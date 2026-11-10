@@ -17,7 +17,7 @@ export function montar3D(cont: HTMLElement) {
   escena.add(sol);
   const grupo = new THREE.Group();
   escena.add(grupo);
-  let primeraVez = true;
+  let encuadre = '';
 
   function fondo() {
     const oscuro = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
@@ -64,11 +64,13 @@ export function montar3D(cont: HTMLElement) {
     const dir = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);
     const origen = estado.dir === 'A' ? new THREE.Vector3(0, top * 0.6, L / 2 + largo + 3) : new THREE.Vector3(-B / 2 - largo - 3, top * 0.6, 0);
     grupo.add(new THREE.ArrowHelper(dir, origen, largo, 0x1f6f8b, 2.5, 1.6));
-    if (primeraVez) {
+    // la cámara se vuelve a encuadrar cuando cambia el tamaño de la torre (no al mover un muro)
+    const clave = [B, L, top, fondoCota].map(v => v.toFixed(1)).join('|');
+    if (clave !== encuadre) {
       const d = Math.max(B, L, h) * 1.6;
-      camara.position.set(-d * 0.7, top * 0.7, d * 0.9);
+      camara.position.set(-d * 0.7, fondoCota + h * 0.7, d * 0.9);
       controles.target.set(0, (top + fondoCota) / 2, 0);
-      primeraVez = false;
+      encuadre = clave;
     }
   }
 

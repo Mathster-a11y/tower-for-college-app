@@ -33,7 +33,7 @@ describe('planilla completa', () => {
   it('escribe el ejemplo y lo vuelve a leer desde la hoja T3D', async () => {
     const p = ejemploGuia();
     const a = aPlanilla(p);
-    const bytes = await escribirPlanilla(readFileSync(new URL('../public/planilla_virgen.xlsx', import.meta.url)), a.datos, calcularPlanilla(a.datos), p);
+    const bytes = await escribirPlanilla(readFileSync(new URL('../src/assets/planilla_virgen.xlsx', import.meta.url)), a.datos, calcularPlanilla(a.datos), p);
     const leido = await leerPlanilla(bytes);
     expect(leido.proyecto?.muros.length).toBe(10);
     expect(leido.sitio.V).toBe(48);

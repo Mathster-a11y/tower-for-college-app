@@ -9,7 +9,7 @@ const salida = process.argv[2] ?? 'ejemplo.xlsx';
 const p = ejemploGuia();
 const a = aPlanilla(p);
 const r = calcularPlanilla(a.datos);
-const bytes = await escribirPlanilla(readFileSync('public/planilla_virgen.xlsx'), a.datos, r, p);
+const bytes = await escribirPlanilla(readFileSync('src/assets/planilla_virgen.xlsx'), a.datos, r, p);
 writeFileSync(salida, bytes);
 writeFileSync(salida.replace(/\.xlsx$/, '.json'), JSON.stringify({
   H61: r.mnyq.H61, J61: r.mnyq.J61, M61: r.mnyq.M61, O61: r.mnyq.O61, L99: r.mnyq.L99, N89: r.mnyq.N89, N90: r.mnyq.N90,

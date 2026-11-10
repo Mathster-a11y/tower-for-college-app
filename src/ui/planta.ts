@@ -72,15 +72,18 @@ export function montarPlanta(cont: HTMLElement) {
         : el('rect', { x: X(m.x - dx / 2), y: Y(m.y + dy / 2), width: Math.max(2, dx * escala), height: Math.max(2, dy * escala), fill: COLORES[papel] });
       grupo.appendChild(forma);
       const pieza = estado.dir === 'A' ? m.piezaA : m.piezaB;
-      const lx = m.dir === 'Y' ? X(m.x + dx / 2) + 4 : X(m.x);
-      const ly = m.dir === 'Y' ? Y(m.y) + 4 : Y(m.y + dy / 2) - 5;
-      grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': m.dir === 'Y' ? 'start' : 'middle' }, `${m.id}${pieza ? ' · ' + pieza : ''}`));
+      // etiqueta del lado de afuera (lejos del centro de la planta), para no tapar los muros del núcleo
+      const izq = m.x < 0, abajo = m.y < 0;
+      const lx = m.dir === 'Y' || m.circular ? (izq ? X(m.x - dx / 2) - 4 : X(m.x + dx / 2) + 4) : X(m.x);
+      const ly = m.dir === 'Y' || m.circular ? Y(m.y) + 4 : abajo ? Y(m.y - dy / 2) + 13 : Y(m.y + dy / 2) - 5;
+      const ancla = m.dir === 'Y' || m.circular ? (izq ? 'end' : 'start') : 'middle';
+      grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, `${m.id}${pieza ? ' · ' + pieza : ''}`));
       grupo.addEventListener('pointerdown', ev => {
         ev.preventDefault();
         estado.seleccion = m.id;
         const q = aMundo(ev);
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y };
-        svg.setPointerCapture(ev.pointerId);
+        try { svg.setPointerCapture(ev.pointerId); } catch { /* puntero sintético: se arrastra igual */ }
         estado.cambiar();
       });
       svg.appendChild(grupo);

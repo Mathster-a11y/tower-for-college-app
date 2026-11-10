@@ -36,10 +36,10 @@ button.mini { padding: 0 6px; }
 .seg button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
 .seg button[aria-pressed="true"] { background: var(--acento); color: var(--panel); border-color: var(--acento); }
 
-.app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; }
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 450px) 1fr; }
 .lateral { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--linea); background: var(--panel); }
 .pestanas { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--linea); }
-.pestanas button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 8px; }
+.pestanas button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 7px; font-size: 13.5px; }
 .pestanas button[aria-selected="true"] { border-bottom-color: var(--acento); font-weight: 600; }
 .panel { flex: 1; overflow: auto; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 10px; }
 .panel > * { flex-shrink: 0; }
@@ -108,3 +108,4 @@ dialog h2 { margin: 0 0 8px; font-size: 18px; }
   .vistas { grid-template-rows: 70vh 60vh; }
   .grilla2 { grid-template-columns: 1fr; }
 }
+button:disabled { opacity: .45; cursor: default; border-color: var(--linea); }

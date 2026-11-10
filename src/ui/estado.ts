@@ -15,12 +15,17 @@ class Estado {
   seleccion: string | null = null;
   calculo!: Calculo;
   private oyentes: Oyente[] = [];
+  /** historia para deshacer / rehacer (proyectos como JSON) */
+  private atras: string[] = [];
+  private adelante: string[] = [];
+  private ultimo = '';
 
   constructor() {
     let p: Proyecto | null = null;
     try { const t = localStorage.getItem(CLAVE); if (t) p = JSON.parse(t) as Proyecto; } catch { p = null; }
     this.proyecto = p && p.version === 1 ? { ...p, hormigon: p.hormigon || 'H30' } : ejemploGuia();
     this.recalcular();
+    this.ultimo = JSON.stringify(this.proyecto);
   }
   suscribir(f: Oyente) { this.oyentes.push(f); }
   recalcular() {
@@ -37,9 +42,32 @@ class Estado {
   /** cambia el proyecto, recalcula, guarda en el navegador y avisa a las vistas */
   cambiar(f?: (p: Proyecto) => void) {
     if (f) f(this.proyecto);
+    const nuevo = JSON.stringify(this.proyecto);
+    if (nuevo !== this.ultimo) {
+      this.atras.push(this.ultimo);
+      if (this.atras.length > 100) this.atras.shift();
+      this.adelante = [];
+      this.ultimo = nuevo;
+    }
+    this.actualizar();
+  }
+  private actualizar() {
     this.recalcular();
-    try { localStorage.setItem(CLAVE, JSON.stringify(this.proyecto)); } catch { /* sin almacenamiento: no pasa nada */ }
+    try { localStorage.setItem(CLAVE, this.ultimo); } catch { /* sin almacenamiento: no pasa nada */ }
     this.oyentes.forEach(o => o());
+  }
+  get puedeDeshacer() { return this.atras.length > 0; }
+  get puedeRehacer() { return this.adelante.length > 0; }
+  deshacer() { this.mover(this.atras, this.adelante); }
+  rehacer() { this.mover(this.adelante, this.atras); }
+  private mover(de: string[], a: string[]) {
+    const t = de.pop();
+    if (t === undefined) return;
+    a.push(this.ultimo);
+    this.ultimo = t;
+    this.proyecto = JSON.parse(t) as Proyecto;
+    if (this.seleccion && !this.proyecto.muros.some(m => m.id === this.seleccion)) this.seleccion = null;
+    this.actualizar();
   }
   reemplazar(p: Proyecto) { this.proyecto = { ...p, hormigon: p.hormigon || 'H30' }; this.seleccion = null; this.cambiar(); }
 }

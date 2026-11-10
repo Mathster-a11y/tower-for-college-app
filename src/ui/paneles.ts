@@ -225,11 +225,12 @@ function panelResultados(c: H) {
     const r = dir === 'A' ? res.rotA : res.rotB, cr = dir === 'A' ? corr.rotA : corr.rotB;
     c.append(h('h3', {}, `Rototraslación, viento ${dir} (nivel −1º, como la planilla)`));
     const tr = h('table', { class: 'tabla compacta' });
-    tr.append(h('thead', {}, h('tr', {}, ...['Fila', '% tras.', 'Q rot (t)', 'M planilla G+N (tm)', 'M corregido (tm)'].map(x => h('th', {}, x)))));
+    tr.append(h('thead', {}, h('tr', {}, ...['Pieza', '% tras.', 'Q rot (t)', 'M planilla G+N (tm)', 'M corregido (tm)'].map(x => h('th', {}, x)))));
     const b = h('tbody');
     r.B.slice(0, 20).forEach((J, i) => {
       if (!(J > 1e-6)) return;
-      b.append(h('tr', {}, h('td', {}, String(i + 1)), h('td', { class: 'n' }, fmt(r.C[i] * 100, 1)), h('td', { class: 'n' }, fmt(r.N[i])), h('td', { class: 'n' }, fmt(r.O[i], 1)), h('td', { class: 'n' }, fmt(cr[i].Mtot, 1))));
+      const nombre = estado.calculo.asig?.piezas.find(pz => pz.dir === dir && pz.filaHoja === i)?.nombre ?? `fila ${i + 1}`;
+      b.append(h('tr', {}, h('td', {}, nombre), h('td', { class: 'n' }, fmt(r.C[i] * 100, 1)), h('td', { class: 'n' }, fmt(r.N[i])), h('td', { class: 'n' }, fmt(r.O[i], 1)), h('td', { class: 'n' }, fmt(cr[i].Mtot, 1))));
     });
     tr.append(b);
     c.append(h('div', { class: 'scroll' }, tr));
@@ -237,16 +238,49 @@ function panelResultados(c: H) {
 }
 
 // ------------------------------------------------------------------ Avisos
+/** Observaciones sobre la planilla virgen: valen para cualquier proyecto. */
+export const NOTAS_PLANILLA = [
+  'A las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para las piezas asimétricas.',
+  'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra).',
+];
+export const cantidadAvisos = () => estado.calculo.asig?.avisos.length ?? 0;
+
 function panelAvisos(c: H) {
   const { asig, error } = estado.calculo;
-  if (error) c.append(h('p', { class: 'error' }, error));
-  const lista = h('ul', { class: 'avisos' });
-  (asig?.avisos ?? []).forEach(a => lista.append(h('li', {}, a)));
-  lista.append(h('li', {}, 'Planilla virgen: a las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para los núcleos.'));
-  lista.append(h('li', {}, 'Planilla virgen: en «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio.'));
-  c.append(lista);
+  if (error) c.append(h('p', { class: 'error' }, `Error en el cálculo: ${error}`));
+  c.append(h('h3', {}, 'De tu proyecto'));
+  const avisos = asig?.avisos ?? [];
+  if (avisos.length) {
+    const lista = h('ul', { class: 'avisos' });
+    avisos.forEach(a => lista.append(h('li', {}, a)));
+    c.append(lista);
+  } else c.append(h('p', { class: 'nota' }, 'Sin avisos.'));
+  c.append(h('h3', {}, 'De la planilla virgen (valen para todos los proyectos)'));
+  const notas = h('ul', { class: 'avisos nota' });
+  NOTAS_PLANILLA.forEach(a => notas.append(h('li', {}, a)));
+  c.append(notas);
+}
+
+// ------------------------------------------------------------------ Ayuda
+function panelAyuda(c: H) {
+  const pasos: [string, string][] = [
+    ['Sitio', 'Nombre, alumno y datos del viento (CIRSOC 102). La exposición completa zg y α. El hormigón fija la tensión admisible: H30 → 30 MPa = 300 kg/cm².'],
+    ['Niveles', 'Con «Generar» armás la torre: pisos, altura del piso tipo, altura de PB y subsuelos. B y L van en la azotea y donde la planta cambia.'],
+    ['Muros', 'El origen (0, 0) es el centro de la planta de PB. Dirección Y: paralelo al viento A; X: paralelo al viento B. Arrastrá los muros en la planta o movelos con las flechas (Mayús: de a 1 m).'],
+    ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
+    ['Resultados', '«Planilla» es lo que da el Excel original; «Guía/CIRSOC» son los valores corregidos. Cada control dice si verifica.'],
+    ['Escribir planilla', 'Descarga la planilla del curso con tus datos. Excel o LibreOffice la recalculan al abrirla. La hoja «T3D» guarda el proyecto: con «Abrir…» la volvés a cargar.'],
+  ];
+  c.append(h('h3', {}, 'Cómo se usa'));
+  const ol = h('ol', { class: 'avisos' });
+  pasos.forEach(([t, d]) => ol.append(h('li', {}, h('b', {}, t + ': '), d)));
+  c.append(ol);
+  c.append(h('h3', {}, 'Atajos'));
+  c.append(h('p', { class: 'nota' }, 'Ctrl+Z deshacer · Ctrl+Y (o Ctrl+Mayús+Z) rehacer · flechas: mover el muro elegido · Supr: borrar el muro elegido.'));
+  c.append(h('h3', {}, 'Dónde quedan los datos'));
+  c.append(h('p', { class: 'nota' }, 'El proyecto se guarda solo en este navegador. Para llevarlo a otra computadora usá «Guardar proyecto» (.json) o la planilla escrita (.xlsx). La app no manda datos a ningún servidor.'));
 }
 
 export const PANELES: Record<string, (c: H) => void> = {
-  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Avisos: panelAvisos,
+  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Avisos: panelAvisos, Ayuda: panelAyuda,
 };
