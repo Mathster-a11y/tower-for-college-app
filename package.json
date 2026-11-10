@@ -1,0 +1,25 @@
+{
+  "name": "tower-for-college-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Torre 3D: app web que acompaña la planilla «Edificios en torre» (FAUD-UNMDP)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}
