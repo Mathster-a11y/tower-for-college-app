@@ -2,6 +2,8 @@
 import { estado, fmt, COLORES } from './estado';
 import type { Muro, Nivel } from '../engine/modelo';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { calcFunicular } from '../engine/funicular';
+import { dibujoGuia, dibujoPresiones } from './funicular';
 
 type H = HTMLElement;
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...hijos: (Node | string)[]) => {
@@ -171,15 +173,15 @@ function panelMuros(c: H) {
 function panelPiezas(c: H) {
   const { asig, res } = estado.calculo;
   if (!asig) return;
-  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe como un perfil equivalente en la hoja J de su dirección. En «paralelos» el tipo depende de la fila (lo fija la hoja de flexocompresión).'));
+  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. Simétrica: el muro suelto o la doble T con alas iguales y centradas. Asimétrica: todo lo demás (C, U, L, T, E), un muro por columna: ala sup., alma izq., alma der. y ala inf. «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
   for (const dir of ['A', 'B'] as const) {
     c.append(h('h3', {}, dir === 'A' ? 'Viento A · J Tabiques paralelos' : 'Viento B · J Tabiques ortogonales'));
     const t = h('table', { class: 'tabla compacta' });
-    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Muros', 'Molde', 'Fila', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
+    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Muros', 'Molde', 'N.º', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
     const tb = h('tbody');
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
-      tb.append(h('tr', {}, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : String(pz.filaHoja + 1 + 3), fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x))));
+      tb.append(h('tr', {}, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${pz.filaHoja + 4})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x))));
       pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '6' }, a))));
     });
     t.append(tb);
@@ -237,11 +239,51 @@ function panelResultados(c: H) {
   }
 }
 
+// ------------------------------------------------------------------ Funicular
+function panelFunicular(c: H) {
+  const { asig, res, corr } = estado.calculo;
+  if (!res) return;
+  const dir = estado.dir;
+  const p = estado.proyecto;
+  const fg = calcFunicular(p, corr.guia.mnyq, asig.filaNivel, dir);
+  const fp = calcFunicular(p, res.mnyq, asig.filaNivel, dir);
+  const mn = corr.guia.mnyq;
+  const perfil = p.niveles.map((n, j) => ({ z: n.cota, lado: dir === 'A' ? mn.F[asig.filaNivel[j]] : mn.E[asig.filaNivel[j]] })).filter(x => isFinite(x.lado));
+  c.append(h('p', { class: 'nota' }, `Viento ${dir} (cambialo arriba). Como en la guía (2.2): se suman W y G y la recta de acción de la resultante tiene que cortar la base dentro del tercio medio. El dibujo usa los valores «Guía/CIRSOC».`));
+  const ok = fg.verifica && fp.verifica;
+  c.append(h('p', { class: `total estado ${ok ? 'verifica' : 'no-verifica'}` }, ok
+    ? `Verifica: la resultante corta la base a ${fmt(fg.e)} m del eje; el tercio medio llega a ${fmt(fg.tercio)} m.`
+    : `No verifica: la resultante corta la base a ${fmt(fg.e)} m del eje, fuera del tercio medio (${fmt(fg.tercio)} m).`));
+  c.append(h('h3', {}, 'Suma gráfica de W y G'));
+  c.append(h('div', { class: 'dibujo' }, dibujoGuia(fg, perfil)));
+  const t = h('table', { class: 'tabla compacta' });
+  t.append(h('thead', {}, h('tr', {}, ...['', 'Planilla', 'Guía/CIRSOC'].map(x => h('th', {}, x)))));
+  const tb = h('tbody');
+  ([['W, viento (t)', fp.W, fg.W, 1], ['hw sobre la base (m)', fp.hw, fg.hw, 2], ['G, peso sin sobrecarga (t)', fp.G, fg.G, 0], ['Mv = W · hw (tm)', fp.Mv, fg.Mv, 0],
+    ['e = Mv / G (m)', fp.e, fg.e, 2], [`b/6 (b = ${fmt(fg.b, 1)} m)`, fp.tercio, fg.tercio, 2]] as [string, number, number, number][])
+    .forEach(([k, a, b, d]) => tb.append(h('tr', {}, h('td', {}, k), h('td', { class: 'n' }, fmt(a, d)), h('td', { class: 'n' }, fmt(b, d)))));
+  t.append(tb);
+  c.append(h('div', { class: 'scroll' }, t));
+  c.append(h('h3', {}, 'Línea de presiones piso a piso'));
+  c.append(h('p', { class: 'nota' }, 'En cada nivel, la resultante de lo que está arriba (viento y peso acumulados) corta el nivel a e = M / N del eje. La banda es el núcleo central de la planta (lado paralelo al viento / 6). Es una referencia: la planta no es maciza, la resisten los tabiques.'));
+  c.append(h('div', { class: 'dibujo' }, dibujoPresiones(fg)));
+  const fuera = fg.puntos.filter(x => !x.dentro);
+  c.append(h('p', { class: `nota ${fuera.length ? 'error' : ''}` }, fuera.length ? `Fuera del núcleo central: ${fuera.map(x => x.nivel).join(', ')}.` : 'Todos los niveles quedan dentro del núcleo central.'));
+  const t2 = h('table', { class: 'tabla compacta' });
+  t2.append(h('thead', {}, h('tr', {}, ...['Nivel', 'N (t)', 'M (tm)', 'e (m)', 'lado/6 (m)'].map(x => h('th', {}, x)))));
+  const tb2 = h('tbody');
+  fg.puntos.forEach(x => tb2.append(h('tr', { class: x.dentro ? '' : 'aviso' }, h('td', {}, x.nivel), h('td', { class: 'n' }, fmt(x.N, 0)), h('td', { class: 'n' }, fmt(x.M, 0)), h('td', { class: 'n' }, fmt(x.e)), h('td', { class: 'n' }, fmt(x.nucleo)))));
+  t2.append(tb2);
+  c.append(h('div', { class: 'scroll' }, t2));
+}
+
 // ------------------------------------------------------------------ Avisos
 /** Observaciones sobre la planilla virgen: valen para cualquier proyecto. */
 export const NOTAS_PLANILLA = [
   'A las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para las piezas asimétricas.',
   'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra).',
+  'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía/CIRSOC» usa el área real (pregunta abierta para la cátedra).',
+  'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía/CIRSOC» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
 ];
 export const cantidadAvisos = () => estado.calculo.asig?.avisos.length ?? 0;
 
@@ -282,5 +324,5 @@ function panelAyuda(c: H) {
 }
 
 export const PANELES: Record<string, (c: H) => void> = {
-  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Avisos: panelAvisos, Ayuda: panelAyuda,
+  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Funicular: panelFunicular, Avisos: panelAvisos, Ayuda: panelAyuda,
 };

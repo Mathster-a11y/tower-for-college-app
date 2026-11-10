@@ -9,7 +9,11 @@
  *  - Varias alas en un mismo extremo se juntan en una sola: espesores sumados y ancho que conserva el área
  *    (criterio provisorio: la medida del ala equivalente es una pregunta abierta para la cátedra).
  *  - La posición de cada pieza es el baricentro de sus muros, pesado por área, medido desde el eje de simetría de PB.
- *  - En «paralelos» cada fila tiene un tipo (lo fija la hoja de flexocompresión); en «ortogonales» el tipo es libre.
+ *  - Plantilla simétrica: solo el muro suelto y la doble T con alas iguales y centradas en el alma.
+ *    Todo lo demás (C, U, L, T, E, alas distintas) va en las columnas asimétricas, un muro por columna.
+ *  - El tipo de fila es libre en las dos hojas. En «paralelos» se prefieren las filas en las que la hoja de
+ *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
+ *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
 import { N_FILAS, TIPO_FILA_PARALELOS, type FilaJ, type PlanillaDatos } from './planilla';
 import type { Muro, Proyecto } from './modelo';
@@ -105,11 +109,19 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
 
   if (almas.length === 1) {
     const w = almas[0];
-    const sup = juntar(extremos.filter(e => e.arriba).map(e => e.a));
-    const inf = juntar(extremos.filter(e => !e.arriba).map(e => e.a));
-    const parecidas = sup && inf && Math.abs(sup.area - inf.area) <= 0.2 * Math.max(sup.area, inf.area) && Math.abs(sup.t - inf.t) <= 0.2 * Math.max(sup.t, inf.t);
+    const gSup = extremos.filter(e => e.arriba).map(e => e.a), gInf = extremos.filter(e => !e.arriba).map(e => e.a);
+    const sup = juntar(gSup);
+    const inf = juntar(gInf);
     if (!sup && !inf) return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: w.largo } };
-    if (parecidas) {
+    // doble T: alas iguales (2 %) y centradas en el alma (baricentro del ala sobre el eje del alma)
+    const centrada = (g: Muro[], b: number) => {
+      const A = g.reduce((x, m) => x + m.largo * m.espesor, 0);
+      const c = g.reduce((x, m) => x + m.largo * m.espesor * t(m), 0) / A;
+      return Math.abs(c - t(w)) <= Math.max(0.05, 0.02 * b);
+    };
+    const iguales = (a: number, b: number) => Math.abs(a - b) <= 0.02 * Math.max(a, b);
+    const dobleT = sup && inf && iguales(sup.area, inf.area) && iguales(sup.t, inf.t) && centrada(gSup, sup.b) && centrada(gInf, inf.b);
+    if (dobleT) {
       extremos.forEach(e => set(e.a, e.arriba ? 'ala sup.' : 'ala inf.'));
       return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: w.largo, F: sup!.b, G: sup!.t, J: inf!.b, K: inf!.t } };
     }
@@ -143,23 +155,43 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
 }
 
 // ------------------------------------------------------------------ asignación de filas
+/**
+ * Orden de preferencia de filas (índices 0 a 19) para cada tipo de pieza.
+ * «paralelos»: la hoja de flexocompresión lee Q (simétrico) en las filas 1–7 y 12–17, AN (asimétrico) en 8–11
+ * y V (circular) en 18–20; a las filas 8 y 9 les faltan fórmulas del molde asimétrico (último recurso para él).
+ * «ortogonales»: cualquier fila; la 20 queda al final porque su N suma también U.
+ */
+function ordenFilas(tipo: 'simétrica' | 'asimétrica' | 'circular', paralelos: boolean): number[] {
+  const r = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
+  if (!paralelos) return tipo === 'circular' ? r(0, 18) : r(0, 19);
+  if (tipo === 'asimétrica') return [9, 10, ...r(11, 16), ...r(0, 6), 17, 18, 19, 7, 8];
+  if (tipo === 'circular') return [17, 18, 19, ...r(0, 6), ...r(11, 16), 7, 8, 9, 10];
+  return [...r(0, 6), ...r(11, 16), 7, 8, 9, 10, 17, 18, 19];
+}
+
 function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: string[]): FilaJ[] {
   const filas: (FilaJ | null)[] = new Array(20).fill(null);
-  const libres = (tipo: 'simétrica' | 'asimétrica' | 'circular') => {
-    if (!paralelos) return [...Array(20).keys()];
-    const orden = tipo === 'asimétrica' ? [9, 10, 7, 8] : [...Array(20).keys()].filter(i => TIPO_FILA_PARALELOS[i] === tipo);
-    return orden;
-  };
-  for (const p of piezas) {
+  const tipoDe = (p: PiezaEquivalente) => (p.molde === 'asimétrico' ? 'asimétrica' : p.molde === 'tubo' ? 'circular' : 'simétrica') as 'simétrica' | 'asimétrica' | 'circular';
+  // primero los tipos con menos filas propias
+  const prioridad = { asimétrica: 0, circular: 1, simétrica: 2 };
+  const orden = [...piezas].sort((a, b) => prioridad[tipoDe(a)] - prioridad[tipoDe(b)]);
+  for (const p of orden) {
     if (!Object.keys(p.fila).length) continue;
-    const tipo = p.molde === 'asimétrico' ? 'asimétrica' : p.molde === 'tubo' ? 'circular' : 'simétrica';
-    const i = libres(tipo).find(k => filas[k] === null);
+    const tipo = tipoDe(p);
+    const i = ordenFilas(tipo, paralelos).find(k => filas[k] === null);
     if (i === undefined) {
-      avisos.push(`No hay fila libre de tipo ${tipo} en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre}.`);
+      avisos.push(`No queda fila libre en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre} (máximo 20 piezas).`);
       continue;
     }
-    if (paralelos && FILAS_SIN_YAC.includes(i)) {
-      p.avisos.push(`Fila de la pieza ${i + 1}: en la planilla virgen le faltan las fórmulas del ala superior y del alma izquierda; su J queda incompleto.`);
+    if (paralelos && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(i)) {
+      p.avisos.push(`Fila de la pieza ${i + 1}: en la planilla virgen le faltan las fórmulas del ala superior y del alma izquierda; su J queda incompleto en la planilla.`);
+    }
+    if (paralelos && TIPO_FILA_PARALELOS[i] !== tipo) {
+      const mod = { 'simétrica': 'simétrico (Q)', 'asimétrica': 'asimétrico (AN)', circular: 'circular (V)' };
+      p.avisos.push(`Va en la fila de la pieza ${i + 1}, donde «Flex comp PB paralelos» lee el módulo ${mod[TIPO_FILA_PARALELOS[i]]}: la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo ${mod[tipo]} (columna «Guía/CIRSOC»).`);
+    }
+    if (paralelos && FILAS_O0.includes(i)) {
+      p.avisos.push(`Fila de la pieza ${i + 1}: la planilla tiene el área en 0 fijo; la app usa el área real en la flexocompresión.`);
     }
     filas[i] = p.fila;
     p.filaHoja = i;

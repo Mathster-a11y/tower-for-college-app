@@ -12,7 +12,7 @@ function correr(p: Proyecto) {
   const r = calcularPlanilla(a.datos);
   const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const c = calcularCorregido(a.datos, a.filaNivel[iPB] ?? 50);
-  controles(p, a.datos, r, c, p.hormigon);
+  controles(p, a.datos, r, c, p.hormigon, a.piezas, a.filaNivel);
   celdasAEscribir(a.datos, r);
   return { a, r };
 }

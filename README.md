@@ -25,7 +25,8 @@ The interface is in Spanish.
 4. **Muros**: walls go on the plan. Drag them with the mouse or move them with the arrow keys. Each wall belongs to one piece per direction (A and B). Where it is attached decides whether it acts as an alma or an ala.
 5. **Piezas**: the equivalent profile of each piece, as written to the J sheets.
 6. **Resultados**: «Planilla» shows the workbook's values and «Guía/CIRSOC» shows the corrected ones, with each check.
-7. **Escribir planilla .xlsx** downloads the filled workbook. Excel or LibreOffice recalculate it on opening. **Guardar proyecto** downloads a `.json`. **Abrir…** accepts either the `.json` or a workbook written by the app.
+7. **Funicular**: the graphic check from the guide (2.2). W and G are added in a force polygon, and the resultant has to cut the foundation base inside the middle third. It also draws the line of pressures floor by floor against the central core of each floor plan.
+8. **Escribir planilla .xlsx** downloads the filled workbook. Excel or LibreOffice recalculate it on opening. **Guardar proyecto** downloads a `.json`. **Abrir…** accepts either the `.json` or a workbook written by the app.
 
 The project is also saved in the browser (localStorage). ↶/↷ or Ctrl+Z / Ctrl+Y undo and redo. The **Ayuda** tab has these same steps inside the app.
 
@@ -53,6 +54,8 @@ Code layout:
 ### Deploy
 
 The build uses relative paths (`base: './'`), so `dist/` works from any folder. Downloads do not work when the page is embedded in a sandboxed iframe.
+
+Work list: [PENDIENTES.md](PENDIENTES.md).
 
 ## Known limitations
 

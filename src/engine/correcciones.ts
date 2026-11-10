@@ -5,7 +5,7 @@
 import { calcularPlanilla, type PlanillaDatos, type PlanillaRes, type RotoRes } from './planilla';
 
 export interface ResultadoCorregido {
-  /** viento con Kz mínimo 5 m (CIRSOC) y sin viento en PB ni subsuelos (guía) */
+  /** viento con Kz mínimo 5 m (CIRSOC), sin viento en PB ni subsuelos (guía) y J completo en todas las filas */
   guia: PlanillaRes;
   /** fuerza y momento de cada pieza con unidades correctas (M rot = Q rot · Mi/Qi) */
   rotA: PiezaRot[];
@@ -16,7 +16,9 @@ export interface PiezaRot { Qtras: number; Qrot: number; Qtot: number; Mtras: nu
 export function datosSegunGuia(d: PlanillaDatos, filaPB: number): PlanillaDatos {
   const D = [...d.mnyq.D];
   for (let k = filaPB; k < D.length; k++) D[k] = 0;
-  return { ...d, mnyq: { ...d.mnyq, D } };
+  // J completo: las fórmulas que le faltan a la planilla virgen (filas 8–9 de «paralelos») y el área de las filas 18–20
+  const jpar = d.jpar.map(f => ({ ...f, sinYAC: false, O0: false }));
+  return { ...d, mnyq: { ...d.mnyq, D }, jpar };
 }
 
 export function repartoCorregido(r: RotoRes): PiezaRot[] {

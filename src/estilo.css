@@ -109,3 +109,22 @@ dialog h2 { margin: 0 0 8px; font-size: 18px; }
   .grilla2 { grid-template-columns: 1fr; }
 }
 button:disabled { opacity: .45; cursor: default; border-color: var(--linea); }
+
+/* verificación funicular */
+.dibujo svg { display: block; width: 100%; height: auto; max-width: 520px; }
+.funicular .f-torre { fill: var(--fila); stroke: var(--suave); stroke-width: 1; }
+.funicular .f-losa { stroke: var(--linea); stroke-width: .6; }
+.funicular .f-fund { fill: var(--suave); opacity: .45; }
+.funicular .f-tercio, .funicular .f-banda { fill: var(--ok); opacity: .3; }
+.funicular .f-eje { stroke: var(--texto); stroke-width: .8; stroke-dasharray: 6 4; opacity: .6; }
+.funicular .f-w { stroke: var(--acento); stroke-width: 2.5; }
+.funicular .f-g { stroke: var(--texto); stroke-width: 2.5; }
+.funicular .f-r { stroke-width: 2; stroke-dasharray: 7 3; }
+.funicular .f-r.ok { stroke: var(--ok); } .funicular .f-r.mal { stroke: var(--mal); }
+.funicular .punta-f { fill: var(--texto); } .funicular .punta-r { fill: var(--ok); }
+.funicular .f-punto.ok { fill: var(--ok); } .funicular .f-punto.mal { fill: var(--mal); }
+.funicular .f-linea { fill: none; stroke: var(--acento); stroke-width: 2; }
+.funicular .f-txt { fill: var(--texto); font-size: 11px; }
+.funicular .f-fuerza { font-weight: 600; }
+.funicular .f-nota { fill: var(--suave); font-size: 10px; }
+p.total.estado { white-space: normal; }
