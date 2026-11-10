@@ -183,7 +183,7 @@ export function aPlanilla(p: Proyecto): Asignacion {
   const subs = niveles.slice(iPB + 1);
   if (arriba.length - 1 > 50) avisos.push('La planilla admite hasta 50 pisos sobre PB.');
   if (subs.length > 3) avisos.push('La planilla admite hasta 3 subsuelos.');
-  if (subs.length < 3) avisos.push(`La planilla tiene 3 subsuelos fijos; los ${3 - subs.length} que faltan se cargan con altura 0 y sin superficie.`);
+  if (subs.length < 3) avisos.push(`La planilla tiene 3 subsuelos fijos; ${3 - subs.length === 1 ? 'el que falta se carga' : `los ${3 - subs.length} que faltan se cargan`} con altura 0 y sin superficie.`);
 
   const Z = new Array<number>(N_FILAS).fill(0);
   const C = new Array<number | null>(N_FILAS).fill(null), D = new Array<number | null>(N_FILAS).fill(null);

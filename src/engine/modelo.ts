@@ -45,6 +45,8 @@ export interface Proyecto {
   niveles: Nivel[];
   /** b1: lado de la fundación paralelo al viento A · a1: perpendicular (M,NyQ N80 y N81) */
   fundacion: { b1: number; a1: number };
+  /** hormigón de los tabiques: su número es la tensión admisible en MPa (H30 → 300 kg/cm²) */
+  hormigon: string;
   muros: Muro[];
 }
 
@@ -62,6 +64,7 @@ export function ejemploGuia(): Proyecto {
     sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
     fundacion: { b1: 18, a1: 22 },
+    hormigon: 'H30',
     muros: [
       m('M1', 'Y', -9.9, 5.75, 4.5, 10.5, 'T1', '', 'T1B'), m('M2', 'Y', 9.9, 5.75, 4.5, 10.5, 'T2', '', 'T2B'),
       m('M3', 'Y', -9.9, -5.75, 4.5, 10.5, 'T3', '', 'T3B'), m('M4', 'Y', 9.9, -5.75, 4.5, 10.5, 'T4', '', 'T4B'),

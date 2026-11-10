@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Torre 3D</title>
+  <meta name="description" content="App web que acompaña la planilla «Edificios en torre» (FAUD-UNMDP): planta, 3D y cálculo en vivo." />
+</head>
+<body>
+  <header class="barra">
+    <div class="marca"><b>Torre 3D</b><span id="nombre-proyecto"></span></div>
+    <div class="acciones">
+      <div class="seg" role="group" aria-label="Dirección del viento">
+        <button type="button" id="dir-A" aria-pressed="true">Viento A</button>
+        <button type="button" id="dir-B" aria-pressed="false">Viento B</button>
+      </div>
+      <button type="button" id="b-ejemplo">Ejemplo</button>
+      <button type="button" id="b-nuevo">Nuevo</button>
+      <label class="boton" for="b-abrir">Abrir…<input type="file" id="b-abrir" accept=".xlsx,.json" hidden /></label>
+      <button type="button" id="b-guardar">Guardar proyecto</button>
+      <button type="button" id="b-exportar" class="primario">Escribir planilla .xlsx</button>
+    </div>
+  </header>
+  <main class="app">
+    <aside class="lateral">
+      <nav class="pestanas" role="tablist" id="pestanas"></nav>
+      <section class="panel" id="panel" role="tabpanel"></section>
+    </aside>
+    <section class="vistas">
+      <div class="vista" id="vista-planta"><span class="rotulo">Planta de PB</span></div>
+      <div class="vista" id="vista-3d"><span class="rotulo">3D</span></div>
+    </section>
+  </main>
+  <dialog id="dialogo"></dialog>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

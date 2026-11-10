@@ -66,12 +66,18 @@ const maxOf = (a: number[]) => (a.some(Number.isNaN) ? NaN : Math.max(...a));
 // ------------------------------------------------------------------ hoja «viento»
 export interface VientoRes { Kz: number[]; qz: number[]; qh: number; P: number[]; Q: number[]; R: number[]; S: number[]; }
 
-export function calcViento(v: Viento): VientoRes {
+export interface Opciones {
+  /** CIRSOC 102, Tabla 5, nota 2: debajo de 5 m, Kz con z = 5 m (la planilla usa la altura real) */
+  kzMin5?: boolean;
+}
+
+export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
   const Kz: number[] = [], qz: number[] = [], P: number[] = [], Q: number[] = [], R: number[] = [], S: number[] = [];
   // las fórmulas completas llegan hasta la fila 55 (PB); 56–58 (subsuelos) solo tienen la cota
   for (let i = 0; i < N_FILAS; i++) {
     if (i <= 50) {
-      const z = n0(v.Z[i]);
+      const z0 = n0(v.Z[i]);
+      const z = op.kzMin5 && z0 > 0 ? Math.max(z0, 5) : z0;
       Kz[i] = 2.01 * pow(z / v.zg, 2 / v.alfa);
       qz[i] = 0.613 * v.Kzt * v.Kd * v.V ** 2 * v.I * Kz[i];
     } else {
@@ -277,8 +283,8 @@ export interface PlanillaRes {
   rotA: RotoRes; rotB: RotoRes; flex: FlexRes;
 }
 
-export function calcularPlanilla(d: PlanillaDatos): PlanillaRes {
-  const viento = calcViento(d.viento);
+export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaRes {
+  const viento = calcViento(d.viento, op);
   const mnyq = calcMNyQ(d.viento, viento, d.mnyq);
   const jpar = calcHojaJ(d.jpar, false);
   const jort = calcHojaJ(d.jort, true);
