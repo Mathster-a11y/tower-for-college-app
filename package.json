@@ -13,6 +13,9 @@
     "build:unico": "tsc --noEmit && vite build --mode unico"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.5",
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@ibm/plex-math": "^1.1.0",
     "jszip": "^3.10.1",
     "three": "^0.170.0"
   },

@@ -59,7 +59,14 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
       planilla: dir === 'A' ? r.jpar.AY24 : r.jort.AY24, guia: g2.J, unidad: 'm⁴', estado: est(g2.J >= g2.minimos.h500),
       nota: `J mín = ${g2.minimos.h500.toFixed(1)} m⁴ (fila ${g2.hormigon})${g2.hormigon !== 'H30' ? `; la planilla compara con la fila H30: ${kPl.toFixed(1)} m⁴` : ''}` });
   }
-  out.push({ grupo: 'Reparto', nombre: 'Control Σ J·a = 0 (cara mayor)', criterio: '= 0', fuente: 'Rototrasl. L25', planilla: r.rotA.L25, guia: null, unidad: '', estado: est(Math.abs(r.rotA.L25) < 1e-6 || !isFinite(r.rotA.L25)) });
+  // Σ J·a = 0 siempre (Xr es el baricentro de los J); la celda L25 de la planilla suma solo las filas 5 a 19
+  for (const [dir, rr, gg] of [['A', r.rotA, c.guia.rotA], ['B', r.rotB, c.guia.rotB]] as const) {
+    const total = gg.L.slice(0, 20).reduce((x, y) => x + (isFinite(y) ? y : 0), 0);
+    const escala = Math.max(1e-9, gg.L.slice(0, 20).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0));
+    const parcial = Math.abs(rr.L25 - total) > 1e-6 * escala;
+    out.push({ grupo: 'Reparto', nombre: `Control Σ J·a = 0 (cara ${dir === 'A' ? 'mayor' : 'menor'})`, criterio: '= 0: el eje de inercia está bien calculado', fuente: `Rototrasl. cara ${dir === 'A' ? 'mayor' : 'menor'} L25`,
+      planilla: rr.L25, guia: total, unidad: 'm⁵', estado: est(Math.abs(total) <= 1e-6 * escala), nota: parcial ? 'La celda L25 de la planilla suma solo las piezas 1 a 15: con piezas en las filas 16 a 20 no da 0, aunque el cálculo esté bien.' : undefined });
+  }
   out.push({ grupo: 'Reparto', nombre: 'Torsión de la Figura 9, caso 2 (cara mayor)', criterio: 'h > 20 m: el CIRSOC pide considerarla', fuente: 'CIRSOC 102, art. 5.12.3', planilla: null, guia: r.rotA.D5 * BPB / 32, unidad: 'tm', estado: h > 20 ? 'atención' : 'informativo', nota: 'La planilla y la guía no la usan. Pregunta abierta para la cátedra.' });
   const adm = TENSION_ADM(hormigon);
   // flexocompresión (columna «Planilla»: la hoja Flex comp PB paralelos, una tensión por pieza).

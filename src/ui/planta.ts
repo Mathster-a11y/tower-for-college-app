@@ -21,6 +21,13 @@ export function montarPlanta(cont: HTMLElement) {
   selNivel.title = 'Planta del nivel: los muros que no están en ese nivel se ven en gris claro';
   selNivel.addEventListener('change', () => { estado.nivelPlanta = selNivel.value === '' ? null : Number(selNivel.value); dibujar(); estado.avisarSeleccion(); });
   cont.appendChild(selNivel);
+  // leyenda de colores (los de la planilla)
+  const ley = document.createElement('div');
+  ley.className = 'leyenda leyenda-planta';
+  ([['alma', 'alma'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna circ.'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
+    const sp = document.createElement('span'); const i = document.createElement('i'); i.className = 'caja'; i.style.background = COLORES[k]; sp.append(i, t); ley.append(sp);
+  });
+  cont.appendChild(ley);
   let arrastre: { id: string; x0: number; y0: number; mx: number; my: number } | null = null;
   let escala = 20, ox = 0, oy = 0;
 
@@ -119,6 +126,8 @@ export function montarPlanta(cont: HTMLElement) {
   }
 
   svg.addEventListener('pointermove', ev => {
+    const co = document.getElementById('coords');
+    if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
     if (!arrastre) return;
     const q = aMundo(ev);
     const snap = (v: number) => Math.round(v / 0.05) * 0.05;

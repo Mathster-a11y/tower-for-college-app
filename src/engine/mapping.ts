@@ -128,7 +128,7 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   };
   const libre = (w: Muro, ...grupos: Muro[][]) => {
     const sol = grupos.reduce((x, g) => x + solape(w, g), 0);
-    if (sol > 1e-9) avisos.push(`El alma ${w.id} llega hasta la cara exterior del ala (${r4(sol)} m): en la hoja J va con su largo libre, ${r4(w.largo - sol)} m, y ese tramo se suma al ala.`);
+    if (sol > 1e-9) avisos.push(`Nota: el alma ${w.id} llega hasta la cara exterior del ala (${String(r4(sol)).replace('.', ',')} m); en la hoja J va con su largo libre, ${String(r4(w.largo - sol)).replace('.', ',')} m, y ese tramo se suma al ala, para que el J sea el del dibujo.`);
     return r4(Math.max(0.01, w.largo - sol));
   };
   /** ancho del ala equivalente con los tramos de alma que caen en su banda */
@@ -285,6 +285,7 @@ export function aPlanilla(p: Proyecto): Asignacion {
     return [...g.entries()].map(([nombre, ms]) => perfilEquivalente(nombre, dir, ms, papeles));
   };
   const piezasA = grupos('A'), piezasB = grupos('B');
+  if (activos.length && activos.every(m => !(m.areaInf > 0))) avisos.push('Ningún muro tiene área de influencia: la flexocompresión no suma la carga de las losas (N queda solo con el peso propio). Cargala en «Muros», columna «Área inf.».');
   const jpar = asignarFilas(piezasA, true, avisos);
   const jort = asignarFilas(piezasB, false, avisos);
 

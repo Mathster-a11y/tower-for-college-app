@@ -28,10 +28,27 @@ export function marcas(min: number, max: number, n = 4): number[] {
 }
 const decimales = (v: number[]) => { const p = v.length > 1 ? Math.abs(v[1] - v[0]) : 1; return p >= 1 ? 0 : p >= 0.1 ? 1 : p >= 0.01 ? 2 : 3; };
 
+export type Color = 'carga' | 'corte' | 'deformada' | 'traccion' | 'compresion' | 'acento' | 'tinta';
+/** tamaño del dibujo en píxeles (el SVG se dibuja a tamaño real: el texto no se agranda) */
+export interface Tam { ancho?: number; alto?: number; }
+const VAR: Record<Color, string> = { carga: '--carga', corte: '--corte', deformada: '--deformada', traccion: '--traccion', compresion: '--compresion', acento: '--accent', tinta: '--ink' };
+/** muestra de leyenda (línea con su color, punteada si corresponde) */
+export function muestra(color: Color, texto: string, punteada = false): HTMLElement {
+  const sp = document.createElement('span');
+  const i = document.createElement('i');
+  i.style.setProperty('--c', `var(${VAR[color]})`);
+  if (punteada) i.className = 'punteada';
+  sp.append(i, texto);
+  return sp;
+}
+
 export interface SerieAltura {
   nombre: string;
   /** clase de color: s1 (azul), s2 (naranja), tinta (texto) */
-  color: 's1' | 's2' | 'tinta';
+  /** color por significado: carga (viento), corte, deformada, tracción, compresión, acento, tinta */
+  color: Color;
+  /** línea punteada (segunda codificación además del color) */
+  punteada?: boolean;
   tipo: 'linea' | 'barras';
   puntos: { z: number; x: number; nivel: string }[];
 }
@@ -49,8 +66,8 @@ export interface GraficoAltura {
   categorias?: boolean;
 }
 
-export function graficoAltura(g: GraficoAltura): HTMLElement {
-  const ancho = 400, alto = 340, mi = 52, md = 16, ms = 12, mb = 40;
+export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
+  const ancho = Math.max(300, tam.ancho ?? 400), alto = Math.max(240, tam.alto ?? 340), mi = 56, md = 18, ms = 14, mb = 42;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
   const cap = document.createElement('figcaption');
@@ -59,7 +76,7 @@ export function graficoAltura(g: GraficoAltura): HTMLElement {
   if (g.series.length > 1) {
     const ley = document.createElement('div');
     ley.className = 'leyenda';
-    g.series.forEach(s => { const sp = document.createElement('span'); const i = document.createElement('i'); i.className = `ley-${s.color}`; sp.append(i, s.nombre); ley.append(sp); });
+    g.series.forEach(s => ley.append(muestra(s.color, s.nombre, s.punteada)));
     fig.append(ley);
   }
   const todos = g.series.flatMap(s => s.puntos);
@@ -85,15 +102,6 @@ export function graficoAltura(g: GraficoAltura): HTMLElement {
   const cada = Math.max(1, Math.ceil(niveles.length / 10));
   niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) svg.append(el('text', { x: mi - 6, y: Z(z) + 4, class: 'd-eje', 'text-anchor': 'end' }, n)); });
   if (!g.categorias && zMin < 0) svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(0), y2: Z(0), class: 'd-pb' }));
-  // referencias
-  (g.referencias ?? []).forEach(r => {
-    svg.append(el('line', { x1: X(r.x), x2: X(r.x), y1: ms, y2: alto - mb, class: 'd-ref' }));
-    svg.append(el('text', { x: X(r.x) + (X(r.x) > ancho - 90 ? -4 : 4), y: ms + 10, class: 'd-eje d-ref-txt', 'text-anchor': X(r.x) > ancho - 90 ? 'end' : 'start' }, r.texto));
-  });
-  (g.alturas ?? []).forEach(a => {
-    svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(a.z), y2: Z(a.z), class: 'd-ref' }));
-    svg.append(el('text', { x: ancho - md - 2, y: Z(a.z) - 5, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, a.texto));
-  });
   // series
   const dec = g.decimales ?? 2;
   const nb = g.series.filter(s => s.tipo === 'barras').length;
@@ -103,13 +111,13 @@ export function graficoAltura(g: GraficoAltura): HTMLElement {
       const alturaBarra = Math.max(2, Math.min(8, ((alto - ms - mb) / Math.max(niveles.length, 1)) * 0.6 / nb));
       s.puntos.forEach(p => {
         const xa = X(Math.min(0, p.x)), xb = X(Math.max(0, p.x));
-        svg.append(el('rect', { x: xa, y: Z(p.z) - (alturaBarra * nb) / 2 + ib * alturaBarra, width: Math.max(1, xb - xa), height: alturaBarra - (nb > 1 ? 1 : 0), rx: Math.min(2, alturaBarra / 2), class: `d-${s.color}` }));
+        svg.append(el('rect', { x: xa, y: Z(p.z) - (alturaBarra * nb) / 2 + ib * alturaBarra, width: Math.max(1, xb - xa), height: alturaBarra - (nb > 1 ? 1 : 0), rx: Math.min(2, alturaBarra / 2), class: `d-c-${s.color}` }));
       });
       ib++;
     } else {
       const pts = s.puntos.filter(p => isFinite(p.x)).sort((a, b) => b.z - a.z).map(p => `${X(p.x).toFixed(1)},${Z(p.z).toFixed(1)}`);
-      svg.append(el('polyline', { points: pts.join(' '), class: `d-linea d-${s.color}-l` }));
-      s.puntos.forEach(p => { if (isFinite(p.x)) svg.append(el('circle', { cx: X(p.x), cy: Z(p.z), r: 2.2, class: `d-${s.color}` })); });
+      svg.append(el('polyline', { points: pts.join(' '), class: `d-linea d-c-${s.color}-l${s.punteada ? ' punteada' : ''}` }));
+      if (s.puntos.length <= 60) s.puntos.forEach(p => { if (isFinite(p.x)) svg.append(el('circle', { cx: X(p.x), cy: Z(p.z), r: 2.4, class: `d-c-${s.color}` })); });
     }
     // rótulo directo en el extremo de mayor |x|
     const ext = s.puntos.reduce((m, p) => (Math.abs(p.x) > Math.abs(m.x) ? p : m), s.puntos[0]);
@@ -119,6 +127,15 @@ export function graficoAltura(g: GraficoAltura): HTMLElement {
       const xv = derecha ? X(ext.x) - 6 : izquierda ? X(ext.x) + 6 : X(ext.x) + (ext.x >= 0 ? 6 : -6);
       svg.append(el('text', { x: xv, y: yv, class: 'd-valor', 'text-anchor': derecha ? 'end' : izquierda ? 'start' : ext.x >= 0 ? 'start' : 'end' }, `${fmt(ext.x, dec)}`));
     }
+  });
+  // referencias
+  (g.referencias ?? []).forEach(r => {
+    svg.append(el('line', { x1: X(r.x), x2: X(r.x), y1: ms, y2: alto - mb, class: 'd-ref' }));
+    svg.append(el('text', { x: X(r.x) + (X(r.x) > ancho - 90 ? -4 : 4), y: ms + 10, class: 'd-eje d-ref-txt', 'text-anchor': X(r.x) > ancho - 90 ? 'end' : 'start' }, r.texto));
+  });
+  (g.alturas ?? []).forEach(a => {
+    svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(a.z), y2: Z(a.z), class: 'd-ref' }));
+    svg.append(el('text', { x: ancho - md - 2, y: Z(a.z) - 5, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, a.texto));
   });
   // capa de lectura: una banda por nivel con todos los valores
   niveles.forEach(([z, n], i) => {
@@ -154,8 +171,8 @@ export function tablaValores(cols: string[], filas: (string | number)[][], dec: 
  * Rototraslación en planta: el contorno, los muros, la resultante del viento (en el eje), el eje de inercia (centro
  * de rigidez) y, en cada pieza, la fuerza de traslación y la de rotación (barras con un mismo eje de fuerzas).
  */
-export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: number, muros: Muro[], papeles: Record<string, { A: string; B: string }>): HTMLElement {
-  const ancho = 400, alto = 380, m = 18;
+export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: number, muros: Muro[], papeles: Record<string, { A: string; B: string }>, tam: Tam = {}): HTMLElement {
+  const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(340, tam.alto ?? 380), m = 18;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
   const cap = document.createElement('figcaption');
@@ -163,12 +180,12 @@ export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: numbe
   fig.append(cap);
   const ley = document.createElement('div');
   ley.className = 'leyenda';
-  [['s1', 'traslación (J / ΣJ · Q)'], ['s2', 'rotación (por Mt = Q · e)']].forEach(([c, t]) => { const sp = document.createElement('span'); const i = document.createElement('i'); i.className = `ley-${c}`; sp.append(i, t); ley.append(sp); });
+  ley.append(muestra('acento', 'traslación (J / ΣJ · Q)'), muestra('corte', 'rotación (por Mt = Q · e)'));
   fig.append(ley);
   // planta: t = transversal al viento (eje horizontal del dibujo), s = sentido del viento (hacia arriba)
   const T = dir === 'A' ? B : L, S = dir === 'A' ? L : B;
   const tMax = Math.max(T / 2, ...rep.piezas.map(p => Math.abs(p.pos)), 1) + 1;
-  const escPl = Math.min((ancho - 2 * m) / (2 * tMax), 150 / Math.max(S, 1));
+  const escPl = Math.min((ancho - 2 * m) / (2 * tMax), (alto * 0.42) / Math.max(S, 1));
   const arribaPl = 34, yPl = arribaPl + (S * escPl) / 2;   // la planta arriba; las fuerzas en una franja abajo
   const cx = ancho / 2;
   const Xp = (t: number) => cx + t * escPl, Yp = (s: number) => yPl - s * escPl;
@@ -196,12 +213,12 @@ export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: numbe
   svg.append(el('line', { x1: m, x2: ancho - m, y1: base, y2: base, class: 'd-cero' }));
   svg.append(el('text', { x: m, y: alto - 30, class: 'd-eje' }, `escala de fuerzas: barra más alta = ${fmt(qMax, 1)} t`));
   svg.append(el('text', { x: m, y: alto - 14, class: 'd-eje' }, `e = ${fmt(rep.d)} m · Mt = Q · e = ${fmt(rep.Mt, 1)} tm`));
-  const anchoB = 5;
+  const anchoB = Math.max(5, Math.min(9, ancho / 80));
   rep.piezas.forEach(p => {
     const x = Xp(p.pos);
     svg.append(el('line', { x1: x, x2: x, y1: Yp(-S / 2), y2: Y(Math.max(p.Qtras, p.Qrot, 0)) - 14, class: 'd-guia' }));
-    const r1 = el('rect', { x: x - anchoB - 1, y: Math.min(Y(p.Qtras), base), width: anchoB, height: Math.max(1, Math.abs(Y(p.Qtras) - base)), rx: 1.5, class: 'd-s1' });
-    const r2 = el('rect', { x: x + 1, y: Math.min(Y(p.Qrot), base), width: anchoB, height: Math.max(1, Math.abs(Y(p.Qrot) - base)), rx: 1.5, class: 'd-s2' });
+    const r1 = el('rect', { x: x - anchoB - 1, y: Math.min(Y(p.Qtras), base), width: anchoB, height: Math.max(1, Math.abs(Y(p.Qtras) - base)), rx: 1.5, class: 'd-c-acento' });
+    const r2 = el('rect', { x: x + 1, y: Math.min(Y(p.Qrot), base), width: anchoB, height: Math.max(1, Math.abs(Y(p.Qrot) - base)), rx: 1.5, class: 'd-c-corte' });
     [r1, r2].forEach(r => r.append(el('title', {}, `${p.nombre} (posición ${fmt(p.pos)} m)\nJ = ${fmt(p.J, 3)} m⁴ (${fmt(p.frac * 100, 1)} %)\ntraslación ${fmt(p.Qtras, 2)} t\nrotación ${fmt(p.Qrot, 2)} t\ntotal ${fmt(p.Qtot, 2)} t`)));
     svg.append(r1, r2);
   });
@@ -218,8 +235,8 @@ export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: numbe
 }
 
 /** ΣJ de cada dirección contra el J mínimo (h/400, h/500, h/600): barras con una misma escala. */
-export function graficoRigidez(rs: Rigidez[]): HTMLElement {
-  const ancho = 400, fila = 64, mi = 70, md = 20, ms = 20;
+export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
+  const ancho = Math.max(320, tam.ancho ?? 400), fila = 64, mi = 70, md = 20, ms = 20;
   const alto = ms + fila * rs.length + 24;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
@@ -235,7 +252,7 @@ export function graficoRigidez(rs: Rigidez[]): HTMLElement {
     const y = ms + i * fila;
     const ok = r.J >= r.minimos.h500;
     svg.append(el('text', { x: mi - 8, y: y + 20, class: 'd-eje', 'text-anchor': 'end' }, `Viento ${r.dir}`));
-    const barra = el('rect', { x: X(0), y: y + 10, width: Math.max(1, X(r.J) - X(0)), height: 14, rx: 3, class: 'd-s1' });
+    const barra = el('rect', { x: X(0), y: y + 10, width: Math.max(1, X(r.J) - X(0)), height: 14, rx: 3, class: r.J >= r.minimos.h500 ? 'd-c-acento' : 'd-c-traccion' });
     barra.append(el('title', {}, `Viento ${r.dir}: ΣJ = ${fmt(r.J, 3)} m⁴\nJ mín h/400 = ${fmt(r.minimos.h400, 3)}\nJ mín h/500 = ${fmt(r.minimos.h500, 3)}\nJ mín h/600 = ${fmt(r.minimos.h600, 3)} m⁴`));
     svg.append(barra);
     svg.append(el('text', { x: X(r.J) + 4, y: y + 21, class: 'd-valor' }, `${fmt(r.J, 2)} m⁴ ${ok ? '✓' : '✗'}`));
@@ -254,13 +271,13 @@ export function graficoRigidez(rs: Rigidez[]): HTMLElement {
  * segmento (σ lineal entre sus dos fibras extremas), cada ala como un punto (axial). Descargado y cargado;
  * referencias en 0 y en la compresión admisible.
  */
-export function graficoTensiones(v: import('../engine/flexocompresion').VerifPieza, adm: number): HTMLElement {
-  const ancho = 400, alto = 230, mi = 46, md = 14, ms = 14, mb = 34;
+export function graficoTensiones(v: import('../engine/flexocompresion').VerifPieza, adm: number, tam: Tam = {}): HTMLElement {
+  const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(220, tam.alto ?? 240), mi = 50, md = 16, ms = 16, mb = 36;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
   const ley = document.createElement('div');
   ley.className = 'leyenda';
-  [['s1', 'descargado (0,7 t/m²): tracción'], ['s2', 'cargado (0,9 t/m²): compresión']].forEach(([c, t]) => { const sp = document.createElement('span'); const i = document.createElement('i'); i.className = `ley-${c}`; sp.append(i, t); ley.append(sp); });
+  ley.append(muestra('traccion', 'descargado, 0,7 t/m² (verifica la tracción)', true), muestra('compresion', 'cargado, 0,9 t/m² (verifica la compresión)'));
   fig.append(ley);
   const tramos = v.muros.map(m => {
     const [y1, y2] = m.papel === 'ala' ? [m.d, m.d] : [m.d - m.h / 2, m.d + m.h / 2];
@@ -284,19 +301,19 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición en el sentido del viento, desde el baricentro de la pieza (m)'));
   marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
   tramos.forEach(({ m, lejos, cerca }) => {
-    ([['desc', 's1'], ['carg', 's2']] as const).forEach(([k, c]) => {
+    ([['desc', 'traccion'], ['carg', 'compresion']] as const).forEach(([k, c]) => {
       const [a, b] = m[k].map(x => x / 10);
       const tip = `${m.id} (${m.papel})\n${k === 'desc' ? 'descargado' : 'cargado'}: ${fmt(a, 1)} / ${fmt(b, 1)} kg/cm²`;
       if (m.papel === 'ala') {
-        const l = el('line', { x1: X(lejos), x2: X(lejos), y1: Y(a), y2: Y(b), class: `d-linea d-${c}-l` });
+        const l = el('line', { x1: X(lejos), x2: X(lejos), y1: Y(a), y2: Y(b), class: `d-linea d-c-${c}-l${k === 'desc' ? ' punteada' : ''}` });
         l.append(el('title', {}, tip));
         svg.append(l);
-        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-${c}` })));
+        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-c-${c}` })));
       } else {
-        const l = el('line', { x1: X(lejos), y1: Y(a), x2: X(cerca), y2: Y(b), class: `d-linea d-${c}-l` });
+        const l = el('line', { x1: X(lejos), y1: Y(a), x2: X(cerca), y2: Y(b), class: `d-linea d-c-${c}-l${k === 'desc' ? ' punteada' : ''}` });
         l.append(el('title', {}, tip));
         svg.append(l);
-        [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-${c}` })));
+        [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-c-${c}` })));
       }
     });
     svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));

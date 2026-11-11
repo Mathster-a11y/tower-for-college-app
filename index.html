@@ -4,37 +4,74 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Torre 3D</title>
-  <meta name="description" content="App web que acompaña la planilla «Edificios en torre» (FAUD-UNMDP): planta, 3D y cálculo en vivo." />
+  <meta name="description" content="App web que acompaña la planilla «Edificios en torre» (FAUD-UNMDP): planta, 3D y cálculo en vivo, etapa por etapa." />
 </head>
 <body>
-  <header class="barra">
-    <div class="marca"><b>Torre 3D</b><span id="nombre-proyecto"></span></div>
-    <div class="acciones">
-      <div class="seg" role="group" aria-label="Dirección del viento">
-        <button type="button" id="dir-A" aria-pressed="true">Viento A</button>
-        <button type="button" id="dir-B" aria-pressed="false">Viento B</button>
+  <header class="barra" role="toolbar" aria-label="Herramientas">
+    <span class="marca">TORRE</span>
+    <span class="proyecto" id="nombre-proyecto"></span>
+    <span class="sep"></span>
+    <div class="grupo">
+      <div class="menu-cont">
+        <button type="button" id="b-ejemplos" aria-haspopup="true" aria-expanded="false">Ejemplos ▾</button>
+        <div class="menu" id="m-ejemplos" role="menu">
+          <button type="button" id="b-ejemplo" role="menuitem">Ejemplo de la guía 2024<span class="pista">Neuquén · 20 pisos · planta 20 × 16 m</span></button>
+          <button type="button" id="b-nuevo" role="menuitem">Proyecto nuevo<span class="pista">Una azotea y PB; se arma desde Niveles</span></button>
+        </div>
       </div>
-      <div class="seg" role="group" aria-label="Historia">
-        <button type="button" id="b-deshacer" title="Deshacer (Ctrl+Z)" aria-label="Deshacer">↶</button>
-        <button type="button" id="b-rehacer" title="Rehacer (Ctrl+Y)" aria-label="Rehacer">↷</button>
-      </div>
-      <button type="button" id="b-ejemplo">Ejemplo</button>
-      <button type="button" id="b-nuevo">Nuevo</button>
       <label class="boton" for="b-abrir" title="Proyecto (.json), planilla del curso, tabla de niveles y muros o líneas de AutoCAD (.xlsx, .csv)">Abrir / importar…<input type="file" id="b-abrir" accept=".xlsx,.json,.csv,.tsv,.txt" hidden /></label>
-      <button type="button" id="b-guardar">Guardar proyecto</button>
-      <button type="button" id="b-exportar" class="primario">Escribir planilla .xlsx</button>
     </div>
+    <span class="sep"></span>
+    <div class="grupo">
+      <button type="button" class="glifo" id="b-deshacer" title="Deshacer (Ctrl+Z)" aria-label="Deshacer">↶</button>
+      <button type="button" class="glifo" id="b-rehacer" title="Rehacer (Ctrl+Y)" aria-label="Rehacer">↷</button>
+    </div>
+    <span class="sep"></span>
+    <div class="grupo">
+      <div class="menu-cont">
+        <button type="button" id="b-mostrar" aria-haspopup="true" aria-expanded="false">Mostrar ▾</button>
+        <div class="menu" id="m-mostrar" role="menu">
+          <button type="button" data-tema="" role="menuitem">Aspecto del sistema<span class="pista">Claro u oscuro, según la computadora</span></button>
+          <button type="button" data-tema="light" role="menuitem">Clásico (claro)</button>
+          <button type="button" data-tema="dark" role="menuitem">Tablero de dibujo (oscuro)</button>
+        </div>
+      </div>
+      <div class="menu-cont">
+        <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar ▾</button>
+        <div class="menu" id="m-exportar" role="menu">
+          <button type="button" id="b-guardar" role="menuitem">Guardar proyecto (.json)<span class="pista">Para seguir en otra computadora</span></button>
+          <button type="button" id="b-tabla" role="menuitem">Tabla de niveles y muros (.xlsx)<span class="pista">Sirve de plantilla para llenar en Excel</span></button>
+        </div>
+      </div>
+      <button type="button" class="primario" id="b-exportar">Escribir planilla .xlsx</button>
+    </div>
+    <span class="espacio"></span>
+    <span class="chip-estado" id="estado-calculo">Calculado</span>
   </header>
   <main class="app">
-    <aside class="lateral">
-      <nav class="pestanas" role="tablist" id="pestanas"></nav>
-      <section class="panel" id="panel" role="tabpanel"></section>
+    <nav class="riel" id="riel" aria-label="Etapas del cálculo"></nav>
+    <aside class="lateral" id="lateral">
+      <div class="banda" id="banda"><span class="chip" id="banda-nro">01</span><h2 id="banda-titulo"></h2></div>
+      <div class="subpasos" id="subpasos" role="group"></div>
+      <section class="panel" id="panel"></section>
     </aside>
-    <section class="vistas">
-      <div class="vista" id="vista-planta"><span class="rotulo">Planta de PB</span></div>
-      <div class="vista" id="vista-3d"><span class="rotulo">3D</span></div>
+    <section class="centro" aria-label="Dibujo">
+      <div class="tira" id="tira-centro"></div>
+      <div class="lienzo" id="lienzo">
+        <div class="centro-planta" id="vista-planta"></div>
+        <div class="centro-dibujos" id="centro-dibujos" hidden></div>
+      </div>
     </section>
+    <aside class="derecha" aria-label="Axonometría y avance">
+      <div class="bloque3d">
+        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
+        <div class="vista3d" id="vista-3d"></div>
+        <div class="capas" id="capas"></div>
+      </div>
+      <div class="avance" id="avance"></div>
+    </aside>
   </main>
+  <footer class="estado-linea"><span id="mensaje">Listo.</span><span class="espacio"></span><span class="coords" id="coords"></span></footer>
   <dialog id="dialogo"></dialog>
   <script type="module" src="/src/main.ts"></script>
 </body>

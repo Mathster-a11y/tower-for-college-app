@@ -21,8 +21,8 @@ export function montar3D(cont: HTMLElement) {
   let encuadre = '';
 
   function fondo() {
-    const oscuro = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
-    escena.background = new THREE.Color(oscuro ? 0x15191c : 0xf3f5f4);
+    const c = getComputedStyle(document.documentElement).getPropertyValue('--lienzo').trim() || '#ffffff';
+    escena.background = new THREE.Color(c);
   }
 
   function construir() {
@@ -38,6 +38,7 @@ export function montar3D(cont: HTMLElement) {
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9 });
     p.niveles.forEach(n => {
       B = n.B ?? B; L = n.L ?? L;
+      if (!estado.capas.losas) return;
       const losa = new THREE.Mesh(new THREE.BoxGeometry(B, 0.2, L), n.cota < 0 ? matSub : matLosa);
       losa.position.set(0, n.cota - 0.1, 0);
       grupo.add(losa);
@@ -58,6 +59,7 @@ export function montar3D(cont: HTMLElement) {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const color = new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
       const entra = entraEnCalculo(m, fondoCota, top);
+      if (!entra && !estado.capas.fuera) return;
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4,
         emissive: estado.seleccion === m.id ? new THREE.Color(0x1f6f8b) : new THREE.Color(0x000000), emissiveIntensity: 0.6 });
       const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
@@ -79,7 +81,7 @@ export function montar3D(cont: HTMLElement) {
     const largo = 8;
     const dir = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);
     const origen = estado.dir === 'A' ? new THREE.Vector3(0, top * 0.6, L / 2 + largo + 3) : new THREE.Vector3(-B / 2 - largo - 3, top * 0.6, 0);
-    grupo.add(new THREE.ArrowHelper(dir, origen, largo, 0x1f6f8b, 2.5, 1.6));
+    if (estado.capas.viento) grupo.add(new THREE.ArrowHelper(dir, origen, largo, 0x1f6f8b, 2.5, 1.6));
     // la cámara se vuelve a encuadrar cuando cambia el tamaño de la torre (no al mover un muro)
     const clave = [B, L, top, fondoCota].map(v => v.toFixed(1)).join('|');
     medidas = { B, L, h, top, fondoCota };

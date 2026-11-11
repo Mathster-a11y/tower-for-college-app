@@ -28,9 +28,9 @@ let nId = 0;
 /** Nivel: cota y lado paralelo al viento, de la azotea hacia abajo. */
 export interface PerfilTorre { z: number; lado: number; }
 
-export function dibujoGuia(f: Funicular, perfil: PerfilTorre[]): SVGSVGElement {
+export function dibujoGuia(f: Funicular, perfil: PerfilTorre[], tam: { ancho?: number; alto?: number } = {}): SVGSVGElement {
   const id = `fu${nId++}`;
-  const ancho = 400, alto = 440, m = 28;
+  const ancho = Math.max(340, tam.ancho ?? 400), alto = Math.max(360, tam.alto ?? 440), m = 28;
   const ladoMax = Math.max(f.b, ...perfil.map(p => p.lado), 1);
   const H = f.zTop - f.zBase;
   // escala única (es una construcción gráfica: largos verdaderos); el polígono de fuerzas va a la derecha
@@ -91,8 +91,8 @@ export function dibujoGuia(f: Funicular, perfil: PerfilTorre[]): SVGSVGElement {
   return svg;
 }
 
-export function dibujoPresiones(f: Funicular): SVGSVGElement {
-  const ancho = 400, alto = 360, mi = 54, md = 14, ms = 18, mb = 34;
+export function dibujoPresiones(f: Funicular, tam: { ancho?: number; alto?: number } = {}): SVGSVGElement {
+  const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(300, tam.alto ?? 360), mi = 54, md = 14, ms = 18, mb = 34;
   const puntos = f.puntos;
   const eMax = Math.max(f.tercio, ...puntos.map(p => Math.max(p.nucleo, Math.abs(p.e))), Math.abs(f.e) || 0, 0.1) * 1.1;
   const X = (x: number) => mi + ((x + eMax) / (2 * eMax)) * (ancho - mi - md);
@@ -125,15 +125,15 @@ export function dibujoPresiones(f: Funicular): SVGSVGElement {
  * (lados paralelos a los rayos); a la derecha el polígono de fuerzas con el polo y los rayos.
  * Los lados extremos se cortan a la altura de la resultante W.
  */
-export function dibujoPoligono(c: import('../engine/funicular').Construccion, zBase: number): SVGSVGElement {
+export function dibujoPoligono(c: import('../engine/funicular').Construccion, zBase: number, tam: { ancho?: number; alto?: number } = {}): SVGSVGElement {
   const id = `pf${nId++}`;
-  const ancho = 400, alto = 440, m = 24;
+  const ancho = Math.max(360, tam.ancho ?? 400), alto = Math.max(380, tam.alto ?? 440), m = 24;
+  const anchoAlz = ancho * 0.59;
   const n = c.fuerzas.length;
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'funicular', role: 'img', 'aria-label': `Polígono funicular del viento: los lados extremos se cortan a ${fmt(c.zR - zBase)} m sobre la base` }) as SVGSVGElement;
   flecha(svg, `${id}-p`, 'punta-f');
   if (!n) return svg;
   // alzado: misma escala en x y en z (los lados tienen que ser paralelos a los rayos)
-  const anchoAlz = 236;
   const xs = [...c.vertices.map(v => v.x), c.xR, c.vertices[0].x + c.m[0] * (c.vertices[0].z - (c.zR + 4)), c.vertices[n - 1].x + c.m[n] * (c.vertices[n - 1].z - (c.zR - 4))];
   const zs = [...c.fuerzas.map(f => f.z), zBase, c.zR];
   const xMin = Math.min(...xs), xMax = Math.max(...xs), zMin = Math.min(...zs), zMax = Math.max(...zs);

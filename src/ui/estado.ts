@@ -13,6 +13,15 @@ class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
   seleccion: string | null = null;
+  /** de dónde salen los valores de fórmulas, indicadores y dibujos: la planilla original o la corregida (guía/CIRSOC) */
+  fuente: 'planilla' | 'guia' = 'guia';
+  /** etapa y sub-paso a la vista */
+  etapa = 'diseno';
+  sub: Record<string, string> = {};
+  /** capas de la vista 3D */
+  capas = { losas: true, viento: true, fuera: true };
+  /** pieza elegida en Flexión */
+  piezaFlex: string | null = null;
   /** cota del nivel cuya planta se muestra (null = PB) */
   nivelPlanta: number | null = null;
   calculo!: Calculo;
@@ -35,6 +44,8 @@ class Estado {
   suscribirSeleccion(f: Oyente) { this.oyentesSel.push(f); }
   elegir(id: string | null) { if (this.seleccion === id) return; this.seleccion = id; this.oyentesSel.forEach(o => o()); }
   avisarSeleccion() { this.oyentesSel.forEach(o => o()); }
+  /** redibuja todo sin recalcular (cambió la vista, no los datos) */
+  avisarPanel() { this.oyentes.forEach(o => o()); }
   recalcular() {
     try {
       const asig = aPlanilla(this.proyecto);
@@ -85,5 +96,10 @@ export const COLORES: Record<string, string> = {
   alma: '#FFFF00', 'ala sup.': '#00FF00', 'ala inf.': '#00CCFF', columna: '#FF4040',
   tubo: '#B07CFF', 'fuera del cálculo': '#B8B8B8', 'sin pieza': '#FFFFFF',
 };
-export const fmt = (x: number | null | undefined, d = 2) =>
-  x === null || x === undefined || Number.isNaN(x) ? '—' : !isFinite(x) ? '∞' : x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+/** número en castellano con signo menos verdadero (−) y sin «−0» */
+export const fmt = (x: number | null | undefined, d = 2) => {
+  if (x === null || x === undefined || Number.isNaN(x)) return '—';
+  if (!isFinite(x)) return '∞';
+  const r = Math.abs(x) < 0.5 * 10 ** -d ? 0 : x;
+  return r.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d }).replace('-', '−');
+};
