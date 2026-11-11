@@ -539,7 +539,8 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .perfil .pf-guia { stroke: var(--hair); stroke-width: .8; }
 /* silueta del piso */
 .planta .contorno.editando { stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; fill: color-mix(in srgb, var(--accent) 6%, transparent); cursor: copy; }
-.planta .vertice { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: move; }
+.planta .vertice { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.5; cursor: move; }
+.planta .vertice:hover { stroke-width: 6; stroke-opacity: .35; paint-order: stroke; }
 .planta .vertice:hover { fill: var(--accent); }
 .silueta-panel { width: 230px; }
 .silueta-panel span { color: var(--ink2); font-size: 11.5px; }
@@ -675,9 +676,12 @@ text[data-par].ultimo { font-size: 15px; }
 .dock-planta .calco-panel.plegado > :not(b) { display: none !important; }
 @media (max-width: 760px) { .dock-planta { position: static; max-height: none; margin: 6px 10px; } }
 /* nodos del elemento elegido */
-.planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: move; }
+.planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.4; pointer-events: none; }
+.planta .nodos .nodo { cursor: move; }
+.planta .nodos .hit { fill: transparent; stroke: none; }
+.planta .nodos .nodo:hover .hit { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
 .planta .nodos polygon.centro { fill: var(--accent); }
-.planta .nodos :hover { fill: var(--accent); }
+.planta .nodos .nodo:hover rect, .planta .nodos .nodo:hover polygon { fill: var(--accent); }
 
 /* importar corte */
 .corte-panel { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-top: 6px; background: var(--panel); }
@@ -689,7 +693,7 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .vertice.vertice-carp { stroke: var(--serie-1); }
 .planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
 .silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }
-.planta .nodos .ref { fill: var(--elegido); stroke: var(--elegido); }
+.planta .nodos .ref rect, .planta .nodos .ref polygon { fill: var(--elegido); stroke: var(--elegido); }
 .prec-panel { width: 262px; left: auto; right: 10px; }
 @media (max-width: 760px) { .prec-panel { position: static; width: auto; margin: 6px 10px; } }
 .prec-panel .prec-fila { display: grid; grid-template-columns: 62px 1fr 1fr auto; align-items: center; gap: 5px; }

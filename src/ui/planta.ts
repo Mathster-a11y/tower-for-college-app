@@ -559,7 +559,7 @@ export function montarPlanta(cont: HTMLElement) {
         estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }); });
       });
       vEd.forEach((v, i) => {
-        const hnd = el('circle', { cx: X(v.x), cy: Y(v.y), r: 5.5, class: 'vertice' + (editaCarp ? ' vertice-carp' : ''), tabindex: 0 });
+        const hnd = el('circle', { cx: X(v.x), cy: Y(v.y), r: 3.5, class: 'vertice' + (editaCarp ? ' vertice-carp' : ''), tabindex: 0 });
         hnd.appendChild(el('title', {}, `vértice ${i + 1}: x ${v.x.toFixed(2)} · y ${v.y.toFixed(2)}${v.b ? ` · arco (bulge ${v.b.toFixed(3)})` : ''} · arrastrar para mover, clic derecho para borrar`));
         hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
         hnd.addEventListener('contextmenu', ev => { ev.preventDefault(); if (vEd.length > 3) estado.cambiar(() => { siluetaPropia().splice(i, 1); }); });
@@ -675,18 +675,31 @@ export function montarPlanta(cont: HTMLElement) {
       });
       svg.appendChild(grupo);
     });
-    calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 5, class: 'iman extremo' })));
+    calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 4, class: 'iman extremo' })));
     // nodos del elemento elegido (modo mover): se arrastran para ubicarlo con precisión
     const elegido = modo === 'mover' ? p.muros.find(m => m.id === estado.seleccion) : undefined;
     if (elegido && presenteEn(elegido, zN, zFund, zTop)) {
       const gg = el('g', { class: 'nodos' });
       const lista = nodosDe(elegido);
+      // en muros finos las esquinas y los medios de los lados cortos quedan pegados: se dibuja uno solo
+      // (primero el centro, después las esquinas, después los medios)
+      const puestos: [number, number][] = [];
+      const prio = { centro: 0, esquina: 1, medio: 2 } as const;
+      const visibles = new Set(lista.map((nd, i) => ({ nd, i })).sort((u, v) => prio[u.nd.t] - prio[v.nd.t]).filter(({ nd }) => {
+        const x = X(nd.x), y = Y(nd.y), esRef = refNodo >= 0 ? nd === lista[refNodo] : false;
+        if (!esRef && puestos.some(([a, b]) => Math.hypot(a - x, b - y) < 7)) return false;
+        puestos.push([x, y]); return true;
+      }).map(o => o.nd));
       lista.forEach(nd => {
+        if (!visibles.has(nd)) return;
         const x = X(nd.x), y = Y(nd.y);
         const esRef = refNodo >= 0 ? nd === lista[refNodo] : nd.t === 'centro';
-        const forma = nd.t === 'esquina' ? el('rect', { x: x - 4.5, y: y - 4.5, width: 9, height: 9 })
-          : nd.t === 'medio' ? el('polygon', { points: `${x},${y - 6} ${x - 5.5},${y + 4.5} ${x + 5.5},${y + 4.5}` })
-            : el('polygon', { points: `${x},${y - 7} ${x + 7},${y} ${x},${y + 7} ${x - 7},${y}`, class: 'centro' });
+        // marca chica (no tapa el muro) y un círculo invisible más grande para agarrarla fácil
+        const forma = el('g', { class: `nodo nodo-${nd.t}` });
+        forma.appendChild(el('circle', { cx: x, cy: y, r: 8, class: 'hit' }));
+        forma.appendChild(nd.t === 'esquina' ? el('rect', { x: x - 2.75, y: y - 2.75, width: 5.5, height: 5.5 })
+          : nd.t === 'medio' ? el('polygon', { points: `${x},${y - 3.6} ${x - 3.3},${y + 2.7} ${x + 3.3},${y + 2.7}` })
+            : el('polygon', { points: `${x},${y - 4.2} ${x + 4.2},${y} ${x},${y + 4.2} ${x - 4.2},${y}`, class: 'centro' }));
         forma.appendChild(el('title', {}, `Arrastrar desde ${nd.t === 'esquina' ? 'esta esquina' : nd.t === 'medio' ? 'el medio de este lado' : 'el centro'}: se pega a los nodos del plano o de otros muros${elegido.grupo ? ' (mueve el grupo entero)' : ''}`));
         forma.addEventListener('pointerdown', e0 => {
           const ev = e0 as PointerEvent;
@@ -728,7 +741,7 @@ export function montarPlanta(cont: HTMLElement) {
         }
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
       }
-      pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 3 : 6, class: `iman ${iman}` }));
+      pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 2.5 : 4.5, class: `iman ${iman}` }));
       if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
       svg.appendChild(pr);
     }
