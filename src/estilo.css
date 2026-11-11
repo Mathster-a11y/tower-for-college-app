@@ -527,3 +527,10 @@ svg.planta.dibujando .muro { cursor: crosshair; }
 .perfil .pf-separa { stroke: var(--hair); stroke-width: 1; }
 tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .perfil .pf-guia { stroke: var(--hair); stroke-width: .8; }
+/* silueta del piso */
+.planta .contorno.editando { stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; fill: color-mix(in srgb, var(--accent) 6%, transparent); cursor: copy; }
+.planta .vertice { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: move; }
+.planta .vertice:hover { fill: var(--accent); }
+.silueta-panel { width: 230px; }
+.silueta-panel span { color: var(--ink2); font-size: 11.5px; }
+.calco-panel[hidden] { display: none; }

@@ -54,7 +54,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - Nada por ahora: el próximo es el primero de la lista de abajo.
 
 ## Próximos
-- [ ] Silueta de cada piso: editarla o importarla de CAD (contornos con segmentos y arcos de círculo)
+- [x] Silueta de cada piso: editarla en la planta (vértices) o importarla de AutoCAD (DXF, polilínea con arcos); se ve en la planta y en las losas del 3D. La planilla sigue leyendo B y L (botón «Usar la caja como B y L»)
 - [x] Dibujar los muros con el mouse en la planta (clic en el inicio y clic en el fin, encadenados), con imán a los extremos y al eje de otros muros
 - [x] Armar las piezas solas: los muros que se tocan forman una pieza (T1 / T1B) y el ala sabe a qué alma está pegada (botón «Armar piezas» y al dibujar)
 - [x] Calcar un plano: imagen de fondo en la planta, con escala por dos puntos, posición y opacidad (un PDF se exporta antes como imagen)

@@ -19,6 +19,12 @@ export interface Nivel {
   B?: number | null;
   /** medida de la planta paralela al viento A (m); vacío = igual a la del nivel de arriba */
   L?: number | null;
+  /**
+   * silueta de la planta (contorno cerrado, en m, desde el centro de PB); vacío = la del nivel de arriba o el
+   * rectángulo B × L. Cada vértice puede llevar «b» (bulge, como en AutoCAD): el tramo que sale de ese vértice es un
+   * arco de círculo con b = tan(ángulo / 4); b = 0 es recto.
+   */
+  silueta?: { x: number; y: number; b?: number }[] | null;
 }
 
 export interface Muro {

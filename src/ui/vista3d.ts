@@ -10,6 +10,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { estado, COLORES, fmt } from './estado';
 import { entraEnCalculo, rectangulos, tipoDe } from '../engine/modelo';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
+import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
@@ -51,10 +52,13 @@ class Prisma {
       tri([p.x, p.y, z0], [q.x, q.y, z0], [q.x, q.y, z1]);
       tri([p.x, p.y, z0], [q.x, q.y, z1], [p.x, p.y, z1]);
     }
-    for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) for (let i = 1; i + 1 < n; i++) {
-      const a: [number, number, number] = [pol[0].x, pol[0].y, z], b: [number, number, number] = [pol[i].x, pol[i].y, z], c: [number, number, number] = [pol[i + 1].x, pol[i + 1].y, z];
-      if (arriba) tri(a, c, b); else tri(a, b, c);
-    }
+    // tapas: triangulación que sirve también para contornos cóncavos (siluetas en L, con arcos, etc.)
+    const tris = n <= 4 ? Array.from({ length: n - 2 }, (_, i) => [0, i + 1, i + 2]) : THREE.ShapeUtils.triangulateShape(pol.map(p => new THREE.Vector2(p.x, p.y)), []);
+    const horario = THREE.ShapeUtils.isClockWise(pol.map(p => new THREE.Vector2(p.x, p.y)));
+    for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) tris.forEach(([i0, i1, i2]) => {
+      const a: [number, number, number] = [pol[i0].x, pol[i0].y, z], b: [number, number, number] = [pol[i1].x, pol[i1].y, z], c: [number, number, number] = [pol[i2].x, pol[i2].y, z];
+      if (arriba !== horario) tri(a, c, b); else tri(a, b, c);
+    });
     // bordes: contorno arriba y abajo y, si es un rectángulo, las aristas verticales piso por piso
     const seg = (a: number[], b: number[]) => this.baseB.push(...a, ...b);
     for (const z of [zs[0], zs[zs.length - 1]]) for (let i = 0; i < n; i++) seg([pol[i].x, pol[i].y, z], [pol[(i + 1) % n].x, pol[(i + 1) % n].y, z]);
@@ -145,11 +149,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     // losas
     const matLosa = new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
-    let Bn = 0, Ln = 0;
-    p.niveles.forEach(n => {
-      Bn = n.B ?? Bn; Ln = n.L ?? Ln;
+    p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas) return;
-      const pol = [{ x: -Bn / 2, y: -Ln / 2 }, { x: Bn / 2, y: -Ln / 2 }, { x: Bn / 2, y: Ln / 2 }, { x: -Bn / 2, y: Ln / 2 }];
+      const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 12);
       prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota));
     });
     // muros
