@@ -678,3 +678,10 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: move; }
 .planta .nodos polygon.centro { fill: var(--accent); }
 .planta .nodos :hover { fill: var(--accent); }
+
+/* importar corte */
+.corte-panel { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-top: 6px; background: var(--panel); }
+.corte-panel[hidden] { display: none; }
+.corte-tabla { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+.corte-tabla th, .corte-tabla td { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.corte-tabla th:nth-child(2), .corte-tabla td:nth-child(2) { text-align: left; }

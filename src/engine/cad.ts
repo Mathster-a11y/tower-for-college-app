@@ -192,3 +192,27 @@ export function contornoDesdeCAD(ents: Entidad[]): Vertice[] | null {
   const area = (v: Vertice[]) => { const p = puntosSilueta(v, 5); return Math.abs(p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a.x * b.y - b.x * a.y; }, 0)) / 2; };
   return cand.map(e => e.v).sort((a, b) => area(b) - area(a))[0];
 }
+
+/**
+ * Niveles a partir de un corte: las líneas horizontales largas (al menos el 30 % del ancho del dibujo) son losas.
+ * Se juntan las que están a menos de 60 cm (cara superior e inferior de una losa: se toma la de arriba) y se
+ * devuelven las cotas en metros, de arriba hacia abajo, con PB en la cota indicada (o en la más baja que sobra
+ * de la planta baja: la que el usuario elija después).
+ */
+export function cotasDesdeCorte(ents: Entidad[], factor: number): number[] {
+  const segs = segmentos(ents).filter(([a, b]) => Math.abs(a.y - b.y) < 1e-6);
+  if (!segs.length) return [];
+  const ancho = Math.max(...segs.map(([a, b]) => Math.abs(b.x - a.x)));
+  const ys = segs.filter(([a, b]) => Math.abs(b.x - a.x) >= 0.3 * ancho).map(([a]) => a.y * factor).sort((p, q) => q - p);
+  const out: number[] = [];
+  ys.forEach(y => { if (!out.length || out[out.length - 1] - y > 0.6) out.push(y); });   // losas (hasta 60 cm de espesor): la cara de arriba
+  return out;
+}
+/** nombres de niveles para cotas (de arriba hacia abajo) con PB en la posición iPB */
+export function nombrarNiveles(cotas: number[], iPB: number): { nombre: string; cota: number }[] {
+  const zPB = cotas[iPB];
+  return cotas.map((c, i) => ({
+    nombre: i === 0 ? 'Azotea' : i < iPB ? `${iPB - i}º` : i === iPB ? 'PB' : `${i - iPB}º SS`,
+    cota: Math.round((c - zPB) * 100) / 100,
+  }));
+}

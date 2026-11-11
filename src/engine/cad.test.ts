@@ -46,3 +46,20 @@ describe('importar CAD (DXF)', () => {
     expect(imanCAD({ x: 14.9, y: 5.1 }, ns, 0.3)).toMatchObject({ t: 'centro' });
   });
 });
+
+import { cotasDesdeCorte, nombrarNiveles } from './cad';
+describe('niveles desde un corte', () => {
+  it('toma las losas (líneas horizontales largas, cara de arriba) y nombra los niveles con PB', () => {
+    const g: string[] = ['0', 'SECTION', '2', 'ENTITIES'];
+    const linea = (x1: number, y1: number, x2: number, y2: number) => g.push('0', 'LINE', '8', 'CORTE', '10', String(x1), '20', String(y1), '11', String(x2), '21', String(y2));
+    // subsuelo a −3000, PB 0, pisos cada 3000 hasta 9000, losas de 200 de espesor; una ventana corta que no cuenta
+    for (const y of [-3000, 0, 3000, 6000, 9000]) { linea(0, y, 20000, y); linea(0, y - 200, 20000, y - 200); }
+    linea(2000, 1500, 3500, 1500);
+    linea(0, -3200, 0, 9000);
+    g.push('0', 'ENDSEC', '0', 'EOF');
+    const d = leerDXFCompleto(g.join('\n'));
+    const cotas = cotasDesdeCorte(d.entidades, 0.001);
+    expect(cotas).toEqual([9, 6, 3, 0, -3]);
+    expect(nombrarNiveles(cotas, 3)).toEqual([{ nombre: 'Azotea', cota: 9 }, { nombre: '2º', cota: 6 }, { nombre: '1º', cota: 3 }, { nombre: 'PB', cota: 0 }, { nombre: '1º SS', cota: -3 }]);
+  });
+});

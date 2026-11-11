@@ -5,6 +5,7 @@ import { estado, fmt, COLORES } from './estado';
 import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
 import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { cotasDesdeCorte, factorUnidad, leerDXFCompleto, nombrarNiveles } from '../engine/cad';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
 
@@ -116,6 +117,71 @@ export function panelNiveles(c: H) {
   tab.title = 'Niveles y muros del proyecto en un Excel: sirve de plantilla para llenar y volver a importar';
   tab.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:tabla')));
   c.append(h('div', { class: 'fila-acciones' }, imp, tab));
+  c.append(importarCorte());
+}
+
+/** «Importar corte (DXF)»: las losas del corte (líneas horizontales largas) dan las cotas; el usuario elige PB y confirma. */
+function importarCorte(): H {
+  const caja = h('div', { class: 'corte-imp' });
+  const archivo = h('input', { type: 'file', accept: '.dxf', hidden: '' }) as HTMLInputElement;
+  const bot = h('button', { type: 'button' }, 'Importar corte (DXF)…');
+  bot.title = 'Lee las losas de un corte dibujado en CAD y propone los niveles con sus cotas';
+  bot.addEventListener('click', () => archivo.click());
+  const panel = h('div', { class: 'corte-panel', hidden: '' });
+  caja.append(h('div', { class: 'fila-acciones' }, bot), archivo, panel);
+  archivo.addEventListener('change', async () => {
+    const f = archivo.files?.[0]; archivo.value = '';
+    if (!f) return;
+    const d = leerDXFCompleto(await f.text());
+    if (!d.entidades.length) { avisoPanel(`${f.name}: no tiene líneas ni polilíneas.`); return; }
+    const { factor, unidad } = factorUnidad(d);
+    let capa = '', iPB = 0, cotas: number[] = [];
+    const armar = () => {
+      cotas = cotasDesdeCorte(capa ? d.entidades.filter(e => e.capa === capa) : d.entidades, factor);
+      // PB: la cota más cercana a 0 si el dibujo tiene el 0 en PB; si no, la más baja
+      const cero = cotas.findIndex(z => Math.abs(z) < 0.05);
+      iPB = cero >= 0 ? cero : Math.max(0, cotas.length - 1);
+      dibujarPanel();
+    };
+    const dibujarPanel = () => {
+      panel.replaceChildren();
+      panel.hidden = false;
+      const selCapa = h('select', { 'aria-label': 'Capa de las losas' }) as HTMLSelectElement;
+      selCapa.append(h('option', { value: '' }, 'todas las capas'), ...d.capas.map(k => h('option', { value: k }, k)));
+      selCapa.value = capa;
+      selCapa.addEventListener('change', () => { capa = selCapa.value; armar(); });
+      panel.append(h('p', {}, h('b', {}, f.name), ` · en ${unidad}. Capa de las losas: `), selCapa);
+      if (!cotas.length) { panel.append(h('p', { class: 'nota' }, 'No encontré líneas horizontales largas (losas) en esa capa.')); return; }
+      const nom = nombrarNiveles(cotas, iPB);
+      const tabla = h('table', { class: 'corte-tabla' });
+      tabla.append(h('tr', {}, h('th', {}, 'PB'), h('th', {}, 'Nivel'), h('th', {}, 'Cota (m)'), h('th', {}, 'Altura de piso (m)')));
+      nom.forEach((n, i) => {
+        const r = h('input', { type: 'radio', name: 'corte-pb', 'aria-label': `PB en ${n.cota} m` }) as HTMLInputElement;
+        r.checked = i === iPB;
+        r.addEventListener('change', () => { iPB = i; dibujarPanel(); });
+        const hp = i < nom.length - 1 ? fmt(n.cota - nom[i + 1].cota, 2) : '—';
+        tabla.append(h('tr', {}, h('td', {}, r), h('td', {}, n.nombre), h('td', {}, fmt(n.cota, 2)), h('td', {}, hp)));
+      });
+      panel.append(tabla);
+      const usar = h('button', { type: 'button', class: 'primario' }, `Usar estos ${nom.length} niveles`);
+      usar.addEventListener('click', () => estado.cambiar(() => {
+        const p = estado.proyecto, viejos = p.niveles;
+        p.niveles = nom.map((n, i) => {
+          const igual = viejos.find(v => v.nombre === n.nombre);
+          const nv: Nivel = { ...(igual ?? {}), nombre: n.nombre, cota: n.cota };
+          if (i === 0) { nv.B ??= viejos[0]?.B ?? 20; nv.L ??= viejos[0]?.L ?? 16; }
+          return nv;
+        });
+        panel.hidden = true;
+        avisoPanel(`Niveles tomados del corte ${f.name}: ${nom.length} niveles, de ${fmt(nom.at(-1)!.cota, 2)} a ${fmt(nom[0].cota, 2)} m.`);
+      }));
+      const cancelar = h('button', { type: 'button' }, 'Cancelar');
+      cancelar.addEventListener('click', () => { panel.hidden = true; });
+      panel.append(h('p', { class: 'nota' }, 'Se toma la cara de arriba de cada losa (NPT aproximado). Revisá los nombres y las cotas en la tabla de niveles después; B, L, siluetas y carpinterías de los niveles con el mismo nombre se conservan.'), h('div', { class: 'fila-acciones' }, usar, cancelar));
+    };
+    armar();
+  });
+  return caja;
 }
 
 // ------------------------------------------------------------------ Muros
