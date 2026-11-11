@@ -1,6 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
+import { armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, txt?: string) => {
@@ -28,6 +29,26 @@ export function montarPlanta(cont: HTMLElement) {
     const sp = document.createElement('span'); const i = document.createElement('i'); i.className = 'caja'; i.style.background = COLORES[k]; sp.append(i, t); ley.append(sp);
   });
   cont.appendChild(ley);
+  // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
+  let modo: 'mover' | 'dibujar' = 'mover';
+  let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
+  const barra = document.createElement('div');
+  barra.className = 'herr-planta seg chico';
+  barra.setAttribute('role', 'group');
+  barra.setAttribute('aria-label', 'Herramienta');
+  const bMover = document.createElement('button'), bDibujar = document.createElement('button'), bArmar = document.createElement('button');
+  bMover.type = bDibujar.type = bArmar.type = 'button';
+  bMover.textContent = 'Mover'; bDibujar.textContent = 'Dibujar muro'; bArmar.textContent = 'Armar piezas';
+  bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
+  bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
+  bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
+  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); svg.classList.toggle('dibujando', m === 'dibujar'); dibujar(); };
+  bMover.addEventListener('click', () => ponerModo('mover'));
+  bDibujar.addEventListener('click', () => ponerModo('dibujar'));
+  bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
+  barra.append(bMover, bDibujar, bArmar);
+  cont.appendChild(barra);
+  const nuevoId = () => { let k = 1; while (estado.proyecto.muros.some(m => m.id === `M${k}`)) k++; return `M${k}`; };
   let arrastre: { id: string; x0: number; y0: number; mx: number; my: number } | null = null;
   let escala = 20, ox = 0, oy = 0;
 
@@ -119,7 +140,9 @@ export function montarPlanta(cont: HTMLElement) {
       if (rot && esta) grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, rot));
       grupo.appendChild(el('title', {}, `${m.id}${pieza ? ' · pieza ' + pieza : ''} · ${papel}${esta ? '' : ' · no está en este nivel'}`));
       grupo.addEventListener('pointerdown', ev => {
+        if (modo === 'dibujar') return;
         ev.preventDefault();
+        ultimoEspesor = m.espesor;
         estado.seleccion = m.id;
         const q = aMundo(ev);
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y };
@@ -128,11 +151,48 @@ export function montarPlanta(cont: HTMLElement) {
       });
       svg.appendChild(grupo);
     });
+    // muro en dibujo: vista previa con su largo y el imán
+    if (modo === 'dibujar' && cursor) {
+      const pr = el('g', { class: 'previa' });
+      if (inicio) {
+        const t = muroDesdeTramo(inicio, cursor, ultimoEspesor);
+        if (t) {
+          const ax = t.dir === 'X' ? t.largo : t.espesor, ay = t.dir === 'X' ? t.espesor : t.largo;
+          pr.appendChild(el('rect', { x: X(t.x - ax / 2), y: Y(t.y + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala) }));
+          pr.appendChild(el('text', { x: X(t.x) + (t.dir === 'Y' ? 8 : 0), y: Y(t.y) + (t.dir === 'X' ? -8 : 4), class: 'etiqueta', 'text-anchor': t.dir === 'X' ? 'middle' : 'start' }, `${t.largo.toFixed(2).replace('.', ',')} m`));
+        }
+        pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
+      }
+      pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 3 : 6, class: `iman ${iman}` }));
+      svg.appendChild(pr);
+    }
   }
+  let ultimoEspesor = 0.2;
+  const pegar = (ev: PointerEvent) => { const r = imanar(aMundo(ev), estado.proyecto.muros, 8 / escala + 0.05); iman = r.a; return r.p; };
+  svg.addEventListener('pointerdown', ev => {
+    if (modo !== 'dibujar' || ev.button !== 0) return;
+    ev.preventDefault();
+    const q = pegar(ev);
+    if (!inicio) { inicio = q; cursor = q; dibujar(); return; }
+    const t = muroDesdeTramo(inicio, q, ultimoEspesor);
+    if (!t) return;
+    const fin = t.dir === 'X' ? { x: t.x + (q.x >= inicio.x ? 1 : -1) * t.largo / 2, y: t.y } : { x: t.x, y: t.y + (q.y >= inicio.y ? 1 : -1) * t.largo / 2 };
+    estado.cambiar(() => {
+      const id = nuevoId();
+      const m: Muro = { id, ...t, llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' };
+      estado.proyecto.muros = armarPiezas([...estado.proyecto.muros, m]);
+      estado.seleccion = id;
+    });
+    inicio = { x: +fin.x.toFixed(2), y: +fin.y.toFixed(2) };      // encadenado: el próximo arranca donde terminó este
+  });
+  svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
+  svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
+  document.addEventListener('keydown', ev => { if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
     if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
+    if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
     if (!arrastre) return;
     const q = aMundo(ev);
     const snap = (v: number) => Math.round(v / 0.05) * 0.05;
@@ -155,5 +215,5 @@ export function montarPlanta(cont: HTMLElement) {
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);
   estado.suscribirSeleccion(dibujar);
-  dibujar();
+  ponerModo('mover');
 }
