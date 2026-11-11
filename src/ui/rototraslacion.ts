@@ -37,6 +37,8 @@ export interface ElementoPlano {
   /** distancia al eje de inercia correspondiente */
   a: number;
   muros: Muro[];
+  /** perpendiculares: posición transversal del centro (marco del viento) */
+  tc?: number;
 }
 export interface DatosRotoPlano {
   dir: 'A' | 'B';
@@ -80,9 +82,13 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   // ---------------------------------------------------------------- planta
   const g = el('g');
   svg.append(g);
+  // Sentido de giro (marco del viento): W actúa en el eje de simetría (t = 0) y el CR está en t = Xr.
+  // Si Xr > 0 el viento queda a la izquierda del CR y la planta gira en sentido horario (en pantalla, rotate > 0).
+  const horario = d.Xr > 0;
+  const gira = Math.abs(d.Xr) > 1e-3 && Math.abs(d.Mt) > 1e-9;
   // planta girada por la rotación (exagerada) en los pasos 3 y 4
-  if (paso >= 3 && Math.abs(d.Mt) > 1e-9) {
-    const ang = -Math.sign(d.Mt) * 4;
+  if (paso >= 3 && gira) {
+    const ang = horario ? 4 : -4;
     g.append(el('rect', { x: X(-d.T / 2), y: Y(d.S / 2), width: d.T * k, height: d.S * k, class: 'rt-girada', transform: `rotate(${ang} ${X(d.Xr)} ${Y(d.Yr)})` }));
   }
   g.append(el('rect', { x: X(-d.T / 2), y: Y(d.S / 2), width: d.T * k, height: d.S * k, class: 'rt-planta' }));
@@ -105,12 +111,14 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   g.append(el('line', { x1: X(0), x2: X(0), y1: Y(sTop), y2: Y(-d.S / 2 - 0.8), class: 'rt-simetria' }));
   const xr = X(d.Xr);
   const coinciden = Math.abs(d.Xr) < 0.005;
-  if (!coinciden) g.append(el('text', { x: X(0) - 4, y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': 'end' }, 'eje de simetría'));
+  // cada rótulo del lado opuesto al otro eje, para que no se pisen
+  const derecha = d.Xr >= 0;
+  if (!coinciden) g.append(el('text', { x: X(0) + (derecha ? -4 : 4), y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': derecha ? 'end' : 'start' }, 'eje de simetría (W)'));
   g.append(el('line', { x1: xr, x2: xr, y1: Y(sTop), y2: Y(sBot), class: 'rt-inercia' }));
-  g.append(el('text', { x: xr + (coinciden ? 0 : 4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': coinciden ? 'middle' : 'start' }, coinciden ? 'eje de inercia = eje de simetría: solo traslación' : `eje de inercia · Xr = ${fmt(d.Xr)} m`));
+  g.append(el('text', { x: xr + (coinciden ? 0 : derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': coinciden ? 'middle' : derecha ? 'start' : 'end' }, coinciden ? 'eje de inercia = eje de simetría: solo traslación' : `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
-  g.append(el('text', { x: xr - 8, y: Y(d.Yr) + 18, class: 'd-valor', 'text-anchor': 'end' }, 'CR'));
+  g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
   // excentricidad
   if (Math.abs(d.Xr) > 1e-3) {
     const ye = Y(-d.S / 2) + 18;
@@ -126,7 +134,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     return p.muros.reduce((s, m) => s + m.largo * m.espesor * ts(m).s, 0) / A;
   };
   const tip = (p: ElementoPlano, perp = false) => perp
-    ? `${p.nombre} (perpendicular)\nJ = ${fmt(p.J, 3)} m⁴ · a = ${fmt(p.a)} m\nrotación: ${fmt(p.rot, 2)} t`
+    ? `${p.nombre} (perpendicular al viento: no toma traslación)\nJ = ${fmt(p.J, 3)} m⁴ · a = ${fmt(p.a)} m al eje de inercia de la otra dirección\nrotación: ${fmt(Math.abs(p.rot), 2)} t`
     : `${p.nombre}\nJ = ${fmt(p.J, 3)} m⁴ (${fmt(p.frac * 100, 1)} % de ΣJ)\na = ${fmt(p.a)} m del eje de inercia\ntraslación: ${fmt(p.tras, 2)} t\nrotación: ${fmt(p.rot, 2)} t\ntotal: ${fmt(p.total, 2)} t`;
   // rótulos sin superponerse: se corren hacia arriba si chocan
   const ocupados: { x: number; y: number }[] = [];
@@ -181,7 +189,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     g.append(el('line', { x1: verts[0].x, y1: verts[0].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
     g.append(el('line', { x1: verts[verts.length - 1].x, y1: verts[verts.length - 1].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
     g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));
-    g.append(el('text', { x: R.x + 6, y: R.y + 14, class: 'd-valor' }, `ΣJ = ${fmt(cons.W, 2)} m⁴ · Xr = ${fmt(cons.zR)} m`));
+    g.append(el('text', { x: R.x + 6, y: R.y + 14, class: 'd-valor' }, `resultante de los J: ΣJ = ${fmt(cons.W, 2)} m⁴, a ${fmt(Math.abs(cons.zR))} m del eje de simetría`));
   }
 
   if (paso >= 2) {
@@ -206,17 +214,19 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       if (paso === 2) g2.append(el('line', { x1: x, x2: x, y1: base + L(p.tras) + 2, y2: base, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
       if (paso === 3 && Math.abs(p.rot) > Fmax * 1e-3) g2.append(el('line', { x1: x, x2: x, y1: p.rot > 0 ? base + L(p.rot) + 2 : base, y2: p.rot > 0 ? base : base + L(p.rot) + 2, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` }));
       if (paso === 4) {
-        const lt = L(p.tras), lr = L(p.rot);
-        if (p.rot >= 0) {
-          g2.append(el('line', { x1: x, x2: x, y1: base + lt + lr + 2, y2: base + lr, class: 'rt-tras', 'stroke-width': w }));
-          g2.append(el('line', { x1: x, x2: x, y1: base + lr + 1, y2: base, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` }));
-        } else {
-          g2.append(el('line', { x1: x, x2: x, y1: base + lt + 2, y2: base, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
-          g2.append(el('line', { x1: x + w / 2 + 3, x2: x + w / 2 + 3, y1: base + lt, y2: base + lt - lr, class: 'rt-rot resta', 'stroke-width': 2 }));
+        // la flecha llena es el total; la punteada, lo que tomaría solo por traslación; el tramo violeta es la rotación
+        const lt = L(p.tras), lT = L(p.total);
+        g2.append(el('line', { x1: x, x2: x, y1: base + lt, y2: base, class: 'rt-fantasma', 'stroke-width': w }));
+        if (p.total >= 0) g2.append(el('line', { x1: x, x2: x, y1: base + lT + 2, y2: base, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
+        else g2.append(el('line', { x1: x, x2: x, y1: base, y2: base + lT + 2, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
+        if (Math.abs(p.rot) > Fmax * 1e-3) {
+          const y1 = base + Math.min(lt, Math.max(0, p.total >= 0 ? lT : 0)), y2 = base + Math.max(lt, p.total >= 0 ? lT : 0);
+          g2.append(el('line', { x1: x + w / 2 + 3, x2: x + w / 2 + 3, y1, y2, class: `rt-rot${p.rot < 0 ? ' resta' : ''}`, 'stroke-width': 3 }));
         }
       }
       g.append(g2);
     });
+    ocupados.push({ x: X(0), y: base + Lmax + 14 });
     // rótulos por recta de acción: nombres juntos y el valor (igual para todos o uno por pieza)
     const valor = (p: ElementoPlano) => (paso === 2 ? `${fmt(p.frac * 100, 1)} %` : paso === 3 ? `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(Math.abs(p.rot), 1)} t` : `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(p.total, 1)} t`);
     [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).forEach((ps, gi) => {
@@ -226,24 +236,33 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       rotulo(x, y1, ps.map(p => p.nombre).join(' · '), 'd-eje');
       rotulo(x, y1 + 12, vals.length === 1 ? vals[0] : ps.map(valor).join(' / '), 'd-valor');
     });
-    // perpendiculares: solo rotación, flechas a lo largo de su dirección (transversal), en su posición
+    // perpendiculares: solo rotación. La flecha va sobre el muro, a lo largo del muro, con el sentido en que el giro
+    // lo empuja: con giro horario, los que están por encima del CR van hacia la derecha y los de abajo, a la izquierda.
     if (paso >= 3) d.perpendiculares.forEach(p => {
       if (Math.abs(p.rot) < Fmax * 1e-3) return;
-      const yc = Y(p.pos), x0 = X(d.T / 2) + 6, L = (Math.abs(p.rot) / Fmax) * Lmax, w = grosor(p.J);
-      const dirx = p.rot >= 0 ? 1 : -1;
-      const l = el('line', { x1: dirx > 0 ? x0 : x0 + L, x2: dirx > 0 ? x0 + L : x0, y1: yc, y2: yc, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` });
-      l.append(el('title', {}, tip(p, true)));
+      const tc = p.tc ?? (p.muros.length ? p.muros.reduce((x, m) => x + ts(m).t * m.largo * m.espesor, 0) / p.muros.reduce((x, m) => x + m.largo * m.espesor, 0) : 0);
+      const sentido = Math.sign(p.pos - d.Yr) * (horario ? 1 : -1) || 1;
+      const L = Math.max(14, (Math.abs(p.rot) / Fmax) * Lmax), w = Math.min(7, grosor(p.J));
+      const yc = Y(p.pos) - (w / 2 + 5);                                      // apenas por encima del muro, sin taparlo
+      const x1 = X(tc) - (sentido * L) / 2, x2 = X(tc) + (sentido * L) / 2;
+      const l = el('line', { x1, x2, y1: yc, y2: yc, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` });
+      l.append(el('title', {}, tip(p, true) + `\nel giro lo empuja hacia la ${sentido > 0 ? 'derecha' : 'izquierda'}`));
       g.append(l);
-      rotulo(x0 + L + 6, yc + 4, `${p.nombre} ${p.rot >= 0 ? '(+)' : '(−)'}`, 'd-eje', 'start');
+      rotulo(X(tc), yc - 8, `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
     });
     // viento y momento de rotación
-    const yW = Y(-d.S / 2) + abajo - 8;
-    g.append(el('line', { x1: X(0), x2: X(0), y1: yW, y2: yW - 40, class: 'rt-W', 'marker-end': `url(#${id}-W)` }));
-    g.append(el('text', { x: X(0) - 6, y: yW - 4, class: 'd-valor', 'text-anchor': 'end' }, `W = ${fmt(d.Q, 1)} t`));
-    if (paso >= 3 && Math.abs(d.Mt) > 1e-9) {
-      const r = 22, c = { x: xr, y: Y(d.Yr) }, sg = -Math.sign(d.Mt);
-      g.append(el('path', { d: `M ${c.x - r} ${c.y} A ${r} ${r} 0 1 ${sg > 0 ? 1 : 0} ${c.x} ${c.y - r}`, class: 'rt-Mt', 'marker-end': `url(#${id}-tinta)` }));
-      g.append(el('text', { x: c.x + r + 4, y: c.y + 4, class: 'd-valor' }, `Mt = ${fmt(Math.abs(d.Mt), 0)} tm`));
+    // W en el eje de simetría, en la franja de las flechas (es la fuerza que las piezas se reparten)
+    const yW = base + Lmax;
+    g.append(el('line', { x1: X(0), x2: X(0), y1: yW, y2: yW - Math.min(Lmax, 46), class: 'rt-W', 'marker-end': `url(#${id}-W)` }));
+    rotulo(X(0), yW + 14, `W = ${fmt(d.Q, 1)} t`, 'd-valor');
+    if (paso >= 3 && gira) {
+      // arco de 270° desde abajo: horario pasa por la izquierda y termina a la derecha bajando; antihorario, al revés
+      const r = 24, c = { x: xr, y: Y(d.Yr) };
+      const fin = horario ? { x: c.x + r, y: c.y } : { x: c.x - r, y: c.y };
+      const arco = el('path', { d: `M ${c.x} ${c.y + r} A ${r} ${r} 0 1 ${horario ? 1 : 0} ${fin.x} ${fin.y}`, class: 'rt-Mt', 'marker-end': `url(#${id}-tinta)` });
+      arco.append(el('title', {}, `Mt = W · e = ${fmt(d.Q, 1)} · ${fmt(Math.abs(d.Xr))} = ${fmt(Math.abs(d.Mt), 1)} tm, sentido ${horario ? 'horario' : 'antihorario'}`));
+      g.append(arco);
+      g.append(el('text', { x: c.x + (horario ? -r - 6 : r + 6), y: c.y - r - 4, class: 'd-valor', 'text-anchor': horario ? 'end' : 'start' }, `Mt = ${fmt(Math.abs(d.Mt), 0)} tm`));
     }
   }
   return svg;

@@ -51,7 +51,7 @@ class Estado {
       const asig = aPlanilla(this.proyecto);
       const res = calcularPlanilla(asig.datos);
       const iPB = this.proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-      const corr = calcularCorregido(asig.datos, asig.filaNivel[iPB] ?? 50);
+      const corr = calcularCorregido(asig.datos, asig.filaNivel[iPB] ?? 50, { proyecto: this.proyecto, piezas: asig.piezas });
       this.calculo = { asig, res, corr, controles: controles(this.proyecto, asig.datos, res, corr, this.proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel) };
     } catch (e) {
       this.calculo = { ...(this.calculo ?? {}), error: String(e) } as Calculo;

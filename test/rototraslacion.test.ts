@@ -34,3 +34,35 @@ describe('rototraslación como la guía (Anexo)', () => {
     expect(pc('T6')).toBeCloseTo(48.38, 1);  // en lugar de 51,37 %
   });
 });
+
+import { ejemploGuia, ejemploAsimetrico } from '../src/engine/modelo';
+import { aPlanilla } from '../src/engine/mapping';
+import { calcularCorregido } from '../src/engine/correcciones';
+
+describe('rototraslación «Guía/CIRSOC» en la app: perpendiculares muro por muro', () => {
+  const corr = (p: ReturnType<typeof ejemploGuia>) => {
+    const a = aPlanilla(p);
+    const iPB = p.niveles.findIndex(n => n.nombre === 'PB');
+    return { a, c: calcularCorregido(a.datos, a.filaNivel[iPB], { proyecto: p, piezas: a.piezas }) };
+  };
+  it('Anexo (T5 aislado): equilibrio de la rotación y las alas de T6 como en la guía', () => {
+    const { c } = corr(ejemploAsimetrico());
+    const r = c.rotoA!;
+    expect(r.e).toBeGreaterThan(1.5);                                         // el eje de inercia se corre hacia T6
+    const todos = [...r.paralelos, ...r.perpendiculares];
+    expect(todos.reduce((s, x) => s + x.rot * x.a, 0)).toBeCloseTo(-r.Mt, 6); // Σ Fj·aj = −Mt
+    expect(r.paralelos.reduce((s, x) => s + x.tras + x.rot, 0)).toBeCloseTo(r.Q, 6);   // los paralelos toman todo W
+    const alas = r.perpendiculares.filter(x => x.nombre === 'M9' || x.nombre === 'M10');
+    expect(alas.map(x => x.J)).toEqual([0.2 * 5 ** 3 / 12, 0.2 * 5 ** 3 / 12].map(v => expect.closeTo(v, 9)));
+    expect(alas.map(x => Math.abs(x.a))).toEqual([1.9, 1.9].map(v => expect.closeTo(v, 9)));
+    // los de la izquierda del eje de inercia suman (+); los de la derecha restan (−)
+    r.paralelos.forEach(x => expect(Math.sign(x.rot)).toBe(x.pos < r.Xr ? 1 : -1));
+    // y el momento de cada pieza en PB la usa
+    const t1 = r.paralelos.find(x => x.nombre === 'T1')!;
+    expect(c.rotA[t1.fila!].Qrot).toBeCloseTo(t1.rot, 9);
+  });
+  it('planta simétrica: no hay rotación', () => {
+    const { c } = corr(ejemploGuia());
+    [...c.rotoA!.paralelos, ...c.rotoA!.perpendiculares].forEach(x => expect(Math.abs(x.rot)).toBeLessThan(1e-9));
+  });
+});

@@ -382,3 +382,4 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-W { stroke: var(--carga); stroke-width: 3; }
 .rototrasl .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 2; }
 .rototrasl .rt-flecha:hover line { filter: drop-shadow(0 0 3px var(--elegido)); }
+.rototrasl .rt-fantasma { stroke: var(--accent); stroke-opacity: .28; stroke-dasharray: 4 3; }
