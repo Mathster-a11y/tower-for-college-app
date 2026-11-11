@@ -34,7 +34,8 @@ describe('del proyecto a la planilla (ejemplo de la guía 2024)', () => {
   it('piezas del viento B: la U pasa a tener dos almas y un ala', () => {
     const t5b = a.piezas.find(p => p.nombre === 'T5B')!;
     expect(t5b.molde).toBe('asimétrico');
-    expect(t5b.fila).toMatchObject({ W: 3.6, X: 0.2, Z: 0.2, AB: 5, AE: 0.2, AF: 5 });
+    // las almas M6 y M7 llegan hasta la cara exterior de M5: van con su largo libre (4,8 m) y las esquinas pasan al ala
+    expect(t5b.fila).toMatchObject({ W: 4, X: 0.2, Z: 0.2, AB: 4.8, AE: 0.2, AF: 4.8 });
     expect(a.papeles.M5.B).toBe('ala sup.');
     expect(a.papeles.M6.B).toBe('alma');
     const t1b = a.piezas.find(p => p.nombre === 'T1B')!;

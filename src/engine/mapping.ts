@@ -117,6 +117,22 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     return { a, w, arriba };
   });
   almas.forEach(w => set(w, 'alma'));
+  // Almas que llegan hasta la cara exterior de un ala (se solapan en el sentido del viento): en el molde el ala va
+  // «arriba» del alma, así que el tramo de alma que está a la altura del ala pasa al ala (el ala se ensancha con la
+  // misma área) y el alma queda con su largo libre. Así el J de la hoja es el del dibujo.
+  const banda = (g: Muro[]) => (g.length ? [Math.min(...g.map(a => s(a) - a.espesor / 2)), Math.max(...g.map(a => s(a) + a.espesor / 2))] : null);
+  const solape = (w: Muro, g: Muro[]) => {
+    const b = banda(g);
+    if (!b) return 0;
+    return Math.max(0, Math.min(s(w) + w.largo / 2, b[1]) - Math.max(s(w) - w.largo / 2, b[0]));
+  };
+  const libre = (w: Muro, ...grupos: Muro[][]) => {
+    const sol = grupos.reduce((x, g) => x + solape(w, g), 0);
+    if (sol > 1e-9) avisos.push(`El alma ${w.id} llega hasta la cara exterior del ala (${r4(sol)} m): en la hoja J va con su largo libre, ${r4(w.largo - sol)} m, y ese tramo se suma al ala.`);
+    return r4(Math.max(0.01, w.largo - sol));
+  };
+  /** ancho del ala equivalente con los tramos de alma que caen en su banda */
+  const conSolapes = (grupo: Grupo, g: Muro[], ws: Muro[]) => r4((grupo.area + ws.reduce((x, w) => x + solape(w, g) * w.espesor, 0)) / grupo.t);
 
   if (almas.length === 1) {
     const w = almas[0];
@@ -134,15 +150,16 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     const dobleT = sup && inf && iguales(sup.area, inf.area) && iguales(sup.t, inf.t) && centrada(gSup, sup.b) && centrada(gInf, inf.b);
     if (dobleT) {
       extremos.forEach(e => set(e.a, e.arriba ? 'ala sup.' : 'ala inf.'));
-      return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: w.largo, F: sup!.b, G: sup!.t, J: inf!.b, K: inf!.t } };
+      return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: libre(w, gSup, gInf), F: conSolapes(sup!, gSup, [w]), G: sup!.t, J: conSolapes(inf!, gInf, [w]), K: inf!.t } };
     }
     // asimétrica: el grupo más grande va arriba (el J no cambia al dar vuelta la pieza)
     const supEsArriba = (sup?.area ?? 0) >= (inf?.area ?? 0);
     const top = supEsArriba ? sup! : inf!;
     const bot = supEsArriba ? inf : sup;
     extremos.forEach(e => set(e.a, e.arriba === supEsArriba ? 'ala sup.' : 'ala inf.'));
-    const fila: FilaJ = { W: top.b, X: top.t, Z: w.espesor, AB: w.largo };
-    if (bot) { fila.AH = bot.b; fila.AI = bot.t; }
+    const gTop = supEsArriba ? gSup : gInf, gBot = supEsArriba ? gInf : gSup;
+    const fila: FilaJ = { W: conSolapes(top, gTop, [w]), X: top.t, Z: w.espesor, AB: libre(w, gSup, gInf) };
+    if (bot) { fila.AH = conSolapes(bot, gBot, [w]); fila.AI = bot.t; }
     return { ...base, molde: 'asimétrico', fila };
   }
 
@@ -160,8 +177,9 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const bot = juntar(abajo.map(e => e.a));
   extremos.forEach(e => set(e.a, e.arriba === arribaEsMas ? 'ala sup.' : 'ala inf.'));
   if (!top) avisos.push('Las dos almas no tienen un ala que las una: conviene cargarlas como piezas separadas.');
-  const fila: FilaJ = { W: top?.b ?? 0.01, X: top?.t ?? 0.01, Z: izq.espesor, AB: izq.largo, AE: der.espesor, AF: der.largo };
-  if (bot) { fila.AH = bot.b; fila.AI = bot.t; }
+  const gTop = extremos.filter(e => e.arriba === arribaEsMas).map(e => e.a), gBot = abajo.map(e => e.a);
+  const fila: FilaJ = { W: top ? conSolapes(top, gTop, [izq, der]) : 0.01, X: top?.t ?? 0.01, Z: izq.espesor, AB: libre(izq, gTop, gBot), AE: der.espesor, AF: libre(der, gTop) };
+  if (bot) { fila.AH = conSolapes(bot, gBot, [izq]); fila.AI = bot.t; }
   return { ...base, molde: 'asimétrico', fila };
 }
 

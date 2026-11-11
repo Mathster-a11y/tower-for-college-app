@@ -8,6 +8,7 @@ import type { Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
 import { calcFunicular } from './funicular';
 import { verificarDireccion } from './flexocompresion';
+import { rigidez } from './diagramas';
 
 export type Estado = 'verifica' | 'no verifica' | 'atención' | 'informativo';
 export interface Control {
@@ -49,10 +50,15 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
         planilla: null, guia: fuera.length, unidad: 'niveles fuera', estado: fuera.length ? 'atención' : 'verifica', nota: fuera.length ? `Fuera: ${fuera.map(x => x.nivel).join(', ')}.` : undefined });
     }
   }
-  const k500 = r.jminA.tabla[0].h500;
-  out.push({ grupo: 'Rigidez', nombre: 'ΣJ viento A ≥ J mínimo (h/500, H30)', criterio: 'ΣJ ≥ J mín', fuente: 'guía 4.2 · J paralelos M37', planilla: r.jpar.AY24, guia: c.guia.jpar.AY24, unidad: 'm⁴', estado: est(r.jpar.AY24 >= k500), nota: `J mín = ${k500.toFixed(1)} m⁴` });
-  const k500b = r.jminB.tabla[0].h500;
-  out.push({ grupo: 'Rigidez', nombre: 'ΣJ viento B ≥ J mínimo (h/500, H30)', criterio: 'ΣJ ≥ J mín', fuente: 'J ortogonales M37', planilla: r.jort.AY24, guia: c.guia.jort.AY24, unidad: 'm⁴', estado: est(r.jort.AY24 >= k500b), nota: `J mín = ${k500b.toFixed(1)} m⁴` });
+  // J mínimo: la planilla compara con la fila H30 (M37); la guía, con la fila del hormigón del proyecto (h/500)
+  const rg = rigidez(c.guia, hormigon);
+  for (const dir of ['A', 'B'] as const) {
+    const kPl = (dir === 'A' ? r.jminA : r.jminB).tabla[0].h500;
+    const g2 = rg.find(x => x.dir === dir)!;
+    out.push({ grupo: 'Rigidez', nombre: `ΣJ viento ${dir} ≥ J mínimo (h/500)`, criterio: 'ΣJ ≥ W·h² / (E/k)', fuente: `guía 4.2 · J ${dir === 'A' ? 'paralelos' : 'ortogonales'} M37`,
+      planilla: dir === 'A' ? r.jpar.AY24 : r.jort.AY24, guia: g2.J, unidad: 'm⁴', estado: est(g2.J >= g2.minimos.h500),
+      nota: `J mín = ${g2.minimos.h500.toFixed(1)} m⁴ (fila ${g2.hormigon})${g2.hormigon !== 'H30' ? `; la planilla compara con la fila H30: ${kPl.toFixed(1)} m⁴` : ''}` });
+  }
   out.push({ grupo: 'Reparto', nombre: 'Control Σ J·a = 0 (cara mayor)', criterio: '= 0', fuente: 'Rototrasl. L25', planilla: r.rotA.L25, guia: null, unidad: '', estado: est(Math.abs(r.rotA.L25) < 1e-6 || !isFinite(r.rotA.L25)) });
   out.push({ grupo: 'Reparto', nombre: 'Torsión de la Figura 9, caso 2 (cara mayor)', criterio: 'h > 20 m: el CIRSOC pide considerarla', fuente: 'CIRSOC 102, art. 5.12.3', planilla: null, guia: r.rotA.D5 * BPB / 32, unidad: 'tm', estado: h > 20 ? 'atención' : 'informativo', nota: 'La planilla y la guía no la usan. Pregunta abierta para la cátedra.' });
   const adm = TENSION_ADM(hormigon);
