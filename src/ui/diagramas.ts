@@ -286,7 +286,7 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
     return { m, lejos, cerca };
   });
   const ys = tramos.flatMap(t => [t.lejos, t.cerca]);
-  const sig = [...v.muros.flatMap(m => [...m.desc, ...m.carg].map(x => x / 10)), 0, -adm * 0.25];
+  const sig = [...v.muros.flatMap(m => [...m.desc, ...m.carg, m.cargReves].map(x => x / 10)), 0, -adm * 0.25];
   const yMin = Math.min(...ys) - 0.3, yMax = Math.max(...ys) + 0.3;
   const sMin = Math.min(...sig), sMax = Math.max(...sig, 1);
   const ts = marcas(sMin, sMax);
@@ -316,6 +316,13 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
         [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-c-${c}` })));
       }
     });
+    // compresión con el viento al revés, si es mayor que la del diagrama de un sentido (alma corrida del baricentro)
+    if (m.papel !== 'ala' && m.cargReves < Math.min(...m.carg) - 1e-6) {
+      const c = el('circle', { cx: X(lejos), cy: Y(m.cargReves / 10), r: 4.5, class: 'd-reves' });
+      c.append(el('title', {}, `${m.id}: con el viento al revés, esta fibra queda a ${fmt(m.cargReves / 10, 1)} kg/cm² (compresión máxima)`));
+      svg.append(c);
+      svg.append(el('text', { x: X(lejos) + 7, y: Y(m.cargReves / 10) + 4, class: 'd-eje' }, 'viento al revés'));
+    }
     svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
   });
   fig.append(svg);

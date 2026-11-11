@@ -68,12 +68,17 @@ export function montarPlanta(cont: HTMLElement) {
     svg.appendChild(el('rect', { x: X(-B / 2), y: Y(L / 2), width: B * escala, height: L * escala, class: 'contorno' }));
     svg.appendChild(el('line', { x1: X(0), y1: Y(-n), x2: X(0), y2: Y(n), class: 'eje' }));
     svg.appendChild(el('line', { x1: X(-n), y1: Y(0), x2: X(n), y2: Y(0), class: 'eje' }));
-    // eje de inercia de la dirección elegida
-    const r = estado.calculo.res;
-    const d = estado.dir === 'A' ? r?.rotA.J7 : r?.rotB.J7;
-    if (d !== undefined && isFinite(d)) {
-      if (estado.dir === 'A') svg.appendChild(el('line', { x1: X(d), y1: Y(-n), x2: X(d), y2: Y(n), class: 'inercia' }));
-      else svg.appendChild(el('line', { x1: X(-n), y1: Y(d), x2: X(n), y2: Y(d), class: 'inercia' }));
+    // ejes de inercia y centro de rigidez (con los valores elegidos: planilla o guía/CIRSOC)
+    const c0 = estado.calculo;
+    const r = estado.fuente === 'guia' ? c0.corr?.guia : c0.res;
+    const xA = r?.rotA.J7, yB = r?.rotB.J7;
+    if (xA !== undefined && isFinite(xA) && estado.dir === 'A') svg.appendChild(el('line', { x1: X(xA), y1: Y(-n), x2: X(xA), y2: Y(n), class: 'inercia' }));
+    if (yB !== undefined && isFinite(yB) && estado.dir === 'B') svg.appendChild(el('line', { x1: X(-n), y1: Y(yB), x2: X(n), y2: Y(yB), class: 'inercia' }));
+    if (xA !== undefined && yB !== undefined && isFinite(xA) && isFinite(yB)) {
+      const cr = el('circle', { cx: X(xA), cy: Y(yB), r: 5, class: 'cr' });
+      cr.appendChild(el('title', {}, `Centro de rigidez: x = ${xA.toFixed(2)} m, y = ${yB.toFixed(2)} m (cruce de los ejes de inercia)`));
+      svg.appendChild(cr);
+      svg.appendChild(el('text', { x: X(xA) + 7, y: Y(yB) - 7, class: 'etiqueta' }, 'CR'));
     }
     // viento
     const fl = el('g', { class: 'viento' });

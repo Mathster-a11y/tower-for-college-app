@@ -66,3 +66,17 @@ describe('flexocompresión muro por muro, como la guía (sección 5)', () => {
     expect(v.muros[0].sigM).toBeCloseTo(10 / (Math.PI / 64 / 0.5), 6);
   });
 });
+
+describe('flexocompresión: el viento cambia de sentido', () => {
+  it('alma corrida del baricentro (pieza en L): la compresión máxima es la fibra más alejada con el viento al revés', () => {
+    const p = ejemploGuia();
+    const alt = datosAlturaDe(p);
+    const alma: Muro = { id: 'a', dir: 'Y', x: 0, y: 0, largo: 4, espesor: 0.2, llega: true, areaInf: 10, piezaA: 'L', pegadoA: '', piezaB: '', pegadoB: '' };
+    const ala: Muro = { id: 's', dir: 'X', x: 2.4, y: 2.1, largo: 5, espesor: 0.2, llega: true, areaInf: 10, piezaA: 'L', pegadoA: 'a', piezaB: '', pegadoB: '' };
+    const v = verificarPieza('L', 'A', [alma, ala], 400, alt, 300);
+    const a = v.muros.find(x => x.id === 'a')!;
+    const ymax = Math.max(Math.abs(a.d - a.h / 2), Math.abs(a.d + a.h / 2));
+    expect(a.compresion * 10).toBeCloseTo(-a.Ncarg / a.A - (400 * ymax) / v.J, 6);
+    expect(a.compresion * 10).toBeLessThan(Math.min(...a.carg));   // más que lo que muestra el diagrama de un sentido
+  });
+});

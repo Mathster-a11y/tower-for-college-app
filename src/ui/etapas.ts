@@ -114,7 +114,7 @@ const viento: Etapa = {
       const fila = 5 + k;
       const zc = estado.fuente === 'guia' ? Math.max(pn.z, 5) : pn.z;
       cuerpo.append(
-        formula('Coeficiente de exposición (CIRSOC 102, Tabla 5)', `${v('K', 'z')}${op('=')}2,01 · (${n(zc)} / ${n(s.zg, 0)})<sup>2/${fmt(s.alfa, 1)}</sup>${op('=')}${r(R.viento.Kz[k], 3)}`, `viento!H${fila}${estado.fuente === 'guia' && pn.z < 5 ? ' · la planilla usa z real; el CIRSOC, z ≥ 5 m' : ''}`),
+        formula('Coeficiente de exposición (CIRSOC 102, Tabla 5)', `${v('K', 'z')}${op('=')}2,01 · (${n(zc)} / ${n(s.zg, 0)})<sup>2/${String(+s.alfa).replace(".", ",")}</sup>${op('=')}${r(R.viento.Kz[k], 3)}`, `viento!H${fila}${estado.fuente === 'guia' && pn.z < 5 ? ' · la planilla usa z real; el CIRSOC, z ≥ 5 m' : ''}`),
         formula('Presión dinámica', `${v('q', 'z')}${op('=')}0,613 · ${n(s.Kzt)} · ${n(s.Kd)} · ${n(s.V, 0)}² · ${n(s.I)} · ${n(R.viento.Kz[k], 3)}${op('=')}${r(R.viento.qz[k], 1, 'N/m²')}`, `viento!M${fila}`),
         formula('Barlovento', `${v('p')}${op('=')}${v('q', 'z')} · ${v('G')} · ${v('C', 'p')}${op('=')}${n(R.viento.qz[k], 1)} · ${n(s.G)} · ${n(s.Cpb)}${op('=')}${r(R.viento.P[k], 1, 'N/m²')}`, `viento!P${fila}`),
         formula('Sotavento (con qh, la de la azotea)', `${v('p')}${op('=')}${v('q', 'h')} · ${v('G')} · ${v('C', 'p')}${op('=')}${n(R.viento.qh, 1)} · ${n(s.G)} · (${n(s.Cps)})${op('=')}${r(R.viento.Q[k], 1, 'N/m²')}`, `viento!Q${fila} · qh = viento!N4`),
@@ -156,7 +156,7 @@ const fuerzas: Etapa = {
     cu.append(
       formula('Fuerza en cada nivel', `${v('W', 'i')}${op('=')}${v('D')} · ${A ? v('E') : v('F')} · ${v('p', 'neta')}`, `M,NyQ!H${5}…  (D = altura de influencia; ${A ? 'E = ancho B' : 'F = ancho L'})`),
       formula('Viento total', `${v('W')}${op('=')}Σ ${v('W', 'i')}${op('=')}${r(d.W, 1, 't')}`, A ? 'M,NyQ!H61' : 'M,NyQ columna N'),
-      formula('Corte y momento, de arriba hacia abajo', `${v('Q', 'i')}${op('=')}${v('Q', 'i−1')} + ${v('W', 'i−1')} · ${v('M', 'i')}${op('=')}${v('M', 'i−1')} + ${v('Q', 'i')} · ${v('h', 'piso')}`, A ? 'M,NyQ columnas I y J' : 'M,NyQ columnas N y O'),
+      formula('Corte y momento, de arriba hacia abajo', `${v('Q', 'i')}${op('=')}${v('Q', 'i−1')} + ${v('W', 'i−1')}<br>${v('M', 'i')}${op('=')}${v('M', 'i−1')} + ${v('Q', 'i')} · ${v('h', 'piso')}`, A ? 'M,NyQ columnas I y J' : 'M,NyQ columnas N y O'),
       formula('Altura de la resultante', `${v('h', 'w')}${op('=')}${v('M', 'v')} / ${v('W')}${op('=')}${n(d.Mv, 1)} / ${n(d.W, 1)}${op('=')}${r(d.hw, 2, 'm')}`, A ? 'M,NyQ!G66' : '—'),
     );
     const t = tablaValores(['Nivel', 'Cota (m)', 'Wi (t)', 'Q (t)', 'M (tm)'], d.alt.map(x => [x.nivel, x.z, x.F, x.V, x.M]), [0, 2, 2, 1, 0]);

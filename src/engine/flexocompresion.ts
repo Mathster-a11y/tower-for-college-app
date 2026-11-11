@@ -45,7 +45,9 @@ export interface VerifMuro {
   sigM: number;
   /** tensiones en las dos fibras extremas (t/m²; + tracción, − compresión), edificio descargado y cargado */
   desc: [number, number]; carg: [number, number];
-  /** máxima tracción (descargado) y máxima compresión (cargado), kg/cm² */
+  /** compresión con el viento al revés en la fibra más alejada (t/m²) */
+  cargReves: number;
+  /** máxima tracción (descargado) y máxima compresión (cargado, cualquier sentido del viento), kg/cm² */
   traccion: number; compresion: number;
   /** armadura por tracción (cm²) y mínima (cm²); x = largo traccionado (m); T = fuerza de tracción (t) */
   x: number; T: number; As: number; AsMin: number;
@@ -130,7 +132,10 @@ export function verificarPieza(nombre: string, dir: 'A' | 'B', muros: Muro[], M:
     const f = (N: number, y: number) => -N / p.A + (J > 0 ? (Mabs * sgn * y) / J : 0);
     const desc: [number, number] = p.papel === 'ala' ? [-Ndesc / p.A + sigM, -Ndesc / p.A - sigM] : [f(Ndesc, yc), f(Ndesc, yo)];
     const carg: [number, number] = p.papel === 'ala' ? [-Ncarg / p.A + sigM, -Ncarg / p.A - sigM] : [f(Ncarg, yc), f(Ncarg, yo)];
-    const sigT = Math.max(...desc), sigC = Math.min(...carg);
+    // El viento cambia de sentido: la tracción máxima es la fibra más alejada con el edificio descargado y la
+    // compresión máxima, la misma fibra con el viento al revés y el edificio cargado (en un alma corrida del
+    // baricentro de la pieza las dos fibras quedan del mismo lado y el diagrama de un solo sentido no la muestra).
+    const sigT = Math.max(...desc), sigC = Math.min(...carg, -Ncarg / p.A - sigM);
     // armadura por tracción (descargado)
     let x = 0, T = 0;
     if (sigT > 0) {
@@ -145,7 +150,7 @@ export function verificarPieza(nombre: string, dir: 'A' | 'B', muros: Muro[], M:
     const As = (T * 1000) / SIGMA_E;                         // t → kg; cm²
     const AsMin = CUANTIA_MIN * p.A * 1e4;                   // m² → cm²
     const compresion = sigC / 10, traccion = sigT / 10;      // t/m² → kg/cm²
-    return { id: p.id, papel: p.papel, A: p.A, b: p.b, h: p.h, d: p.d, Pp, losaDesc, losaCarg, Ndesc, Ncarg, sigM, desc, carg, traccion, compresion, x, T, As, AsMin, verifica: Math.abs(Math.min(0, compresion)) <= adm };
+    return { id: p.id, papel: p.papel, A: p.A, b: p.b, h: p.h, d: p.d, Pp, losaDesc, losaCarg, Ndesc, Ncarg, sigM, desc, carg, cargReves: -Ncarg / p.A - sigM, traccion, compresion, x, T, As, AsMin, verifica: Math.abs(Math.min(0, compresion)) <= adm };
   });
   if (!out.length) avisos.push('La pieza no tiene muros en PB.');
   const traccion = Math.max(...out.map(v => v.traccion), -Infinity), compresion = Math.min(...out.map(v => v.compresion), Infinity);

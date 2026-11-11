@@ -40,8 +40,15 @@ Se tacha cada ítem cuando está hecho, probado y subido.
   - Traslación, rotación y rototraslación con flechas en la recta de cada tabique: grosor según J y largo según la fuerza.
 - [x] Segundo ejemplo: el Anexo de la guía (T5 aislado, la planta rota)
 
+- [x] **Rotación «Guía/CIRSOC» muro por muro, como la guía.** Cada muro perpendicular entra con su J propio. La usan el momento de cada pieza, Flexión, el panel y el dibujo.
+- [x] **Revisión de todos los diagramas.**
+  - Sentido de giro, Mt y flechas de los perpendiculares corregidos.
+  - Paso 4 con la flecha total.
+  - Compresión con el viento al revés en almas corridas del baricentro.
+  - Eje de inercia y CR en la planta según los valores elegidos.
+
 ## En curso
-- [ ] **Propuesta de la rototraslación en planta:** esperando la opinión del usuario. Hay que decidir si los perpendiculares entran en la rotación muro por muro (como la guía) o por pieza (como la planilla).
+- Nada por ahora.
 - Nada por ahora: el próximo es el primero de la lista de abajo.
 
 ## Próximos
