@@ -35,10 +35,26 @@ export interface DatosCarta {
   PB: NivelCarta | null;
   plano: DatosRotoPlano & { SJ: number; SJa2: number };
   roto: Rototraslacion3D | null;
+  /** vuelco y tensiones en el suelo (abajo de las tablas de «M,NyQ»: filas 65 a 99) */
+  vuelco: Vuelco;
   /** controles principales para el pie de la carta */
   controles: { nombre: string; valor: string; estado: string }[];
 }
-export type Variante = 'A' | 'B' | 'C';
+export interface Vuelco {
+  /** lado de la base paralelo al viento (b') y perpendicular (a1), superficie (m, m²) */
+  bB: number; aB: number; Sb: number;
+  /** momento volcador en la fundación (tm), peso descargado y cargado (t) */
+  Mv: number; P: number; G: number;
+  /** momento equilibrante P · b'/2 (tm) y coeficiente de seguridad Me / Mv */
+  Me: number; coef: number;
+  /** excentricidad de la resultante e = Mv / P y núcleo central b'/6 (m) */
+  e: number; nucleo: number;
+  /** tensiones en el suelo (kg/cm², compresión negativa): descargado, cargado, viento, máxima y mínima */
+  Tp: number; Tg: number; Tv: number; Tmax: number; Tmin: number;
+  /** la planilla hace esta verificación solo con la cara a (viento A) */
+  enPlanilla: boolean;
+}
+export type Variante = 'A' | 'B' | 'C' | 'D';
 
 const NS = 'http://www.w3.org/2000/svg';
 type Attrs = Record<string, string | number>;
@@ -94,20 +110,21 @@ function marcas(max: number, n = 3): number[] {
 }
 
 export function carta(d: DatosCarta, variante: Variante, ancho = 1100): SVGSVGElement {
-  const alto = variante === 'C' ? 760 : 720;
+  const alto = variante === 'C' || variante === 'D' ? 760 : 720;
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: `grafico carta carta-${variante}`, role: 'img',
     'aria-label': `Carta de la torre (${variante}), viento ${d.dir}: W = ${fmt(d.W, 1)} t, M en PB = ${fmt(d.Mv, 0)} tm` }) as SVGSVGElement;
   svg.append(el('rect', { x: 0, y: 0, width: ancho, height: alto, class: 'ct-fondo' }));
   // rótulo (como el de un plano): proyecto, viento, fuente
   const g = el('g');
   svg.append(g);
-  const titulos: Record<Variante, string> = { A: 'Lámina M, N y Q', B: 'Ficha de la torre', C: 'Axonometría de la ménsula' };
+  const titulos: Record<Variante, string> = { A: 'Lámina M, N y Q', B: 'Ficha de la torre', C: 'Axonometría de la ménsula', D: 'Vuelco y tensiones en el suelo' };
   txt(g, 16, 26, `${titulos[variante]} · viento ${d.dir}`, 'ct-titulo');
   txt(g, ancho - 16, 26, `${d.proyecto} · ${d.fuente}`, 'd-eje', 'end');
   linea(g, 12, 36, ancho - 12, 36, 'ct-regla');
   if (variante === 'A') laminaA(g, d, ancho, alto);
   else if (variante === 'B') fichaB(g, d, ancho, alto);
-  else axonometriaC(g, d, ancho, alto);
+  else if (variante === 'C') axonometriaC(g, d, ancho, alto);
+  else vuelcoD(g, d, ancho, alto);
   return svg;
 }
 
@@ -158,11 +175,11 @@ function alzado(g: SVGElement, d: DatosCarta, x0: number, x1: number, Y: (z: num
   }
   // resultante W a la altura hw
   if (isFinite(d.hw)) {
-    const yw = Y(d.hw);
+    const yw = Y(d.zFondo + d.hw);                                  // hW se mide desde la fundación (M,NyQ!G66 = J61 / W)
     flecha(g, xa - 56, yw, xa - 2, yw, 'resultante', 3);
     txt(g, xa - 56, yw - 7, `W = ${fmt(d.W, 1)} t`, 'd-valor', 'start');
     linea(g, xa - 2, yw, xb + 2, yw, 'ct-hw');
-    cota(g, xa + 12, Y(0), xa + 12, yw, `hw = ${fmt(d.hw)} m`, 1);
+    cota(g, xa + 12, Y(d.zFondo), xa + 12, yw, `hW = ${fmt(d.hw)} m`, 1);
   }
   // deformada exagerada del eje
   if (opc.deformada && d.roto) {
@@ -243,9 +260,9 @@ function laminaA(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
     ['h / B', fmt(d.zTop / Math.min(d.T, d.S), 2), 'esbeltez'],
     ['W = Σ Wi', `${fmt(d.W, 1)} t`, `a hw = ${fmt(d.hw)} m`],
     ['Q en PB', `${fmt(PB?.Q ?? NaN, 1)} t`, 'corte en la base'],
-    ['M en PB', `${fmt(d.Mv, 0)} tm`, 'M = W · hw'],
+    ['M en PB', `${fmt(PB?.M ?? NaN, 0)} tm`, `fundación: ${fmt(d.Mv, 0)} tm`],
     ['N en PB', `${fmt(PB?.N ?? NaN, 0)} t`, 'peso descargado'],
-    ['M / N', `${fmt(d.Mv / (PB?.N || NaN), 2)} m`, 'excentricidad de la carga'],
+    ['e = Mv / P', `${fmt(d.vuelco.e, 2)} m`, `b'/6 = ${fmt(d.vuelco.nucleo, 2)} m`],
   ];
   const wd = (ancho - 32 - 6 * 8) / 7;
   datos.forEach(([t, v2, nt], i) => dato(g, 16 + i * (wd + 8), yP, wd, t, v2, nt));
@@ -287,7 +304,7 @@ function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: nu
   const e = Math.abs(pl.Xr);
   if (e > 0.005) linea(g, X(pl.Xr), Yp(pl.S / 2 + 1.2), X(pl.Xr), Yp(-pl.S / 2 - 1.2), 'ct-inercia');
   g.append(el('circle', { cx: X(pl.Xr), cy: Yp(pl.Yr), r: 5, class: 'ct-cr' }));
-  txt(g, X(pl.Xr) + 6, Yp(pl.Yr) + 18, 'CR · punto de giro', 'ct-cr-txt');
+  txt(g, X(pl.Xr) + 6, Yp(pl.Yr) + 18, 'CR · centro de rotación', 'ct-cr-txt');
   // viento
   flecha(g, X(0), Yp(-pl.S / 2) + 46, X(0), Yp(-pl.S / 2) + 14, 'resultante', 3);
   txt(g, X(0) + 6, Yp(-pl.S / 2) + 44, `W = ${fmt(d.W, 1)} t`, 'd-valor');
@@ -314,7 +331,7 @@ function fichaB(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   const PB = d.PB, roto = d.roto;
   const filas: [string, string, string, string?][] = [
     ['W = Σ Wi', `${fmt(d.W, 1)} t`, `a hw = ${fmt(d.hw)} m`],
-    ['M en PB', `${fmt(d.Mv, 0)} tm`, 'M,NyQ · col. J'],
+    ['M en PB · fundación', `${fmt(d.PB?.M ?? NaN, 0)} · ${fmt(d.Mv, 0)} tm`, 'M,NyQ · col. J'],
     ['N en PB', `${fmt(PB?.N ?? NaN, 0)} t`, 'peso descargado'],
     ['Σ J paralelos', `${fmt(d.plano.SJ, 2)} m⁴`, 'traslación'],
     ['e · Mt', `${fmt(Math.abs(d.plano.Xr), 2)} m · ${fmt(Math.abs(d.plano.Mt), 0)} tm`, 'rotación'],
@@ -368,9 +385,10 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   });
   // resultante W en hw
   if (isFinite(d.hw)) {
-    const a = P(0, -S / 2 - 18, d.hw), b = P(0, -S / 2 - 0.3, d.hw);
+    const zw = d.zFondo + d.hw;
+    const a = P(0, -S / 2 - 18, zw), b = P(0, -S / 2 - 0.3, zw);
     flecha(g, a.x, a.y, b.x, b.y, 'resultante', 3.2);
-    txt(g, a.x - 6, a.y + 4, `W = ${fmt(d.W, 1)} t a hw = ${fmt(d.hw)} m`, 'd-valor', 'end');
+    txt(g, a.x - 6, a.y + 4, `W = ${fmt(d.W, 1)} t a hW = ${fmt(d.hw)} m de la fundación`, 'd-valor', 'end');
   }
   // eje de la torre por el CR y deformada exagerada (se traslada en el sentido del viento)
   const cr = { t: d.plano.Xr, s: d.plano.Yr };
@@ -394,8 +412,9 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   ns.forEach((n, i) => { if (i % 3 === 0 && n.z > 0) { const a = P(T / 2, s0, n.z), b = P(T / 2, s0 + Math.abs(n.M) * km, n.z); linea(g, a.x, a.y, b.x, b.y, 'ct-ordenada'); } });
   const e0 = P(T / 2, s0, H + 2), e1 = P(T / 2, s0, 0);
   linea(g, e0.x, e0.y, e1.x, e1.y, 'ct-eje-col');
-  const mPB = P(T / 2, s0 + Math.abs(d.Mv) * km, 0);
-  txt(g, mPB.x + 6, mPB.y + 4, `M PB = ${fmt(d.Mv, 0)} tm`, 'd-valor');
+  const mPBv = Math.abs(d.PB?.M ?? d.Mv);
+  const mPB = P(T / 2, s0 + mPBv * km, 0);
+  txt(g, mPB.x + 6, mPB.y + 4, `M PB = ${fmt(mPBv, 0)} tm`, 'd-valor');
   txt(g, e0.x - 4, e0.y - 6, `diagrama de M (col. ${d.dir === 'A' ? 'J' : 'O'})`, 'd-eje', 'middle');
   // en la base, debajo del suelo: Q contra el viento y N hacia arriba
   const b0 = P(cr.t, cr.s, 0);
@@ -425,4 +444,106 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     g.append(el('rect', { x: xl, y: 60 + i * 18, width: 14, height: 4, rx: 2, class: `ct-ley ${c}` }));
     txt(g, xl + 20, 65 + i * 18, t, 'd-eje');
   });
+}
+
+// ------------------------------------------------------------------ D · Vuelco y tensiones en el suelo
+/** flecha curva (arco de círculo) con punta, para los momentos */
+function arco(g: SVGElement, cx: number, cy: number, r: number, a0: number, a1: number, clase: string) {
+  const p = (a: number) => ({ x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) });
+  const A = p(a0), B = p(a1), grande = Math.abs(a1 - a0) > Math.PI ? 1 : 0, horario = a1 < a0 ? 1 : 0;
+  g.append(el('path', { d: `M${A.x.toFixed(1)},${A.y.toFixed(1)} A${r},${r} 0 ${grande} ${horario} ${B.x.toFixed(1)},${B.y.toFixed(1)}`, class: `ct-arco ${clase}` }));
+  // punta tangente al final del arco
+  const t = { x: -Math.sin(a1) * (a1 > a0 ? 1 : -1), y: -Math.cos(a1) * (a1 > a0 ? 1 : -1) };
+  const n = { x: -t.y, y: t.x }, L = 10, W = 5;
+  g.append(el('polygon', { points: `${B.x + t.x * 4},${B.y + t.y * 4} ${B.x - t.x * L + n.x * W},${B.y - t.y * L + n.y * W} ${B.x - t.x * L - n.x * W},${B.y - t.y * L - n.y * W}`, class: `ct-arco-punta ${clase}` }));
+}
+
+function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
+  const v = d.vuelco, S = d.S, zF = d.zFondo, H = d.zTop;
+  // ---- alzado a escala (misma escala en las dos direcciones), el viento de izquierda a derecha
+  const xL = 40, xR = Math.min(640, ancho * 0.56), yT = 96, yF = alto - 190;
+  const k = Math.min((yF - yT) / (H - zF), (xR - xL - 300) / Math.max(v.bB, S));
+  const cx = xL + 190 + (v.bB / 2) * k;
+  const X = (s: number) => cx + s * k, Y = (z: number) => yF - (z - zF) * k;
+  txt(g, xL, 54, 'Alzado a escala · el viento de izquierda a derecha', 'ct-col-tit');
+  // suelo, subsuelos y base
+  linea(g, xL, Y(0), xR, Y(0), 'ct-calle');
+  txt(g, xR, Y(0) - 5, 'nivel calle ±0,00', 'd-eje', 'end');
+  if (zF < 0) g.append(el('rect', { x: X(-v.bB / 2), y: Y(0), width: v.bB * k, height: (0 - zF) * k, class: 'ct-subsuelo' }));
+  g.append(el('rect', { x: X(-v.bB / 2), y: Y(zF), width: v.bB * k, height: 5, class: 'ct-base' }));
+  linea(g, xL, Y(zF), X(-v.bB / 2) - 4, Y(zF), 'ct-fundacion');
+  txt(g, xL, Y(zF) - 5, `fundación ${fmt(zF)}`, 'd-eje');
+  // torre
+  g.append(el('rect', { x: X(-S / 2), y: Y(H), width: S * k, height: H * k, class: 'ct-torre' }));
+  d.niveles.filter(n => n.z > 0 && n.z < H).forEach(n => linea(g, X(-S / 2), Y(n.z), X(S / 2), Y(n.z), 'ct-losa'));
+  txt(g, X(S / 2) + 6, Y(H) + 4, 'nivel azotea', 'd-eje');
+  // viento de cada piso
+  const sobre = d.niveles.filter(n => n.z > 0);
+  const wMax = Math.max(...sobre.map(n => n.Wi), 1e-9);
+  sobre.forEach(n => flecha(g, X(-S / 2) - 8 - (n.Wi / wMax) * 46, Y(n.z), X(-S / 2) - 3, Y(n.z), 'carga', 1.1));
+  if (sobre[0]) txt(g, xL, Y(H) - 12, 'Wi · viento en cada piso', 'd-eje');
+  // W en hW (desde la fundación) y su recta de acción hasta el eje
+  const zw = zF + d.hw, I = { x: X(0), y: Y(zw) };
+  flecha(g, X(-S / 2) - 96, I.y, X(-S / 2) - 60, I.y, 'resultante', 3.2);
+  txt(g, X(-S / 2) - 98, I.y - 7, `W = ${fmt(d.W, 1)} t`, 'd-valor', 'start');
+  linea(g, X(-S / 2) - 60, I.y, I.x, I.y, 'ct-hw');
+  cota(g, X(-S / 2) - 112, Y(zF), X(-S / 2) - 112, I.y, `hW = ${fmt(d.hw)} m`, -1);
+  cota(g, X(S / 2) + 110, Y(0), X(S / 2) + 110, Y(H), `h = ${fmt(H)} m`, 1);
+  cota(g, X(-S / 2), Y(H) - 16, X(S / 2), Y(H) - 16, `b = ${fmt(S)} m`);
+  // peso P en el eje y resultante R = W + P: corta la base a e = Mv / P del centro
+  flecha(g, I.x, I.y, I.x, I.y + Math.min(70, (yF - I.y) * 0.45), 'peso', 3);
+  txt(g, I.x - 7, I.y + 40, `P = ${fmt(v.P, 0)} t`, 'd-valor', 'end');
+  const Bp = { x: X(v.e), y: Y(zF) };
+  flecha(g, I.x, I.y, Bp.x, Bp.y, 'resultante-r', 2);
+  linea(g, Bp.x, Bp.y, Bp.x + (Bp.x - I.x) * 0.06, Bp.y + 46, 'ct-r-punteada');
+  txt(g, (I.x + Bp.x) / 2 + 6, (I.y + Bp.y) / 2, 'R = W + P', 'd-valor ct-rojo');
+  // base: centro, núcleo central ±b'/6, e, b'/2 y el punto de giro
+  const ok = Math.abs(v.e) <= v.nucleo;
+  g.append(el('rect', { x: X(-v.nucleo), y: Y(zF) - 2, width: 2 * v.nucleo * k, height: 9, class: `ct-nucleo ${ok ? 'ok' : 'mal'}` }));
+  linea(g, X(0), Y(zF) - 10, X(0), Y(zF) + 12, 'ct-eje');
+  const giro = { x: X(v.bB / 2), y: Y(zF) + 2.5 };
+  g.append(el('circle', { cx: giro.x, cy: giro.y, r: 6, class: 'ct-giro' }));
+  txt(g, giro.x + 10, giro.y + 14, 'punto de giro', 'd-valor');
+  cota(g, X(0), Y(zF) + 22, Bp.x, Y(zF) + 22, `e = ${fmt(v.e, 2)}`, 1);
+  cota(g, X(0), Y(zF) + 46, X(v.bB / 2), Y(zF) + 46, `b'/2 = ${fmt(v.bB / 2, 2)}`, 1);
+  cota(g, X(-v.bB / 2), Y(zF) + 70, X(v.bB / 2), Y(zF) + 70, `b' = ${fmt(v.bB, 2)} m`, 1);
+  txt(g, X(-v.bB / 2) - 6, Y(zF) + 16, `núcleo central ±b'/6 = ±${fmt(v.nucleo, 2)}`, ok ? 'd-eje' : 'd-valor ct-rojo', 'end');
+  // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
+  arco(g, giro.x, giro.y, 40, Math.PI * 0.95, Math.PI * 0.45, 'volcador');
+  arco(g, giro.x, giro.y, 62, Math.PI * 0.5, Math.PI * 0.92, 'equilibrante');
+  txt(g, giro.x + 72, giro.y - 26, `Mv = W·hW = ${fmt(v.Mv, 0)} tm (volcador)`, 'd-valor ct-rojo');
+  txt(g, giro.x + 72, giro.y - 12, `Me = P·b'/2 = ${fmt(v.Me, 0)} tm (equilibrante)`, 'd-valor ct-amarillo');
+  // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx
+  const y0 = Y(zF) + 104, Tm = Math.max(Math.abs(v.Tmax), Math.abs(v.Tmin), 1e-9), kt = 44 / Tm;
+  const pa = { x: X(-v.bB / 2), y: y0 - v.Tmin * kt }, pb = { x: X(v.bB / 2), y: y0 - v.Tmax * kt };
+  g.append(el('polygon', { points: pts([{ x: X(-v.bB / 2), y: y0 }, pa, pb, { x: X(v.bB / 2), y: y0 }]), class: `ct-suelo-t ${v.Tmin > 0 ? 'traccion' : ''}` }));
+  linea(g, X(-v.bB / 2), y0, X(v.bB / 2), y0, 'ct-eje-col');
+  txt(g, pa.x - 6, pa.y + 4, `Tmín ${fmt(v.Tmin, 2)}`, v.Tmin > 0 ? 'd-valor ct-rojo' : 'd-valor', 'end');
+  txt(g, pb.x + 6, pb.y + 4, `Tmáx ${fmt(v.Tmax, 2)} kg/cm²`, 'd-valor');
+  txt(g, X(0), y0 - 6, 'tensiones en el suelo', 'd-eje', 'middle');
+  // ---- derecha: planta tipo dentro de la base y las dos tablas de la hoja
+  const x0 = xR + 30, w = ancho - x0 - 16;
+  txt(g, x0, 54, 'Planta tipo y base', 'ct-col-tit');
+  const kp = Math.min((w - 110) / Math.max(v.bB, S), 150 / Math.max(v.aB, d.T));
+  const pcx = x0 + 60 + (Math.max(v.bB, S) / 2) * kp, pcy = 100 + (Math.max(v.aB, d.T) / 2) * kp;
+  g.append(el('rect', { x: pcx - (v.bB / 2) * kp, y: pcy - (v.aB / 2) * kp, width: v.bB * kp, height: v.aB * kp, class: 'ct-base-planta' }));
+  g.append(el('rect', { x: pcx - (S / 2) * kp, y: pcy - (d.T / 2) * kp, width: S * kp, height: d.T * kp, class: 'ct-planta' }));
+  txt(g, pcx, pcy + 4, 'planta tipo', 'd-eje', 'middle');
+  flecha(g, pcx - (v.bB / 2) * kp - 40, pcy, pcx - (v.bB / 2) * kp - 8, pcy, 'resultante', 2.4);
+  txt(g, pcx - (v.bB / 2) * kp - 42, pcy - 6, 'W', 'd-valor');
+  cota(g, pcx - (S / 2) * kp, pcy - (v.aB / 2) * kp - 12, pcx + (S / 2) * kp, pcy - (v.aB / 2) * kp - 12, `b = ${fmt(S)}`);
+  cota(g, pcx - (v.bB / 2) * kp, pcy + (v.aB / 2) * kp + 12, pcx + (v.bB / 2) * kp, pcy + (v.aB / 2) * kp + 12, `b' = ${fmt(v.bB)}`, 1);
+  cota(g, pcx + (v.bB / 2) * kp + 12, pcy - (v.aB / 2) * kp, pcx + (v.bB / 2) * kp + 12, pcy + (v.aB / 2) * kp, `a1 = ${fmt(v.aB)}`, 1);
+  // tabla de vuelco (M,NyQ filas 97 a 99) y de tensiones (filas 80 a 90)
+  const col = (w - 3 * 6) / 4;
+  const fila = (y: number, ds: [string, string, string, string?][]) => ds.forEach(([t, val, nt, c], i) => dato(g, x0 + i * (col + 6), y, col, t, val, nt, c ?? ''));
+  const yV = pcy + (Math.max(v.aB, d.T) / 2) * kp + 56;
+  txt(g, x0, yV - 8, 'Vuelco (M,NyQ fila 99)', 'ct-col-tit');
+  fila(yV, [['Mto volcador', `${fmt(v.Mv, 0)} tm`, 'H99'], ['Peso P', `${fmt(v.P, 0)} t`, 'I99'], ["b'/2", `${fmt(v.bB / 2, 2)} m`, 'J99'], ['Mto equilibr.', `${fmt(v.Me, 0)} tm`, 'K99']]);
+  fila(yV + 52, [['coef. seguridad', fmt(v.coef, 2), 'Me / Mv ≥ 1,5', v.coef >= 1.5 ? 'ok' : 'mal'], ['e = Mv / P', `${fmt(v.e, 2)} m`, 'M99'], ["b'/6", `${fmt(v.nucleo, 2)} m`, 'N99'], ["e ≤ b'/6", ok ? 'verifica' : 'no verifica', 'sin tracción en la base', ok ? 'ok' : 'mal']]);
+  const yT2 = yV + 52 * 2 + 30;
+  txt(g, x0, yT2 - 8, 'Tensiones en la base (kg/cm², filas 80 a 90)', 'ct-col-tit');
+  fila(yT2, [['Sb = b1·a1', `${fmt(v.Sb, 0)} m²`, 'N82'], ['N descargado', `${fmt(v.P, 0)} t`, 'N83'], ['G cargado', `${fmt(v.G, 0)} t`, 'N84 = N·9/7'], ['Tv viento', `±${fmt(v.Tv, 2)}`, '6·Mv / a1·b1²']]);
+  fila(yT2 + 52, [['Tp descargado', fmt(v.Tp, 2), 'N85'], ['Tg cargado', fmt(v.Tg, 2), 'N86'], ['Tmáx sotavento', fmt(v.Tmax, 2), 'N89 = Tg − Tv'], ['Tmín barlovento', fmt(v.Tmin, 2), 'N90 ≤ 0: sin tracción', v.Tmin <= 0 ? 'ok' : 'mal']]);
+  if (!v.enPlanilla) txt(g, x0, yT2 + 52 * 2 + 14, 'La planilla hace esta verificación solo con la cara a; acá, la misma cuenta con la cara b.', 'd-eje');
 }

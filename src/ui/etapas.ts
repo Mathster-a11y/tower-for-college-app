@@ -520,12 +520,17 @@ export function datosCarta(): DatosCarta | null {
       Wi: (A ? m.H[k] : m.D[k] * m.F[k] * m.G[k]) || 0, Q: (A ? m.I[k] : m.N[k]) || 0, M: (A ? m.J[k] : m.O[k]) || 0, N: m.M[k] || 0 };
   }).filter((x): x is NivelCarta => x !== null);
   const plano = datosRotoPlano(d);
+  // vuelco y suelo (M,NyQ filas 80 a 99): la planilla lo hace con la cara a; en el viento B, la misma cuenta con la cara b
+  const fu = d.p.fundacion;
+  const bB = A ? fu.b1 : fu.a1, aB = A ? fu.a1 : fu.b1, P = m.M61, G = (P / 7) * 9, Sb = fu.b1 * fu.a1;
+  const Tp = -P / Sb / 10, Tg = -G / Sb / 10, Tv = (6 * d.Mv) / aB / bB ** 2 / 10;
+  const vuelco = { bB, aB, Sb, Mv: d.Mv, P, G, Me: (P * bB) / 2, coef: (P * bB) / 2 / d.Mv, e: d.Mv / P, nucleo: bB / 6, Tp, Tg, Tv, Tmax: Tg - Tv, Tmin: Tp + Tv, enPlanilla: A };
   const PB = niveles.find(n => Math.abs(n.z) < 1e-6) ?? niveles.filter(n => n.z >= 0).pop() ?? null;
   const cs = (estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo');
   return {
     dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla',
     niveles, T: plano.T, S: plano.S, zTop: d.p.niveles[0]?.cota ?? 0, zFondo: d.p.niveles[d.p.niveles.length - 1]?.cota ?? 0,
-    W: d.W, Mv: d.Mv, hw: d.hw, PB, plano, roto: datosRoto3D(),
+    W: d.W, Mv: d.Mv, hw: d.hw, PB, plano, roto: datosRoto3D(), vuelco,
     controles: cs.map(c => ({ nombre: c.nombre, valor: c.guia !== null ? `${fmt(c.guia, 1)} ${c.unidad}` : c.planilla !== null ? `${fmt(c.planilla, 1)} ${c.unidad}` : '', estado: c.estado })),
   };
 }
@@ -533,6 +538,7 @@ const VARIANTES: [Variante, string, string][] = [
   ['A', 'A · Lámina M, N y Q', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja.'],
   ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
   ['C', 'C · Axonometría de la ménsula', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones.'],
+  ['D', 'D · Vuelco y suelo', 'El esquema de abajo de las tablas de «M,NyQ», a escala: viento de cada piso, W en hW, peso P, resultante, punto de giro, núcleo central b\'/6 y tensiones en el suelo, con las dos tablas de la hoja.'],
 ];
 const cartaE: Etapa = {
   id: 'carta', nro: '▤', nombre: 'Carta', rol: '--r-resumen', dependeDir: true, conFuente: true,

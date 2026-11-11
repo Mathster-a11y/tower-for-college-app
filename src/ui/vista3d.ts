@@ -288,9 +288,16 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       extras.push({ mover: f => { const q = desplazar(r, x, y, zt, f, f * kGiro); o.position.set(q.x, zt + 1.6, -q.y); } });
     });
     // CR: punto de giro arriba y abajo
-    const crAbajo = etiqueta('CR', 'cr', 'Centro de rigidez: la planta gira alrededor de este punto');
+    const crAbajo = etiqueta('CR', 'cr', 'Centro de rigidez: cada planta gira alrededor de este punto (rototraslación)');
+    // punto de giro del vuelco (M,NyQ): el borde de la base del lado de sotavento, a nivel de fundación
+    const fu = p.fundacion, bB = A ? fu.b1 : fu.a1, aB = A ? fu.a1 : fu.b1;
+    const zFu = p.niveles[p.niveles.length - 1]?.cota ?? 0;
+    const g0 = A ? new THREE.Vector3(-aB / 2, zFu, -bB / 2) : new THREE.Vector3(bB / 2, zFu, -aB / 2);
+    const g1 = A ? new THREE.Vector3(aB / 2, zFu, -bB / 2) : new THREE.Vector3(bB / 2, zFu, aB / 2);
+    grupo.add(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, g0.distanceTo(g1), 12).rotateZ(A ? Math.PI / 2 : 0).rotateX(A ? 0 : Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--ink', '#222')) })).translateX((g0.x + g1.x) / 2).translateY(zFu).translateZ((g0.z + g1.z) / 2));
+    etiqueta('punto de giro (vuelco)', 'giro', 'Borde de la base a sotavento: el viento hace volcar la torre alrededor de esta arista (M,NyQ: Mv contra Me = P · b\'/2)').position.copy(g1.clone().add(new THREE.Vector3(A ? 1 : 0.5, 0.8, A ? 0 : 0.5)));
     crAbajo.position.set(r.cr.x, z0 + 0.4, -r.cr.y);
-    const crArriba = etiqueta('CR · punto de giro', 'cr arriba');
+    const crArriba = etiqueta('CR · centro de rotación de la planta', 'cr arriba');
     extras.push({ mover: f => { const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro); crArriba.position.set(q.x, top + 6, -q.y); } });
     // ejes en el suelo, en el sentido del viento: simetría (donde actúa W) e inercia (por el CR)
     const largoEje = (A ? L : B) / 2 + 3;

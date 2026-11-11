@@ -31,8 +31,8 @@ export function armarInforme(): HTMLElement {
       estado.dir = dir;
       const dc = datosCarta();
       if (!dc) return;
-      const s1 = h('section', { class: 'inf-hoja' }, h('h2', {}, `${2 + i * 2} · Viento ${dir}: M, N y Q`));
-      s1.append(carta(dc, 'A', 1100), carta(dc, 'B', 1100));
+      const s1 = h('section', { class: 'inf-hoja' }, h('h2', {}, `${2 + i * 2} · Viento ${dir}: M, N y Q, vuelco y suelo`));
+      s1.append(carta(dc, 'A', 1100), carta(dc, 'D', 1100));
       doc.append(s1);
       const s2 = h('section', { class: 'inf-hoja' }, h('h2', {}, `${3 + i * 2} · Viento ${dir}: rototraslación`));
       const dp = datosRotoPlanoActual();
