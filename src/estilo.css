@@ -249,13 +249,13 @@ dialog .avisos { margin-top: 12px; }
 svg.planta { display: block; width: 100%; height: 100%; background: var(--lienzo); touch-action: none; }
 .planta .g1 { stroke: var(--grilla); stroke-width: .6; }
 .planta .g5 { stroke: var(--grilla); stroke-width: 1.3; }
-.planta .contorno { fill: none; stroke: var(--ink2); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.planta .contorno { fill: none; stroke: color-mix(in srgb, var(--ink2) 45%, transparent); stroke-width: 1; stroke-dasharray: 6 4; }
 .planta .eje { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 8 5; opacity: .45; }
 .planta .inercia { stroke: var(--elegido); stroke-width: 2; }
 .planta .viento line { stroke: var(--carga); stroke-width: 2.5; }
 .planta .viento text { fill: var(--carga); font-size: 12px; font-weight: 600; font-family: var(--mono); }
 .planta .punta { fill: var(--carga); }
-.planta .muro rect, .planta .muro circle { stroke: #222; stroke-width: 1; cursor: grab; }
+.planta .muro rect, .planta .muro circle { stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: miter; cursor: grab; }   /* contorno fuerte: se lee de lejos */
 .planta .muro.sel rect, .planta .muro.sel circle { stroke: var(--elegido); stroke-width: 3; }
 .planta .muro.fuera rect { fill-opacity: .35; stroke-dasharray: 3 2; }
 .planta .muro.ausente { opacity: .18; pointer-events: none; }
@@ -641,3 +641,10 @@ text[data-par].ultimo { font-size: 15px; }
 .rototrasl.paso-1 .rt-muro { opacity: .2; }
 .rototrasl .rt-J .tronco { stroke: var(--serie-1); }
 .rototrasl .rt-J .punta { fill: var(--serie-1); }
+/* contraste de los elementos en los otros dibujos de planta */
+.rototrasl .rt-muro, .rototrasl .rt-muro.paralelo { stroke: var(--ink); stroke-width: 1.2; }
+.rototrasl.paso-1 .rt-muro, .rototrasl.paso-1 .rt-muro.paralelo { stroke-opacity: .5; }
+.rototrasl .rt-planta { stroke: color-mix(in srgb, var(--ink2) 45%, transparent); stroke-width: 1; }
+.carta .ct-muro { stroke: var(--ink); stroke-width: 1.2; }
+.carta .ct-planta { stroke: color-mix(in srgb, var(--ink2) 50%, transparent); stroke-width: 1; }
+.perfil .pf-muro { stroke: var(--ink); stroke-width: 1.2; }
