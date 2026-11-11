@@ -49,7 +49,7 @@ const peor = (cs: Control[]): EstadoChip => (cs.some(c => c.estado === 'no verif
 const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => pre.some(g => c.grupo.startsWith(g))) ?? [];
 
 /** Tabla de controles: planilla, guía y estado. */
-function tablaControles(cs: Control[]): H {
+export function tablaControles(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
   t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
@@ -418,6 +418,7 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
 }
 
 /** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
+export function datosRotoPlanoActual() { return datosRotoPlano(datos()); }
 function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla' } {
   const A = d.dir === 'A';
   const porId = new Map(d.p.muros.map(m => [m.id, m]));

@@ -59,8 +59,8 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Armar las piezas solas: los muros que se tocan forman una pieza y el ala sabe a qué alma está pegada
 - [ ] Calcar un plano: poner una imagen o un PDF de fondo en la planta, con escala
 - [ ] Dibujo del perfil equivalente de cada pieza tal como queda en la hoja J, para controlarlo
-- [ ] Informe imprimible (PDF) con datos, resultados y verificaciones
-- [ ] Publicar la app con link (GitHub Pages o Netlify)
+- [x] Informe imprimible (PDF) con datos, cartas de los dos vientos, rototraslación y controles (Exportar ▾)
+- [ ] Publicar la app con link: el workflow ya compila y prueba; falta activar Settings → Pages → Source «GitHub Actions» en el repositorio (lo hace el dueño)
 
 ## Esperando a la cátedra
 - [ ] Filas de las piezas 8 y 9 de «J Tabiques paralelos»: faltan fórmulas en la planilla virgen

@@ -2,6 +2,7 @@ import './estilo.css';
 import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
+import { imprimirInforme } from './ui/informe';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, chip, h } from './ui/comp';
@@ -300,6 +301,7 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; e
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
+$('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
 
 // menús desplegables (tarjetas)
 function cerrarMenus() { document.querySelectorAll('.menu.abierto').forEach(m => { m.classList.remove('abierto'); (m.previousElementSibling as HTMLElement | null)?.setAttribute('aria-expanded', 'false'); }); }

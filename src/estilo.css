@@ -485,3 +485,22 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .carta .ct-cara.techo { fill: var(--panel); }
 .carta .ct-ley.carga { fill: var(--carga); } .carta .ct-ley.momento { fill: var(--accent); } .carta .ct-ley.reaccion { fill: var(--reaccion); } .carta .ct-ley.deformada { fill: var(--deformada); }
 .carta .ct-ordenada { stroke: var(--accent); stroke-width: .8; opacity: .7; }
+/* informe para imprimir */
+.informe { display: none; }
+@media print {
+  body.imprimiendo > *:not(.informe) { display: none !important; }
+  body.imprimiendo { background: #fff; overflow: visible; height: auto; }
+  body.imprimiendo .informe { display: block; color: #111; font: 10.5pt var(--fuente); }
+  .informe .inf-portada { border-bottom: 2px solid #111; margin-bottom: 10mm; padding-bottom: 4mm; }
+  .informe .inf-marca { font: 600 9pt var(--mono); letter-spacing: .04em; color: #555; }
+  .informe h1 { font-size: 20pt; margin: 2mm 0; }
+  .informe h2 { font-size: 13pt; border-bottom: 1px solid #999; padding-bottom: 1mm; }
+  .informe h3 { font-size: 11pt; margin: 4mm 0 1mm; }
+  .informe .inf-hoja { break-before: page; }
+  .informe .inf-hoja:first-of-type { break-before: auto; }
+  .informe svg { width: 100%; height: auto; break-inside: avoid; margin: 3mm 0; }
+  .informe table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+  .informe th, .informe td { border-bottom: .5px solid #bbb; padding: 1mm 2mm; text-align: left; }
+  .informe .inf-pie { margin-top: 6mm; color: #555; font-size: 9pt; }
+  @page { size: A4; margin: 14mm; }
+}
