@@ -7,6 +7,7 @@
  * - Agrega una hoja nueva «T3D» con el proyecto de la app (niveles y muros), para poder volver a abrirlo.
  * - Marca el libro para que Excel/LibreOffice recalculen todo al abrirlo.
  */
+import { AVISO } from '../autoria';
 import JSZip from 'jszip';
 import type { PlanillaDatos, PlanillaRes } from '../engine/planilla';
 import type { Proyecto } from '../engine/modelo';
@@ -76,7 +77,7 @@ function hojaT3D(p: Proyecto): string {
   for (let i = 0; i < json.length; i += 30000) trozos.push(json.slice(i, i + 30000));
   const filas: string[] = [];
   const cel = (ref: string, v: string | number) => (typeof v === 'number' ? `<c r="${ref}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t>${String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</t></is></c>`);
-  filas.push(`<row r="1">${cel('A1', 'Hoja creada por la app Torre 3D. No la modifiques a mano: guarda el proyecto (niveles y muros) para volver a abrirlo.')}</row>`);
+  filas.push(`<row r="1">${cel('A1', `Hoja creada por la app Torre 3D (${AVISO}). No la modifiques a mano: guarda el proyecto (niveles y muros) para volver a abrirlo.`)}</row>`);
   filas.push(`<row r="2">${cel('A2', 'T3D-JSON')}${cel('B2', trozos.length)}</row>`);
   trozos.forEach((t, i) => filas.push(`<row r="${3 + i}">${cel(`A${3 + i}`, t)}</row>`));
   const r0 = 5 + trozos.length;

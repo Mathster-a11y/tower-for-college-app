@@ -4,6 +4,7 @@
  * aparte que solo se ve al imprimir.
  */
 import { estado, fmt } from './estado';
+import { AVISO } from '../autoria';
 import { h, esc } from './comp';
 import { carta } from './carta';
 import { datosCarta, datosRotoPlanoActual, tablaControles } from './etapas';
@@ -16,7 +17,7 @@ export function armarInforme(): HTMLElement {
   const doc = h('div', { class: 'informe' });
   const hoy = new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
   doc.append(h('header', { class: 'inf-portada' },
-    h('div', { class: 'inf-marca' }, 'TORRE 3D · Edificios en torre (FAUD-UNMDP)'),
+    h('div', { class: 'inf-marca' }, `TORRE 3D · Edificios en torre (FAUD-UNMDP) · ${AVISO}`),
     h('h1', {}, p.nombre || 'Proyecto'),
     h('p', {}, `${hoy} · hormigón ${p.hormigon || 'H30'} · ${estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla'}`)));
   // datos
@@ -45,7 +46,7 @@ export function armarInforme(): HTMLElement {
   } finally { estado.dir = dirAntes; }
   const sC = h('section', { class: 'inf-hoja' }, h('h2', {}, '6 · Controles'));
   sC.append(tablaControles(estado.calculo.controles ?? []));
-  sC.append(h('p', { class: 'inf-pie' }, 'Informe generado con Torre 3D. Los valores salen de la planilla del curso calculada en la app; la planilla .xlsx escrita por la app los recalcula en Excel.'));
+  sC.append(h('p', { class: 'inf-pie' }, `Informe generado con Torre 3D (${AVISO}). Los valores salen de la planilla del curso calculada en la app; la planilla .xlsx escrita por la app los recalcula en Excel.`));
   doc.append(sC);
   void esc;
   // en papel las tablas van abiertas

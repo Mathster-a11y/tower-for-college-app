@@ -1,5 +1,6 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
 import { dibujoPerfil } from './perfil';
+import { AUTOR, ANIO, LICENCIA, LICENCIA_NOMBRE, LICENCIA_URL } from '../autoria';
 import { estado, fmt, COLORES } from './estado';
 import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
 import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
@@ -394,5 +395,8 @@ export function panelAyuda(c: H) {
   c.append(h('p', { class: 'nota' }, 'Ctrl+Z deshacer · Ctrl+Y (o Ctrl+Mayús+Z) rehacer · flechas: mover el muro elegido · Supr: borrar el muro elegido.'));
   c.append(h('h3', {}, 'Dónde quedan los datos'));
   c.append(h('p', { class: 'nota' }, 'El proyecto se guarda solo en este navegador. Para llevarlo a otra computadora usá «Guardar proyecto» (.json) o la planilla escrita (.xlsx). La app no manda datos a ningún servidor.'));
+  c.append(h('h3', {}, 'Autoría y licencia'));
+  const lic = h('a', { href: LICENCIA_URL, target: '_blank', rel: 'noopener license' }, LICENCIA_NOMBRE);
+  c.append(h('p', { class: 'nota' }, `Torre 3D · © ${ANIO} ${AUTOR}. Se distribuye bajo la licencia `, lic, ` (${LICENCIA}): se puede usar, compartir y adaptar citando al autor, sin fines comerciales. La planilla del curso es material de la cátedra (FAUD-UNMDP) y el CIRSOC 102 pertenece a sus autores; no están incluidos en esta licencia.`));
 }
 

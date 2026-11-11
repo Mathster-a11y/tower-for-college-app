@@ -26,5 +26,7 @@
     "vite": "^6.0.7",
     "vite-plugin-singlefile": "^2.1.0",
     "vitest": "^2.1.8"
-  }
+  },
+  "author": "Augusto Andrés Marsella",
+  "license": "CC-BY-NC-4.0"
 }

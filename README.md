@@ -83,3 +83,11 @@ These are open questions for the cátedra:
 - The virgin «J Tabiques paralelos» sheet is missing the top-ala and left-alma formulas in the rows for pieces 8 and 9. The app uses the other asymmetric rows first.
 - In «Flex comp PB paralelos», cells D13:D20 are fixed at 0.01, so pieces 10–17 do not add their own weight.
 - It is not settled whether flexible buildings (F < 1 Hz) should use Gf (CIRSOC 102 art. 5.8.2). The app flags them with «atención».
+
+## Authorship and license
+
+Torre 3D · © 2026 **Augusto Andrés Marsella**.
+
+The app (source code, design, drawings and texts) is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**: it can be used, shared and adapted with credit to the author and for non-commercial purposes only. See [`LICENSE`](LICENSE) (in Spanish) and the [license summary](https://creativecommons.org/licenses/by-nc/4.0/deed.es).
+
+The course workbook (`src/assets/planilla_virgen.xlsx`), the CIRSOC 102 regulation and the course guides belong to their authors and are not covered by this license. The libraries (three.js, JSZip, IBM Plex and JetBrains Mono fonts) keep their own licenses.
