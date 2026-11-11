@@ -31,3 +31,22 @@ describe('verificación funicular (ejemplo de la guía 2024)', () => {
     expect(g.e).toBeCloseTo(r.mnyq.O61 / r.mnyq.M61, 9);
   });
 });
+
+import { poligonoFunicular } from '../src/engine/funicular';
+import { datosAltura } from '../src/engine/diagramas';
+describe('polígono funicular (construcción gráfica)', () => {
+  it('fuerzas cualesquiera: los lados extremos se cortan a la altura Σ F·z / W', () => {
+    const f = [{ z: 10, F: 2, nivel: 'a' }, { z: 7, F: 5, nivel: 'b' }, { z: 3, F: 1.5, nivel: 'c' }, { z: 1, F: 4, nivel: 'd' }];
+    const c = poligonoFunicular(f, 3);
+    const esperado = f.reduce((s, x) => s + x.F * x.z, 0) / f.reduce((s, x) => s + x.F, 0);
+    expect(c.zR).toBeCloseTo(esperado, 9);
+    expect(c.W).toBe(12.5);
+  });
+  it('ejemplo de la guía: el funicular da la misma hw que M,NyQ', () => {
+    const p = ejemploGuia(); const a = aPlanilla(p); const r = calcularPlanilla(a.datos);
+    const alt = datosAltura(p, r.viento, r.mnyq, a.filaNivel, 'A');
+    const c = poligonoFunicular(alt.map(x => ({ z: x.z, F: x.F, nivel: x.nivel })));
+    const zBase = alt[alt.length - 1].z;
+    expect(c.zR - zBase).toBeCloseTo(r.mnyq.G66, 6);
+  });
+});

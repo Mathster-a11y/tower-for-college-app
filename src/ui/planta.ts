@@ -1,6 +1,6 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { estado, COLORES } from './estado';
-import type { Muro } from '../engine/modelo';
+import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, txt?: string) => {
@@ -11,8 +11,16 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
 };
 
 export function montarPlanta(cont: HTMLElement) {
-  const svg = el('svg', { class: 'planta', role: 'img', 'aria-label': 'Planta de PB con los muros del contraviento' });
+  const svg = el('svg', { class: 'planta', role: 'img', 'aria-label': 'Planta con los muros del contraviento' });
   cont.appendChild(svg);
+  // elección del nivel cuya planta se muestra
+  const rotulo = cont.querySelector('.rotulo') as HTMLElement | null;
+  const selNivel = document.createElement('select');
+  selNivel.className = 'sel-nivel';
+  selNivel.setAttribute('aria-label', 'Planta del nivel');
+  selNivel.title = 'Planta del nivel: los muros que no están en ese nivel se ven en gris claro';
+  selNivel.addEventListener('change', () => { estado.nivelPlanta = selNivel.value === '' ? null : Number(selNivel.value); dibujar(); estado.avisarSeleccion(); });
+  cont.appendChild(selNivel);
   let arrastre: { id: string; x0: number; y0: number; mx: number; my: number } | null = null;
   let escala = 20, ox = 0, oy = 0;
 
@@ -24,10 +32,19 @@ export function montarPlanta(cont: HTMLElement) {
   function dibujar() {
     const p = estado.proyecto;
     const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-    const B = p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.B ?? v, null) ?? 20;
-    const L = p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.L ?? v, null) ?? 16;
+    // nivel elegido (por defecto PB)
+    let iN = estado.nivelPlanta === null ? iPB : p.niveles.findIndex(n => Math.abs(n.cota - estado.nivelPlanta!) < 1e-6);
+    if (iN < 0) { iN = iPB; estado.nivelPlanta = null; }
+    const nivel = p.niveles[iN];
+    selNivel.replaceChildren(...p.niveles.map((n, i) => { const o = document.createElement('option'); o.value = i === iPB ? '' : String(n.cota); o.textContent = `Planta: ${n.nombre}`; return o; }));
+    selNivel.value = iN === iPB ? '' : String(nivel?.cota ?? '');
+    if (rotulo) rotulo.textContent = '';
+    const B = p.niveles.slice(0, iN + 1).reduce<number | null>((v, n) => n.B ?? v, null) ?? 20;
+    const L = p.niveles.slice(0, iN + 1).reduce<number | null>((v, n) => n.L ?? v, null) ?? 16;
+    const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
+    const zN = nivel?.cota ?? 0;
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
-    const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + m.largo / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + m.largo / 2))) + 6;
+    const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + 6;
     escala = Math.min(w, h) / ext;
     ox = w / 2; oy = h / 2;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -66,24 +83,29 @@ export function montarPlanta(cont: HTMLElement) {
     const yaRotuladas = new Set<string>();
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
-      const [dx, dy] = m.circular ? [m.circular.D, m.circular.D] : m.dir === 'Y' ? [m.espesor, m.largo] : [m.largo, m.espesor];
-      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id ? ' sel' : '') + (m.llega ? '' : ' fuera'), 'data-id': m.id, tabindex: 0 });
-      const forma = m.circular
-        ? el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.circular.D / 2) * escala, fill: COLORES[papel] })
-        : el('rect', { x: X(m.x - dx / 2), y: Y(m.y + dy / 2), width: Math.max(2, dx * escala), height: Math.max(2, dy * escala), fill: COLORES[papel] });
+      const { ax: dx, ay: dy } = huella(m);
+      const t = tipoDe(m);
+      const esta = presenteEn(m, zN, zFund, zTop);
+      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id ? ' sel' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente'), 'data-id': m.id, tabindex: 0 });
+      const forma = el('g');
+      if (t === 'tubo-circ') {
+        forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.largo / 2) * escala, fill: COLORES[papel] }));
+        if (dInterior(m) > 0) forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (dInterior(m) / 2) * escala, class: 'hueco' }));
+      } else rectangulos(m).forEach(r => forma.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: Math.max(2, r.ax * escala), height: Math.max(2, r.ay * escala), fill: COLORES[papel] })));
       grupo.appendChild(forma);
       const pieza = estado.dir === 'A' ? m.piezaA : m.piezaB;
       // etiqueta del lado de afuera (lejos del centro de la planta), para no tapar los muros del núcleo
       const izq = m.x < 0, abajo = m.y < 0;
-      const lx = m.dir === 'Y' || m.circular ? (izq ? X(m.x - dx / 2) - 4 : X(m.x + dx / 2) + 4) : X(m.x);
-      const ly = m.dir === 'Y' || m.circular ? Y(m.y) + 4 : abajo ? Y(m.y - dy / 2) + 13 : Y(m.y + dy / 2) - 5;
-      const ancla = m.dir === 'Y' || m.circular ? (izq ? 'end' : 'start') : 'middle';
+      const vertical = t !== 'tabique' || m.dir === 'Y';
+      const lx = vertical ? (izq ? X(m.x - dx / 2) - 4 : X(m.x + dx / 2) + 4) : X(m.x);
+      const ly = vertical ? Y(m.y) + 4 : abajo ? Y(m.y - dy / 2) + 13 : Y(m.y + dy / 2) - 5;
+      const ancla = vertical ? (izq ? 'end' : 'start') : 'middle';
       // con muchos muros, un solo rótulo por pieza (el del primer muro) para que la planta se pueda leer
       const muchos = p.muros.length > 24;
-      const rotulo = !muchos ? `${m.id}${pieza ? ' · ' + pieza : ''}` : pieza && !yaRotuladas.has(pieza) ? pieza : '';
+      const rot = !muchos ? `${m.id}${pieza ? ' · ' + pieza : ''}` : pieza && !yaRotuladas.has(pieza) ? pieza : '';
       if (pieza) yaRotuladas.add(pieza);
-      if (rotulo) grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, rotulo));
-      grupo.appendChild(el('title', {}, `${m.id}${pieza ? ' · pieza ' + pieza : ''} · ${papel}`));
+      if (rot && esta) grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, rot));
+      grupo.appendChild(el('title', {}, `${m.id}${pieza ? ' · pieza ' + pieza : ''} · ${papel}${esta ? '' : ' · no está en este nivel'}`));
       grupo.addEventListener('pointerdown', ev => {
         ev.preventDefault();
         estado.seleccion = m.id;

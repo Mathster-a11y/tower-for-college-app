@@ -119,3 +119,68 @@ export function dibujoPresiones(f: Funicular): SVGSVGElement {
   if (isFinite(f.e)) svg.appendChild(el('circle', { cx: X(f.e), cy: Z(f.zBase), r: 4, class: `f-punto ${f.verifica ? 'ok' : 'mal'}` }));
   return svg;
 }
+
+/**
+ * Polígono funicular de las fuerzas del viento: a la izquierda el alzado con cada fuerza y el funicular
+ * (lados paralelos a los rayos); a la derecha el polígono de fuerzas con el polo y los rayos.
+ * Los lados extremos se cortan a la altura de la resultante W.
+ */
+export function dibujoPoligono(c: import('../engine/funicular').Construccion, zBase: number): SVGSVGElement {
+  const id = `pf${nId++}`;
+  const ancho = 400, alto = 440, m = 24;
+  const n = c.fuerzas.length;
+  const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'funicular', role: 'img', 'aria-label': `Polígono funicular del viento: los lados extremos se cortan a ${fmt(c.zR - zBase)} m sobre la base` }) as SVGSVGElement;
+  flecha(svg, `${id}-p`, 'punta-f');
+  if (!n) return svg;
+  // alzado: misma escala en x y en z (los lados tienen que ser paralelos a los rayos)
+  const anchoAlz = 236;
+  const xs = [...c.vertices.map(v => v.x), c.xR, c.vertices[0].x + c.m[0] * (c.vertices[0].z - (c.zR + 4)), c.vertices[n - 1].x + c.m[n] * (c.vertices[n - 1].z - (c.zR - 4))];
+  const zs = [...c.fuerzas.map(f => f.z), zBase, c.zR];
+  const xMin = Math.min(...xs), xMax = Math.max(...xs), zMin = Math.min(...zs), zMax = Math.max(...zs);
+  const flechaMax = 38;
+  const esc = Math.min((anchoAlz - 2 * m - flechaMax) / Math.max(xMax - xMin, 1e-6), (alto - 2 * m - 20) / Math.max(zMax - zMin, 1e-6));
+  const X = (x: number) => m + flechaMax + (x - xMin) * esc, Z = (z: number) => m + (zMax - z) * esc;
+  const Fmax = Math.max(...c.fuerzas.map(f => f.F));
+  // rectas de acción y fuerzas
+  c.fuerzas.forEach((f, k) => {
+    const y = Z(f.z);
+    svg.append(el('line', { x1: m, x2: X(xMax), y1: y, y2: y, class: 'f-losa' }));
+    const L = Math.max(4, (f.F / Fmax) * (flechaMax - 6));
+    const fl = el('line', { x1: m + flechaMax - L - 2, x2: m + flechaMax - 2, y1: y, y2: y, class: 'f-w fina', 'marker-end': `url(#${id}-p)` });
+    fl.append(el('title', {}, `${f.nivel}: F${k + 1} = ${fmt(f.F, 2)} t`));
+    svg.append(fl);
+  });
+  // funicular: lados interiores y lados extremos prolongados hasta cortarse
+  const v = c.vertices;
+  svg.append(el('polyline', { points: v.map(p => `${X(p.x).toFixed(1)},${Z(p.z).toFixed(1)}`).join(' '), class: 'f-funicular' }));
+  svg.append(el('line', { x1: X(v[0].x), y1: Z(v[0].z), x2: X(c.xR), y2: Z(c.zR), class: 'f-extremo' }));
+  svg.append(el('line', { x1: X(v[n - 1].x), y1: Z(v[n - 1].z), x2: X(c.xR), y2: Z(c.zR), class: 'f-extremo' }));
+  svg.append(el('text', { x: X(v[0].x) + 4, y: Z(v[0].z) - 4, class: 'f-txt f-nota' }, 'lado 0'));
+  svg.append(el('text', { x: X(v[n - 1].x) + 4, y: Z(v[n - 1].z) + 12, class: 'f-txt f-nota' }, `lado ${n}`));
+  // resultante
+  svg.append(el('line', { x1: m, x2: X(c.xR), y1: Z(c.zR), y2: Z(c.zR), class: 'f-r ok', 'marker-end': `url(#${id}-p)` }));
+  svg.append(el('circle', { cx: X(c.xR), cy: Z(c.zR), r: 4, class: 'f-punto ok' }));
+  svg.append(el('text', { x: X(c.xR) + 6, y: Z(c.zR) - 6, class: 'f-txt f-fuerza' }, `W = ${fmt(c.W, 1)} t`));
+  svg.append(el('text', { x: X(c.xR) + 6, y: Z(c.zR) + 8, class: 'f-txt' }, `hw = ${fmt(c.zR - zBase)} m`));
+  svg.append(el('line', { x1: m, x2: X(xMax), y1: Z(zBase), y2: Z(zBase), class: 'f-eje' }));
+  svg.append(el('text', { x: m, y: Z(zBase) + 14, class: 'f-txt f-nota' }, 'base de la fundación'));
+  // polígono de fuerzas, polo y rayos
+  const px = anchoAlz + 26, ancho2 = ancho - px - 14;
+  const escF = Math.min(ancho2 / c.W, (alto - 150) / c.polo.H);
+  const yF = 60, PX = (s: number) => px + s * escF, Oy = yF + c.polo.H * escF, Ox = PX(c.polo.x);
+  svg.append(el('text', { x: px, y: yF - 30, class: 'f-txt' }, 'Polígono de fuerzas'));
+  svg.append(el('line', { x1: PX(0), x2: PX(c.W), y1: yF, y2: yF, class: 'f-w' }));
+  c.S.forEach((s, k) => {
+    svg.append(el('line', { x1: PX(s), x2: PX(s), y1: yF - 4, y2: yF + 4, class: 'f-g fina' }));
+    const r = el('line', { x1: Ox, y1: Oy, x2: PX(s), y2: yF, class: k === 0 || k === n ? 'f-rayo extremo' : 'f-rayo' });
+    r.append(el('title', {}, `rayo ${k}`));
+    svg.append(r);
+  });
+  svg.append(el('text', { x: PX(0), y: yF - 8, class: 'f-txt f-nota', 'text-anchor': 'middle' }, '0'));
+  svg.append(el('text', { x: PX(c.W), y: yF - 8, class: 'f-txt f-nota', 'text-anchor': 'middle' }, String(n)));
+  svg.append(el('text', { x: (PX(0) + PX(c.W)) / 2, y: yF - 16, class: 'f-txt f-nota', 'text-anchor': 'middle' }, `W = ${fmt(c.W, 1)} t`));
+  svg.append(el('circle', { cx: Ox, cy: Oy, r: 3.5, class: 'f-punto ok' }));
+  svg.append(el('text', { x: Ox + 6, y: Oy + 4, class: 'f-txt f-fuerza' }, 'O (polo)'));
+  svg.append(el('text', { x: px, y: Oy + 28, class: 'f-txt f-nota' }, `escala: 1 px = ${fmt(1 / escF, 2)} t`));
+  return svg;
+}

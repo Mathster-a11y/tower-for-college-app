@@ -1,12 +1,13 @@
 /** Paneles laterales: formularios de datos, niveles, muros, piezas, resultados y avisos. */
 import { estado, fmt, COLORES } from './estado';
-import type { Muro, Nivel } from '../engine/modelo';
+import { tipoDe, type Muro, type Nivel, type TipoElemento } from '../engine/modelo';
 import { TENSION_ADM } from '../engine/verificaciones';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
-import { calcFunicular } from '../engine/funicular';
-import { dibujoGuia, dibujoPresiones } from './funicular';
-import { datosAltura, deformada, E_DE_DIVISOR, reparto, rigidez } from '../engine/diagramas';
-import { graficoAltura, graficoReparto, graficoRigidez, tablaValores } from './diagramas';
+import { calcFunicular, poligonoFunicular } from '../engine/funicular';
+import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
+import { datosAltura, deformada, E_DE_DIVISOR, reparto, rigidez, rigidezPorNivel } from '../engine/diagramas';
+import { graficoAltura, graficoReparto, graficoRigidez, graficoTensiones, tablaValores } from './diagramas';
+import { verificarDireccion } from '../engine/flexocompresion';
 
 type H = HTMLElement;
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...hijos: (Node | string)[]) => {
@@ -147,7 +148,7 @@ function panelMuros(c: H) {
   tab.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:tabla')));
   acc.append(nuevo, dup, borrar, imp, tab);
   c.append(acc);
-  c.append(h('p', { class: 'nota' }, 'Una fila por muro. Se puede pegar una tabla copiada de Excel (con las columnas en este orden) o importarla con «Importar…». Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. Columna circular: diámetro D (y d interior; vacío = tabique).'));
+  c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],
     escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; m[clave] = x; },
@@ -163,15 +164,29 @@ function panelMuros(c: H) {
       if (estado.seleccion === viejo) estado.seleccion = nuevoId;
     } },
     { titulo: 'Dir.', clave: 'dir', tipo: 'lista', opciones: ['Y', 'X'], leer: m => m.dir, escribir: (m, v) => { const d = v.trim().toUpperCase(); if (d !== 'X' && d !== 'Y') return false; m.dir = d; } },
-    numM('x (m)', 'x'), numM('y (m)', 'y'), numM('Largo', 'largo', 0.01), numM('Esp.', 'espesor', 0.01),
+    numM('x (m)', 'x'), numM('y (m)', 'y'), { ...numM('Largo', 'largo', 0.01), ayuda: 'tabique: largo · tubo rect.: lado en x · tubo circ.: diámetro exterior' },
+    { ...numM('Esp.', 'espesor', 0.01), ayuda: 'tabique: espesor · tubos: espesor de pared (≥ la mitad del lado o del diámetro = macizo)' },
     { titulo: 'Llega', clave: 'llega', tipo: 'lista', opciones: ['sí', 'no'], ayuda: '¿Llega a la fundación?', leer: m => (m.llega ? 'sí' : 'no'),
       escribir: (m, v) => { const t = v.trim().toLowerCase(); if (['sí', 'si', 's', '1', 'true', 'x', ''].includes(t)) m.llega = true; else if (['no', 'n', '0', 'false'].includes(t)) m.llega = false; else return false; } },
     numM('Área inf. (m²)', 'areaInf', 0),
     txt('Pieza A', 'piezaA'), txt('Pegado a (A)', 'pegadoA'), txt('Pieza B', 'piezaB'), txt('Pegado a (B)', 'pegadoB'),
-    { titulo: 'D col.', clave: 'D', tipo: 'numero', ayuda: 'Columna circular: diámetro exterior', leer: m => m.circular?.D ?? null,
-      escribir: (m, v) => { const x = aNumero(v); if (x === null || x === 0) { m.circular = null; return; } if (Number.isNaN(x) || x < 0) return false; m.circular = { D: x, d: m.circular?.d ?? 0 }; } },
-    { titulo: 'd int.', clave: 'd', tipo: 'numero', ayuda: 'Columna circular: diámetro interior (0 = maciza)', leer: m => m.circular?.d ?? null,
-      escribir: (m, v) => { const x = aNumero(v) ?? 0; if (Number.isNaN(x) || x < 0) return false; if (m.circular) m.circular.d = x; } },
+    { titulo: 'Tipo', clave: 'tipo', tipo: 'lista', opciones: ['tabique', 'tubo rect.', 'tubo circ.'], ayuda: 'tabique (o columna rectangular) · tubo rectangular · tubo circular',
+      leer: m => ({ tabique: 'tabique', 'tubo-rect': 'tubo rect.', 'tubo-circ': 'tubo circ.' } as Record<TipoElemento, string>)[tipoDe(m)],
+      escribir: (m, v) => {
+        const t = v.trim().toLowerCase();
+        const nuevo: TipoElemento | null = !t || t.startsWith('tab') || t.startsWith('col') ? 'tabique' : t.includes('rect') ? 'tubo-rect' : t.includes('circ') ? 'tubo-circ' : null;
+        if (!nuevo) return false;
+        if (nuevo === 'tubo-rect' && !m.ladoY) m.ladoY = m.largo;
+        m.tipo = nuevo; delete m.circular;
+      } },
+    { titulo: 'Lado y', clave: 'ladoY', tipo: 'numero', ayuda: 'Solo tubo rectangular: lado en y', leer: m => (tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : null),
+      escribir: (m, v) => { const x = aNumero(v); if (x === null) { m.ladoY = null; return; } if (Number.isNaN(x) || x <= 0) return false; m.ladoY = x; } },
+    { titulo: 'Desde', clave: 'zDesde', tipo: 'lista', opciones: ['', ...p.niveles.map(n => n.nombre)], ayuda: 'Nivel donde arranca (vacío = en la fundación)',
+      leer: m => (m.zDesde == null ? '' : p.niveles.find(n => Math.abs(n.cota - m.zDesde!) < 1e-6)?.nombre ?? `${m.zDesde} m`),
+      escribir: (m, v) => { const t = v.trim(); if (!t) { m.zDesde = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zDesde = z; } },
+    { titulo: 'Hasta', clave: 'zHasta', tipo: 'lista', opciones: ['', ...p.niveles.map(n => n.nombre)], ayuda: 'Nivel donde termina (vacío = en la azotea)',
+      leer: m => (m.zHasta == null ? '' : p.niveles.find(n => Math.abs(n.cota - m.zHasta!) < 1e-6)?.nombre ?? `${m.zHasta} m`),
+      escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
   ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null) }));
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];
   if (pap) c.append(h('p', { class: 'nota' }, `Muro ${estado.seleccion}: viento A «${pap.A}», viento B «${pap.B}». En la planta: arrastrar o flechas para moverlo (Mayús: de a 1 m).`));
@@ -262,7 +277,13 @@ function panelFunicular(c: H) {
   c.append(h('p', { class: `total estado ${ok ? 'verifica' : 'no-verifica'}` }, ok
     ? `Verifica: la resultante corta la base a ${fmt(fg.e)} m del eje; el tercio medio llega a ${fmt(fg.tercio)} m.`
     : `No verifica: la resultante corta la base a ${fmt(fg.e)} m del eje, fuera del tercio medio (${fmt(fg.tercio)} m).`));
-  c.append(h('h3', {}, 'Suma gráfica de W y G'));
+  c.append(h('h3', {}, '1. Polígono funicular del viento: dónde actúa W'));
+  c.append(h('p', { class: 'nota' }, 'Cada piso recibe su fuerza de viento (flechas a la izquierda). En el polígono de fuerzas se ponen una a continuación de otra; se elige un polo O y se trazan los rayos. En el alzado, entre dos fuerzas seguidas se dibuja un lado paralelo al rayo que las separa. Los lados extremos (0 y n) se cortan sobre la recta de acción de la resultante W: esa es su altura hw.'));
+  const altF = datosAltura(p, corr.guia.viento, mn, asig.filaNivel, dir);
+  const cons = poligonoFunicular(altF.map(x => ({ z: x.z, F: x.F, nivel: x.nivel })));
+  c.append(h('div', { class: 'dibujo' }, dibujoPoligono(cons, fg.zBase)));
+  c.append(h('p', { class: 'nota' }, `Gráficamente hw = ${fmt(cons.zR - fg.zBase)} m; la planilla da ${fmt(fg.hw)} m (M,NyQ G66 = Mv / W).`));
+  c.append(h('h3', {}, '2. Suma gráfica de W y G: la resultante en la base'));
   c.append(h('div', { class: 'dibujo' }, dibujoGuia(fg, perfil)));
   const t = h('table', { class: 'tabla compacta' });
   t.append(h('thead', {}, h('tr', {}, ...['', 'Planilla', 'Guía/CIRSOC'].map(x => h('th', {}, x)))));
@@ -286,7 +307,7 @@ function panelFunicular(c: H) {
 }
 
 // ------------------------------------------------------------------ Diagramas
-const SUBDIAGRAMAS = ['Viento', 'Esfuerzos', 'Rototraslación', 'Rigidez', 'Funicular'] as const;
+const SUBDIAGRAMAS = ['Viento', 'Esfuerzos', 'Rototraslación', 'Flexocompresión', 'Rigidez', 'Funicular'] as const;
 let subDiagrama: (typeof SUBDIAGRAMAS)[number] = 'Viento';
 
 function panelDiagramas(c: H) {
@@ -302,7 +323,7 @@ function panelDiagramas(c: H) {
   const dir = estado.dir;
   const p = estado.proyecto;
   const g = corr.guia;
-  c.append(h('p', { class: 'nota' }, `Viento ${dir} (cambialo arriba). Valores «Guía/CIRSOC»: Kz mínimo de 5 m, sin viento en PB ni en los subsuelos. Pasá el mouse por un nivel o una barra para ver su valor.`));
+  if (subDiagrama !== 'Funicular') c.append(h('p', { class: 'nota' }, `Viento ${dir} (cambialo arriba). Valores «Guía/CIRSOC»: Kz mínimo de 5 m, sin viento en PB ni en los subsuelos. Pasá el mouse por un nivel o una barra para ver su valor.`));
   const alt = datosAltura(p, g.viento, g.mnyq, asig.filaNivel, dir);
   const sobrePB = alt.filter(x => x.z > 0);   // la guía no pone viento en PB
   const W = dir === 'A' ? g.mnyq.H61 : alt.reduce((s2, x) => s2 + x.F, 0);
@@ -334,20 +355,43 @@ function panelDiagramas(c: H) {
     c.append(graficoReparto(rep, dir, B, L, p.muros.filter(m => m.llega), asig.papeles));
     c.append(h('p', { class: 'nota' }, 'Cada pieza toma una parte del viento proporcional a su J (traslación). Si el eje de inercia no coincide con la resultante del viento, aparece el momento Mt = Q · e, que se reparte según J · a (rotación): suma de un lado y resta del otro. Valores en el nivel −1º, como la planilla.'));
     c.append(tablaValores(['Pieza', 'Posición (m)', 'J (m⁴)', '% tras.', 'Q tras. (t)', 'Q rot. (t)', 'Q total (t)'], rep.piezas.map(x => [x.nombre, x.pos, x.J, x.frac * 100, x.Qtras, x.Qrot, x.Qtot]), [0, 2, 3, 1, 2, 2, 2]));
+  } else if (subDiagrama === 'Flexocompresión') {
+    const adm = TENSION_ADM(p.hormigon || 'H30');
+    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), en PB y muro por muro: σ = −N/F ± M/W. N = peso propio (F · altura · 2,4 t/m³) + losa (0,7 t/m² descargado o 0,9 cargado) · área de influencia · n.º de losas. M = la parte del momento en PB que toma la pieza (traslación + rotación). En una pieza de varios muros, las almas trabajan a flexocompresión y las alas hacen un par (fuerza M · F · d / J). Tracción con el edificio descargado; compresión con el edificio cargado, contra ${adm} kg/cm² (${p.hormigon}).`));
+    const vs = verificarDireccion(p, asig.piezas, corr, asig.filaNivel, dir, adm);
+    if (!vs.length) c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.'));
+    vs.forEach(v => {
+      const art = h('section', { class: 'tarjeta' });
+      const ok = v.verifica, trac = v.traccion > 0;
+      art.append(h('h3', {}, `${v.nombre}: M = ${fmt(v.M, 1)} tm · J = ${fmt(v.J, 3)} m⁴`));
+      art.append(h('p', { class: `estado ${ok ? (trac ? 'atención' : 'verifica') : 'no-verifica'}` }, ok ? (trac ? `Verifica la compresión (${fmt(v.compresion, 1)} kg/cm²); tracciona (${fmt(v.traccion, 1)} kg/cm²): lleva armadura` : `Verifica: todo comprimido, máx. ${fmt(-v.compresion, 1)} kg/cm²`) : `No verifica: compresión ${fmt(-v.compresion, 1)} kg/cm² > ${adm}`));
+      art.append(graficoTensiones(v, adm));
+      const filas = v.muros.map(m => [`${m.id} (${m.papel})`, m.A, m.Ndesc, m.Ncarg, m.sigM / 10, m.desc[0] / 10, m.desc[1] / 10, m.carg[0] / 10, m.carg[1] / 10, Math.max(m.As, m.AsMin)]);
+      art.append(tablaValores(['Muro', 'F (m²)', 'N desc (t)', 'N carg (t)', 'M·y/J (kg/cm²)', 'σ desc ext.', 'σ desc int.', 'σ carg ext.', 'σ carg int.', 'As adopt. (cm²)'], filas, [0, 3, 1, 1, 1, 1, 1, 1, 1, 1]));
+      const det = v.muros.filter(m => m.traccion > 0).map(m => `${m.id}: tracción ${fmt(m.traccion, 1)} kg/cm² en ${fmt(m.x * 100, 0)} cm → T = ${fmt(m.T, 2)} t, As = T / 2400 = ${fmt(m.As, 2)} cm²; mínima 0,8 % = ${fmt(m.AsMin, 1)} cm² → se adopta ${fmt(Math.max(m.As, m.AsMin), 1)} cm².`);
+      if (det.length) art.append(h('p', { class: 'nota' }, det.join(' ')));
+      c.append(art);
+    });
   } else if (subDiagrama === 'Rigidez') {
     const rs = rigidez(g, p.hormigon || 'H30');
     c.append(graficoRigidez(rs));
     const r = rs.find(x => x.dir === dir)!;
     c.append(h('p', { class: 'nota' }, `J mínimo de la planilla (fila ${r.hormigon}): J = W·h² / divisor, para que la azotea no se corra más de h/400, h/500 o h/600. La guía adopta h/500.`));
     const E = E_DE_DIVISOR((r.W * r.h * r.h) / r.minimos.h500);
-    const def = deformada(alt, W, E, r.J);
+    const Jniv = rigidezPorNivel(p, asig.piezas, dir, r.J);
+    const varia = Jniv.some(x => Math.abs(x.J - r.J) > 1e-6 * r.J);
+    const def = deformada(alt, W, E, r.J, z => { const x = Jniv.find(q => Math.abs(q.z - z) < 1e-6); return x && x.J > 0 ? x.J : r.J; });
     const mm = (x: number) => x * 1000;
     c.append(graficoAltura({ titulo: `Deformada, viento ${dir}: la azotea se corre ${fmt(mm(def.dTop), 1)} mm (límite h/500 = ${fmt(mm(def.limite), 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
       series: [{ nombre: 'deformada', color: 's1', tipo: 'linea', puntos: def.puntos.map(x => ({ z: x.z, x: mm(x.d), nivel: x.nivel })) }],
       referencias: [{ x: mm(def.limite), texto: 'h/500' }] }));
     const ok = def.dTop <= def.limite;
     c.append(h('p', { class: `total estado ${ok ? 'verifica' : 'no-verifica'}` }, ok ? `Verifica: ${fmt(mm(def.dTop), 1)} mm ≤ h/500 = ${fmt(mm(def.limite), 1)} mm.` : `No verifica: ${fmt(mm(def.dTop), 1)} mm > h/500 = ${fmt(mm(def.limite), 1)} mm.`));
-    c.append(h('p', { class: 'nota' }, `Ménsula empotrada en PB con E = ${fmt(E / 10, 0)} kg/cm² (el que usa la planilla para el J mínimo) y ΣJ = ${fmt(r.J, 3)} m⁴, integrando el momento real de cada nivel. Con la carga uniforme de la planilla (δ = W·h³ / 8EJ) daría ${fmt(mm(def.dUniforme), 1)} mm.`));
+    c.append(h('p', { class: 'nota' }, `Ménsula empotrada en PB con E = ${fmt(E / 10, 0)} kg/cm² (el que usa la planilla para el J mínimo) y ΣJ = ${fmt(r.J, 3)} m⁴ en PB, integrando el momento real de cada nivel. Con la carga uniforme de la planilla (δ = W·h³ / 8EJ) daría ${fmt(mm(def.dUniforme), 1)} mm.`));
+    if (varia) {
+      c.append(h('p', { class: 'nota' }, 'La planta cambia en altura: la deformada usa el ΣJ de cada nivel (los muros de cada pieza que siguen en ese piso).'));
+      c.append(graficoAltura({ titulo: 'ΣJ en cada nivel', eje: 'ΣJ', unidad: 'm⁴', decimales: 2, series: [{ nombre: 'ΣJ', color: 's1', tipo: 'barras', puntos: Jniv.map(x => ({ z: x.z, x: x.J, nivel: x.nivel })) }] }));
+    }
     const piezasDir = asig.piezas.filter(x => x.dir === dir && x.filaHoja !== null);
     const Jp = (i: number) => (dir === 'A' ? g.jpar : g.jort).filas[i].AY;
     const tot = piezasDir.reduce((s2, x) => s2 + Jp(x.filaHoja!), 0);
@@ -392,7 +436,8 @@ function panelAyuda(c: H) {
     ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
     ['Importar', 'Con «Abrir / importar…» o «Importar desde Excel…»: la tabla de la app (bajala con «Descargar tabla»), líneas exportadas de AutoCAD (x1, y1, x2, y2) o la planilla del curso ya llena.'],
     ['Resultados', '«Planilla» es lo que da el Excel original; «Guía/CIRSOC» son los valores corregidos. Cada control dice si verifica.'],
-    ['Diagramas', 'Viento en altura, corte y momento, rototraslación en planta, rigidez y deformada, y la verificación funicular. Pasá el mouse por el gráfico para ver los valores.'],
+    ['Diagramas', 'Viento en altura, corte y momento, rototraslación en planta, flexocompresión muro por muro (como la guía, con la armadura por tracción), rigidez y deformada, y la verificación funicular (polígono de fuerzas, polo, rayos y funicular). Pasá el mouse por el gráfico para ver los valores.'],
+    ['Elementos', 'En «Muros», la columna «Tipo»: tabique (o columna rectangular), tubo rectangular o tubo circular. «Desde» y «Hasta» dicen en qué niveles está cada muro; arriba de la planta elegís qué piso ver.'],
     ['Escribir planilla', 'Descarga la planilla del curso con tus datos. Excel o LibreOffice la recalculan al abrirla. La hoja «T3D» guarda el proyecto: con «Abrir…» la volvés a cargar.'],
   ];
   c.append(h('h3', {}, 'Cómo se usa'));

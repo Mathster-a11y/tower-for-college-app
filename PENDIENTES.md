@@ -18,11 +18,21 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 - [x] **Diagramas** (pestaña «Diagramas»): presión del viento y fuerza por piso en altura; corte V y momento M; rototraslación en planta (eje de inercia, resultante, traslación y rotación de cada pieza); rigidez (ΣJ contra J mínimo, deformada contra h/500, reparto de J); funicular
 
+- [x] **Verificación de tabiques y columnas como la guía** (sección 5), muro por muro.
+  - Ng y Nq de cada muro con su peso propio, su área de influencia y sus losas.
+  - Almas a flexocompresión; alas con el par.
+  - Armadura por tracción (triángulo de tracción) y cuantía mínima.
+  - Compresión contra la tensión admisible.
+  - Probado con los números del ejemplo: T1 y las alas de T5.
+- [x] **Diagrama de flexocompresión** por pieza (tensiones de cada muro, descargado y cargado)
+- [x] **Tubos rectangulares y circulares** como elementos (los rectangulares en las columnas asimétricas, con el J exacto de la caja)
+- [x] **Verificación funicular gráfica**: polígono de fuerzas con polo y rayos, polígono funicular en el alzado (da hw), W + G y tercio medio, línea de presiones
+- [x] **Plantas por piso**: «Desde» y «Hasta» de cada muro, planta de cada nivel, 3D por tramos, ΣJ por nivel en la deformada
+
 ## En curso
 - Nada por ahora: el próximo es el primero de la lista de abajo.
 
 ## Próximos
-- [ ] Diagrama de flexocompresión por pieza (tensiones N/A ± M/W, descargada y cargada)
 - [ ] Dibujar los muros con el mouse en la planta (clic en el inicio y clic en el fin), con imán a los extremos de otros muros
 - [ ] Armar las piezas solas: los muros que se tocan forman una pieza y el ala sabe a qué alma está pegada
 - [ ] Calcar un plano: poner una imagen o un PDF de fondo en la planta, con escala
@@ -37,3 +47,5 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Torsión de la Fig. 9 del CIRSOC 102
 - [ ] Área de la pieza (columna O de las hojas J): no suma el ala inferior AH · AI del molde asimétrico
 - [ ] Flexocompresión: la planilla combina Ng con la compresión y Nq con la tracción (el caso más desfavorable es al revés)
+- [ ] Flexocompresión: la planilla verifica la pieza entera (N total / área total); la guía separa almas y alas, cada una con su N. ¿Cuál se usa en la entrega?
+- [ ] Guía, T1: el largo traccionado x del triángulo de tracción figura como 78 cm (y 1,05 m en el esquema); con σ = +137,78 / −788 t/m² sale x = 4,50 · 137,78 / 925,8 = 0,67 m

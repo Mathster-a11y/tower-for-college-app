@@ -16,10 +16,10 @@
  *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
 import { N_FILAS, TIPO_FILA_PARALELOS, type FilaJ, type PlanillaDatos } from './planilla';
-import type { Muro, Proyecto } from './modelo';
+import { areaMuro, dInterior, entraEnCalculo, tipoDe, type Muro, type Proyecto } from './modelo';
 
 export type Direccion = 'A' | 'B';
-export type Papel = 'alma' | 'ala sup.' | 'ala inf.' | 'columna' | 'fuera del cálculo' | 'sin pieza';
+export type Papel = 'alma' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'fuera del cálculo' | 'sin pieza';
 export type Molde = 'simétrico' | 'asimétrico' | 'tubo';
 
 export interface PiezaEquivalente {
@@ -68,17 +68,28 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const s = (m: Muro) => (dir === 'A' ? m.y : m.x);            // coordenada en la dirección del viento
   const t = (m: Muro) => (dir === 'A' ? m.x : m.y);            // coordenada transversal
   const avisos: string[] = [];
-  const area = muros.reduce((a, m) => a + (m.circular ? Math.PI * ((m.circular.D / 2) ** 2 - (m.circular.d / 2) ** 2) : m.largo * m.espesor), 0);
-  const posicion = r4(muros.reduce((a, m) => a + (m.circular ? Math.PI * ((m.circular.D / 2) ** 2 - (m.circular.d / 2) ** 2) : m.largo * m.espesor) * t(m), 0) / area);
+  const area = muros.reduce((a, m) => a + areaMuro(m), 0);
+  const posicion = r4(muros.reduce((a, m) => a + areaMuro(m) * t(m), 0) / area);
   const areaInf = muros.reduce((a, m) => a + m.areaInf, 0);
   const base = { nombre, dir, muros: muros.map(m => m.id), posicion, area, areaInf, filaHoja: null, avisos };
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
 
-  const circ = muros.filter(m => m.circular);
+  const circ = muros.filter(m => tipoDe(m) === 'tubo-circ');
   if (circ.length) {
-    if (muros.length > 1) avisos.push('Una columna circular tiene que ser una pieza sola; se usa solo la primera.');
+    if (muros.length > 1) avisos.push('Un tubo circular tiene que ser una pieza sola; se usa solo el primero.');
     set(circ[0], 'columna');
-    return { ...base, molde: 'tubo', fila: { S: circ[0].circular!.D, T: circ[0].circular!.d || undefined } };
+    return { ...base, molde: 'tubo', fila: { S: circ[0].largo, T: dInterior(circ[0]) || undefined } };
+  }
+  // tubo rectangular: caja en las columnas asimétricas (ala sup., dos almas, ala inf.); el J sale exacto
+  const caja = muros.filter(m => tipoDe(m) === 'tubo-rect');
+  if (caja.length) {
+    if (muros.length > 1) avisos.push('Un tubo rectangular tiene que ser una pieza sola; se usa solo el primero.');
+    const m = caja[0];
+    const enViento = dir === 'A' ? (m.ladoY ?? m.largo) : m.largo, trans = dir === 'A' ? m.largo : (m.ladoY ?? m.largo);
+    const e = Math.min(m.espesor, enViento / 2, trans / 2);
+    set(m, 'tubo');
+    if (e >= enViento / 2 || e >= trans / 2) return { ...base, molde: 'simétrico', fila: { B: trans, C: enViento } };   // macizo
+    return { ...base, molde: 'asimétrico', fila: { W: trans, X: e, Z: e, AB: enViento - 2 * e, AE: e, AF: enViento - 2 * e, AH: trans, AI: e } };
   }
   const almas = muros.filter(m => m.dir === dirAlma);
   const alas = muros.filter(m => m.dir !== dirAlma);
@@ -246,8 +257,10 @@ export function aPlanilla(p: Proyecto): Asignacion {
 
   // piezas
   const papeles: Asignacion['papeles'] = {};
-  p.muros.forEach(m => { papeles[m.id] = { A: m.llega ? 'sin pieza' : 'fuera del cálculo', B: m.llega ? 'sin pieza' : 'fuera del cálculo' }; });
-  const activos = p.muros.filter(m => m.llega);
+  const zFund = niveles.length ? niveles[niveles.length - 1].cota : 0, zTop = niveles[0]?.cota ?? 0;
+  const entra = (m: Muro) => entraEnCalculo(m, zFund, zTop);
+  p.muros.forEach(m => { papeles[m.id] = { A: entra(m) ? 'sin pieza' : 'fuera del cálculo', B: entra(m) ? 'sin pieza' : 'fuera del cálculo' }; });
+  const activos = p.muros.filter(entra);
   const grupos = (dir: Direccion) => {
     const g = new Map<string, Muro[]>();
     activos.forEach(m => { const k = dir === 'A' ? m.piezaA : m.piezaB; if (k) g.set(k, [...(g.get(k) ?? []), m]); });

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { estado, COLORES } from './estado';
+import { entraEnCalculo, rectangulos, tipoDe } from '../engine/modelo';
 
 export function montar3D(cont: HTMLElement) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -47,17 +48,32 @@ export function montar3D(cont: HTMLElement) {
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const h = top - fondoCota;
+    const zNivel = estado.nivelPlanta;
+    if (zNivel !== null) {
+      const resalte = new THREE.Mesh(new THREE.BoxGeometry(B + 0.6, 0.3, L + 0.6), new THREE.MeshStandardMaterial({ color: 0x1f6f8b, transparent: true, opacity: 0.35 }));
+      const n = p.niveles.find(x => Math.abs(x.cota - zNivel) < 1e-6);
+      if (n) { resalte.position.set(0, n.cota - 0.1, 0); grupo.add(resalte); }
+    }
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const color = new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, transparent: !m.llega, opacity: m.llega ? 1 : 0.35,
+      const entra = entraEnCalculo(m, fondoCota, top);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4,
         emissive: estado.seleccion === m.id ? new THREE.Color(0x1f6f8b) : new THREE.Color(0x000000), emissiveIntensity: 0.6 });
-      const geo = m.circular
-        ? new THREE.CylinderGeometry(m.circular.D / 2, m.circular.D / 2, h, 24)
-        : new THREE.BoxGeometry(m.dir === 'Y' ? m.espesor : m.largo, h, m.dir === 'Y' ? m.largo : m.espesor);
-      const muro = new THREE.Mesh(geo, mat);
-      muro.position.set(m.x, fondoCota + h / 2, -m.y);
-      grupo.add(muro);
+      const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
+      const alto = z1 - z0;
+      if (alto <= 0) return;
+      if (tipoDe(m) === 'tubo-circ') {
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(m.largo / 2, m.largo / 2, alto, 32, 1, false), mat);
+        c.position.set(m.x, z0 + alto / 2, -m.y);
+        grupo.add(c);
+        return;
+      }
+      rectangulos(m).forEach(r => {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(r.ax, alto, r.ay), mat);
+        b.position.set(r.x, z0 + alto / 2, -r.y);
+        grupo.add(b);
+      });
     });
     // viento
     const largo = 8;

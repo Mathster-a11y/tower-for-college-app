@@ -15,7 +15,24 @@ describe('importar', () => {
     const imp = interpretar(await leerLibro(bytes));
     expect(imp.tipo).toBe('tabla');
     expect(imp.niveles).toEqual(p.niveles.map(n => ({ ...n })));
-    expect(imp.muros).toEqual(p.muros.map(m => ({ ...m, circular: null })));
+    expect(imp.muros).toEqual(p.muros);
+  });
+
+  it('tubos, columnas y muros que arrancan o terminan en otro nivel, ida y vuelta', async () => {
+    const muros = [
+      ...p.muros.slice(0, 2),
+      { ...p.muros[2], zHasta: 31 },                                      // termina en el 10º
+      { id: 'N1', dir: 'Y' as const, tipo: 'tubo-rect' as const, ladoY: 6, x: 0, y: 0, largo: 4, espesor: 0.25, llega: true, areaInf: 40, piezaA: 'N1', pegadoA: '', piezaB: 'N1B', pegadoB: '' },
+      { id: 'C1', dir: 'Y' as const, tipo: 'tubo-circ' as const, x: 5, y: 5, largo: 0.8, espesor: 0.4, llega: true, areaInf: 12, piezaA: 'C1', pegadoA: '', piezaB: 'C1B', pegadoB: '', zDesde: 4 },
+    ];
+    const bytes = await escribirLibro(tablaDelProyecto(p.niveles, muros));
+    const imp = interpretar(await leerLibro(bytes));
+    expect(imp.muros).toEqual(muros);
+  });
+
+  it('tabla vieja con «D col.» y «d int.»: se lee como tubo circular', () => {
+    const imp = interpretar(leerTexto('Muro;Dir.;x;y;Largo;Esp.;D col.;d int.\nC1;Y;0;0;1;0,2;1;0,6\n'));
+    expect(imp.muros[0]).toMatchObject({ tipo: 'tubo-circ', largo: 1, espesor: 0.2 });
   });
 
   it('CSV con encabezados en castellano, coma decimal y punto y coma', () => {

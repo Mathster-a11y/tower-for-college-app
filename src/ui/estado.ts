@@ -1,4 +1,4 @@
-import { ejemploGuia, type Proyecto } from '../engine/modelo';
+import { ejemploGuia, normalizarProyecto, type Proyecto } from '../engine/modelo';
 import { aPlanilla, type Asignacion } from '../engine/mapping';
 import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
 import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
@@ -13,6 +13,8 @@ class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
   seleccion: string | null = null;
+  /** cota del nivel cuya planta se muestra (null = PB) */
+  nivelPlanta: number | null = null;
   calculo!: Calculo;
   private oyentes: Oyente[] = [];
   /** historia para deshacer / rehacer (proyectos como JSON) */
@@ -23,7 +25,7 @@ class Estado {
   constructor() {
     let p: Proyecto | null = null;
     try { const t = localStorage.getItem(CLAVE); if (t) p = JSON.parse(t) as Proyecto; } catch { p = null; }
-    this.proyecto = p && p.version === 1 ? { ...p, hormigon: p.hormigon || 'H30' } : ejemploGuia();
+    this.proyecto = p && p.version === 1 ? normalizarProyecto(p) : ejemploGuia();
     this.recalcular();
     this.ultimo = JSON.stringify(this.proyecto);
   }
@@ -32,6 +34,7 @@ class Estado {
   private oyentesSel: Oyente[] = [];
   suscribirSeleccion(f: Oyente) { this.oyentesSel.push(f); }
   elegir(id: string | null) { if (this.seleccion === id) return; this.seleccion = id; this.oyentesSel.forEach(o => o()); }
+  avisarSeleccion() { this.oyentesSel.forEach(o => o()); }
   recalcular() {
     try {
       const asig = aPlanilla(this.proyecto);
@@ -73,14 +76,14 @@ class Estado {
     if (this.seleccion && !this.proyecto.muros.some(m => m.id === this.seleccion)) this.seleccion = null;
     this.actualizar();
   }
-  reemplazar(p: Proyecto) { this.proyecto = { ...p, hormigon: p.hormigon || 'H30' }; this.seleccion = null; this.cambiar(); }
+  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); this.seleccion = null; this.cambiar(); }
 }
 
 export const estado = new Estado();
 
 export const COLORES: Record<string, string> = {
   alma: '#FFFF00', 'ala sup.': '#00FF00', 'ala inf.': '#00CCFF', columna: '#FF4040',
-  'fuera del cálculo': '#B8B8B8', 'sin pieza': '#FFFFFF',
+  tubo: '#B07CFF', 'fuera del cálculo': '#B8B8B8', 'sin pieza': '#FFFFFF',
 };
 export const fmt = (x: number | null | undefined, d = 2) =>
   x === null || x === undefined || Number.isNaN(x) ? '—' : !isFinite(x) ? '∞' : x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });

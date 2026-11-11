@@ -41,6 +41,10 @@ const CLAVES_MURO: Record<string, string[]> = {
   pegadoA: ['pegadoaa', 'pegadoa', 'pegadoavientoa'],
   piezaB: ['piezab', 'piezavientob'],
   pegadoB: ['pegadoab', 'pegadob', 'pegadoavientob'],
+  tipo: ['tipo', 'elemento'],
+  ladoY: ['ladoy', 'ladoym', 'ladoeny'],
+  desde: ['desde', 'nivelinicio', 'arranca'],
+  hasta: ['hasta', 'nivelfin', 'termina'],
   D: ['dcol', 'dext', 'diametro', 'diametroexterior', 'dcolumna'],
   d: ['dint', 'diametrointerior'],
   x1: ['x1', 'startx', 'iniciox', 'xinicio', 'puntoinicialx', 'xi', 'inicioxm'],
@@ -84,6 +88,7 @@ export function interpretar(hojas: Hoja[]): Importacion {
   let niveles: Nivel[] | null = null;
   const muros: Muro[] = [];
   const lineas: Linea[] = [];
+  const pendientes: { m: Muro; campo: 'zDesde' | 'zHasta'; v: number | string }[] = [];
   for (const h of hojas) {
     const eN = encabezados(h, CLAVES_NIVEL);
     const eM = encabezados(h, CLAVES_MURO);
@@ -122,15 +127,30 @@ export function interpretar(hojas: Hoja[]): Importacion {
       const d = texto(g('dir')).toUpperCase();
       const D = numero(g('D'));
       const ll = norm(g('llega'));
-      muros.push({
+      const tn = norm(g('tipo'));
+      const tipo = tn.includes('rect') ? 'tubo-rect' : tn.includes('circ') || (D && D > 0) ? 'tubo-circ' : 'tabique';
+      const nivel = (v: Valor) => { const t = texto(v); if (!t) return null; const x = numero(v); return x !== null ? x : t; };
+      const m: Muro = {
         id: texto(g('id')) || `M${muros.length + 1}`, dir: d === 'X' ? 'X' : 'Y', x, y, largo,
         espesor: numero(g('espesor')) ?? 0.2, llega: !['no', 'n', '0', 'false'].includes(ll), areaInf: numero(g('areaInf')) ?? 0,
         piezaA: texto(g('piezaA')), pegadoA: texto(g('pegadoA')), piezaB: texto(g('piezaB')), pegadoB: texto(g('pegadoB')),
-        circular: D && D > 0 ? { D, d: numero(g('d')) ?? 0 } : null,
-      });
+      };
+      if (tipo !== 'tabique') m.tipo = tipo;
+      if (tipo === 'tubo-rect') m.ladoY = numero(g('ladoY')) ?? largo;
+      if (D && D > 0) { const dI = numero(g('d')) ?? 0; m.largo = D; m.espesor = dI > 0 ? (D - dI) / 2 : D / 2; }
+      const de = nivel(g('desde')), ha = nivel(g('hasta'));
+      if (de !== null) pendientes.push({ m, campo: 'zDesde', v: de });
+      if (ha !== null) pendientes.push({ m, campo: 'zHasta', v: ha });
+      muros.push(m);
       if (d && d !== 'X' && d !== 'Y') avisos.push(`Muro ${muros[muros.length - 1].id}: dirección «${d}» no es X ni Y; se tomó Y.`);
     }
   }
+  // «Desde» / «Hasta»: cota o nombre de un nivel (de esta misma tabla)
+  pendientes.forEach(({ m, campo, v }) => {
+    if (typeof v === 'number') { m[campo] = v; return; }
+    const n = niveles?.find(x => norm(x.nombre) === norm(v));
+    if (n) m[campo] = n.cota; else avisos.push(`Muro ${m.id}: el nivel «${v}» no está en la tabla de niveles; se dejó vacío.`);
+  });
   // ids repetidos
   const vistos = new Set<string>();
   muros.forEach(m => { let id = m.id, k = 2; while (vistos.has(id)) id = `${m.id}_${k++}`; if (id !== m.id) avisos.push(`Muro ${m.id} repetido: el segundo se llama ${id}.`); m.id = id; vistos.add(id); });
@@ -286,16 +306,22 @@ function piezaAMuros(v: Record<string, number>, nombre: string, dir: 'A' | 'B', 
 export function tablaDelProyecto(niveles: Nivel[], muros: Muro[]): { nombre: string; filas: Valor[][]; anchos: number[] }[] {
   return [
     { nombre: 'Niveles', anchos: [14, 10, 10, 10], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)'], ...niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null])] },
-    { nombre: 'Muros', anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 8, 8],
-      filas: [['Muro', 'Dir.', 'x (m)', 'y (m)', 'Largo (m)', 'Espesor (m)', 'Llega', 'Área inf. (m²)', 'Pieza A', 'Pegado a (A)', 'Pieza B', 'Pegado a (B)', 'D col.', 'd int.'],
-        ...muros.map(m => [m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? 'sí' : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null, m.circular?.D ?? null, m.circular ? m.circular.d : null])] },
+    { nombre: 'Muros', anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10],
+      filas: [['Muro', 'Dir.', 'x (m)', 'y (m)', 'Largo (m)', 'Espesor (m)', 'Llega', 'Área inf. (m²)', 'Pieza A', 'Pegado a (A)', 'Pieza B', 'Pegado a (B)', 'Tipo', 'Lado y', 'Desde', 'Hasta'],
+        ...muros.map(m => {
+          const t = m.tipo ?? 'tabique';
+          const nombreNivel = (z: number | null | undefined) => (z == null ? null : niveles.find(n => Math.abs(n.cota - z) < 1e-6)?.nombre ?? z);
+          return [m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? 'sí' : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
+            t === 'tabique' ? null : t === 'tubo-rect' ? 'tubo rect.' : 'tubo circ.', t === 'tubo-rect' ? m.ladoY ?? m.largo : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta)];
+        })] },
     { nombre: 'Cómo llenar', anchos: [110], filas: [['Cómo llenar esta tabla'],
       ['Niveles: de la azotea al último subsuelo. B (perpendicular al viento A) y L (paralelo al viento A) en la primera fila y donde la planta cambia; vacío = igual al de arriba.'],
       ['Muros: una fila por muro. Origen (0, 0) en el centro de la planta de PB; x hacia la derecha, y hacia arriba. x, y = centro del muro.'],
       ['Dir.: Y si el muro es paralelo al viento A (vertical en la planta); X si es paralelo al viento B (horizontal).'],
       ['Llega: «no» si el muro no llega a la fundación (apeado). Área inf.: área de losa que carga el muro.'],
       ['Pieza A / Pieza B: nombre de la pieza a la que pertenece el muro en cada dirección. Pegado a: para un ala, el alma a la que se une.'],
-      ['D col. / d int.: solo para columnas circulares (diámetro exterior e interior; 0 = maciza).'],
+      ['Tipo: vacío o «tabique» (también columnas rectangulares); «tubo rect.» (Largo = lado en x, Lado y = lado en y, Espesor = espesor de pared); «tubo circ.» (Largo = diámetro exterior, Espesor = espesor de pared; macizo si es la mitad del diámetro).'],
+      ['Desde / Hasta: nivel donde arranca y donde termina el muro (nombre del nivel o cota); vacío = de la fundación a la azotea.'],
       ['También se pueden importar líneas exportadas de AutoCAD: una tabla con x1, y1, x2, y2 (o Start X, Start Y, End X, End Y).']] },
   ];
 }

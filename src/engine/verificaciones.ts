@@ -7,6 +7,7 @@ import type { ResultadoCorregido } from './correcciones';
 import type { Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
 import { calcFunicular } from './funicular';
+import { verificarDireccion } from './flexocompresion';
 
 export type Estado = 'verifica' | 'no verifica' | 'atención' | 'informativo';
 export interface Control {
@@ -55,27 +56,26 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
   out.push({ grupo: 'Reparto', nombre: 'Control Σ J·a = 0 (cara mayor)', criterio: '= 0', fuente: 'Rototrasl. L25', planilla: r.rotA.L25, guia: null, unidad: '', estado: est(Math.abs(r.rotA.L25) < 1e-6 || !isFinite(r.rotA.L25)) });
   out.push({ grupo: 'Reparto', nombre: 'Torsión de la Figura 9, caso 2 (cara mayor)', criterio: 'h > 20 m: el CIRSOC pide considerarla', fuente: 'CIRSOC 102, art. 5.12.3', planilla: null, guia: r.rotA.D5 * BPB / 32, unidad: 'tm', estado: h > 20 ? 'atención' : 'informativo', nota: 'La planilla y la guía no la usan. Pregunta abierta para la cátedra.' });
   const adm = TENSION_ADM(hormigon);
-  // flexocompresión: la planilla usa el módulo que fija cada fila, el área O (0 en las filas 18–20) y no suma el peso
-  // propio de las piezas 10–17 (D13:D20 = 0,01). La columna «Guía/CIRSOC» usa el módulo del molde de cada pieza,
-  // su área real y su peso propio.
-  r.jpar.filas.forEach((_f, i) => {
-    const df = d.flex[i];
-    if (df?.C == null) return;
-    const fl = r.flex;
-    const pz = piezas.find(x => x.dir === 'A' && x.filaHoja === i);
-    if (piezas.length && !pz) return;
-    const jg = c.guia.jpar.filas[i];
-    const W = !pz ? fl.W[i] : pz.molde === 'asimétrico' ? jg.AN : pz.molde === 'tubo' ? jg.V : jg.Q;
-    const A = pz ? pz.area : fl.B[i];
-    const peso = A * (df.C ?? 0) * 2.4;
-    const Hn = peso + (df.F ?? 0) * (df.G ?? 0) * 0.7, In = peso + (df.F ?? 0) * (df.G ?? 0) * 0.9;
-    const Mcorr = Math.abs(c.rotA[i].Mtot);
-    const trac = (-Hn / A + Mcorr / W) * 0.1, comp = (-In / A - Mcorr / W) * 0.1;
-    const quien = pz ? `${pz.nombre} (fila ${i + 1}, ${pz.molde})` : `Pieza ${i + 1}`;
-    const difiere = pz && TIPO_FILA_PARALELOS[i] !== (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
-    const notaFila = difiere ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : undefined;
-    out.push({ grupo: 'Flexocompresión', nombre: `${quien}: tracción`, criterio: 'σ ≤ 0; si no, lleva armadura', fuente: 'guía 5', planilla: fl.P[i], guia: trac, unidad: 'kg/cm²', estado: trac > 0 ? 'atención' : 'verifica', nota: [trac > 0 ? 'Lleva armadura.' : '', notaFila ?? ''].filter(Boolean).join(' ') || undefined });
-    out.push({ grupo: 'Flexocompresión', nombre: `${quien}: compresión máxima`, criterio: `|σ| ≤ ${adm} kg/cm² (${hormigon})`, fuente: 'guía 5', planilla: fl.O[i], guia: comp, unidad: 'kg/cm²', estado: est(Math.abs(comp) <= adm) });
-  });
+  // flexocompresión (columna «Planilla»: la hoja Flex comp PB paralelos, una tensión por pieza).
+  // Columna «Guía/CIRSOC»: muro por muro como la guía (sección 5), con el momento de cada pieza en PB.
+  if (piezas.length && filaNivel.length) {
+    for (const dir of ['A', 'B'] as const) {
+      verificarDireccion(p, piezas, c, filaNivel, dir, adm).forEach(v => {
+        const pz = piezas.find(x => x.nombre === v.nombre && x.dir === dir)!;
+        const i = pz.filaHoja!;
+        const enPlanilla = dir === 'A' && d.flex[i]?.C != null;
+        const difiere = enPlanilla && TIPO_FILA_PARALELOS[i] !== (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
+        const peor = v.muros.reduce((m2, x) => (x.traccion > m2.traccion ? x : m2), v.muros[0]);
+        const comp = v.muros.reduce((m2, x) => (x.compresion < m2.compresion ? x : m2), v.muros[0]);
+        if (!peor) return;
+        const As = Math.max(...v.muros.map(x => Math.max(x.As, x.AsMin)));
+        out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: tracción (descargado)`, criterio: 'σ ≤ 0; si no, armadura (T = σ·b·x/2)', fuente: 'guía 5',
+          planilla: enPlanilla ? r.flex.P[i] : null, guia: peor.traccion, unidad: 'kg/cm²', estado: peor.traccion > 0 ? 'atención' : 'verifica',
+          nota: [peor.traccion > 0 ? `Lleva armadura: muro ${peor.id}, As = ${peor.As.toFixed(1)} cm² (mínima ${peor.AsMin.toFixed(1)} cm²).` : '', difiere ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : '', v.muros.length > 1 ? `Peor muro: ${peor.id}.` : ''].filter(Boolean).join(' ') || undefined });
+        out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: compresión (cargado)`, criterio: `|σ| ≤ ${adm} kg/cm² (${hormigon})`, fuente: 'guía 5',
+          planilla: enPlanilla ? r.flex.O[i] : null, guia: comp.compresion, unidad: 'kg/cm²', estado: est(v.verifica), nota: v.muros.length > 1 ? `Peor muro: ${comp.id}. Armadura mínima de la pieza: ${As.toFixed(1)} cm².` : undefined });
+      });
+    }
+  }
   return out;
 }

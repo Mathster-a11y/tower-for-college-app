@@ -42,7 +42,9 @@ function ordenar(s: Sel) { return { ra: Math.min(s.r0, s.r1), rb: Math.max(s.r0,
 
 export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElement {
   const filas = op.filas();
-  const nF = filas.length, nC = cols.length;
+  const nC = cols.length;
+  // una fila vacía al final (como en Excel) para escribir o pegar elementos nuevos
+  const nF = filas.length + (op.nueva ? 1 : 0);
   let sel = selecciones.get(op.id) ?? { r0: 0, c0: 0, r1: 0, c1: 0 };
   const lim = (s: Sel): Sel => ({ r0: Math.max(0, Math.min(s.r0, nF - 1)), r1: Math.max(0, Math.min(s.r1, nF - 1)), c0: Math.max(0, Math.min(s.c0, nC - 1)), c1: Math.max(0, Math.min(s.c1, nC - 1)) });
   sel = lim(sel);
@@ -62,16 +64,19 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   tabla.append(thead);
   const tbody = document.createElement('tbody');
   const celdas: HTMLTableCellElement[][] = [];
-  filas.forEach((f, r) => {
+  const conExtra: (T | null)[] = op.nueva ? [...filas, null] : filas;
+  conExtra.forEach((f, r) => {
     const tr = document.createElement('tr');
+    if (f === null) tr.className = 'nueva';
     const th = document.createElement('th');
-    th.textContent = op.rotuloFila ? op.rotuloFila(f, r) : String(r + 1);
+    th.textContent = f === null ? '+' : op.rotuloFila ? op.rotuloFila(f, r) : String(r + 1);
+    if (f === null) th.title = 'Escribí o pegá acá para agregar';
     th.dataset.r = String(r);
     tr.append(th);
     celdas.push([]);
     cols.forEach((c, k) => {
       const td = document.createElement('td');
-      const v = c.leer(f);
+      const v = f === null ? null : c.leer(f);
       td.textContent = v === null || v === undefined || (typeof v === 'number' && !isFinite(v)) ? '' : typeof v === 'number' ? String(+v.toFixed(4)).replace('.', ',') : String(v);
       if (c.tipo === 'numero') td.className = 'n';
       td.dataset.r = String(r); td.dataset.c = String(k);
@@ -178,10 +183,16 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     const col = cols[sel.c1];
     const anterior = td.textContent ?? '';
     let ed: HTMLInputElement | HTMLSelectElement;
+    let sugerencias: HTMLDataListElement | null = null;
     if (col.tipo === 'lista' && col.opciones) {
-      ed = document.createElement('select');
-      col.opciones.forEach(o => { const opt = document.createElement('option'); opt.value = o; opt.textContent = o; ed.append(opt); });
-      ed.value = anterior;
+      // texto con sugerencias: se puede escribir («10º») o elegir de la lista
+      ed = document.createElement('input');
+      const dl = document.createElement('datalist');
+      dl.id = `dl-${op.id}-${col.clave}`;
+      col.opciones.forEach(o => { const opt = document.createElement('option'); opt.value = o; dl.append(opt); });
+      sugerencias = dl;
+      ed.setAttribute('list', dl.id);
+      ed.value = inicial ?? anterior;
     } else {
       ed = document.createElement('input');
       ed.value = inicial ?? anterior;
@@ -191,6 +202,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     ed.setAttribute('aria-label', col.titulo);
     td.textContent = '';
     td.append(ed);
+    if (sugerencias) td.append(sugerencias);
     editor = ed;
     ed.focus();
     if (ed instanceof HTMLInputElement && inicial === undefined) ed.select();

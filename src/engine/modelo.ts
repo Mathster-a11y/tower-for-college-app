@@ -33,8 +33,79 @@ export interface Muro {
   areaInf: number;
   piezaA: string; pegadoA: string;
   piezaB: string; pegadoB: string;
-  /** columna circular del contraviento: diámetro exterior e interior (0 = maciza) */
+  /**
+   * tipo de elemento (vacío = tabique):
+   *  - «tabique»: rectángulo de largo × espesor en la dirección «dir» (una columna rectangular es un tabique corto);
+   *  - «tubo-rect»: tubo rectangular (caja, núcleo): largo = lado en x, ladoY = lado en y, espesor = espesor de pared;
+   *  - «tubo-circ»: tubo circular: largo = diámetro exterior, espesor = espesor de pared (≥ D/2: columna maciza).
+   */
+  tipo?: TipoElemento;
+  /** tubo rectangular: lado en y (m) */
+  ladoY?: number | null;
+  /** cota donde arranca el muro (vacío = en la fundación) y donde termina (vacío = en la azotea) */
+  zDesde?: number | null;
+  zHasta?: number | null;
+  /** (versiones anteriores) columna circular: se convierte en «tubo-circ» al abrir el proyecto */
   circular?: { D: number; d: number } | null;
+}
+
+export type TipoElemento = 'tabique' | 'tubo-rect' | 'tubo-circ';
+export const tipoDe = (m: Muro): TipoElemento => m.tipo ?? (m.circular ? 'tubo-circ' : 'tabique');
+
+/** Convierte datos de versiones anteriores (columna circular con D y d) al modelo actual. */
+export function normalizarMuro(m: Muro): Muro {
+  if (!m.circular) return m;
+  const { D, d } = m.circular;
+  const r: Muro = { ...m, tipo: 'tubo-circ', largo: D, espesor: d > 0 ? (D - d) / 2 : D / 2 };
+  delete r.circular;
+  return r;
+}
+export function normalizarProyecto(p: Proyecto): Proyecto {
+  return { ...p, hormigon: p.hormigon || 'H30', muros: p.muros.map(normalizarMuro) };
+}
+
+/** diámetro interior de un tubo circular (0 = macizo) */
+export const dInterior = (m: Muro) => Math.max(0, Math.round((m.largo - 2 * m.espesor) * 1e4) / 1e4);
+
+/** Rectángulos que forman el elemento en planta (centro y medidas en x e y), para dibujar y calcular. */
+export function rectangulos(m: Muro): { x: number; y: number; ax: number; ay: number }[] {
+  const t = tipoDe(m);
+  if (t === 'tubo-rect') {
+    const B = m.largo, H = m.ladoY ?? m.largo, e = Math.min(m.espesor, B / 2, H / 2);
+    if (e >= B / 2 || e >= H / 2) return [{ x: m.x, y: m.y, ax: B, ay: H }];
+    return [
+      { x: m.x, y: m.y + H / 2 - e / 2, ax: B, ay: e }, { x: m.x, y: m.y - H / 2 + e / 2, ax: B, ay: e },
+      { x: m.x - B / 2 + e / 2, y: m.y, ax: e, ay: H - 2 * e }, { x: m.x + B / 2 - e / 2, y: m.y, ax: e, ay: H - 2 * e },
+    ];
+  }
+  if (t === 'tubo-circ') return [{ x: m.x, y: m.y, ax: m.largo, ay: m.largo }];
+  return [m.dir === 'Y' ? { x: m.x, y: m.y, ax: m.espesor, ay: m.largo } : { x: m.x, y: m.y, ax: m.largo, ay: m.espesor }];
+}
+
+/** área en planta del elemento (m²) */
+export function areaMuro(m: Muro): number {
+  const t = tipoDe(m);
+  if (t === 'tubo-circ') return (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2);
+  return rectangulos(m).reduce((a, r) => a + r.ax * r.ay, 0);
+}
+
+/** medidas totales en x e y (caja que lo contiene) */
+export function huella(m: Muro): { ax: number; ay: number } {
+  const t = tipoDe(m);
+  if (t === 'tubo-rect') return { ax: m.largo, ay: m.ladoY ?? m.largo };
+  if (t === 'tubo-circ') return { ax: m.largo, ay: m.largo };
+  return m.dir === 'Y' ? { ax: m.espesor, ay: m.largo } : { ax: m.largo, ay: m.espesor };
+}
+
+/** El muro está en la planta del nivel de cota z (arranca en z o más abajo y sigue más arriba de z). */
+export function presenteEn(m: Muro, z: number, zFund: number, zTop: number): boolean {
+  const a = m.zDesde ?? zFund, b = m.zHasta ?? zTop;
+  return a <= z + 1e-6 && (z < b - 1e-6 || (z >= zTop - 1e-6 && b >= zTop - 1e-6));
+}
+
+/** El muro entra en el cálculo de la planilla: llega a la fundación y pasa por PB. */
+export function entraEnCalculo(m: Muro, zFund: number, zTop: number): boolean {
+  return m.llega && (m.zDesde ?? zFund) <= zFund + 1e-6 && (m.zHasta ?? zTop) > 1e-6;
 }
 
 export interface Proyecto {

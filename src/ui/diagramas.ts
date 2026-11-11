@@ -248,3 +248,59 @@ export function graficoRigidez(rs: Rigidez[]): HTMLElement {
   fig.append(svg);
   return fig;
 }
+
+/**
+ * Tensiones de una pieza a lo largo del sentido del viento (desde el baricentro de la pieza): cada alma como un
+ * segmento (σ lineal entre sus dos fibras extremas), cada ala como un punto (axial). Descargado y cargado;
+ * referencias en 0 y en la compresión admisible.
+ */
+export function graficoTensiones(v: import('../engine/flexocompresion').VerifPieza, adm: number): HTMLElement {
+  const ancho = 400, alto = 230, mi = 46, md = 14, ms = 14, mb = 34;
+  const fig = document.createElement('figure');
+  fig.className = 'diagrama';
+  const ley = document.createElement('div');
+  ley.className = 'leyenda';
+  [['s1', 'descargado (0,7 t/m²): tracción'], ['s2', 'cargado (0,9 t/m²): compresión']].forEach(([c, t]) => { const sp = document.createElement('span'); const i = document.createElement('i'); i.className = `ley-${c}`; sp.append(i, t); ley.append(sp); });
+  fig.append(ley);
+  const tramos = v.muros.map(m => {
+    const [y1, y2] = m.papel === 'ala' ? [m.d, m.d] : [m.d - m.h / 2, m.d + m.h / 2];
+    // desc[0]/carg[0] corresponden a la fibra más alejada del baricentro
+    const lejos = Math.abs(y1) >= Math.abs(y2) ? y1 : y2, cerca = lejos === y1 ? y2 : y1;
+    return { m, lejos, cerca };
+  });
+  const ys = tramos.flatMap(t => [t.lejos, t.cerca]);
+  const sig = [...v.muros.flatMap(m => [...m.desc, ...m.carg].map(x => x / 10)), 0, -adm * 0.25];
+  const yMin = Math.min(...ys) - 0.3, yMax = Math.max(...ys) + 0.3;
+  const sMin = Math.min(...sig), sMax = Math.max(...sig, 1);
+  const ts = marcas(sMin, sMax);
+  const s0 = Math.min(ts[0], sMin), s1 = Math.max(ts[ts.length - 1], sMax);
+  const X = (y: number) => mi + ((y - yMin) / (yMax - yMin || 1)) * (ancho - mi - md);
+  const Y = (s: number) => ms + ((s1 - s) / (s1 - s0 || 1)) * (alto - ms - mb);
+  const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico', role: 'img', 'aria-label': `Tensiones de ${v.nombre}: tracción máxima ${fmt(v.traccion, 1)} kg/cm², compresión máxima ${fmt(v.compresion, 1)} kg/cm²` });
+  ts.forEach(t => { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(t), y2: Y(t), class: t === 0 ? 'd-cero' : 'd-grilla' })); svg.append(el('text', { x: mi - 6, y: Y(t) + 4, class: 'd-eje', 'text-anchor': 'end' }, fmt(t, 0))); });
+  if (-adm >= s0) { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(-adm), y2: Y(-adm), class: 'd-ref fuerte' })); svg.append(el('text', { x: ancho - md - 2, y: Y(-adm) - 4, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, `admisible −${adm}`)); }
+  if (s1 > 0) svg.append(el('rect', { x: mi, y: Y(s1), width: ancho - mi - md, height: Y(0) - Y(s1), class: 'd-traccion' }));
+  svg.append(el('text', { x: mi, y: ms - 2, class: 'd-eje' }, 'σ (kg/cm²) · arriba de 0: tracción'));
+  svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición en el sentido del viento, desde el baricentro de la pieza (m)'));
+  marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
+  tramos.forEach(({ m, lejos, cerca }) => {
+    ([['desc', 's1'], ['carg', 's2']] as const).forEach(([k, c]) => {
+      const [a, b] = m[k].map(x => x / 10);
+      const tip = `${m.id} (${m.papel})\n${k === 'desc' ? 'descargado' : 'cargado'}: ${fmt(a, 1)} / ${fmt(b, 1)} kg/cm²`;
+      if (m.papel === 'ala') {
+        const l = el('line', { x1: X(lejos), x2: X(lejos), y1: Y(a), y2: Y(b), class: `d-linea d-${c}-l` });
+        l.append(el('title', {}, tip));
+        svg.append(l);
+        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-${c}` })));
+      } else {
+        const l = el('line', { x1: X(lejos), y1: Y(a), x2: X(cerca), y2: Y(b), class: `d-linea d-${c}-l` });
+        l.append(el('title', {}, tip));
+        svg.append(l);
+        [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-${c}` })));
+      }
+    });
+    svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
+  });
+  fig.append(svg);
+  return fig;
+}

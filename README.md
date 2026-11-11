@@ -24,15 +24,22 @@ The interface is in Spanish.
 3. **Niveles**: floor levels and plan dimensions B and L. There is a generator for repeated floors. The table works like Excel:
    - Select cells, then drag the fill handle to copy a value or continue a series.
    - Copy and paste with Ctrl+C / Ctrl+V from Excel.
-4. **Muros**: walls go on the plan. Drag them with the mouse or move them with the arrow keys. Each wall belongs to one piece per direction (A and B). Where it is attached decides whether it acts as an alma or an ala.
+4. **Muros**: walls go on the plan. Each element has a type: tabique (a rectangular column is a short tabique), rectangular tube (box or core) or circular tube. «Desde» and «Hasta» set the levels where it exists, and the plan of each level is chosen above the plan view. Only walls that reach the foundation go into the PB calculation. The deflected shape uses ΣJ per level. Drag them with the mouse or move them with the arrow keys. Each wall belongs to one piece per direction (A and B). Where it is attached decides whether it acts as an alma or an ala.
 5. **Piezas**: the equivalent profile of each piece, as written to the J sheets.
 6. **Resultados**: «Planilla» shows the workbook's values and «Guía/CIRSOC» shows the corrected ones, with each check.
 7. **Diagramas**:
    - Wind pressure and force per floor along the height.
    - Shear and bending moment along the height.
    - Rototraslación on the plan: inertia axis, wind resultant and the force each piece takes.
+   - Flexocompresión wall by wall, following the guide (section 5): σ = −N/F ± M/W.
+     - Each wall uses its own N: self-weight plus slab load × its area of influence × the number of slabs, unloaded (0.7 t/m²) and loaded (0.9 t/m²).
+     - In a piece with several walls, the webs work in bending and the flanges form a couple.
+     - Reinforcement where the wall is in tension: T = σ·b·x/2 and As = T/2400, compared with the 0.8 % minimum.
    - Stiffness: ΣJ against the minimum J, the deflected shape against h/500, and how J is shared among the pieces.
-   - Funicular: W + G in a force polygon, and the resultant cutting the base inside the middle third. It also shows the line of pressures floor by floor.
+   - Funicular:
+     - The graphic construction: force polygon of the floor forces, pole, rays and funicular polygon. The extreme sides give hw.
+     - Then W + G, with the resultant cutting the base inside the middle third.
+     - The line of pressures floor by floor.
 8. **Escribir planilla .xlsx** downloads the filled workbook. Excel or LibreOffice recalculate it on opening. **Guardar proyecto** downloads a `.json`. **Abrir / importar…** accepts the following:
    - a project `.json`;
    - a workbook written by the app;

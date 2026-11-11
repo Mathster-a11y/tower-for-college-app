@@ -6,6 +6,8 @@
 import type { MNyQRes, PlanillaRes, RotoRes, VientoRes, JMinimo } from './planilla';
 import type { Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
+import { presenteEn } from './modelo';
+import { partesDePieza } from './flexocompresion';
 
 export interface PuntoAltura {
   nivel: string;
@@ -38,14 +40,15 @@ export interface Deformada { puntos: { nivel: string; z: number; d: number }[]; 
  * con el momento real de cada nivel. También la fórmula de la carga uniforme (δ = W·h³ / 8EJ), que es la que
  * usa la planilla para el J mínimo.
  */
-export function deformada(alt: PuntoAltura[], W: number, E: number, J: number): Deformada {
+export function deformada(alt: PuntoAltura[], W: number, E: number, J: number, Jz?: (z: number) => number): Deformada {
+  const Jen = (z: number) => (Jz ? Jz(z) : J) || J;
   const sobre = alt.filter(x => x.z >= 0).sort((a, b) => a.z - b.z);
   const out: Deformada['puntos'] = [];
   let th = 0, d = 0;
   sobre.forEach((x, i) => {
     if (i > 0) {
       const a = sobre[i - 1], dz = x.z - a.z;
-      const th1 = th + ((a.M + x.M) / 2) * dz / (E * J);
+      const th1 = th + ((a.M / Jen(a.z) + x.M / Jen(x.z)) / 2) * dz / E;
       d += ((th + th1) / 2) * dz;
       th = th1;
     }
@@ -91,4 +94,20 @@ export function rigidez(res: PlanillaRes, hormigon: string): Rigidez[] {
     const f = fila(t);
     return { dir, J: dir === 'A' ? res.jpar.AY24 : res.jort.AY24, minimos: { h400: f.h400, h500: f.h500, h600: f.h600 }, hormigon: f.hormigon, W: t.W, h: t.h };
   });
+}
+
+/**
+ * ΣJ de cada nivel sobre PB, como fracción del de PB, con los muros de cada pieza que están en ese nivel
+ * (plantas distintas por piso). Devuelve J(z) = ΣJ de la planilla · fracción.
+ */
+export function rigidezPorNivel(p: Proyecto, piezas: PiezaEquivalente[], dir: 'A' | 'B', Jplanilla: number): { z: number; nivel: string; J: number }[] {
+  const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
+  const porId = new Map(p.muros.map(m => [m.id, m]));
+  const JdeNivel = (z: number) => piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).reduce((s, pz) => {
+    const ms = pz.muros.map(id => porId.get(id)!).filter(m => m && presenteEn(m, z, zFund, zTop));
+    return s + (ms.length ? partesDePieza(ms, dir).J : 0);
+  }, 0);
+  const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
+  const J0 = JdeNivel(p.niveles[iPB]?.cota ?? 0) || 1;
+  return p.niveles.filter(n => n.cota >= (p.niveles[iPB]?.cota ?? 0)).map(n => ({ z: n.cota, nivel: n.nombre, J: (Jplanilla * JdeNivel(n.cota)) / J0 }));
 }

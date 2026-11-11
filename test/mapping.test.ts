@@ -86,3 +86,29 @@ describe('regla de las piezas: simétrica solo el muro suelto y la doble T', () 
     expect(a.piezas.find(p => p.filaHoja === 11)!.avisos.join(' ')).toMatch(/módulo simétrico/);
   });
 });
+
+describe('tubos y plantas por piso', () => {
+  const base = ejemploGuia();
+  it('tubo rectangular: en las columnas asimétricas, con el J exacto de la caja en cada dirección', () => {
+    const caja = { id: 'N', dir: 'Y' as const, tipo: 'tubo-rect' as const, ladoY: 6, x: 0, y: 0, largo: 4, espesor: 0.25, llega: true, areaInf: 40, piezaA: 'N', pegadoA: '', piezaB: 'NB', pegadoB: '' };
+    const a = aPlanilla({ ...base, muros: [caja] });
+    const r = calcularPlanilla(a.datos);
+    const pA = a.piezas.find(x => x.nombre === 'N')!, pB = a.piezas.find(x => x.nombre === 'NB')!;
+    expect(pA.molde).toBe('asimétrico');
+    expect(r.jpar.filas[pA.filaHoja!].AY).toBeCloseTo((4 * 6 ** 3 - 3.5 * 5.5 ** 3) / 12, 6);   // viento A: flexión con el lado de 6 m
+    expect(r.jort.filas[pB.filaHoja!].AY).toBeCloseTo((6 * 4 ** 3 - 5.5 * 3.5 ** 3) / 12, 6);   // viento B: con el lado de 4 m
+    expect(a.papeles.N.A).toBe('tubo');
+  });
+  it('tubo circular: en las columnas de tubos (D y d)', () => {
+    const c = { id: 'C', dir: 'Y' as const, tipo: 'tubo-circ' as const, x: 0, y: 0, largo: 1.2, espesor: 0.2, llega: true, areaInf: 10, piezaA: 'C', pegadoA: '', piezaB: '', pegadoB: '' };
+    const a = aPlanilla({ ...base, muros: [c] });
+    const pz = a.piezas.find(x => x.nombre === 'C')!;
+    expect(pz.fila).toMatchObject({ S: 1.2, T: 0.8 });
+  });
+  it('un muro que arranca en el 5º piso no entra en el cálculo de PB; uno que termina en el 10º sí', () => {
+    const muros = base.muros.map(m => (m.id === 'M1' ? { ...m, zDesde: 16 } : m.id === 'M2' ? { ...m, zHasta: 31 } : m));
+    const a = aPlanilla({ ...base, muros });
+    expect(a.papeles.M1.A).toBe('fuera del cálculo');
+    expect(a.papeles.M2.A).toBe('alma');
+  });
+});
