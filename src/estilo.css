@@ -685,3 +685,7 @@ text[data-par].ultimo { font-size: 15px; }
 .corte-tabla { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
 .corte-tabla th, .corte-tabla td { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .corte-tabla th:nth-child(2), .corte-tabla td:nth-child(2) { text-align: left; }
+.planta .carpinteria.editando { stroke-width: 3; fill: color-mix(in srgb, var(--serie-1) 6%, transparent); pointer-events: visiblePainted; cursor: copy; }
+.planta .vertice.vertice-carp { stroke: var(--serie-1); }
+.planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
+.silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }

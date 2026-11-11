@@ -41,6 +41,8 @@ export function montarPlanta(cont: HTMLElement) {
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
   let iNivel = 0;
   let arrastreV: number | null = null;
+  /** en el modo «Silueta»: se edita el contorno de la losa (false) o el de la carpintería (true) */
+  let editaCarp = false;
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
@@ -159,8 +161,8 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // silueta del piso: mover vértices, doble clic en un borde agrega uno, clic derecho en un vértice lo borra
   const bSil = document.createElement('button');
-  bSil.type = 'button'; bSil.textContent = 'Silueta';
-  bSil.title = 'Editar el contorno de este piso: arrastrar los vértices, doble clic en un borde para agregar uno, clic derecho en un vértice para borrarlo. También se importa de AutoCAD (DXF).';
+  bSil.type = 'button'; bSil.textContent = 'Contornos';
+  bSil.title = 'Editar el contorno de la losa o de la carpintería de este piso: arrastrar los vértices, doble clic en un borde para agregar uno, clic derecho en un vértice para borrarlo. También se importa de AutoCAD (DXF).';
   bSil.addEventListener('click', () => ponerModo(modo === 'silueta' ? 'mover' : 'silueta'));
   const panelSil = document.createElement('div');
   panelSil.className = 'calco-panel silueta-panel';
@@ -169,9 +171,15 @@ export function montarPlanta(cont: HTMLElement) {
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
+    if (editaCarp) {
+      if (!n.carpinteria || n.carpinteria.length < 3) n.carpinteria = (carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta).map(v => ({ ...v }));
+      return n.carpinteria;
+    }
     if (!n.silueta || n.silueta.length < 3) n.silueta = plantaDeNivel(estado.proyecto, iNivel).silueta.map(v => ({ ...v }));
     return n.silueta;
   };
+  /** los vértices que se están editando (losa o carpintería), propios o heredados */
+  const verticesEd = (): Vertice[] => (editaCarp ? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
   function armarPanelSil() {
     const p = estado.proyecto, n = p.niveles[iNivel];
     if (!n) return;
@@ -194,9 +202,24 @@ export function montarPlanta(cont: HTMLElement) {
       const u = (window.prompt(`Unidad del dibujo (m, cm o mm). El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF:`, guess) ?? '').trim().toLowerCase();
       const factor = u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : u === 'm' ? 1 : NaN;
       if (!isFinite(factor)) return;
-      estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = ajustarContorno(mayor, factor, true); });
+      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) nv.carpinteria = c; else nv.silueta = c; });
     });
-    panelSil.append(b(`Silueta de ${n.nombre}`), linea(pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
+    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
+    if (editaCarp) {
+      const car = carpinteriaDeNivel(p, iNivel);
+      const f2 = (x: number) => x.toFixed(2).replace('.', ',');
+      panelSil.append(que, b(`Carpintería de ${n.nombre}`),
+        linea(!car ? 'sin carpintería: arrastrá un vértice y se copia la silueta de la losa' : car.propia ? 'propia de este nivel' : 'heredada del nivel de arriba (se copia al editarla)'),
+        ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
+        linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m${car && (Math.abs(car.a - pl.B) > 0.01 || Math.abs(car.b - pl.L) > 0.01) ? ' (distinto de la caja)' : ''}`),
+        dxf,
+        boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
+        ...(car ? [boton('Usar a máx y b máx como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +car.a.toFixed(2); nv.L = +car.b.toFixed(2); }), 'Escribe en este nivel B = a máx y L = b máx (es lo que lee la planilla para el viento). No se hace solo: queda a tu criterio.')] : []),
+        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'));
+      return;
+    }
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), linea(pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       dxf,
@@ -370,22 +393,25 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(tx);
     }
     const contorno = puntosSilueta(pl.silueta);
-    const pathC = el('polygon', { points: contorno.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'contorno' + (modo === 'silueta' ? ' editando' : '') });
+    const pathC = el('polygon', { points: contorno.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'contorno' + (modo === 'silueta' && !editaCarp ? ' editando' : '') });
     svg.appendChild(pathC);
     if (modo === 'silueta') {
+      const vEd = verticesEd();
+      const objetivo = editaCarp ? el('polygon', { points: puntosSilueta(vEd).map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria editando' }) : pathC;
+      if (editaCarp) svg.appendChild(objetivo);
       // doble clic en un borde: vértice nuevo en el tramo más cercano
-      pathC.addEventListener('dblclick', ev => {
+      objetivo.addEventListener('dblclick', ev => {
         const q = aMundo(ev as unknown as PointerEvent);
-        const v = pl.silueta;
+        const v = vEd;
         let mejor = 0, dMin = Infinity;
         v.forEach((a, i) => { const b2 = v[(i + 1) % v.length]; const dx = b2.x - a.x, dy = b2.y - a.y; const t = Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy || 1))); const d = Math.hypot(a.x + t * dx - q.x, a.y + t * dy - q.y); if (d < dMin) { dMin = d; mejor = i; } });
         estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }); });
       });
-      pl.silueta.forEach((v, i) => {
-        const hnd = el('circle', { cx: X(v.x), cy: Y(v.y), r: 5.5, class: 'vertice', tabindex: 0 });
+      vEd.forEach((v, i) => {
+        const hnd = el('circle', { cx: X(v.x), cy: Y(v.y), r: 5.5, class: 'vertice' + (editaCarp ? ' vertice-carp' : ''), tabindex: 0 });
         hnd.appendChild(el('title', {}, `vértice ${i + 1}: x ${v.x.toFixed(2)} · y ${v.y.toFixed(2)}${v.b ? ` · arco (bulge ${v.b.toFixed(3)})` : ''} · arrastrar para mover, clic derecho para borrar`));
         hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
-        hnd.addEventListener('contextmenu', ev => { ev.preventDefault(); if (pl.silueta.length > 3) estado.cambiar(() => { siluetaPropia().splice(i, 1); }); });
+        hnd.addEventListener('contextmenu', ev => { ev.preventDefault(); if (vEd.length > 3) estado.cambiar(() => { siluetaPropia().splice(i, 1); }); });
         svg.appendChild(hnd);
       });
     }
@@ -577,7 +603,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (modo === 'silueta') {
       if (arrastreV === null) return;
-      const q = aMundo(ev), v = estado.proyecto.niveles[iNivel].silueta;
+      const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? nv.carpinteria : nv.silueta;
       if (v && v[arrastreV]) { v[arrastreV].x = +(Math.round(q.x / 0.05) * 0.05).toFixed(2); v[arrastreV].y = +(Math.round(q.y / 0.05) * 0.05).toFixed(2); dibujar(); }
       return;
     }
