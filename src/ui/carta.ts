@@ -520,8 +520,8 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
   arco(g, giro.x, giro.y, 40, Math.PI * 0.95, Math.PI * 0.45, 'volcador');
   arco(g, giro.x, giro.y, 62, Math.PI * 0.5, Math.PI * 0.92, 'equilibrante');
-  txt(g, X(S / 2) + 8, Y(0) - 34, `Mv = W·hW = ${fmt(v.Mv, 0)} tm (volcador)`, 'd-valor ct-rojo');
-  txt(g, X(S / 2) + 8, Y(0) - 20, `Me = P·b'/2 = ${fmt(v.Me, 0)} tm (equilibrante)`, 'd-valor ct-amarillo');
+  txt(g, X(S / 2) + 8, Y(0) - 34, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-rojo');
+  txt(g, X(S / 2) + 8, Y(0) - 20, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-amarillo');
   // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx
   const y0 = Y(zF) + 104, Tm = Math.max(Math.abs(v.Tmax), Math.abs(v.Tmin), 1e-9), kt = 44 / Tm;
   const pa = { x: X(-v.bB / 2), y: y0 - v.Tmin * kt }, pb = { x: X(v.bB / 2), y: y0 - v.Tmax * kt };

@@ -250,7 +250,7 @@ export function graficoReparto(rep: Reparto, dir: 'A' | 'B', B: number, L: numbe
 
 /** ΣJ de cada dirección contra el J mínimo (h/400, h/500, h/600): barras con una misma escala. */
 export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
-  const ancho = Math.max(320, tam.ancho ?? 400), fila = 64, mi = 70, md = 20, ms = 20;
+  const ancho = Math.max(320, tam.ancho ?? 400), fila = ancho < 560 ? 86 : 64, mi = 70, md = 20, ms = 20;   // angosto: lugar para los rótulos en renglones
   const alto = ms + fila * rs.length + 24;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
@@ -270,10 +270,14 @@ export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
     barra.append(el('title', {}, `Viento ${r.dir}: ΣJ = ${fmt(r.J, 3)} m⁴\nJ mín h/400 = ${fmt(r.minimos.h400, 3)}\nJ mín h/500 = ${fmt(r.minimos.h500, 3)}\nJ mín h/600 = ${fmt(r.minimos.h600, 3)} m⁴`));
     svg.append(barra);
     svg.append(el('text', { x: X(r.J) + 4, y: y + 21, class: 'd-valor' }, `${fmt(r.J, 2)} m⁴ ${ok ? '✓' : '✗'}`));
-    ([['h400', 'h/400'], ['h500', 'h/500'], ['h600', 'h/600']] as const).forEach(([k, t], j) => {
+    // rótulos de los J mínimos: si quedan muy juntos (pantallas chicas), cada uno baja un renglón
+    let xAnt = -Infinity, renglon = 0;
+    ([['h400', 'h/400'], ['h500', 'h/500'], ['h600', 'h/600']] as const).forEach(([k, t]) => {
       const x = X(r.minimos[k]);
-      svg.append(el('line', { x1: x, x2: x, y1: y + 4, y2: y + 30, class: k === 'h500' ? 'd-ref fuerte' : 'd-ref' }));
-      svg.append(el('text', { x, y: y + 42 + (j % 2) * 10, class: 'd-eje', 'text-anchor': 'middle' }, t));
+      renglon = Math.abs(x - xAnt) < 38 ? renglon + 1 : 0;
+      xAnt = x;
+      svg.append(el('line', { x1: x, x2: x, y1: y + 4, y2: y + 30 + renglon * 12, class: k === 'h500' ? 'd-ref fuerte' : 'd-ref' }));
+      svg.append(el('text', { x, y: y + 42 + renglon * 12, class: 'd-eje', 'text-anchor': 'middle' }, t));
     });
   });
   fig.append(svg);

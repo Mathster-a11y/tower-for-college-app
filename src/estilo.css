@@ -353,9 +353,14 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 @media (max-width: 760px) {
   body { height: auto; }
   .app { display: flex; flex-direction: column; overflow: visible; }
-  .riel { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--edge); }
-  .riel button { min-width: 64px; }
-  .riel .riel-fin { margin-top: 0; margin-left: 0; }
+  .riel { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--edge); align-items: flex-start; flex-shrink: 0; scrollbar-width: thin; }
+  .riel button { min-width: 64px; flex: 0 0 auto; }
+  /* el grupo del final (Carta, Resumen, Ayuda) también en fila: si no, estira toda la barra */
+  .riel .riel-fin { margin-top: 0; margin-left: 0; display: flex; flex-direction: row; gap: 2px; flex: 0 0 auto; }
+  /* herramientas de la planta: en varias líneas, cada una entera */
+  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
+  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
+  .sel-nivel { top: 84px; right: 10px; }
   .lateral { border-right: 0; }
   .panel { overflow: visible; }
   .centro { min-height: 70vh; }
@@ -581,3 +586,4 @@ text[data-par].ultimo { font-size: 15px; }
 [data-par] { transition: opacity .12s; }
 .rt-letra.neutra { fill: var(--ink2); }
 .funicular .f-vertice { fill: var(--ink2); }
+.rt-letra, .f-letra { fill: var(--ink); }
