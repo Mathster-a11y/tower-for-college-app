@@ -726,3 +726,12 @@ text[data-par].ultimo { font-size: 15px; }
 .menu-mis .mis-fila > button { width: auto; }
 .menu-mis .mis-fila .glifo { padding: 4px 8px; color: var(--ink2); }
 @media (max-width: 760px) { .menu-mis { position: fixed; top: 76px; left: 16px; right: 16px; min-width: 0; } }
+/* recorrido guiado */
+.recorrido { position: fixed; inset: 0; z-index: 100; }
+.recorrido-foco { position: fixed; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(10, 20, 30, .55); outline: 2px solid var(--accent); transition: all .2s ease; pointer-events: none; }
+.recorrido-globo { position: fixed; background: var(--field); color: var(--ink); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); transition: left .2s ease, top .2s ease; }
+.recorrido-globo b { display: block; font-size: 15px; margin-bottom: 4px; }
+.recorrido-globo p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: var(--ink2); }
+.recorrido-pie { display: flex; align-items: center; gap: 6px; }
+.recorrido-pie span { margin-right: auto; font-size: 12px; color: var(--dim); }
+@media print { .recorrido { display: none; } }

@@ -6,6 +6,7 @@ import { imprimirInforme } from './ui/informe';
 import { imprimirLaminas } from './ui/lamina';
 import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
+import { recorrido, recorridoSiEsPrimeraVez } from './ui/recorrido';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
@@ -308,6 +309,8 @@ $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplaz
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
+$('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
+recorridoSiEsPrimeraVez();
 $('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas(); });
 
 // «Mis proyectos»: versiones en el navegador
