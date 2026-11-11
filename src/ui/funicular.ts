@@ -160,8 +160,9 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
   // resultante
   svg.append(el('line', { x1: m, x2: X(c.xR), y1: Z(c.zR), y2: Z(c.zR), class: 'f-r ok', 'marker-end': `url(#${id}-p)` }));
   svg.append(el('circle', { cx: X(c.xR), cy: Z(c.zR), r: 4, class: 'f-punto ok' }));
-  svg.append(el('text', { x: X(c.xR) + 6, y: Z(c.zR) - 6, class: 'f-txt f-fuerza' }, `W = ${fmt(c.W, 1)} t`));
-  svg.append(el('text', { x: X(c.xR) + 6, y: Z(c.zR) + 8, class: 'f-txt' }, `hw = ${fmt(c.zR - zBase)} m`));
+  // del lado de la flecha (izquierda de R): los lados extremos llegan a R desde la derecha
+  svg.append(el('text', { x: X(c.xR) - 10, y: Z(c.zR) - 7, class: 'f-txt f-fuerza', 'text-anchor': 'end' }, `W = ${fmt(c.W, 1)} t`));
+  svg.append(el('text', { x: X(c.xR) - 10, y: Z(c.zR) + 15, class: 'f-txt', 'text-anchor': 'end' }, `hw = ${fmt(c.zR - zBase)} m`));
   svg.append(el('line', { x1: m, x2: X(xMax), y1: Z(zBase), y2: Z(zBase), class: 'f-eje' }));
   svg.append(el('text', { x: m, y: Z(zBase) + 14, class: 'f-txt f-nota' }, 'base de la fundación'));
   // polígono de fuerzas, polo y rayos

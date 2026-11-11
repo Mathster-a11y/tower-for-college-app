@@ -94,13 +94,13 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   // grilla y ejes (recesivos)
   tx.forEach(v => {
     svg.append(el('line', { x1: X(v), x2: X(v), y1: ms, y2: alto - mb, class: v === 0 ? 'd-cero' : 'd-grilla' }));
-    svg.append(el('text', { x: X(v), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(v, decimales(tx))));
+    svg.append(el('text', { x: X(v), y: alto - mb + 15, class: 'd-eje', 'text-anchor': 'middle' }, fmt(v, decimales(tx))));
   });
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, `${g.eje} (${g.unidad})`));
   // niveles: rótulos en el eje vertical (no más de ~10)
   const niveles = [...new Map(todos.map(p => [p.z, p.nivel])).entries()].sort((a, b) => b[0] - a[0]);
   const cada = Math.max(1, Math.ceil(niveles.length / 10));
-  niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) svg.append(el('text', { x: mi - 6, y: Z(z) + 4, class: 'd-eje', 'text-anchor': 'end' }, n)); });
+  niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) svg.append(el('text', { x: mi - 6, y: Math.min(Z(z) + 4, alto - mb - 2), class: 'd-eje', 'text-anchor': 'end' }, n)); });   // el más bajo no baja hasta las marcas del eje
   if (!g.categorias && zMin < 0) svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(0), y2: Z(0), class: 'd-pb' }));
   // series
   const dec = g.decimales ?? 2;
@@ -123,9 +123,13 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
     const ext = s.puntos.reduce((m, p) => (Math.abs(p.x) > Math.abs(m.x) ? p : m), s.puntos[0]);
     if (ext && g.series.length <= 4) {
       const derecha = X(ext.x) > ancho - 70, izquierda = X(ext.x) < mi + 40;
-      const yv = s.tipo === 'barras' ? Z(ext.z) + 4 : Z(ext.z) < ms + 14 ? Z(ext.z) + 14 : Z(ext.z) - 6;
-      const xv = derecha ? X(ext.x) - 6 : izquierda ? X(ext.x) + 6 : X(ext.x) + (ext.x >= 0 ? 6 : -6);
-      svg.append(el('text', { x: xv, y: yv, class: 'd-valor', 'text-anchor': derecha ? 'end' : izquierda ? 'start' : ext.x >= 0 ? 'start' : 'end' }, `${fmt(ext.x, dec)}`));
+      // al costado del punto (la curva sigue para arriba o para abajo, no para el costado)
+      const yv = Z(ext.z) + 4;
+      const texto = fmt(ext.x, dec), anchoT = texto.length * 7;
+      // a la izquierda solo si entra sin meterse en el margen de los rótulos de los niveles
+      const aIzq = !izquierda && (derecha || ext.x < 0) && X(ext.x) - 6 - anchoT > mi;
+      const xv = aIzq ? X(ext.x) - 8 : X(ext.x) + 8;
+      svg.append(el('text', { x: xv, y: yv, class: 'd-valor', 'text-anchor': aIzq ? 'end' : 'start' }, texto));
     }
   });
   // referencias

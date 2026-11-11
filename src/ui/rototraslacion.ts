@@ -133,7 +133,9 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   const derecha = d.Xr >= 0;
   if (!coinciden) g.append(el('text', { x: X(0) + (derecha ? -4 : 4), y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': derecha ? 'end' : 'start' }, 'eje de simetría (W)'));
   g.append(el('line', { x1: xr, x2: xr, y1: Y(sTop), y2: Y(sBot), class: 'rt-inercia' }));
-  g.append(el('text', { x: xr + (coinciden ? 0 : derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': coinciden ? 'middle' : derecha ? 'start' : 'end' }, coinciden ? 'eje de inercia = eje de simetría: solo traslación' : `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
+  // con los dos ejes juntos, el rótulo va debajo de la planta (arriba están los nombres de las piezas)
+  if (coinciden) g.append(el('text', { x: xr + 6, y: Y(-d.S / 2) + 16, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
+  else g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
   g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
@@ -178,7 +180,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const x = X(p.pos), yc = Y(sCentro(p)), L = Math.max(10, (p.J / Jmax) * Lmax);
       g.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(sBot), class: 'rt-accion' }));
       g.append(flecha(x, yc - L / 2, x, yc + L / 2, grosor(p.J), 'rt-J', tip(p)));
-      rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, 2)}`);
+      rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, p.J < 0.1 ? 3 : 2)}`);
     });
     // Determinación gráfica como en la clase 5: los J se ordenan de izquierda a derecha y se ponen uno a
     // continuación del otro (polígono de los J). Los tabiques sobre la misma recta de acción (T1 y T3) van seguidos,

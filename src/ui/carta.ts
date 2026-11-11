@@ -87,10 +87,16 @@ function cota(g: SVGElement, x1: number, y1: number, x2: number, y2: number, t: 
   const L = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / L, uy = (y2 - y1) / L;
   linea(g, x1, y1, x2, y2, 'ct-cota');
   for (const [x, y] of [[x1, y1], [x2, y2]]) linea(g, x - 4 * (ux - uy), y - 4 * (uy + ux), x + 4 * (ux - uy), y + 4 * (uy + ux), 'ct-cota');
-  const vertical = Math.abs(uy) > 0.9;
+  const vertical = Math.abs(uy) > 0.9, horizontal = Math.abs(uy) < 0.1;
   const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
   if (vertical) txt(g, mx + lado * 6, my, t, 'd-valor', lado > 0 ? 'start' : 'end', { 'dominant-baseline': 'middle' });
-  else txt(g, mx, my + (lado < 0 ? -5 : 13), t, 'd-valor', 'middle');
+  else if (horizontal) txt(g, mx, my + (lado < 0 ? -5 : 13), t, 'd-valor', 'middle');
+  else {
+    // cota oblicua: el texto se corre en perpendicular a la línea, del lado pedido, para que la línea no lo cruce
+    const nx = -uy, ny = ux, s2 = (ny > 0 ? 1 : -1) * (lado > 0 ? 1 : -1);
+    const ox = nx * s2 * 10, oy = ny * s2 * 10;
+    txt(g, mx + ox, my + oy + (oy > 0 ? 9 : -2), t, 'd-valor', ox > 2 ? 'start' : ox < -2 ? 'end' : 'middle');
+  }
 }
 /** recuadro de dato: título chico y valor grande */
 function dato(g: SVGElement, x: number, y: number, w: number, tit: string, val: string, nota = '', clase = '') {
@@ -316,15 +322,15 @@ function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: nu
 }
 function fichaB(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   const xAl = ancho * 0.4, xVal = ancho - 240;
-  plantaFicha(g, d, 16, 44, xAl - 50, alto - 60);
+  plantaFicha(g, d, 16, 44, xAl - 100, alto - 60);
   // alzado con la deformada y W
   const y0 = 92, y1 = alto - 56;
   const Y = escalaZ(d, y0, y1);
   txt(g, xAl, 54, 'Alzado · el viento de izquierda a derecha', 'ct-col-tit');
   const rot = nivelesRotulados(d, Y, 15);
   d.niveles.forEach(n => { if (rot.has(n)) txt(g, xAl, Y(n.z) + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num'); });
-  const { xb, yTop, yPB } = alzado(g, d, xAl + 75, xVal - 50, Y, { presiones: true, deformada: true });
-  cota(g, xb + 60, yPB, xb + 60, yTop, `h = ${fmt(d.zTop)} m`, 1);
+  const { xb, yTop, yPB } = alzado(g, d, xAl + 75, xVal - 110, Y, { presiones: true, deformada: true });
+  cota(g, xb + 52, yPB, xb + 52, yTop, `h = ${fmt(d.zTop)} m`, 1);
   // datos
   const x0 = xVal, w = ancho - x0 - 16;
   txt(g, x0, 54, 'Valores', 'ct-col-tit');
@@ -384,11 +390,14 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     flecha(g, a.x, a.y, b.x, b.y, 'carga', 1.3);
   });
   // resultante W en hw
+  let yW = NaN;
   if (isFinite(d.hw)) {
     const zw = d.zFondo + d.hw;
     const a = P(0, -S / 2 - 18, zw), b = P(0, -S / 2 - 0.3, zw);
     flecha(g, a.x, a.y, b.x, b.y, 'resultante', 3.2);
-    txt(g, a.x - 6, a.y + 4, `W = ${fmt(d.W, 1)} t a hW = ${fmt(d.hw)} m de la fundación`, 'd-valor', 'end');
+    txt(g, a.x - 6, a.y - 4, `W = ${fmt(d.W, 1)} t`, 'd-valor', 'end');
+    txt(g, a.x - 6, a.y + 10, `hW = ${fmt(d.hw)} m (desde la fundación)`, 'd-eje', 'end');
+    yW = a.y;
   }
   // eje de la torre por el CR y deformada exagerada (se traslada en el sentido del viento)
   const cr = { t: d.plano.Xr, s: d.plano.Yr };
@@ -398,7 +407,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     const dMax = Math.max(...d.roto.niveles.map(n => Math.abs(n.d)), 1e-12), kd = (S * 0.35) / dMax;
     g.append(el('polyline', { points: pts(d.roto.niveles.map(n => P(cr.t, cr.s + n.d * kd, n.z))), class: 'ct-deformada' }));
     const t = d.roto.niveles[d.roto.niveles.length - 1], q = P(cr.t, cr.s + t.d * kd, t.z);
-    txt(g, q.x + 6, q.y - 4, `δ = ${fmt(d.roto.dTop * 1000, 1)} mm (exagerada)`, 'd-valor ct-verde');
+    txt(g, q.x - 8, q.y - 6, `δ = ${fmt(d.roto.dTop * 1000, 1)} mm (exagerada)`, 'd-valor ct-verde', 'end');
   }
   txt(g, c1.x + 5, c1.y, 'CR', 'ct-cr-txt');
   // diagrama de momentos en el plano del costado cercano (t = T/2), detrás de la torre en el sentido del viento:
@@ -421,7 +430,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   const q0 = P(cr.t, cr.s + 10, 0);
   linea(g, b0.x, b0.y, b0.x, b0.y + 66, 'ct-hw');
   flecha(g, q0.x, q0.y + 66, b0.x, b0.y + 66, 'reaccion', 2.4);
-  txt(g, q0.x + 6, q0.y + 70, `Q = ${fmt(d.PB?.Q ?? NaN, 1)} t`, 'd-valor');
+  txt(g, b0.x - 10, b0.y + 62, `Q = ${fmt(d.PB?.Q ?? NaN, 1)} t`, 'd-valor', 'end');
   flecha(g, b0.x, b0.y + 126, b0.x, b0.y + 72, 'reaccion', 2.4);
   txt(g, b0.x - 6, b0.y + 122, `N = ${fmt(d.PB?.N ?? NaN, 0)} t`, 'd-valor', 'end');
   txt(g, b0.x - 6, b0.y + 136, 'reacciones en PB', 'd-eje', 'end');
@@ -437,7 +446,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   // niveles rotulados a la izquierda de la arista de barlovento
   const Yfake = (z: number) => P(-T / 2, -S / 2, z).y;
   const rot = nivelesRotulados(d, Yfake, 14);
-  d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
+  d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0 && !(Math.abs(Yfake(n.z) - yW) < 22)) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
   // leyenda de lectura
   const xl = ancho - 290;
   [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'deformada exagerada del eje (por el CR)']].forEach(([c, t], i) => {
@@ -495,7 +504,7 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   txt(g, I.x - 7, I.y + 40, `P = ${fmt(v.P, 0)} t`, 'd-valor', 'end');
   const Bp = { x: X(v.e), y: Y(zF) };
   flecha(g, I.x, I.y, Bp.x, Bp.y, 'resultante-r', 2);
-  linea(g, Bp.x, Bp.y, Bp.x + (Bp.x - I.x) * 0.06, Bp.y + 46, 'ct-r-punteada');
+  linea(g, Bp.x, Bp.y, Bp.x + (Bp.x - I.x) * 0.02, Bp.y + 14, 'ct-r-punteada');
   txt(g, (I.x + Bp.x) / 2 + 6, (I.y + Bp.y) / 2, 'R = W + P', 'd-valor ct-rojo');
   // base: centro, núcleo central ±b'/6, e, b'/2 y el punto de giro
   const ok = Math.abs(v.e) <= v.nucleo;
@@ -511,8 +520,8 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
   arco(g, giro.x, giro.y, 40, Math.PI * 0.95, Math.PI * 0.45, 'volcador');
   arco(g, giro.x, giro.y, 62, Math.PI * 0.5, Math.PI * 0.92, 'equilibrante');
-  txt(g, giro.x + 72, giro.y - 26, `Mv = W·hW = ${fmt(v.Mv, 0)} tm (volcador)`, 'd-valor ct-rojo');
-  txt(g, giro.x + 72, giro.y - 12, `Me = P·b'/2 = ${fmt(v.Me, 0)} tm (equilibrante)`, 'd-valor ct-amarillo');
+  txt(g, X(S / 2) + 8, Y(0) - 34, `Mv = W·hW = ${fmt(v.Mv, 0)} tm (volcador)`, 'd-valor ct-rojo');
+  txt(g, X(S / 2) + 8, Y(0) - 20, `Me = P·b'/2 = ${fmt(v.Me, 0)} tm (equilibrante)`, 'd-valor ct-amarillo');
   // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx
   const y0 = Y(zF) + 104, Tm = Math.max(Math.abs(v.Tmax), Math.abs(v.Tmin), 1e-9), kt = 44 / Tm;
   const pa = { x: X(-v.bB / 2), y: y0 - v.Tmin * kt }, pb = { x: X(v.bB / 2), y: y0 - v.Tmax * kt };
@@ -545,5 +554,5 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   txt(g, x0, yT2 - 8, 'Tensiones en la base (kg/cm², filas 80 a 90)', 'ct-col-tit');
   fila(yT2, [['Sb = b1·a1', `${fmt(v.Sb, 0)} m²`, 'N82'], ['N descargado', `${fmt(v.P, 0)} t`, 'N83'], ['G cargado', `${fmt(v.G, 0)} t`, 'N84 = N·9/7'], ['Tv viento', `±${fmt(v.Tv, 2)}`, '6·Mv / a1·b1²']]);
   fila(yT2 + 52, [['Tp descargado', fmt(v.Tp, 2), 'N85'], ['Tg cargado', fmt(v.Tg, 2), 'N86'], ['Tmáx sotavento', fmt(v.Tmax, 2), 'N89 = Tg − Tv'], ['Tmín barlovento', fmt(v.Tmin, 2), 'N90 ≤ 0: sin tracción', v.Tmin <= 0 ? 'ok' : 'mal']]);
-  if (!v.enPlanilla) txt(g, x0, yT2 + 52 * 2 + 14, 'La planilla hace esta verificación solo con la cara a; acá, la misma cuenta con la cara b.', 'd-eje');
+  if (!v.enPlanilla) txt(g, xL, alto - 14, 'La planilla hace esta verificación solo con la cara a; acá, la misma cuenta con la cara b.', 'd-eje');
 }

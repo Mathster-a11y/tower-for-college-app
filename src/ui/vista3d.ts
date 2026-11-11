@@ -397,6 +397,21 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   construir();
   tamaño();
   const t0 = performance.now();
+  let cuadro = 0;
+  /** rótulos 3D: si dos se pisan en pantalla, se oculta el de menor prioridad (cotas y punto de giro primero) */
+  const PRIORIDAD: Record<string, number> = { cota: 6, giro: 6, cr: 5, delta: 4, pieza: 3, nivel: 2, eje: 1 };
+  function ordenarRotulos() {
+    const es = [...capaEt.domElement.querySelectorAll<HTMLElement>('.et3d')].filter(e => e.style.display !== 'none');
+    const prio = (e: HTMLElement) => Math.max(0, ...[...e.classList].map(c => PRIORIDAD[c] ?? 0));
+    es.sort((a, b) => prio(b) - prio(a));
+    const puestos: DOMRect[] = [];
+    es.forEach(e => {
+      e.style.visibility = 'visible';
+      const r = e.getBoundingClientRect();
+      const choca = puestos.some(q => r.left < q.right - 1 && r.right > q.left + 1 && r.top < q.bottom - 1 && r.bottom > q.top + 1);
+      if (choca) e.style.visibility = 'hidden'; else puestos.push(r);
+    });
+  }
   let animando = false;
   renderer.setAnimationLoop(() => {
     if (!cont.isConnected) return;
@@ -405,7 +420,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     else if (animando) { animando = false; mover(fMax); }
     controles.update();
     renderer.render(escena, camara);
-    if (op.etiquetas) capaEt.render(escena, camara);
+    if (op.etiquetas) { capaEt.render(escena, camara); if (++cuadro % 6 === 0) ordenarRotulos(); }
   });
   return { construir, encuadrar, tamaño };
 }
