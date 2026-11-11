@@ -73,3 +73,32 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Guía, Anexo de rototraslación: con las posiciones que da (T1–T4 a ±10 m, T5 a −6 m, T6 a +4,14 m) el eje de inercia queda a 1,77 m, no a 0,37 m. Con e = 0,37 m la rotación no se anula: entre todos los tabiques toman 990 de 1000. Con e = 1,77 m los porcentajes son T1 14,25 %, T2 7,09 %, T5 8,94 % y T6 48,38 % (la guía da 10,77, 9,34, 7,32 y 51,37).
 - [ ] Rotación: la guía suma en ΣJt·a² cada muro perpendicular con su J propio (las alas de T6, 2,083 m⁴ a ±1,90 m). La planilla toma la pieza perpendicular entera en su baricentro, y una U en el eje no aporta nada.
 - [ ] Guía, T1: el largo traccionado x del triángulo de tracción figura como 78 cm (y 1,05 m en el esquema); con σ = +137,78 / −788 t/m² sale x = 4,50 · 137,78 / 925,8 = 0,67 m
+
+## Próximos pasos (propuesta, noviembre 2026)
+
+### Para la entrega
+- [ ] Lámina de entrega A3 apaisada para imprimir: rótulo (alumno, curso, fecha, cátedra), carta elegida, planta y verificaciones
+- [ ] Prueba de punta a punta con una entrega real: escribir la planilla, abrirla en Excel/LibreOffice y comparar celda por celda (con piezas agrupadas y alas intermedias)
+- [ ] Elegir la carta principal (A, B, C, D o una combinación)
+
+### Para armar la torre más rápido
+- [ ] Biblioteca de piezas tipo para insertar con medidas: tabique, L, T, C, U, doble T, núcleo (tubo), con su J a la vista
+- [ ] Importar muros desde DXF (no solo líneas en CSV), con capas
+- [ ] Calcar un PDF directamente (sin exportarlo antes como imagen)
+- [ ] Edición táctil en celular y tablet: arrastrar muros con el dedo, pellizcar para acercar
+- [ ] Vista en corte (alzado) para editar «desde» y «hasta» de cada muro arrastrando
+
+### Para entender (didáctica)
+- [ ] Recorrido guiado por las etapas para la primera vez (qué mirar en cada una)
+- [ ] Comparar dos variantes del proyecto: antes y después de mover o cambiar un muro (ΔJ, Δe, Δδ)
+- [ ] Rototraslación animada también en la planta (no solo en el 3D)
+- [ ] «Qué pasa si…»: deslizadores para largo y posición de un muro con el resultado en vivo
+
+### Para el uso diario
+- [ ] Lista de proyectos guardados en el navegador, con versiones
+- [ ] Exportar los dibujos (planta, cartas, diagramas) como SVG o PNG para las láminas
+- [ ] Carga más rápida al abrir (separar el 3D y la planilla del resto)
+
+### Pendientes de la cátedra (preguntas abiertas, arriba)
+- [ ] Criterio de alas intermedias y de piezas con más de dos almas en el molde
+- [ ] Torsión de la Fig. 9, edificios flexibles (Gf), criterios de flexocompresión
