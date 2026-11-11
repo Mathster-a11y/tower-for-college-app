@@ -752,3 +752,6 @@ text[data-par].ultimo { font-size: 15px; }
 .tabla-cmp .cmp-no { color: var(--mal); font-weight: 700; }
 .tabla-cmp .cmp-info { color: var(--dim); font-size: 11px; }
 .tabla-cmp tr.cmp-cambia td { background: color-mix(in srgb, #f5c400 18%, transparent); }
+.areas-panel { width: 240px; }
+.areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; }
+.areas-panel button { font-size: 12px; white-space: normal; }
