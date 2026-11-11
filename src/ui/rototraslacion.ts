@@ -38,6 +38,8 @@ function flecha(x1: number, y1: number, x2: number, y2: number, w: number, clase
   const ux = L > 0 ? (x2 - x1) / L : 0, uy = L > 0 ? (y2 - y1) / L : -1;
   const lp = Math.min(largoP, L * 0.6 + 4);                                   // flechas cortas: punta proporcionada
   const bx = x2 - ux * lp, by = y2 - uy * lp;                                 // base de la punta
+  // halo del color del fondo: la flecha se separa del muro o de la línea que tenga abajo
+  if (L > lp) g.append(el('line', { x1, y1, x2: bx, y2: by, class: 'halo', 'stroke-width': w + 3 }));
   if (L > lp) g.append(el('line', { x1, y1, x2: bx + ux * 0.5, y2: by + uy * 0.5, class: 'tronco', 'stroke-width': w }));
   const nx = -uy * (anchoP / 2), ny = ux * (anchoP / 2);
   g.append(el('polygon', { points: `${x2},${y2} ${bx + nx},${by + ny} ${bx - nx},${by - ny}`, class: 'punta' }));
@@ -74,7 +76,7 @@ export type Paso = 1 | 2 | 3 | 4;
 export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number } = {}): SVGSVGElement {
   const id = `rt${nId++}`;
   const ancho = Math.max(420, tam.ancho ?? 640), alto = Math.max(420, tam.alto ?? 560);
-  const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico rototrasl', role: 'img',
+  const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: `grafico rototrasl paso-${paso}`, role: 'img',
     'aria-label': `Rototraslación, viento ${d.dir}, paso ${paso}: eje de inercia a ${fmt(d.Xr)} m del eje de simetría; Mt = ${fmt(d.Mt, 1)} tm` }) as SVGSVGElement;
   // marcadores de flecha
   const defs = el('defs');

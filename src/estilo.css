@@ -634,3 +634,10 @@ text[data-par].ultimo { font-size: 15px; }
 .exportar-dibujo button { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--edge); background: var(--field); color: var(--ink2); }
 .exportar-dibujo button:hover { color: var(--accent); border-color: var(--accent); }
 @media print { .exportar-dibujo { display: none; } }
+/* contraste: en el paso 1 los tabiques van claros para que se lean los vectores J; las flechas llevan halo */
+.rototrasl .rt-flecha-dib .halo { stroke: var(--lienzo); stroke-linecap: butt; }
+.rototrasl .rt-flecha-dib .punta { stroke: var(--lienzo); stroke-width: 1.2; stroke-linejoin: round; }
+.rototrasl.paso-1 .rt-muro.paralelo { fill: var(--ink2); opacity: .32; }
+.rototrasl.paso-1 .rt-muro { opacity: .2; }
+.rototrasl .rt-J .tronco { stroke: var(--serie-1); }
+.rototrasl .rt-J .punta { fill: var(--serie-1); }
