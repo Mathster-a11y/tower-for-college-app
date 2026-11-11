@@ -7,6 +7,7 @@
  */
 import type { Funicular } from '../engine/funicular';
 import { fmt } from './estado';
+import { activarResaltado, colorPar, letra } from './bow';
 
 const NS = 'http://www.w3.org/2000/svg';
 type Attrs = Record<string, string | number>;
@@ -150,38 +151,58 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
     fl.append(el('title', {}, `${f.nivel}: F${k + 1} = ${fmt(f.F, 2)} t`));
     svg.append(fl);
   });
-  // funicular: lados interiores y lados extremos prolongados hasta cortarse
+  // notación de Bow: letras en los espacios entre las rectas de acción (a arriba de la primera fuerza…)
   const v = c.vertices;
-  svg.append(el('polyline', { points: v.map(p => `${X(p.x).toFixed(1)},${Z(p.z).toFixed(1)}`).join(' '), class: 'f-funicular' }));
-  svg.append(el('line', { x1: X(v[0].x), y1: Z(v[0].z), x2: X(c.xR), y2: Z(c.zR), class: 'f-extremo' }));
-  svg.append(el('line', { x1: X(v[n - 1].x), y1: Z(v[n - 1].z), x2: X(c.xR), y2: Z(c.zR), class: 'f-extremo' }));
-  svg.append(el('text', { x: X(v[0].x) + 4, y: Z(v[0].z) - 4, class: 'f-txt f-nota' }, 'lado 0'));
-  svg.append(el('text', { x: X(v[n - 1].x) + 4, y: Z(v[n - 1].z) + 12, class: 'f-txt f-nota' }, `lado ${n}`));
+  const ys = c.fuerzas.map(f => Z(f.z));
+  for (let k = 0; k <= n; k++) {
+    const y = k === 0 ? ys[0] - 9 : k === n ? ys[n - 1] + 15 : (ys[k - 1] + ys[k]) / 2 + 4;
+    if (k > 0 && k < n && ys[k] - ys[k - 1] < 12) continue;                 // pisos muy juntos: la letra va solo en el rayo y el lado
+    svg.append(el('text', { x: 11, y, class: 'f-letra', 'text-anchor': 'middle', 'data-par': k, style: `fill:${colorPar(k)}` }, letra(k)));
+  }
+  // funicular: el lado k está en el espacio k y es paralelo al rayo Ok; el primero y el último, punteados, hasta R
+  const P = (q: { x: number; z: number }) => ({ x: X(q.x), y: Z(q.z) });
+  const R = { x: X(c.xR), y: Z(c.zR) };
+  const lados: [{ x: number; y: number }, { x: number; y: number }][] = [[R, P(v[0])]];
+  for (let k = 1; k < n; k++) lados.push([P(v[k - 1]), P(v[k])]);
+  lados.push([P(v[n - 1]), R]);
+  lados.forEach(([a, b], k) => {
+    const ext = k === 0 || k === n;
+    const ln = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: `f-lado${ext ? ' extremo' : ''}`, 'data-par': k, style: `stroke:${colorPar(k)}` });
+    ln.append(el('title', {}, `Lado ${letra(k)} ∥ rayo O${letra(k)}${ext ? ' · lado extremo: se prolonga hasta R' : ''}`));
+    svg.append(ln);
+    if (Math.hypot(b.x - a.x, b.y - a.y) > 16) svg.append(el('text', { x: (a.x + b.x) / 2 + 6, y: (a.y + b.y) / 2 + 4, class: 'f-letra chica', 'data-par': k, style: `fill:${colorPar(k)}` }, letra(k)));
+  });
+  v.forEach(q => svg.append(el('circle', { cx: X(q.x), cy: Z(q.z), r: 2, class: 'f-vertice' })));
   // resultante
   svg.append(el('line', { x1: m, x2: X(c.xR), y1: Z(c.zR), y2: Z(c.zR), class: 'f-r ok', 'marker-end': `url(#${id}-p)` }));
   svg.append(el('circle', { cx: X(c.xR), cy: Z(c.zR), r: 4, class: 'f-punto ok' }));
   // del lado de la flecha (izquierda de R): los lados extremos llegan a R desde la derecha
-  svg.append(el('text', { x: X(c.xR) - 10, y: Z(c.zR) - 7, class: 'f-txt f-fuerza', 'text-anchor': 'end' }, `W = ${fmt(c.W, 1)} t`));
-  svg.append(el('text', { x: X(c.xR) - 10, y: Z(c.zR) + 15, class: 'f-txt', 'text-anchor': 'end' }, `hw = ${fmt(c.zR - zBase)} m`));
+  svg.append(el('text', { x: X(c.xR) + 7, y: Z(c.zR) + 4, class: 'f-letra' }, 'R'));
   svg.append(el('line', { x1: m, x2: X(xMax), y1: Z(zBase), y2: Z(zBase), class: 'f-eje' }));
   svg.append(el('text', { x: m, y: Z(zBase) + 14, class: 'f-txt f-nota' }, 'base de la fundación'));
   // polígono de fuerzas, polo y rayos
   const px = anchoAlz + 26, ancho2 = ancho - px - 14;
   const escF = Math.min(ancho2 / c.W, (alto - 150) / c.polo.H);
   const yF = 60, PX = (s: number) => px + s * escF, Oy = yF + c.polo.H * escF, Ox = PX(c.polo.x);
-  svg.append(el('text', { x: px, y: yF - 30, class: 'f-txt' }, 'Polígono de fuerzas'));
+  svg.append(el('text', { x: px, y: yF - 42, class: 'f-txt' }, 'Polígono de fuerzas'));
   svg.append(el('line', { x1: PX(0), x2: PX(c.W), y1: yF, y2: yF, class: 'f-w' }));
-  c.S.forEach((s, k) => {
-    svg.append(el('line', { x1: PX(s), x2: PX(s), y1: yF - 4, y2: yF + 4, class: 'f-g fina' }));
-    const r = el('line', { x1: Ox, y1: Oy, x2: PX(s), y2: yF, class: k === 0 || k === n ? 'f-rayo extremo' : 'f-rayo' });
-    r.append(el('title', {}, `rayo ${k}`));
+  let ultX = -Infinity;
+  c.S.forEach((s2, k) => {
+    svg.append(el('line', { x1: PX(s2), x2: PX(s2), y1: yF - 4, y2: yF + 4, class: 'f-g fina' }));
+    const r = el('line', { x1: Ox, y1: Oy, x2: PX(s2), y2: yF, class: 'f-rayo-c', 'data-par': k, style: `stroke:${colorPar(k)}` });
+    const separa = k === 0 ? `antes de ${c.fuerzas[0].nivel}` : k === n ? `después de ${c.fuerzas[n - 1].nivel}` : `entre ${c.fuerzas[k - 1].nivel} y ${c.fuerzas[k].nivel}`;
+    r.append(el('title', {}, `Rayo O${letra(k)} ∥ lado ${letra(k)} (espacio ${letra(k)}, ${separa})`));
     svg.append(r);
+    // letra en el punto del polígono, si hay lugar
+    if (PX(s2) - ultX >= 10 || k === n) { svg.append(el('text', { x: PX(s2), y: yF - 8, class: 'f-letra chica', 'text-anchor': 'middle', 'data-par': k, style: `fill:${colorPar(k)}` }, letra(k))); ultX = PX(s2); }
   });
-  svg.append(el('text', { x: PX(0), y: yF - 8, class: 'f-txt f-nota', 'text-anchor': 'middle' }, '0'));
-  svg.append(el('text', { x: PX(c.W), y: yF - 8, class: 'f-txt f-nota', 'text-anchor': 'middle' }, String(n)));
-  svg.append(el('text', { x: (PX(0) + PX(c.W)) / 2, y: yF - 16, class: 'f-txt f-nota', 'text-anchor': 'middle' }, `W = ${fmt(c.W, 1)} t`));
+  svg.append(el('text', { x: (PX(0) + PX(c.W)) / 2, y: yF - 26, class: 'f-txt f-nota', 'text-anchor': 'middle' }, `W = ${fmt(c.W, 1)} t`));
   svg.append(el('circle', { cx: Ox, cy: Oy, r: 3.5, class: 'f-punto ok' }));
   svg.append(el('text', { x: Ox + 6, y: Oy + 4, class: 'f-txt f-fuerza' }, 'O (polo)'));
   svg.append(el('text', { x: px, y: Oy + 28, class: 'f-txt f-nota' }, `escala: 1 px = ${fmt(1 / escF, 2)} t`));
+  svg.append(el('text', { x: px, y: Oy + 44, class: 'f-txt f-nota' }, 'rayo Oc ∥ lado c (misma letra y color)'));
+  svg.append(el('text', { x: px, y: Oy + 68, class: 'f-txt f-fuerza' }, `R: W = ${fmt(c.W, 1)} t`));
+  svg.append(el('text', { x: px, y: Oy + 84, class: 'f-txt' }, `a hw = ${fmt(c.zR - zBase)} m de la base`));
+  activarResaltado(svg);
   return svg;
 }

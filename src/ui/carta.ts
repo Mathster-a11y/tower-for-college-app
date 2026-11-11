@@ -407,7 +407,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     const dMax = Math.max(...d.roto.niveles.map(n => Math.abs(n.d)), 1e-12), kd = (S * 0.35) / dMax;
     g.append(el('polyline', { points: pts(d.roto.niveles.map(n => P(cr.t, cr.s + n.d * kd, n.z))), class: 'ct-deformada' }));
     const t = d.roto.niveles[d.roto.niveles.length - 1], q = P(cr.t, cr.s + t.d * kd, t.z);
-    txt(g, q.x - 8, q.y - 6, `δ = ${fmt(d.roto.dTop * 1000, 1)} mm (exagerada)`, 'd-valor ct-verde', 'end');
+    txt(g, q.x + 8, q.y + 30, `δ = ${fmt(d.roto.dTop * 1000, 1)} mm (exagerada)`, 'd-valor ct-verde', 'start');
   }
   txt(g, c1.x + 5, c1.y, 'CR', 'ct-cr-txt');
   // diagrama de momentos en el plano del costado cercano (t = T/2), detrás de la torre en el sentido del viento:
@@ -430,7 +430,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   const q0 = P(cr.t, cr.s + 10, 0);
   linea(g, b0.x, b0.y, b0.x, b0.y + 66, 'ct-hw');
   flecha(g, q0.x, q0.y + 66, b0.x, b0.y + 66, 'reaccion', 2.4);
-  txt(g, b0.x - 10, b0.y + 62, `Q = ${fmt(d.PB?.Q ?? NaN, 1)} t`, 'd-valor', 'end');
+  txt(g, b0.x - 10, b0.y + 84, `Q = ${fmt(d.PB?.Q ?? NaN, 1)} t`, 'd-valor', 'end');
   flecha(g, b0.x, b0.y + 126, b0.x, b0.y + 72, 'reaccion', 2.4);
   txt(g, b0.x - 6, b0.y + 122, `N = ${fmt(d.PB?.N ?? NaN, 0)} t`, 'd-valor', 'end');
   txt(g, b0.x - 6, b0.y + 136, 'reacciones en PB', 'd-eje', 'end');

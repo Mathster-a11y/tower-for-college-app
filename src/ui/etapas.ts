@@ -323,18 +323,32 @@ const rototrasl: Etapa = {
       seg.append(b2);
     });
     const textos: Record<Paso, string> = {
-      1: 'Como en la clase 5 (determinación gráfica): el J de cada tabique es un vector sobre el tabique (más grueso y más largo cuanto mayor es J). A la derecha, los J se ponen uno a continuación del otro, de izquierda a derecha (polígono de los J), y desde el polo O se trazan los rayos 1, 2, 3…; los tabiques sobre la misma recta de acción van seguidos, sin rayo entre ellos. Debajo de la planta se dibuja el funicular: el lado i es paralelo al rayo i y va de la recta de acción de un tabique a la del siguiente (mismo número en un círculo). El primer y el último lado se prolongan hasta cortarse en R: por R pasa la resultante ΣJ, que sube por el eje de inercia. Donde cruza el eje de inercia de la otra dirección está el centro de rigidez CR.',
+      1: 'Eje de inercia por el polígono funicular, como en la clase 5, con la notación de Bow. El J de cada tabique es un vector sobre el tabique (más grueso y más largo cuanto mayor es J). Los espacios entre las rectas de acción llevan letras a, b, c…, y cada J se nombra por los dos espacios que separa (ab, bc…). A la derecha, los J se ponen uno a continuación del otro (polígono de los J) y desde el polo O salen los rayos Oa, Ob, Oc… Debajo de la planta, el lado c del funicular es paralelo al rayo Oc y queda en el espacio c: tienen la misma letra y el mismo color. El primer y el último lado (punteados) se prolongan hasta cortarse en R; por R pasa la resultante ΣJ, que sube por el eje de inercia hasta el centro de rigidez CR.',
       2: 'Traslación: el viento W actúa en el eje de simetría y cada tabique toma una parte proporcional a su J: Wj = W · Jj / ΣJ. La flecha está sobre la recta de acción del tabique; su grosor es su J y su largo, la fuerza.',
       3: 'Rotación: como el eje de inercia no coincide con el eje de simetría, el viento gira la planta con Mt = W · e alrededor del CR. Cada tabique toma ± W · e · Jj · aj / ΣJt·aj² (aj: distancia al eje de inercia). Del lado del viento se suma (+) y del otro se resta (−). Los perpendiculares no toman traslación pero colaboran en la rotación.',
       4: 'Rototraslación = traslación ± rotación. En azul la parte de traslación; en violeta la de rotación, que se suma (+) o se resta (−).',
     };
     if (pasoN === 5) { centro3D(c, seg, dp); return; }
     c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, textos[paso]));
-    const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) });
+    // paso a paso de la funicular de los J: cada clic agrega un rayo y su lado (con la misma letra y color)
+    const nPares = new Set(dp.paralelos.map(x => x.pos.toFixed(2))).size + 1;
+    const hasta = estado.sub.funiHasta ? Math.min(nPares, Math.max(1, Number(estado.sub.funiHasta))) : undefined;
+    if (paso === 1) {
+      const ir = (k: number | undefined) => { estado.sub.funiHasta = k === undefined ? '' : String(k); estado.avisarPanel(); };
+      const bt = (t: string, titulo: string, f: () => void, des = false) => { const b = h('button', { type: 'button', class: 'mini', title: titulo }, t) as HTMLButtonElement; b.disabled = des; b.addEventListener('click', f); return b; };
+      const L = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? '?';
+      c.append(h('div', { class: 'fila-acciones controles3d' },
+        h('span', { class: 'nota' }, 'Construcción:'),
+        bt('◀', 'Quitar el último rayo y su lado', () => ir(Math.max(1, (hasta ?? nPares) - 1)), hasta === 1),
+        bt('▶ Paso a paso', 'Agregar el próximo rayo y su lado paralelo', () => ir(hasta === undefined ? 1 : Math.min(nPares, hasta + 1)), hasta === nPares),
+        bt('Todo', 'Ver la construcción completa', () => ir(undefined), hasta === undefined),
+        h('span', { class: 'nota' }, hasta === undefined ? 'Pasá el mouse por un rayo o un lado: se resaltan los dos.' : `Rayo O${L(hasta - 1)} y lado ${L(hasta - 1)} (${hasta} de ${nPares})${hasta === nPares ? ': el primer y el último lado se cortan en R' : ''}`)));
+    }
+    const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) }, { hasta: paso === 1 ? hasta : undefined });
     c.append(svg);
     const ley = h('div', { class: 'leyenda' });
     const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
-    ley.append(mu('var(--accent)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
+    ley.append(mu('var(--accent)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', paso === 1 ? 'eje de inercia y R' : 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
     c.append(ley);
   },
   nombreCentro: () => (estado.sub.pasoRoto === '5' ? `Torre 3D · rototraslación exagerada, viento ${estado.dir}` : `Planta · rototraslación, viento ${estado.dir}`),

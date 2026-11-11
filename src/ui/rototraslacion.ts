@@ -13,6 +13,7 @@
 import type { Muro } from '../engine/modelo';
 import { rectangulos, tipoDe } from '../engine/modelo';
 import { fmt } from './estado';
+import { activarResaltado, colorPar, letra } from './bow';
 import type { Tam } from './diagramas';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -70,7 +71,7 @@ export interface DatosRotoPlano {
 }
 export type Paso = 1 | 2 | 3 | 4;
 
-export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}): SVGSVGElement {
+export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number } = {}): SVGSVGElement {
   const id = `rt${nId++}`;
   const ancho = Math.max(420, tam.ancho ?? 640), alto = Math.max(420, tam.alto ?? 560);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico rototrasl', role: 'img',
@@ -134,8 +135,9 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   if (!coinciden) g.append(el('text', { x: X(0) + (derecha ? -4 : 4), y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': derecha ? 'end' : 'start' }, 'eje de simetría (W)'));
   g.append(el('line', { x1: xr, x2: xr, y1: Y(sTop), y2: Y(sBot), class: 'rt-inercia' }));
   // con los dos ejes juntos, el rótulo va debajo de la planta (arriba están los nombres de las piezas)
-  if (coinciden) g.append(el('text', { x: xr + 6, y: Y(-d.S / 2) + 16, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
-  else g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
+  // (en el paso 1 va debajo de R, más abajo)
+  if (coinciden && paso !== 1) g.append(el('text', { x: xr + 6, y: Y(-d.S / 2) + 16, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
+  else if (!coinciden) g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
   g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
@@ -163,14 +165,6 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     while (ocupados.some(o => Math.abs(o.x - x) < 46 && Math.abs(o.y - yy) < 12)) yy -= 12;
     ocupados.push({ x, y: yy });
     g.append(el('text', { x, y: yy, class: clase, 'text-anchor': ancla }, texto));
-  };
-
-  // número en un círculo chico: relaciona cada rayo con el lado del funicular paralelo a él
-  const numero = (x: number, y: number, i: number, ext: boolean) => {
-    const gg = el('g', { class: `rt-num${ext ? ' extremo' : ''}` });
-    gg.append(el('circle', { cx: x, cy: y, r: 6.5 }));
-    gg.append(el('text', { x, y: y + 3.3, 'text-anchor': 'middle' }, String(i)));
-    g.append(gg);
   };
 
   if (paso === 1) {
@@ -214,51 +208,78 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     const R = { x: X(tR), y: FY(vR1) };
     const E0 = { x: X(t0 - ext), y: FY(vE0) }, Em = { x: X(tm + ext), y: FY(vEm) };
 
-    // polígono de los J, a la derecha
+    // ---- notación de Bow: letras en los espacios entre rectas de acción (dentro de la planta, abajo)
+    const visible = (i: number) => opc.hasta === undefined || i < opc.hasta;
+    const bordesX = [verts[0].x - 26, ...verts.map(v => v.x), verts[m - 1].x + 26];
+    // debajo de la planta si no hay cota de e; si no, adentro; si dos letras quedan muy juntas, una baja un renglón
+    const yLetra = Math.abs(d.Xr) < 1e-3 ? Y(-d.S / 2) + 14 : Y(-d.S / 2) - 8;
+    let xPrev = -Infinity, alterna = false;
+    for (let i = 0; i <= m; i++) {
+      const xm = i === 0 ? verts[0].x - 14 : i === m ? verts[m - 1].x + 14 : (bordesX[i] + bordesX[i + 1]) / 2;
+      alterna = xm - xPrev < 18 ? !alterna : false;
+      xPrev = xm;
+      g.append(el('text', { x: xm, y: yLetra + (alterna ? 16 : 0), class: 'rt-letra', 'text-anchor': 'middle', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
+    }
+    // ---- polígono de los J, a la derecha: cada fuerza (grupo sobre una recta) se nombra por sus dos espacios
     const px = ancho - md + 44, pTop = ms + 22;
     const kf = Math.min((alto * 0.5) / W0, (md - 64) / Hp);
     const PY = (sAc: number) => pTop + sAc * kf;
     const O = { x: px + Hp * kf, y: pTop + (W0 / 2) * kf };
     g.append(el('text', { x: px - 10, y: pTop - 12, class: 'd-eje' }, 'polígono de los J'));
     let acc = 0;
-    orden.forEach(p => {
-      g.append(flecha(px, PY(acc), px, PY(acc + p.J), 1.8, 'rt-J', `${p.nombre}: J = ${fmt(p.J, 3)} m⁴`));
-      if (p.J * kf > 9) g.append(el('text', { x: px - 6, y: PY(acc + p.J / 2) + 4, class: 'd-eje', 'text-anchor': 'end' }, p.nombre));
-      acc += p.J;
+    orden.forEach(p => { g.append(flecha(px, PY(acc), px, PY(acc + p.J), 1.8, 'rt-J', `${p.nombre}: J = ${fmt(p.J, 3)} m⁴`)); acc += p.J; });
+    const rotIzq: number[] = [];
+    gruposJ.forEach((x, i) => {
+      let y = PY(Sg[i] + x.J / 2) + 4;
+      while (rotIzq.some(q => Math.abs(q - y) < 12)) y += 12;
+      rotIzq.push(y);
+      const tx = el('text', { x: px - 6, y, class: 'rt-letra chica neutra', 'text-anchor': 'end' }, `${letra(i)}${letra(i + 1)}`);
+      tx.append(el('title', {}, `Fuerza ${letra(i)}${letra(i + 1)}: J de ${x.ps.map(p => p.nombre).join(' + ')} = ${fmt(x.J, 3)} m⁴ (separa los espacios ${letra(i)} y ${letra(i + 1)})`));
+      g.append(tx);
     });
-    const numeros: { x: number; y: number }[] = [];
+    // rayos O·a, O·b…: cada uno con el color y la letra del lado del funicular paralelo a él
+    const letrasP: { x: number; y: number }[] = [];
     Sg.forEach((sAc, i) => {
-      const extremo = i === 0 || i === m;
-      g.append(el('line', { x1: px, y1: PY(sAc), x2: O.x, y2: O.y, class: extremo ? 'rt-rayo extremo' : 'rt-rayo' }));
-      for (const dx of [16, 32, 48, 64, 80, 96]) {
-        const rx = px + dx, ry = PY(sAc) + (O.y - PY(sAc)) * (dx / (O.x - px));
-        if (dx === 96 || !numeros.some(q => Math.hypot(q.x - rx, q.y - ry) < 14)) { numeros.push({ x: rx, y: ry }); numero(rx, ry, i + 1, extremo); break; }
-      }
+      if (!visible(i)) return;
+      const separa = i === 0 ? `antes de ${gruposJ[0].ps.map(p => p.nombre).join('+')}` : i === m ? `después de ${gruposJ[m - 1].ps.map(p => p.nombre).join('+')}` : `entre ${gruposJ[i - 1].ps.map(p => p.nombre).join('+')} y ${gruposJ[i].ps.map(p => p.nombre).join('+')}`;
+      const ray = el('line', { x1: px, y1: PY(sAc), x2: O.x, y2: O.y, class: 'rt-rayo-c', 'data-par': i, style: `stroke:${colorPar(i)}` });
+      ray.append(el('title', {}, `Rayo O${letra(i)} ∥ lado ${letra(i)} del funicular (espacio ${letra(i)}, ${separa})`));
+      g.append(ray);
+      // letra en el punto del polígono (corrida si choca con la anterior)
+      let lx = px + 8;
+      const ly = PY(sAc) + 4;
+      while (letrasP.some(q => Math.abs(q.y - ly) < 11 && Math.abs(q.x - lx) < 10)) lx += 11;      // se corre a la derecha
+      letrasP.push({ x: lx, y: ly });
+      g.append(el('text', { x: lx, y: ly, class: 'rt-letra chica', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
     });
     g.append(el('circle', { cx: O.x, cy: O.y, r: 3.5, class: 'rt-cr' }));
     g.append(el('text', { x: O.x + 6, y: O.y + 4, class: 'd-eje' }, 'O'));
-    g.append(el('text', { x: px - 10, y: PY(W0) + 22, class: 'd-eje' }, 'rayo i ∥ lado i'));
+    g.append(el('text', { x: px - 10, y: PY(W0) + 22, class: 'd-eje' }, 'rayo Oa ∥ lado a'));
 
-    // funicular: primer lado (desde afuera, por el primer vértice, hasta R), lados intermedios, último lado
-    g.append(el('line', { x1: E0.x, y1: E0.y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
-    g.append(el('line', { x1: Em.x, y1: Em.y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
-    if (m > 1) g.append(el('polyline', { points: verts.map(v => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' '), class: 'rt-funicular' }));
+    // ---- funicular: el lado i está en el espacio i, paralelo al rayo Oi; el primero y el último van punteados
+    const lados: [{ x: number; y: number }, { x: number; y: number }][] = [[E0, R]];
+    for (let i = 1; i < m; i++) lados.push([verts[i - 1], verts[i]]);
+    lados.push([Em, R]);
+    lados.forEach(([a2, b2], i) => {
+      if (!visible(i)) return;
+      const extremo = i === 0 || i === m;
+      const ln = el('line', { x1: a2.x, y1: a2.y, x2: b2.x, y2: b2.y, class: `rt-lado${extremo ? ' extremo' : ''}`, 'data-par': i, style: `stroke:${colorPar(i)}` });
+      ln.append(el('title', {}, `Lado ${letra(i)} ∥ rayo O${letra(i)}${extremo ? ' · lado extremo: se prolonga hasta cortarse en R' : ''}`));
+      g.append(ln);
+      // letra en el tramo (en los extremos, en la parte de afuera, antes del vértice)
+      const q = extremo ? { x: (a2.x + (i === 0 ? verts[0].x : verts[m - 1].x)) / 2, y: (a2.y + (i === 0 ? verts[0].y : verts[m - 1].y)) / 2 } : { x: (a2.x + b2.x) / 2, y: (a2.y + b2.y) / 2 };
+      if (extremo || Math.hypot(b2.x - a2.x, b2.y - a2.y) > 22) g.append(el('text', { x: Math.abs(q.x - R.x) < 12 ? R.x + 14 : q.x, y: q.y - 7, class: 'rt-letra', 'text-anchor': 'middle', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
+    });
     verts.forEach(v => g.append(el('circle', { cx: v.x, cy: v.y, r: 2.6, class: 'rt-vertice' })));
-    numero((E0.x + verts[0].x) / 2, (E0.y + verts[0].y) / 2 - 10, 1, true);
-    for (let i = 1; i < m; i++) {
-      const a2 = verts[i - 1], b2 = verts[i];
-      if (Math.hypot(b2.x - a2.x, b2.y - a2.y) > 24) {
-        const mx = (a2.x + b2.x) / 2;
-        numero(Math.abs(mx - R.x) < 12 ? R.x + 16 : mx, (a2.y + b2.y) / 2 - 10, i + 1, false);     // sin tapar la resultante
-      }
+    const todo = visible(m);
+    if (todo) {
+      // resultante: de R sube por el eje de inercia hasta el CR (como la recta azul de la clase)
+      g.append(el('line', { x1: R.x, x2: R.x, y1: R.y, y2: Y(d.Yr), class: 'rt-resultante' }));
+      g.append(flecha(R.x, R.y - 34, R.x, R.y - 3, 3, 'rt-J', `ΣJ = ${fmt(W0, 3)} m⁴`));
+      g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));
+      g.append(el('text', { x: R.x, y: R.y + 18, class: 'd-valor', 'text-anchor': 'middle' }, `R: ΣJ = ${fmt(W0, 2)} m⁴`));
+      g.append(el('text', { x: R.x, y: R.y + 31, class: 'd-eje', 'text-anchor': 'middle' }, Math.abs(tR) < 1e-3 ? 'sobre el eje de simetría: los dos ejes coinciden, solo traslación' : `a ${fmt(Math.abs(tR))} m del eje de simetría`));
     }
-    numero((Em.x + verts[m - 1].x) / 2, (Em.y + verts[m - 1].y) / 2 - 10, m + 1, true);
-    // resultante: de R sube por el eje de inercia hasta el CR (como la recta azul de la clase)
-    g.append(el('line', { x1: R.x, x2: R.x, y1: R.y, y2: Y(d.Yr), class: 'rt-resultante' }));
-    g.append(flecha(R.x, R.y - 34, R.x, R.y - 3, 3, 'rt-J', `ΣJ = ${fmt(W0, 3)} m⁴`));
-    g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));
-    g.append(el('text', { x: R.x, y: R.y + 18, class: 'd-valor', 'text-anchor': 'middle' }, `R: ΣJ = ${fmt(W0, 2)} m⁴`));
-    g.append(el('text', { x: R.x, y: R.y + 31, class: 'd-eje', 'text-anchor': 'middle' }, `a ${fmt(Math.abs(tR))} m del eje de simetría`));
   }
 
   if (paso >= 2) {
@@ -332,5 +353,8 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       g.append(el('text', { x: c.x + (horario ? -r - 6 : r + 6), y: c.y - r - 4, class: 'd-valor', 'text-anchor': horario ? 'end' : 'start' }, `Mt = ${fmt(Math.abs(d.Mt), 0)} tm`));
     }
   }
+  activarResaltado(svg);
+  // paso a paso: el último par agregado queda marcado
+  if (opc.hasta !== undefined) svg.querySelectorAll(`[data-par="${opc.hasta - 1}"]`).forEach(e => e.classList.add('ultimo'));
   return svg;
 }
