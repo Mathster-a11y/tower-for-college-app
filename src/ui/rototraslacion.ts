@@ -26,6 +26,25 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Attrs = {}, txt?: s
 };
 let nId = 0;
 
+/**
+ * Flecha dibujada en dos partes: el tronco (línea) termina donde empieza la punta (triángulo), así no se tapan.
+ * La punta es siempre bastante más ancha y larga que el tronco y lleva un borde fino del color del fondo, para que
+ * se distinga del tronco aunque el tronco sea grueso.
+ */
+function flecha(x1: number, y1: number, x2: number, y2: number, w: number, clase: string, titulo?: string): SVGGElement {
+  const g = el('g', { class: `rt-flecha-dib ${clase}` });
+  const L = Math.hypot(x2 - x1, y2 - y1);
+  const largoP = Math.max(9, w * 2.6), anchoP = Math.max(9, w * 3);
+  const ux = L > 0 ? (x2 - x1) / L : 0, uy = L > 0 ? (y2 - y1) / L : -1;
+  const lp = Math.min(largoP, L * 0.6 + 4);                                   // flechas cortas: punta proporcionada
+  const bx = x2 - ux * lp, by = y2 - uy * lp;                                 // base de la punta
+  if (L > lp) g.append(el('line', { x1, y1, x2: bx + ux * 0.5, y2: by + uy * 0.5, class: 'tronco', 'stroke-width': w }));
+  const nx = -uy * (anchoP / 2), ny = ux * (anchoP / 2);
+  g.append(el('polygon', { points: `${x2},${y2} ${bx + nx},${by + ny} ${bx - nx},${by - ny}`, class: 'punta' }));
+  if (titulo) g.append(el('title', {}, titulo));
+  return g;
+}
+
 export interface ElementoPlano {
   nombre: string;
   /** posición transversal al viento (paralelos) o en el sentido del viento (perpendiculares), en metros reales */
@@ -70,7 +89,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   const conPoligono = paso === 1;
   const mi = 34, md = conPoligono ? Math.min(220, ancho * 0.3) : 30, ms = 30;
   const altoFuni = conPoligono ? alto * 0.36 : 0;
-  const abajo = conPoligono ? altoFuni + 36 : 150;                           // lugar para las flechas que entran por barlovento
+  const abajo = conPoligono ? altoFuni + 36 : 196;                           // lugar para las flechas que entran por barlovento
   const tExt = Math.max(d.T / 2, ...d.paralelos.map(p => Math.abs(p.pos))) + 1;
   const k = Math.min((ancho - mi - md) / (2 * tExt), (alto - ms - abajo) / (d.S + 2));
   const cx = mi + (ancho - mi - md) / 2;
@@ -128,7 +147,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
 
   // ---------------------------------------------------------------- flechas por tabique
   const Jmax = Math.max(...d.paralelos.map(p => p.J), ...d.perpendiculares.map(p => p.J), 1e-9);
-  const grosor = (J: number) => 2 + 9 * Math.sqrt(J / Jmax);
+  const grosor = (J: number) => 1.5 + 3.5 * Math.sqrt(J / Jmax);           // tronco de 1,5 a 5 px según J
   const sCentro = (p: ElementoPlano) => {
     const A = p.muros.reduce((s, m) => s + (m.largo * m.espesor), 0) || 1;
     return p.muros.reduce((s, m) => s + m.largo * m.espesor * ts(m).s, 0) / A;
@@ -151,9 +170,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     d.paralelos.forEach(p => {
       const x = X(p.pos), yc = Y(sCentro(p)), L = Math.max(10, (p.J / Jmax) * Lmax);
       g.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(sBot), class: 'rt-accion' }));
-      const v = el('line', { x1: x, x2: x, y1: yc - L / 2, y2: yc + L / 2, class: 'rt-J', 'stroke-width': grosor(p.J), 'marker-end': `url(#${id}-J)` });
-      v.append(el('title', {}, tip(p)));
-      g.append(v);
+      g.append(flecha(x, yc - L / 2, x, yc + L / 2, grosor(p.J), 'rt-J', tip(p)));
       rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, 2)}`);
     });
     // polígono de los J (vertical), polo y rayos; funicular debajo de la planta, a la escala de la planta, con los
@@ -170,9 +187,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     const O = { x: px + Hp * kf, y: pTop + (cons.W / 2) * kf };
     g.append(el('text', { x: px - 10, y: pTop - 12, class: 'd-eje' }, 'polígono de los J'));
     cons.fuerzas.forEach((f, i) => {
-      const v = el('line', { x1: px, x2: px, y1: PY(cons.S[i]), y2: PY(cons.S[i + 1]), class: 'rt-J', 'stroke-width': 2.5, 'marker-end': `url(#${id}-J)` });
-      v.append(el('title', {}, `${f.nivel}: J = ${fmt(f.F, 3)} m⁴`));
-      g.append(v);
+      g.append(flecha(px, PY(cons.S[i]), px, PY(cons.S[i + 1]), 1.8, 'rt-J', `${f.nivel}: J = ${fmt(f.F, 3)} m⁴`));
       if ((cons.S[i + 1] - cons.S[i]) * kf > 9) g.append(el('text', { x: px - 6, y: (PY(cons.S[i]) + PY(cons.S[i + 1])) / 2 + 4, class: 'd-eje', 'text-anchor': 'end' }, f.nivel));
     });
     cons.S.forEach((sAc, i) => g.append(el('line', { x1: px, y1: PY(sAc), x2: O.x, y2: O.y, class: i === 0 || i === cons.S.length - 1 ? 'rt-rayo extremo' : 'rt-rayo' })));
@@ -189,7 +204,8 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     g.append(el('line', { x1: verts[0].x, y1: verts[0].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
     g.append(el('line', { x1: verts[verts.length - 1].x, y1: verts[verts.length - 1].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
     g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));
-    g.append(el('text', { x: R.x + 6, y: R.y + 14, class: 'd-valor' }, `resultante de los J: ΣJ = ${fmt(cons.W, 2)} m⁴, a ${fmt(Math.abs(cons.zR))} m del eje de simetría`));
+    g.append(el('text', { x: R.x, y: R.y + 18, class: 'd-valor', 'text-anchor': 'middle' }, `resultante de los J: ΣJ = ${fmt(cons.W, 2)} m⁴`));
+    g.append(el('text', { x: R.x, y: R.y + 31, class: 'd-eje', 'text-anchor': 'middle' }, `sobre el eje de inercia, a ${fmt(Math.abs(cons.zR))} m del eje de simetría`));
   }
 
   if (paso >= 2) {
@@ -198,30 +214,30 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     const Fmax = Math.max(1e-9, ...(paso === 2 ? d.paralelos.map(p => Math.abs(p.tras))
       : paso === 3 ? [...d.paralelos, ...d.perpendiculares].map(p => Math.abs(p.rot))
         : d.paralelos.map(p => Math.max(Math.abs(p.tras), Math.abs(p.total)))));
-    const Lmax = abajo - 62;
+    const Lmax = abajo - 76;
     const base = Y(-d.S / 2) + 4;
     // piezas en la misma recta de acción: flechas una al lado de la otra
     const grupos = new Map<string, ElementoPlano[]>();
     d.paralelos.forEach(p => { const kk = p.pos.toFixed(2); grupos.set(kk, [...(grupos.get(kk) ?? []), p]); });
     const corr = new Map<ElementoPlano, number>();
-    grupos.forEach(ps => { const ws = ps.map(p => grosor(p.J) + 3); const tot = ws.reduce((a, b) => a + b, 0); let acc = -tot / 2; ps.forEach((p, i) => { corr.set(p, acc + ws[i] / 2); acc += ws[i]; }); });
+    grupos.forEach(ps => { const ws = ps.map(p => Math.max(9, grosor(p.J) * 3) + 4); const tot = ws.reduce((a, b) => a + b, 0); let acc = -tot / 2; ps.forEach((p, i) => { corr.set(p, acc + ws[i] / 2); acc += ws[i]; }); });
     d.paralelos.forEach(p => {
       const x = X(p.pos) + (corr.get(p) ?? 0), w = grosor(p.J);
       const L = (f: number) => (Math.abs(f) / Fmax) * Lmax;
       const g2 = el('g', { class: 'rt-flecha', 'data-pieza': p.nombre });
       g2.append(el('title', {}, tip(p)));
       g2.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(d.S / 2), class: 'rt-accion' }));
-      if (paso === 2) g2.append(el('line', { x1: x, x2: x, y1: base + L(p.tras) + 2, y2: base, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
-      if (paso === 3 && Math.abs(p.rot) > Fmax * 1e-3) g2.append(el('line', { x1: x, x2: x, y1: p.rot > 0 ? base + L(p.rot) + 2 : base, y2: p.rot > 0 ? base : base + L(p.rot) + 2, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` }));
+      if (paso === 2) g2.append(flecha(x, base + L(p.tras) + 2, x, base, w, 'rt-tras'));
+      if (paso === 3 && Math.abs(p.rot) > Fmax * 1e-3) g2.append(p.rot > 0 ? flecha(x, base + L(p.rot) + 2, x, base, w, 'rt-rot') : flecha(x, base, x, base + L(p.rot) + 2, w, 'rt-rot'));
       if (paso === 4) {
-        // la flecha llena es el total; la punteada, lo que tomaría solo por traslación; el tramo violeta es la rotación
+        // la flecha es el total; al costado (solo si la diferencia se ve), una línea fina punteada con lo que tomaría
+        // solo por traslación y, del otro lado, el tramo violeta que la rotación suma o resta
         const lt = L(p.tras), lT = L(p.total);
-        g2.append(el('line', { x1: x, x2: x, y1: base + lt, y2: base, class: 'rt-fantasma', 'stroke-width': w }));
-        if (p.total >= 0) g2.append(el('line', { x1: x, x2: x, y1: base + lT + 2, y2: base, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
-        else g2.append(el('line', { x1: x, x2: x, y1: base, y2: base + lT + 2, class: 'rt-tras', 'stroke-width': w, 'marker-end': `url(#${id}-tras)` }));
-        if (Math.abs(p.rot) > Fmax * 1e-3) {
-          const y1 = base + Math.min(lt, Math.max(0, p.total >= 0 ? lT : 0)), y2 = base + Math.max(lt, p.total >= 0 ? lT : 0);
-          g2.append(el('line', { x1: x + w / 2 + 3, x2: x + w / 2 + 3, y1, y2, class: `rt-rot${p.rot < 0 ? ' resta' : ''}`, 'stroke-width': 3 }));
+        g2.append(p.total >= 0 ? flecha(x, base + lT + 2, x, base, w, 'rt-tras') : flecha(x, base, x, base + lT + 2, w, 'rt-tras'));
+        if (Math.abs(lt - (p.total >= 0 ? lT : -lT)) > 5) {
+          const xa = x - Math.max(9, w * 3) / 2 - 3, xb = x + Math.max(9, w * 3) / 2 + 3;
+          g2.append(el('line', { x1: xa, x2: xa, y1: base + lt + 2, y2: base, class: 'rt-fantasma' }));
+          g2.append(el('line', { x1: xb, x2: xb, y1: base + Math.min(lt, Math.max(lT, 0)) + 2, y2: base + Math.max(lt, lT) + 2, class: `rt-rot-tramo${p.rot < 0 ? ' resta' : ''}` }));
         }
       }
       g.append(g2);
@@ -242,18 +258,16 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       if (Math.abs(p.rot) < Fmax * 1e-3) return;
       const tc = p.tc ?? (p.muros.length ? p.muros.reduce((x, m) => x + ts(m).t * m.largo * m.espesor, 0) / p.muros.reduce((x, m) => x + m.largo * m.espesor, 0) : 0);
       const sentido = Math.sign(p.pos - d.Yr) * (horario ? 1 : -1) || 1;
-      const L = Math.max(14, (Math.abs(p.rot) / Fmax) * Lmax), w = Math.min(7, grosor(p.J));
-      const yc = Y(p.pos) - (w / 2 + 5);                                      // apenas por encima del muro, sin taparlo
+      const L = Math.max(16, (Math.abs(p.rot) / Fmax) * Lmax), w = grosor(p.J);
+      const yc = Y(p.pos) - 9;                                                // apenas por encima del muro, sin taparlo
       const x1 = X(tc) - (sentido * L) / 2, x2 = X(tc) + (sentido * L) / 2;
-      const l = el('line', { x1, x2, y1: yc, y2: yc, class: 'rt-rot', 'stroke-width': w, 'marker-end': `url(#${id}-rot)` });
-      l.append(el('title', {}, tip(p, true) + `\nel giro lo empuja hacia la ${sentido > 0 ? 'derecha' : 'izquierda'}`));
-      g.append(l);
+      g.append(flecha(x1, yc, x2, yc, w, 'rt-rot', tip(p, true) + `\nel giro lo empuja hacia la ${sentido > 0 ? 'derecha' : 'izquierda'}`));
       rotulo(X(tc), yc - 8, `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
     });
     // viento y momento de rotación
     // W en el eje de simetría, en la franja de las flechas (es la fuerza que las piezas se reparten)
     const yW = base + Lmax;
-    g.append(el('line', { x1: X(0), x2: X(0), y1: yW, y2: yW - Math.min(Lmax, 46), class: 'rt-W', 'marker-end': `url(#${id}-W)` }));
+    g.append(flecha(X(0), yW, X(0), yW - Math.min(Lmax, 46), 2.5, 'rt-W'));
     rotulo(X(0), yW + 14, `W = ${fmt(d.Q, 1)} t`, 'd-valor');
     if (paso >= 3 && gira) {
       // arco de 270° desde abajo: horario pasa por la izquierda y termina a la derecha bajando; antihorario, al revés

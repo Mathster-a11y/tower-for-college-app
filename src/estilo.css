@@ -382,6 +382,18 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-W { stroke: var(--carga); stroke-width: 3; }
 .rototrasl .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 2; }
 .rototrasl .rt-flecha:hover line { filter: drop-shadow(0 0 3px var(--elegido)); }
-.rototrasl .rt-fantasma { stroke: var(--accent); stroke-opacity: .28; stroke-dasharray: 4 3; }
+.rototrasl .rt-fantasma { stroke: var(--accent); stroke-width: 1.3; stroke-dasharray: 3 3; }
+.rototrasl .rt-rot-tramo { stroke: var(--corte); stroke-width: 3; }
+.rototrasl .rt-rot-tramo.resta { stroke-dasharray: 3 2; }
 .grafico .d-reves { fill: none; stroke: var(--compresion); stroke-width: 2; }
 .planta .cr { fill: var(--elegido); stroke: var(--lienzo); stroke-width: 1.5; }
+/* flechas de la rototraslación: tronco fino y punta bien marcada */
+.rototrasl .rt-flecha-dib .tronco { stroke-linecap: butt; }
+.rototrasl .rt-flecha-dib .punta { stroke: var(--lienzo); stroke-width: 1; stroke-linejoin: round; }
+.rototrasl .rt-J .tronco, .rototrasl .rt-tras .tronco { stroke: var(--accent); }
+.rototrasl .rt-J .punta, .rototrasl .rt-tras .punta { fill: var(--accent); }
+.rototrasl .rt-rot .tronco { stroke: var(--corte); }
+.rototrasl .rt-rot .punta { fill: var(--corte); }
+.rototrasl .rt-W .tronco { stroke: var(--carga); }
+.rototrasl .rt-W .punta { fill: var(--carga); }
+.rototrasl g.rt-flecha:hover .tronco { filter: drop-shadow(0 0 2px var(--elegido)); }
