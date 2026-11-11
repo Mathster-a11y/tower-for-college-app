@@ -19,7 +19,9 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true };
+  capas = { losas: true, viento: true, fuera: true, deformada: false };
+  /** rototraslación en 3D: exageración elegida (null = automática), torre sin deformar y animación */
+  roto3d: { exag: number | null; original: boolean; animar: boolean } = { exag: null, original: true, animar: false };
   /** pieza elegida en Flexión */
   piezaFlex: string | null = null;
   /** cota del nivel cuya planta se muestra (null = PB) */

@@ -3,7 +3,7 @@ import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
 import { cantidadAvisos } from './ui/paneles';
-import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, type Etapa } from './ui/etapas';
+import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, chip, h } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, ejemploAsimetrico, proyectoVacio, type Proyecto } from './engine/modelo';
@@ -105,7 +105,7 @@ function dibujarAvance() {
 }
 function dibujarCapas() {
   const c = $('capas');
-  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)']];
+  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ['deformada', 'Deformada (exagerada)', 'var(--deformada)']];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
     b.style.setProperty('--c', col);
@@ -328,7 +328,7 @@ $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.ta
 estado.suscribir(dibujarTodo);
 estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'planta') dibujarCentro(); });
 montarPlanta($('vista-planta'));
-montar3D($('vista-3d'));
+montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
 $('b-encuadrar').addEventListener('click', () => $('vista-3d').querySelector('canvas')?.dispatchEvent(new MouseEvent('dblclick')));
 new ResizeObserver(() => {
   const l = $('lienzo');

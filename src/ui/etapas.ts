@@ -9,7 +9,8 @@ import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelPr
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
-import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, type PuntoAltura } from '../engine/diagramas';
+import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
+import { montar3D, exageracionAuto } from './vista3d';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
 import { TENSION_ADM, type Control } from '../engine/verificaciones';
@@ -312,10 +313,11 @@ const rototrasl: Etapa = {
   centro(c, tam) {
     const d = datos();
     const dp = datosRotoPlano(d);
-    const paso = (Number(estado.sub.pasoRoto) || 1) as Paso;
+    const pasoN = Number(estado.sub.pasoRoto) || 1;
+    const paso = Math.min(4, pasoN) as Paso;
     const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Paso' });
-    (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación'] as const).forEach((t, i) => {
-      const b2 = h('button', { type: 'button', 'aria-pressed': String(paso === i + 1) }, t);
+    (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación', '5 · En 3D'] as const).forEach((t, i) => {
+      const b2 = h('button', { type: 'button', 'aria-pressed': String(pasoN === i + 1) }, t);
       b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
       seg.append(b2);
     });
@@ -325,6 +327,7 @@ const rototrasl: Etapa = {
       3: 'Rotación: como el eje de inercia no coincide con el eje de simetría, el viento gira la planta con Mt = W · e alrededor del CR. Cada tabique toma ± W · e · Jj · aj / ΣJt·aj² (aj: distancia al eje de inercia). Del lado del viento se suma (+) y del otro se resta (−). Los perpendiculares no toman traslación pero colaboran en la rotación.',
       4: 'Rototraslación = traslación ± rotación. En azul la parte de traslación; en violeta la de rotación, que se suma (+) o se resta (−).',
     };
+    if (pasoN === 5) { centro3D(c, seg, dp); return; }
     c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, textos[paso]));
     const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) });
     c.append(svg);
@@ -333,9 +336,76 @@ const rototrasl: Etapa = {
     ley.append(mu('var(--accent)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
     c.append(ley);
   },
-  nombreCentro: () => `Planta · rototraslación, viento ${estado.dir}`,
+  nombreCentro: () => (estado.sub.pasoRoto === '5' ? `Torre 3D · rototraslación exagerada, viento ${estado.dir}` : `Planta · rototraslación, viento ${estado.dir}`),
   estado: () => (estado.calculo.asig?.piezas.length ? (grupoControles(['Reparto']).some(c => c.estado === 'no verifica') ? 'revisar' : 'completa') : 'pendiente'),
 };
+
+/**
+ * Rototraslación en altura para el 3D: la deformada de la etapa Rigidez (δ en cada nivel, con el J de cada piso)
+ * y el giro θ = −δ·e·ΣJ/ΣJt·a² alrededor del CR, con los mismos valores que la planta (fuente elegida).
+ */
+export function datosRoto3D(): Rototraslacion3D | null {
+  try {
+    const d = datos();
+    if (!d.asig?.piezas.length) return null;
+    const dp = datosRotoPlano(d);
+    const rg = rigidez(d.R, d.p.hormigon || 'H30').find(x => x.dir === d.dir)!;
+    const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+    const Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
+    const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
+    const r = rototraslacion3D(def, d.dir, dp.Xr, dp.Yr, dp.SJ, dp.SJa2);
+    return r.niveles.length && isFinite(r.dTop) ? r : null;
+  } catch { return null; }
+}
+
+/** visor 3D grande del paso 5 de la rototraslación: se crea una vez y se vuelve a poner en el centro */
+let visorRoto: HTMLElement | null = null;
+function visor3DRoto(): HTMLElement {
+  if (!visorRoto) {
+    visorRoto = h('div', { class: 'vista3d grande' });
+    const v = visorRoto;
+    requestAnimationFrame(() => montar3D(v, { deformada: () => true, roto: datosRoto3D, rotulo: true }));
+  }
+  return visorRoto;
+}
+
+/** Paso 5: la torre en 3D con la rototraslación exagerada, la torre sin deformar y el eje del CR. */
+function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosRotoPlano>) {
+  const r = datosRoto3D();
+  const p = estado.proyecto;
+  const B = p.niveles.reduce<number>((x, n) => n.B ?? x, 20), L = p.niveles.reduce<number>((x, n) => n.L ?? x, 16);
+  const auto = r ? exageracionAuto(r, B, L) : 1;
+  const f = estado.roto3d.exag ?? auto;
+  const gira = !!r && Math.abs(r.thTop) > 1e-12;
+  const texto = !r ? 'Todavía no hay piezas para deformar la torre.'
+    : `Versión exagerada (× ${fmt(f, 0)}) de cómo se mueve la torre con el viento ${dp.dir}. Cada piso se traslada δ(z) en el sentido del viento (la deformada de la etapa Rigidez) ` +
+      (gira ? `y gira alrededor del CR (eje naranja) un ángulo θ(z) = δ(z) · e · ΣJ / ΣJt·a², en sentido ${r.thTop < 0 ? 'horario' : 'antihorario'} visto desde arriba. Así cada tabique se corre δ·(1 ± e·ΣJ·a/ΣJt·a²): los del lado del viento más (+) y los del otro lado menos (−), como en el reparto de la rototraslación.`
+        : 'y no gira: el eje de inercia coincide con el eje de simetría, la planta solo se traslada.') +
+      ' En trazos, la torre sin deformar.';
+  const exag = h('input', { type: 'range', min: '0', max: '1', step: '0.01', 'aria-label': 'Exageración' }) as HTMLInputElement;
+  // escala logarítmica de ×(auto/10) a ×(auto·10)
+  exag.value = String((Math.log10(f / auto) + 1) / 2);
+  const val = h('span', { class: 'mono' }, `× ${fmt(f, 0)}`);
+  exag.addEventListener('input', () => { const x = auto * 10 ** (Number(exag.value) * 2 - 1); const v2 = Number(x.toPrecision(2)); val.textContent = `× ${fmt(v2, 0)}`; });
+  exag.addEventListener('change', () => { estado.roto3d.exag = Number((auto * 10 ** (Number(exag.value) * 2 - 1)).toPrecision(2)); estado.avisarPanel(); });
+  const bAuto = h('button', { type: 'button', class: 'mini' }, 'automática');
+  bAuto.addEventListener('click', () => { estado.roto3d.exag = null; estado.avisarPanel(); });
+  const orig = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d.original) }, h('i', {}), 'Torre sin deformar');
+  (orig.firstChild as HTMLElement).style.setProperty('--c', 'var(--ink2)');
+  orig.addEventListener('click', () => { estado.roto3d.original = !estado.roto3d.original; estado.avisarPanel(); });
+  const anim = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d.animar) }, h('i', {}), 'Animar ráfaga');
+  (anim.firstChild as HTMLElement).style.setProperty('--c', 'var(--carga)');
+  anim.addEventListener('click', () => { estado.roto3d.animar = !estado.roto3d.animar; anim.setAttribute('aria-pressed', String(estado.roto3d.animar)); });
+  c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, texto),
+    h('div', { class: 'fila-acciones controles3d' }, h('label', { class: 'campo-linea' }, 'Exageración ', exag, val), bAuto, orig, anim));
+  c.append(visor3DRoto());
+  if (r) {
+    const ley = h('div', { class: 'leyenda' });
+    const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
+    ley.append(mu('var(--elegido)', 'eje vertical por el CR (se traslada, no gira)'), mu('var(--corte)', 'giro de la azotea'), mu('var(--carga)', 'viento W'), mu('var(--ink2)', 'torre sin deformar'));
+    c.append(ley);
+  }
+}
 
 /** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
 function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla' } {

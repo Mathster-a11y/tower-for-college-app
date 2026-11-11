@@ -28,6 +28,8 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] **Tubos rectangulares y circulares** como elementos (los rectangulares en las columnas asimétricas, con el J exacto de la caja)
 - [x] **Verificación funicular gráfica**: polígono de fuerzas con polo y rayos, polígono funicular en el alzado (da hw), W + G y tercio medio, línea de presiones
 - [x] **Plantas por piso**: «Desde» y «Hasta» de cada muro, planta de cada nivel, 3D por tramos, ΣJ por nivel en la deformada
+- [x] **Funicular de los J como en la clase 5**: J de izquierda a derecha, rayos y lados numerados, primer y último lado prolongados hasta R, resultante que sube al CR
+- [x] **Rototraslación en 3D**: cada piso se traslada δ(z) y gira θ(z) = −δ·e·ΣJ/ΣJt·a² alrededor del CR (exagerado, con torre sin deformar en trazos, animación y capa «Deformada» en la axonometría)
 
 - [x] **Consistencia matemática.** Pruebas cruzadas entre módulos (J de la hoja = J del dibujo, flexocompresión = hoja Flex con los mismos datos, ΣQ, ΣM, funicular = M,NyQ). Corregido el solape alma–ala en el J y el J mínimo según el hormigón.
 - [x] **Interfaz con el sistema de diseño de la app Truss.**

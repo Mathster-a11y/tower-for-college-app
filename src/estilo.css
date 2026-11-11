@@ -403,3 +403,13 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-num.extremo circle { stroke: var(--elegido); stroke-width: 1.2; }
 .rototrasl .rt-num.extremo text { fill: var(--ink); }
 .rototrasl .rt-vertice { fill: var(--elegido); }
+/* rototraslación en 3D */
+.vista3d { position: relative; }
+.vista3d.grande { height: clamp(380px, 62vh, 760px); border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; background: var(--lienzo); }
+.vista3d.grande canvas { display: block; width: 100%; height: 100%; }
+.info3d { position: absolute; left: 8px; bottom: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--edge); font: 11px/1.4 var(--mono); color: var(--ink); pointer-events: none; }
+.info3d b { color: var(--deformada); }
+.controles3d { flex-wrap: wrap; gap: 8px; align-items: center; }
+.campo-linea { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.campo-linea input[type=range] { width: 160px; accent-color: var(--accent); }
+.mono { font-family: var(--mono); }
