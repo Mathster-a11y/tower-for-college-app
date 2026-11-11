@@ -26,7 +26,7 @@ export function montarPlanta(cont: HTMLElement) {
   // leyenda de colores (los de la planilla)
   const ley = document.createElement('div');
   ley.className = 'leyenda leyenda-planta';
-  ([['alma', 'alma'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna circ.'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
+  ([['alma', 'alma (izq.)'], ['alma der.', 'alma der.'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna circ.'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
     const sp = document.createElement('span'); const i = document.createElement('i'); i.className = 'caja'; i.style.background = COLORES[k]; sp.append(i, t); ley.append(sp);
   });
   cont.appendChild(ley);
@@ -143,7 +143,7 @@ export function montarPlanta(cont: HTMLElement) {
     panelCalco.append(tit, campo('ancho (m)', 'ancho', '0.1', '0.1'), campo('centro x', 'x', '0.05'), campo('centro y', 'y', '0.05'), campo('opacidad', 'opacidad', '0.05', '0.05', '1'), cal, quitar);
   }
   const nuevoId = () => { let k = 1; while (estado.proyecto.muros.some(m => m.id === `M${k}`)) k++; return `M${k}`; };
-  let arrastre: { id: string; x0: number; y0: number; mx: number; my: number } | null = null;
+  let arrastre: { id: string; x0: number; y0: number; mx: number; my: number; otros: { id: string; x: number; y: number }[] } | null = null;
   let escala = 20, ox = 0, oy = 0;
 
   const aMundo = (ev: PointerEvent) => {
@@ -239,7 +239,8 @@ export function montarPlanta(cont: HTMLElement) {
       const { ax: dx, ay: dy } = huella(m);
       const t = tipoDe(m);
       const esta = presenteEn(m, zN, zFund, zTop);
-      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id ? ' sel' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente'), 'data-id': m.id, tabindex: 0 });
+      const grupoSel = !!m.grupo && p.muros.find(x => x.id === estado.seleccion)?.grupo === m.grupo;
+      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id ? ' sel' : grupoSel ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente'), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
       if (t === 'tubo-circ') {
         forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.largo / 2) * escala, fill: COLORES[papel] }));
@@ -265,7 +266,7 @@ export function montarPlanta(cont: HTMLElement) {
         ultimoEspesor = m.espesor;
         estado.seleccion = m.id;
         const q = aMundo(ev);
-        arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y };
+        arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y, otros: m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo && o.id !== m.id).map(o => ({ id: o.id, x: o.x, y: o.y })) : [] };
         try { svg.setPointerCapture(ev.pointerId); } catch { /* puntero sintético: se arrastra igual */ }
         estado.cambiar();
       });
@@ -346,6 +347,9 @@ export function montarPlanta(cont: HTMLElement) {
     if (!m) return;
     m.x = +snap(arrastre.x0 + q.x - arrastre.mx).toFixed(2);
     m.y = +snap(arrastre.y0 + q.y - arrastre.my).toFixed(2);
+    // el grupo se mueve entero
+    const dx = m.x - arrastre.x0, dy = m.y - arrastre.y0;
+    arrastre.otros.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(2); w.y = +(o.y + dy).toFixed(2); } });
     dibujar();
   });
   const soltar = () => { if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };

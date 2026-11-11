@@ -51,11 +51,20 @@ export interface Muro {
   /** cota donde arranca el muro (vacío = en la fundación) y donde termina (vacío = en la azotea) */
   zDesde?: number | null;
   zHasta?: number | null;
+  /**
+   * papel del muro en el molde de la hoja J, elegido a mano para cada viento (vacío = el que propone la app):
+   * alma (izquierda), alma der., ala sup., ala inf. o fuera (no entra al molde)
+   */
+  rolA?: RolMolde | '';
+  rolB?: RolMolde | '';
+  /** grupo al que pertenece (pieza armada como un elemento: se mueve, gira y espeja entera) */
+  grupo?: string;
   /** (versiones anteriores) columna circular: se convierte en «tubo-circ» al abrir el proyecto */
   circular?: { D: number; d: number } | null;
 }
 
 export type TipoElemento = 'tabique' | 'tubo-rect' | 'tubo-circ';
+export type RolMolde = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'fuera';
 export const tipoDe = (m: Muro): TipoElemento => m.tipo ?? (m.circular ? 'tubo-circ' : 'tabique');
 
 /** Convierte datos de versiones anteriores (columna circular con D y d) al modelo actual. */

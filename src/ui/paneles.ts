@@ -1,7 +1,8 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
 import { dibujoPerfil } from './perfil';
 import { estado, fmt, COLORES } from './estado';
-import { tipoDe, type Muro, type Nivel, type TipoElemento } from '../engine/modelo';
+import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
+import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
 import { TENSION_ADM } from '../engine/verificaciones';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
@@ -118,6 +119,66 @@ export function panelNiveles(c: H) {
 
 // ------------------------------------------------------------------ Muros
 let contador = 1;
+const avisoPanel = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+const ROLES_ALMA: RolMolde[] = ['alma', 'alma der.', 'fuera'], ROLES_ALA: RolMolde[] = ['ala sup.', 'ala inf.', 'fuera'];
+
+/**
+ * Grupos: cada pieza armada como un elemento, con sus muros. Cada muro muestra el color de su columna en la hoja J
+ * (como los dibujos debajo de las tablas de tabiques) y un selector de papel por viento: «auto» deja el que propone
+ * la app. Abajo, el J del molde contra el J de la sección real.
+ */
+function seccionGrupos(c: H) {
+  const p = estado.proyecto, asig = estado.calculo.asig;
+  const nombres = [...new Set(p.muros.map(m => m.grupo).filter(Boolean) as string[])];
+  if (!nombres.length) {
+    c.append(h('p', { class: 'nota chica' }, 'Grupos: elegí un muro de una pieza y apretá «Agrupar pieza» para manejarla como un elemento (mover, girar, espejar) y elegir el papel de cada muro en la hoja J.'));
+    return;
+  }
+  const selGrupo = p.muros.find(m => m.id === estado.seleccion)?.grupo;
+  const sec = seccion('Grupos (piezas como un elemento)');
+  nombres.forEach(g => {
+    const ms = p.muros.filter(m => m.grupo === g);
+    const pz = (d: 'A' | 'B') => asig?.piezas.find(x => x.dir === d && x.muros.includes(ms[0].id));
+    const resumen = (d: 'A' | 'B') => { const x = pz(d); if (!x) return `${d}: —`; const dif = x.Jreal ? (100 * ((x.Jhoja ?? 0) - x.Jreal)) / x.Jreal : 0; return `${d}: ${x.molde} · J ${fmt(x.Jhoja ?? NaN, 3)} (real ${fmt(x.Jreal ?? NaN, 3)}${Math.abs(dif) > 0.5 ? `, ${dif > 0 ? '+' : '−'}${fmt(Math.abs(dif), 0)} %` : ''})`; };
+    const det = h('details', { class: 'grupo-muros' + (selGrupo === g ? ' sel' : '') });
+    if (selGrupo === g) det.setAttribute('open', '');
+    det.append(h('summary', {}, h('b', {}, g), ` · ${ms.length} muros · ${resumen('A')} · ${resumen('B')}`));
+    const t = h('table', { class: 'tabla compacta' });
+    t.append(h('thead', {}, h('tr', {}, ...['Muro', 'largo × esp.', 'papel en la hoja J'].map(x => h('th', {}, x)))));
+    const tb = h('tbody');
+    ms.forEach(m => {
+      const selector = (d: 'A' | 'B') => {
+        const paralelo = (d === 'A') === (m.dir === 'Y');
+        const actual = (d === 'A' ? m.rolA : m.rolB) || '';
+        const auto = asig?.papeles[m.id]?.[d] ?? '';
+        const sel = h('select', { 'aria-label': `Papel de ${m.id} en el viento ${d}` }) as HTMLSelectElement;
+        sel.append(h('option', { value: '' }, `auto (${auto})`), ...(paralelo ? ROLES_ALMA : ROLES_ALA).map(r => h('option', { value: r }, r)));
+        sel.value = actual;
+        sel.style.setProperty('--c', COLORES[auto] ?? 'transparent');
+        sel.addEventListener('change', () => estado.cambiar(() => { const v = sel.value as RolMolde | ''; if (d === 'A') m.rolA = v; else m.rolB = v; }));
+        return h('div', { class: 'papel-dir' }, h('span', { class: 'dir' }, d), h('span', { class: 'caja-papel', style: `background:${COLORES[auto] ?? '#fff'}` }), sel);
+      };
+      const tr = h('tr', { class: estado.seleccion === m.id ? 'sel' : '' }, h('td', {}, m.id), h('td', { class: 'n' }, `${fmt(m.largo)} × ${fmt(m.espesor)}`), h('td', {}, selector('A'), selector('B')));
+      tr.addEventListener('click', ev => { if ((ev.target as HTMLElement).tagName !== 'SELECT') estado.elegir(m.id); });
+      tb.append(tr);
+    });
+    t.append(tb);
+    const acc = h('div', { class: 'fila-acciones' });
+    const b = (txt: string, titulo: string, f: () => void) => { const x = h('button', { type: 'button', class: 'mini', title: titulo }, txt); x.addEventListener('click', () => estado.cambiar(f)); return x; };
+    acc.append(
+      b('Girar 90°', 'Gira el grupo alrededor de su baricentro (los papeles elegidos a mano se borran: un alma pasa a ser ala)', () => { p.muros = girarGrupo(p.muros, g); }),
+      b('Espejar ↔', 'Espeja el grupo respecto de un eje vertical por su baricentro', () => { p.muros = espejarGrupo(p.muros, g, 'x'); }),
+      b('Espejar ↕', 'Espeja el grupo respecto de un eje horizontal por su baricentro', () => { p.muros = espejarGrupo(p.muros, g, 'y'); }),
+      b('Papeles automáticos', 'Vuelve a los papeles que propone la app en los dos vientos', () => { p.muros.forEach(m => { if (m.grupo === g) { m.rolA = ''; m.rolB = ''; } }); }),
+      b('Desagrupar', 'Los muros quedan sueltos (en la misma pieza)', () => { p.muros = desagrupar(p.muros, g); }),
+    );
+    const avisosG = [...(pz('A')?.avisos ?? []).map(a => `A: ${a}`), ...(pz('B')?.avisos ?? []).map(a => `B: ${a}`)].filter(a => !a.includes('Nota: el alma'));
+    det.append(h('div', { class: 'scroll' }, t), acc, ...avisosG.map(a => h('p', { class: a.includes('Nota:') ? 'nota chica' : 'aviso-linea' }, a)));
+    sec.cuerpo.append(det);
+  });
+  c.append(sec.el);
+  void armarPiezas;
+}
 function nuevoMuro(): Muro {
   const p = estado.proyecto;
   while (p.muros.some(m => m.id === `M${contador}`)) contador++;
@@ -144,8 +205,22 @@ export function panelMuros(c: H) {
   const tab = h('button', { type: 'button' }, 'Descargar tabla (.xlsx)');
   tab.title = 'Niveles y muros del proyecto en un Excel: sirve de plantilla para llenar y volver a importar';
   tab.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:tabla')));
-  acc.append(nuevo, dup, borrar, imp, tab);
+  // agrupar: los muros de la pieza del muro elegido (o los que se tocan con él) pasan a ser un elemento
+  const bAgr = h('button', { type: 'button', title: 'Hace un elemento con la pieza del muro elegido: se mueve, gira y espeja entera, y cada muro lleva el color de su columna en la hoja J' }, 'Agrupar pieza');
+  bAgr.addEventListener('click', () => estado.cambiar(() => {
+    const sel = p.muros.find(m => m.id === estado.seleccion);
+    if (!sel) { avisoPanel('Elegí un muro de la pieza (en la planta o en la tabla) y después «Agrupar pieza».'); return; }
+    let ids = sel.piezaA ? p.muros.filter(m => m.piezaA === sel.piezaA).map(m => m.id) : [sel.id];
+    if (ids.length === 1) {               // sin pieza: los que se tocan con él (y los que se tocan con esos)
+      const set = new Set([sel.id]); let cambio = true;
+      while (cambio) { cambio = false; p.muros.forEach(m => { if (!set.has(m.id) && [...set].some(id => seTocan(p.muros.find(x => x.id === id)!, m))) { set.add(m.id); cambio = true; } }); }
+      ids = [...set];
+    }
+    p.muros = agrupar(p.muros, ids).muros;
+  }));
+  acc.append(nuevo, dup, borrar, bAgr, imp, tab);
   c.append(acc);
+  seccionGrupos(c);
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],
@@ -223,7 +298,7 @@ export function panelPiezas(c: H) {
     const fila = (elegida.dir === 'A' ? asig.datos.jpar : asig.datos.jort)[elegida.filaHoja];
     const fr = (elegida.dir === 'A' ? res.jpar : res.jort).filas[elegida.filaHoja];
     const muros = elegida.muros.map(id => estado.proyecto.muros.find(m => m.id === id)).filter((m): m is Muro => !!m);
-    c.append(seccion(`Perfil equivalente · ${elegida.nombre}`, dibujoPerfil(elegida, fila, fr, muros), h('p', { class: 'nota chica' }, 'Elegí una fila de las tablas para ver otra pieza. A la izquierda, los muros como están en la planta; a la derecha, el perfil que la app escribe en la hoja J. Tienen que tener el mismo largo de alma y las alas del mismo lado.')).el);
+    c.append(seccion(`Perfil equivalente · ${elegida.nombre}`, dibujoPerfil(elegida, fila, fr, muros, 400, asig.papeles), h('p', { class: 'nota chica' }, 'Elegí una fila de las tablas para ver otra pieza. A la izquierda, los muros como están en la planta; a la derecha, el perfil que la app escribe en la hoja J. Tienen que tener el mismo largo de alma y las alas del mismo lado.')).el);
   }
 }
 

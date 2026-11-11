@@ -15,11 +15,11 @@
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
  *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
-import { N_FILAS, TIPO_FILA_PARALELOS, type FilaJ, type PlanillaDatos } from './planilla';
-import { areaMuro, dInterior, entraEnCalculo, tipoDe, type Muro, type Proyecto } from './modelo';
+import { N_FILAS, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
+import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 
 export type Direccion = 'A' | 'B';
-export type Papel = 'alma' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'fuera del cálculo' | 'sin pieza';
+export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'fuera del cálculo' | 'sin pieza';
 export type Molde = 'simétrico' | 'asimétrico' | 'tubo';
 
 export interface PiezaEquivalente {
@@ -35,6 +35,9 @@ export interface PiezaEquivalente {
   /** fila asignada en la hoja J (0 a 19) o null si no entró */
   filaHoja: number | null;
   avisos: string[];
+  /** J de la sección real (cada muro con su Steiner, respecto del baricentro) y J del molde de la hoja (m⁴) */
+  Jreal?: number;
+  Jhoja?: number;
 }
 
 export interface Asignacion {
@@ -55,14 +58,6 @@ export const FILAS_O0 = [17, 18, 19];
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
 
 // ------------------------------------------------------------------ perfil equivalente
-interface Grupo { b: number; t: number; area: number; }
-function juntar(ms: Muro[]): Grupo | null {
-  if (!ms.length) return null;
-  const t = ms.reduce((s, m) => s + m.espesor, 0);
-  const area = ms.reduce((s, m) => s + m.espesor * m.largo, 0);
-  return { b: r4(area / t), t: r4(t), area };
-}
-
 export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
   const dirAlma = dir === 'A' ? 'Y' : 'X';
   const s = (m: Muro) => (dir === 'A' ? m.y : m.x);            // coordenada en la dirección del viento
@@ -91,96 +86,131 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     if (e >= enViento / 2 || e >= trans / 2) return { ...base, molde: 'simétrico', fila: { B: trans, C: enViento } };   // macizo
     return { ...base, molde: 'asimétrico', fila: { W: trans, X: e, Z: e, AB: enViento - 2 * e, AE: e, AF: enViento - 2 * e, AH: trans, AI: e } };
   }
-  const almas = muros.filter(m => m.dir === dirAlma);
-  const alas = muros.filter(m => m.dir !== dirAlma);
+  // papel elegido a mano para este viento (vacío = el que propone la app)
+  const rol = (m: Muro) => (dir === 'A' ? m.rolA : m.rolB) || '';
+  const fuera = muros.filter(m => rol(m) === 'fuera');
+  fuera.forEach(m => set(m, 'fuera del cálculo'));
+  if (fuera.length) avisos.push(`Fuera del molde (elegido a mano): ${fuera.map(m => m.id).join(', ')}; no suman al J de la hoja.`);
+  const activos = muros.filter(m => rol(m) !== 'fuera');
+  let almas = activos.filter(m => m.dir === dirAlma);
+  const alas = activos.filter(m => m.dir !== dirAlma);
+  // más de dos almas: el molde admite dos; se toman las de más área (o las elegidas a mano) y el resto queda fuera
+  if (almas.length > 2) {
+    const elegidas = almas.filter(m => rol(m) === 'alma' || rol(m) === 'alma der.');
+    const orden = [...elegidas, ...[...almas].filter(m => !elegidas.includes(m)).sort((x, y) => y.largo * y.espesor - x.largo * x.espesor)];
+    const quedan = orden.slice(0, 2), sobran = orden.slice(2);
+    sobran.forEach(m => set(m, 'fuera del cálculo'));
+    avisos.push(`Más de dos almas: el molde de la hoja admite dos. Se tomaron ${quedan.map(m => m.id).join(' y ')} (las de más área) y quedan fuera ${sobran.map(m => m.id).join(', ')}; se puede elegir otras en el grupo. Mirá la diferencia de J.`);
+    almas = quedan;
+  }
 
   if (almas.length === 0) {
     if (alas.length > 1) avisos.push('Pieza sin alma: solo se toma el primer muro (trabaja por su eje débil).');
     const m = alas[0];
+    if (!m) return { ...base, molde: 'simétrico', fila: {} };
     set(m, 'alma');
     return { ...base, molde: 'simétrico', fila: { B: m.largo, C: m.espesor } };
   }
-  if (almas.length > 2) {
-    avisos.push('Más de dos almas: el molde de la planilla no lo admite. Dividir la pieza en piezas de una o dos almas.');
-    muros.forEach(m => set(m, 'sin pieza'));
-    return { ...base, molde: 'simétrico', fila: {} };
-  }
-  // cada ala se pega a un alma (la indicada o la más cercana) y va a su extremo más cercano
+  // alma izquierda (la principal: la de más área, salvo que se elija a mano la derecha) y alma derecha
+  let [izq, der] = [...almas].sort((x, y) => y.largo * y.espesor - x.largo * x.espesor) as [Muro, Muro | undefined];
+  const forzDer = almas.find(m => rol(m) === 'alma der.');
+  if (forzDer && almas.length === 2) { der = forzDer; izq = almas.find(m => m !== forzDer)!; }
+  // cada ala se pega a un alma (la indicada o la más cercana) y queda en un extremo de esa alma o en el medio
   const pegado = (m: Muro) => (dir === 'A' ? m.pegadoA : m.pegadoB);
-  const extremos = alas.map(a => {
+  type PosAla = 'arriba' | 'abajo' | 'medio';
+  const info = alas.map(a => {
+    // el alma indicada; si no, la que toca (y entre las que tocan, aquella de la que el ala está en un extremo);
+    // si no toca ninguna, la más cercana
+    const toca = (x: Muro) => Math.abs(t(x) - t(a)) <= a.largo / 2 + x.espesor / 2 + 0.02 && s(a) >= s(x) - x.largo / 2 - a.espesor && s(a) <= s(x) + x.largo / 2 + a.espesor;
+    const enExtremo = (x: Muro) => Math.abs(s(a) - (s(x) + x.largo / 2)) <= a.espesor + 0.05 || Math.abs(s(a) - (s(x) - x.largo / 2)) <= a.espesor + 0.05;
     let w = almas.find(x => x.id === pegado(a));
     if (!w) {
-      w = almas.reduce((best, x) => (Math.abs(t(x) - t(a)) < Math.abs(t(best) - t(a)) ? x : best), almas[0]);
-      if (almas.length > 1) avisos.push(`El ala ${a.id} no dice a qué alma se pega: se tomó ${w.id}, la más cercana.`);
+      const tocan = almas.filter(toca);
+      w = tocan.find(x => x === izq && enExtremo(x)) ?? tocan.find(enExtremo) ?? tocan[0]
+        ?? almas.reduce((best, x) => (Math.abs(t(x) - t(a)) < Math.abs(t(best) - t(a)) ? x : best), almas[0]);
+      if (almas.length > 1 && tocan.length !== 1) avisos.push(`Nota: el ala ${a.id} no dice a qué alma se pega: se tomó ${w.id}.`);
     }
-    const arriba = s(a) >= s(w);
-    return { a, w, arriba };
+    const top = s(w) + w.largo / 2, bot = s(w) - w.largo / 2, tol = a.espesor + 0.05;
+    const pos: PosAla = s(a) >= top - tol ? 'arriba' : s(a) <= bot + tol ? 'abajo' : 'medio';
+    return { a, w, pos };
   });
-  almas.forEach(w => set(w, 'alma'));
-  // Almas que llegan hasta la cara exterior de un ala (se solapan en el sentido del viento): en el molde el ala va
-  // «arriba» del alma, así que el tramo de alma que está a la altura del ala pasa al ala (el ala se ensancha con la
-  // misma área) y el alma queda con su largo libre. Así el J de la hoja es el del dibujo.
+  // el extremo con más ala es la «ala superior» del molde (dar vuelta la pieza no cambia el J)
+  const areaExt = (p: PosAla) => info.filter(x => x.pos === p).reduce((q, x) => q + x.a.largo * x.a.espesor, 0);
+  const arriba: PosAla = areaExt('arriba') >= areaExt('abajo') ? 'arriba' : 'abajo';
+  const abajo: PosAla = arriba === 'arriba' ? 'abajo' : 'arriba';
+  // papel final de cada ala: el elegido a mano o el propuesto (las del medio se suman al ala superior)
+  const papelAla = (x: typeof info[number]): 'ala sup.' | 'ala inf.' => {
+    const r = rol(x.a);
+    if (r === 'ala sup.' || r === 'ala inf.') return r;
+    return x.pos === abajo ? 'ala inf.' : 'ala sup.';
+  };
+  const medio = info.filter(x => x.pos === 'medio' && !rol(x.a));
+  if (medio.length) avisos.push(`Nota: ${medio.map(x => x.a.id).join(', ')} ${medio.length > 1 ? 'están' : 'está'} en el medio del alma; ${medio.length > 1 ? 'se suman' : 'se suma'} al ala superior del molde (se puede cambiar a «fuera» o «ala inf.»). Mirá la diferencia de J.`);
+  const sup = info.filter(x => papelAla(x) === 'ala sup.'), inf = info.filter(x => papelAla(x) === 'ala inf.');
+  // solo las alas de los extremos recortan el alma (las del medio no)
+  const extSup = sup.filter(x => x.pos === arriba).map(x => x.a), extInf = inf.filter(x => x.pos === abajo).map(x => x.a);
   const banda = (g: Muro[]) => (g.length ? [Math.min(...g.map(a => s(a) - a.espesor / 2)), Math.max(...g.map(a => s(a) + a.espesor / 2))] : null);
   const solape = (w: Muro, g: Muro[]) => {
-    const b = banda(g);
-    if (!b) return 0;
-    return Math.max(0, Math.min(s(w) + w.largo / 2, b[1]) - Math.max(s(w) - w.largo / 2, b[0]));
+    const bb = banda(g.filter(a => info.find(x => x.a === a)?.w === w || almas.length === 1 || Math.abs(t(a) - t(w)) <= a.largo / 2 + w.espesor));
+    if (!bb) return 0;
+    return Math.max(0, Math.min(s(w) + w.largo / 2, bb[1]) - Math.max(s(w) - w.largo / 2, bb[0]));
   };
   const libre = (w: Muro, ...grupos: Muro[][]) => {
     const sol = grupos.reduce((x, g) => x + solape(w, g), 0);
     if (sol > 1e-9) avisos.push(`Nota: el alma ${w.id} llega hasta la cara exterior del ala (${String(r4(sol)).replace('.', ',')} m); en la hoja J va con su largo libre, ${String(r4(w.largo - sol)).replace('.', ',')} m, y ese tramo se suma al ala, para que el J sea el del dibujo.`);
     return r4(Math.max(0.01, w.largo - sol));
   };
-  /** ancho del ala equivalente con los tramos de alma que caen en su banda */
-  const conSolapes = (grupo: Grupo, g: Muro[], ws: Muro[]) => r4((grupo.area + ws.reduce((x, w) => x + solape(w, g) * w.espesor, 0)) / grupo.t);
+  /** ala equivalente: espesor del ala del extremo (o la mayor) y ancho que conserva el área (con los tramos de alma que caen en su banda) */
+  const ala = (g: typeof info, ext: Muro[], ws: Muro[]) => {
+    if (!g.length) return null;
+    const tt = Math.max(...(ext.length ? ext : g.map(x => x.a)).map(m => m.espesor));
+    const area = g.reduce((q, x) => q + x.a.largo * x.a.espesor, 0) + ws.reduce((q, w) => q + solape(w, ext) * w.espesor, 0);
+    return { b: r4(area / tt), t: r4(tt), area };
+  };
+  set(izq, 'alma');
+  if (der) set(der, 'alma der.');
+  info.forEach(x => set(x.a, papelAla(x)));
+  const A = ala(sup, extSup, almas), B = ala(inf, extInf, [izq]);
 
-  if (almas.length === 1) {
-    const w = almas[0];
-    const gSup = extremos.filter(e => e.arriba).map(e => e.a), gInf = extremos.filter(e => !e.arriba).map(e => e.a);
-    const sup = juntar(gSup);
-    const inf = juntar(gInf);
-    if (!sup && !inf) return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: w.largo } };
-    // doble T: alas iguales (2 %) y centradas en el alma (baricentro del ala sobre el eje del alma)
+  if (!der) {
+    if (!A && !B) return { ...base, molde: 'simétrico', fila: { B: izq.espesor, C: izq.largo } };
+    // doble T: alas solo en los extremos, iguales (2 %) y centradas en el alma
     const centrada = (g: Muro[], b: number) => {
-      const A = g.reduce((x, m) => x + m.largo * m.espesor, 0);
-      const c = g.reduce((x, m) => x + m.largo * m.espesor * t(m), 0) / A;
-      return Math.abs(c - t(w)) <= Math.max(0.05, 0.02 * b);
+      const Ar = g.reduce((x, m) => x + m.largo * m.espesor, 0);
+      const c = g.reduce((x, m) => x + m.largo * m.espesor * t(m), 0) / Ar;
+      return Math.abs(c - t(izq)) <= Math.max(0.05, 0.02 * b);
     };
     const iguales = (a: number, b: number) => Math.abs(a - b) <= 0.02 * Math.max(a, b);
-    const dobleT = sup && inf && iguales(sup.area, inf.area) && iguales(sup.t, inf.t) && centrada(gSup, sup.b) && centrada(gInf, inf.b);
-    if (dobleT) {
-      extremos.forEach(e => set(e.a, e.arriba ? 'ala sup.' : 'ala inf.'));
-      return { ...base, molde: 'simétrico', fila: { B: w.espesor, C: libre(w, gSup, gInf), F: conSolapes(sup!, gSup, [w]), G: sup!.t, J: conSolapes(inf!, gInf, [w]), K: inf!.t } };
+    const sinMedio = sup.every(x => x.pos !== 'medio') && inf.every(x => x.pos !== 'medio');
+    if (A && B && sinMedio && iguales(A.area, B.area) && iguales(A.t, B.t) && centrada(sup.map(x => x.a), A.b) && centrada(inf.map(x => x.a), B.b)) {
+      return { ...base, molde: 'simétrico', fila: { B: izq.espesor, C: libre(izq, extSup, extInf), F: A.b, G: A.t, J: B.b, K: B.t } };
     }
-    // asimétrica: el grupo más grande va arriba (el J no cambia al dar vuelta la pieza)
-    const supEsArriba = (sup?.area ?? 0) >= (inf?.area ?? 0);
-    const top = supEsArriba ? sup! : inf!;
-    const bot = supEsArriba ? inf : sup;
-    extremos.forEach(e => set(e.a, e.arriba === supEsArriba ? 'ala sup.' : 'ala inf.'));
-    const gTop = supEsArriba ? gSup : gInf, gBot = supEsArriba ? gInf : gSup;
-    const fila: FilaJ = { W: conSolapes(top, gTop, [w]), X: top.t, Z: w.espesor, AB: libre(w, gSup, gInf) };
-    if (bot) { fila.AH = conSolapes(bot, gBot, [w]); fila.AI = bot.t; }
+    const top = A ?? B!, bot = A ? B : null;
+    if (!A) inf.forEach(x => set(x.a, 'ala sup.'));
+    const fila: FilaJ = { W: top.b, X: top.t, Z: izq.espesor, AB: libre(izq, extSup, extInf) };
+    if (bot) { fila.AH = bot.b; fila.AI = bot.t; }
     return { ...base, molde: 'asimétrico', fila };
   }
-
-  // dos almas: el lado con más ala es «arriba»; el ala de arriba une las dos almas
-  const areaLado = (arriba: boolean) => extremos.filter(e => e.arriba === arriba).reduce((x, e) => x + e.a.largo * e.a.espesor, 0);
-  const arribaEsMas = areaLado(true) >= areaLado(false);
-  const top = juntar(extremos.filter(e => e.arriba === arribaEsMas).map(e => e.a));
-  const abajo = extremos.filter(e => e.arriba !== arribaEsMas);
-  const abajoDe = (w: Muro) => abajo.filter(e => e.w.id === w.id);
-  let [izq, der] = almas;
-  if (abajoDe(der).length > abajoDe(izq).length) [izq, der] = [der, izq];
-  if (abajoDe(izq).length && abajoDe(der).length) {
-    avisos.push('Las dos almas tienen alas abajo; el molde solo admite una ala inferior, bajo el alma izquierda: se juntaron todas ahí.');
-  }
-  const bot = juntar(abajo.map(e => e.a));
-  extremos.forEach(e => set(e.a, e.arriba === arribaEsMas ? 'ala sup.' : 'ala inf.'));
-  if (!top) avisos.push('Las dos almas no tienen un ala que las una: conviene cargarlas como piezas separadas.');
-  const gTop = extremos.filter(e => e.arriba === arribaEsMas).map(e => e.a), gBot = abajo.map(e => e.a);
-  const fila: FilaJ = { W: top ? conSolapes(top, gTop, [izq, der]) : 0.01, X: top?.t ?? 0.01, Z: izq.espesor, AB: libre(izq, gTop, gBot), AE: der.espesor, AF: libre(der, gTop) };
-  if (bot) { fila.AH = conSolapes(bot, gBot, [izq]); fila.AI = bot.t; }
+  // dos almas: el ala superior une las dos; la inferior va solo bajo el alma izquierda
+  if (inf.some(x => x.w === der)) avisos.push(`Nota: el molde solo admite el ala inferior bajo el alma izquierda; ${inf.filter(x => x.w === der).map(x => x.a.id).join(', ')} se juntó ahí.`);
+  if (!A) avisos.push('Las dos almas no tienen un ala que las una: conviene cargarlas como piezas separadas.');
+  // el alma derecha del molde cuelga del ala superior; si en la realidad no llega a ella, se acepta y se avisa
+  const derArriba = arriba === 'arriba' ? s(der) + der.largo / 2 : s(der) - der.largo / 2;
+  const supArriba = arriba === 'arriba' ? s(izq) + izq.largo / 2 : s(izq) - izq.largo / 2;
+  if (Math.abs(derArriba - supArriba) > 0.3) avisos.push(`El alma derecha ${der.id} no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.`);
+  const fila: FilaJ = { W: A ? A.b : 0.01, X: A ? A.t : 0.01, Z: izq.espesor, AB: libre(izq, extSup, extInf), AE: der.espesor, AF: libre(der, extSup) };
+  if (B) { fila.AH = B.b; fila.AI = B.t; }
   return { ...base, molde: 'asimétrico', fila };
+}
+
+/** J de la sección real respecto de su baricentro, para el viento dado: cada rectángulo con su Steiner (m⁴) */
+export function Jreal(muros: Muro[], dir: Direccion): number {
+  const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ').flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));
+  const circ = muros.filter(m => tipoDe(m) === 'tubo-circ').map(m => ({ A: (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2), I: (Math.PI / 64) * (m.largo ** 4 - dInterior(m) ** 4), s: dir === 'A' ? m.y : m.x }));
+  const A = rs.reduce((q, r) => q + r.b * r.h, 0) + circ.reduce((q, c) => q + c.A, 0);
+  if (!(A > 0)) return 0;
+  const sg = (rs.reduce((q, r) => q + r.b * r.h * r.s, 0) + circ.reduce((q, c) => q + c.A * c.s, 0)) / A;
+  return rs.reduce((q, r) => q + (r.b * r.h ** 3) / 12 + r.b * r.h * (r.s - sg) ** 2, 0) + circ.reduce((q, c) => q + c.I + c.A * (c.s - sg) ** 2, 0);
 }
 
 // ------------------------------------------------------------------ asignación de filas
@@ -285,6 +315,17 @@ export function aPlanilla(p: Proyecto): Asignacion {
     return [...g.entries()].map(([nombre, ms]) => perfilEquivalente(nombre, dir, ms, papeles));
   };
   const piezasA = grupos('A'), piezasB = grupos('B');
+  // J de la hoja (molde) contra J de la sección real: la simplificación puede cambiarlo mucho
+  const porId = new Map(p.muros.map(m => [m.id, m]));
+  [...piezasA, ...piezasB].forEach(pz => {
+    if (!Object.keys(pz.fila).length || pz.molde === 'tubo') return;
+    // el J real es el de todos los muros de la pieza (también los que se dejan fuera del molde)
+    const ms = pz.muros.map(id => porId.get(id)!).filter(Boolean);
+    pz.Jhoja = calcFilaJ({ S: 0.01, W: 0.01, X: 0.01, ...pz.fila }, pz.dir === 'B', false).AY;
+    pz.Jreal = Jreal(ms, pz.dir);
+    const dif = pz.Jreal > 0 ? (pz.Jhoja - pz.Jreal) / pz.Jreal : 0;
+    if (Math.abs(dif) > 0.05) pz.avisos.push(`La simplificación al molde cambia el J: hoja ${String(r4(pz.Jhoja)).replace('.', ',')} m⁴ contra ${String(r4(pz.Jreal)).replace('.', ',')} m⁴ de la sección real (${dif > 0 ? '+' : '−'}${Math.abs(Math.round(dif * 100))} %).`);
+  });
   if (activos.length && activos.every(m => !(m.areaInf > 0))) avisos.push('Ningún muro tiene área de influencia: la flexocompresión no suma la carga de las losas (N queda solo con el peso propio). Cargala en «Muros», columna «Área inf.».');
   const jpar = asignarFilas(piezasA, true, avisos);
   const jort = asignarFilas(piezasB, false, avisos);

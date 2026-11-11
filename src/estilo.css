@@ -520,8 +520,8 @@ svg.planta.dibujando .muro { cursor: crosshair; }
 .planta image.calco { pointer-events: none; }
 /* perfil equivalente */
 .perfil { width: 100%; height: auto; }
-.perfil .pf-muro { fill: var(--ink2); }
-.perfil .pf-perfil { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: var(--accent); stroke-width: 1.2; }
+.perfil .pf-muro { fill: var(--ink2); stroke: #333; stroke-width: .6; }
+.perfil .pf-perfil { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: #333; stroke-width: .8; }
 .perfil .pf-hueco { fill: var(--lienzo); stroke: var(--ink2); stroke-width: .8; }
 .perfil .pf-eje { stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 8 3 2 3; }
 .perfil .pf-separa { stroke: var(--hair); stroke-width: 1; }
@@ -553,3 +553,15 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .carta .ct-suelo-t { fill: color-mix(in srgb, var(--compresion) 22%, transparent); stroke: var(--compresion); stroke-width: 1.4; }
 .carta .ct-suelo-t.traccion { fill: color-mix(in srgb, var(--traccion) 22%, transparent); stroke: var(--traccion); }
 .et3d.giro { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }
+.planta .muro.sel-grupo rect, .planta .muro.sel-grupo circle { stroke: var(--elegido); stroke-width: 1.6; stroke-dasharray: 3 2; }
+/* grupos de muros */
+.grupo-muros { border: 1px solid var(--edge); border-radius: 8px; padding: 4px 8px; margin: 4px 0; background: var(--panel); }
+.grupo-muros.sel { border-color: var(--elegido); }
+.grupo-muros summary { cursor: pointer; font-size: 12.5px; line-height: 1.5; }
+.grupo-muros select { font-size: 12px; border-left: 4px solid var(--c, transparent); }
+.caja-papel { display: inline-block; width: 11px; height: 11px; border: 1px solid #333; margin-right: 5px; vertical-align: -1px; }
+.aviso-linea { font-size: 12px; color: var(--mal); margin: 2px 0; }
+.perfil .pf-mal { fill: var(--mal); }
+.grupo-muros .papel-dir { display: flex; align-items: center; gap: 4px; margin: 1px 0; }
+.grupo-muros .papel-dir .dir { font: 600 10.5px var(--mono); color: var(--ink2); width: 10px; }
+.grupo-muros .papel-dir select { max-width: 150px; }

@@ -97,3 +97,58 @@ export function armarPiezas(muros: Muro[]): Muro[] {
   });
   return out;
 }
+
+// ------------------------------------------------------------------ grupos (una pieza como un elemento)
+/** muros de un grupo */
+export const delGrupo = (muros: Muro[], g: string) => muros.filter(m => m.grupo === g);
+const centroDe = (ms: Muro[]) => {
+  const A = ms.reduce((s, m) => s + m.largo * m.espesor, 0) || 1;
+  return { x: r2(ms.reduce((s, m) => s + m.x * m.largo * m.espesor, 0) / A), y: r2(ms.reduce((s, m) => s + m.y * m.largo * m.espesor, 0) / A) };
+};
+
+/**
+ * Agrupa los muros indicados en un elemento: comparten la pieza en los dos vientos (nombre «T…» y «T…B») y cada
+ * ala queda pegada al alma que toca. Devuelve los muros nuevos y el nombre del grupo.
+ */
+export function agrupar(muros: Muro[], ids: string[], nombre?: string): { muros: Muro[]; grupo: string } {
+  const usados = new Set(muros.map(m => m.grupo).filter(Boolean) as string[]);
+  const piezas = new Set(muros.filter(m => !ids.includes(m.id)).map(m => m.piezaA));
+  let g = nombre && !usados.has(nombre) ? nombre : '';
+  if (!g) { const previo = muros.find(m => ids.includes(m.id) && m.piezaA)?.piezaA; g = previo && !usados.has(previo) ? previo : ''; }
+  for (let k = 1; !g; k++) if (!usados.has(`T${k}`) && !piezas.has(`T${k}`)) g = `T${k}`;
+  const dentro = muros.filter(m => ids.includes(m.id));
+  const out = muros.map(m => {
+    if (!ids.includes(m.id)) return m;
+    const alma = (dirAlma: 'X' | 'Y') => dentro.find(o => o.id !== m.id && tipoDe(o) === 'tabique' && o.dir === dirAlma && seTocan(o, m))?.id ?? '';
+    return { ...m, grupo: g, piezaA: g, piezaB: `${g}B`, pegadoA: m.dir === 'Y' ? '' : alma('Y'), pegadoB: m.dir === 'X' ? '' : alma('X') };
+  });
+  return { muros: out, grupo: g };
+}
+/** deshace el grupo: los muros quedan sueltos pero en la misma pieza */
+export function desagrupar(muros: Muro[], g: string): Muro[] {
+  return muros.map(m => { if (m.grupo !== g) return m; const { grupo: _g, ...resto } = m; void _g; return resto; });
+}
+/** mueve el grupo entero */
+export function moverGrupo(muros: Muro[], g: string, dx: number, dy: number): Muro[] {
+  return muros.map(m => (m.grupo === g ? { ...m, x: r2(m.x + dx), y: r2(m.y + dy) } : m));
+}
+/**
+ * Gira el grupo 90° (antihorario) alrededor de su baricentro. Los muros cambian de dirección, así que los papeles
+ * elegidos a mano se borran (un alma pasa a ser ala) y los «pegado a» se rehacen.
+ */
+export function girarGrupo(muros: Muro[], g: string): Muro[] {
+  const c = centroDe(delGrupo(muros, g));
+  const girados = muros.map(m => {
+    if (m.grupo !== g) return m;
+    const x = r2(c.x - (m.y - c.y)), y = r2(c.y + (m.x - c.x));
+    const n: Muro = { ...m, x, y, dir: m.dir === 'X' ? 'Y' : 'X', rolA: '', rolB: '' };
+    if (tipoDe(m) === 'tubo-rect') { n.largo = m.ladoY ?? m.largo; n.ladoY = m.largo; n.dir = m.dir; }
+    return n;
+  });
+  return agrupar(girados, delGrupo(girados, g).map(m => m.id), g).muros;
+}
+/** espeja el grupo respecto de un eje vertical (x) u horizontal (y) por su baricentro; los papeles se conservan */
+export function espejarGrupo(muros: Muro[], g: string, eje: 'x' | 'y'): Muro[] {
+  const c = centroDe(delGrupo(muros, g));
+  return muros.map(m => (m.grupo !== g ? m : eje === 'x' ? { ...m, x: r2(2 * c.x - m.x) } : { ...m, y: r2(2 * c.y - m.y) }));
+}

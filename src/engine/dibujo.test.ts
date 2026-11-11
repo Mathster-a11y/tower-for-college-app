@@ -33,3 +33,30 @@ describe('dibujar muros y armar piezas', () => {
     out.forEach((m, i) => { expect(m.piezaA).toBe(p.muros[i].piezaA); expect(m.piezaB).toBe(p.muros[i].piezaB); });
   });
 });
+
+import { agrupar, desagrupar, espejarGrupo, girarGrupo, moverGrupo } from './dibujo';
+describe('grupos de muros', () => {
+  const p = ejemploGuia();
+  it('agrupar T5 (M5, M6, M7): misma pieza en los dos vientos y las alas pegadas a su alma', () => {
+    const { muros, grupo } = agrupar(p.muros, ['M5', 'M6', 'M7']);
+    expect(grupo).toBe('T5');
+    const g = muros.filter(m => m.grupo === 'T5');
+    expect(g).toHaveLength(3);
+    expect(g.every(m => m.piezaA === 'T5' && m.piezaB === 'T5B')).toBe(true);
+    expect(g.find(m => m.id === 'M6')!.pegadoA).toBe('M5');
+    expect(g.find(m => m.id === 'M5')!.pegadoB).toBe('M6');
+  });
+  it('mover, girar 90° y espejar mueven el grupo entero; desagrupar lo deja suelto', () => {
+    let ms = agrupar(p.muros, ['M5', 'M6', 'M7']).muros;
+    ms = moverGrupo(ms, 'T5', 1, 0.5);
+    expect(ms.find(m => m.id === 'M5')).toMatchObject({ x: -5.4, y: 0.5 });
+    expect(ms.find(m => m.id === 'M1')).toMatchObject({ x: -9.9 });         // los de afuera no se mueven
+    const g = girarGrupo(ms, 'T5');
+    expect(g.find(m => m.id === 'M5')!.dir).toBe('X');
+    expect(g.find(m => m.id === 'M6')!.pegadoB).toBe('M5');                 // ahora M5 es alma en el viento B
+    const e = espejarGrupo(ms, 'T5', 'x');
+    const c5 = ms.find(m => m.id === 'M5')!.x, c6 = ms.find(m => m.id === 'M6')!.x;
+    expect(e.find(m => m.id === 'M5')!.x - e.find(m => m.id === 'M6')!.x).toBeCloseTo(-(c5 - c6), 6);
+    expect(desagrupar(ms, 'T5').some(m => m.grupo)).toBe(false);
+  });
+});

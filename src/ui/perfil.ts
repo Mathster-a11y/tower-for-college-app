@@ -7,7 +7,7 @@
  *  - asimétrico: ala sup. b1 × h1 (W, X) arriba a la izquierda, alma izq. b2 × h2 (Z, AB), alma der. b3 × h3
  *    (AE, AF) y ala inf. (AH, AI); el eje de inercia está a AK del borde superior.
  */
-import { fmt } from './estado';
+import { fmt, COLORES } from './estado';
 import type { FilaJ, FilaJRes } from '../engine/planilla';
 import type { PiezaEquivalente } from '../engine/mapping';
 import { rectangulos, tipoDe, type Muro } from '../engine/modelo';
@@ -43,7 +43,9 @@ export function rectangulosPerfil(f: FilaJ): { rects: Rect[]; circ: { D: number;
   return { rects, circ: null, ejeV: null };
 }
 
-export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros: Muro[], ancho = 400): SVGSVGElement {
+export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros: Muro[], ancho = 400, papeles: Record<string, { A: string; B: string }> = {}): SVGSVGElement {
+  // colores de la hoja J (los de los dibujos debajo de las tablas de tabiques)
+  const color = (papel: string) => COLORES[papel === 'alma izq.' ? 'alma' : papel] ?? '';
   const altoB = 250, alto = 2 * altoB + 10;
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico perfil', role: 'img', 'aria-label': `Perfil equivalente de ${pz.nombre}` }) as SVGSVGElement;
   // ---- arriba: los muros en planta (marco del viento: el viento sube)
@@ -61,7 +63,7 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
   svg.append(el('text', { x: 10, y: 18, class: 'd-valor' }, `${pz.nombre} · muros en planta`));
   svg.append(el('text', { x: 10, y: 32, class: 'd-eje' }, `viento ${pz.dir} hacia arriba ↑ · ${pz.muros.join(', ')}`));
   rs.forEach(q => {
-    svg.append(el('rect', { x: XP(q.t0), y: YP(q.s1), width: Math.max(1.5, (q.t1 - q.t0) * kP), height: Math.max(1.5, (q.s1 - q.s0) * kP), class: 'pf-muro' }));
+    svg.append(el('rect', { x: XP(q.t0), y: YP(q.s1), width: Math.max(1.5, (q.t1 - q.t0) * kP), height: Math.max(1.5, (q.s1 - q.s0) * kP), class: 'pf-muro', ...(color(papeles[q.id]?.[pz.dir] ?? '') ? { style: `fill:${color(papeles[q.id][pz.dir])}` } : {}) }));
     const vertical = q.s1 - q.s0 > q.t1 - q.t0;
     svg.append(el('text', { x: vertical ? XP(q.t0) - 4 : (XP(q.t0) + XP(q.t1)) / 2, y: vertical ? (YP(q.s0) + YP(q.s1)) / 2 + 4 : YP(q.s1) - 4, class: 'd-eje', 'text-anchor': vertical ? 'end' : 'middle' }, q.id));
   });
@@ -72,7 +74,8 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
   const { rects, circ, ejeV } = rectangulosPerfil(f);
   svg.append(el('text', { x: 10, y: y0 + 18, class: 'd-valor' }, `en la hoja J · molde ${pz.molde}`));
   svg.append(el('text', { x: 10, y: y0 + 32, class: 'd-eje' }, `fila ${pz.filaHoja === null ? '—' : pz.filaHoja + 4} de «${pz.dir === 'A' ? 'J Tabiques paralelos' : 'J Tabiques ortogonales'}»`));
-  svg.append(el('text', { x: 10, y: alto - 22, class: 'd-valor' }, `J = ${fmt(r.AY, 4)} m⁴ (col. AY)`));
+  svg.append(el('text', { x: 10, y: alto - 22, class: 'd-valor' }, `J hoja = ${fmt(r.AY, 4)} m⁴ (col. AY)${pz.Jreal !== undefined ? ` · J real = ${fmt(pz.Jreal, 4)} m⁴` : ''}`));
+  if (pz.Jreal) { const dif = (100 * (r.AY - pz.Jreal)) / pz.Jreal; if (Math.abs(dif) > 0.5) svg.append(el('text', { x: ancho - 10, y: alto - 8, class: Math.abs(dif) > 5 ? 'd-valor pf-mal' : 'd-eje', 'text-anchor': 'end' }, `la simplificación cambia el J ${dif > 0 ? '+' : '−'}${fmt(Math.abs(dif), 0)} %`)); }
   svg.append(el('text', { x: 10, y: alto - 8, class: 'd-eje' }, `área = ${fmt(r.O, 3)} m² (col. O)`));
   if (circ) {
     const k = Math.min((ancho - 140) / circ.D, (altoB - 90) / circ.D), cx = ancho / 2, cy = y0 + 50 + (altoB - 90) / 2;
@@ -91,7 +94,7 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
   const xr = U(u1) + 14;
   const usados: number[] = [];
   rects.forEach(q => {
-    svg.append(el('rect', { x: U(q.u), y: V(q.v), width: Math.max(1.5, q.w * k), height: Math.max(1.5, q.h * k), class: 'pf-perfil' }));
+    svg.append(el('rect', { x: U(q.u), y: V(q.v), width: Math.max(1.5, q.w * k), height: Math.max(1.5, q.h * k), class: 'pf-perfil', ...(color(q.rol) ? { style: `fill:${color(q.rol)}` } : {}) }));
     // medida de cada rectángulo con su columna de la hoja, en una columna de rótulos a la derecha
     let y = V(q.v + q.h / 2) + 4;
     while (usados.some(u => Math.abs(u - y) < 12)) y += 12;
