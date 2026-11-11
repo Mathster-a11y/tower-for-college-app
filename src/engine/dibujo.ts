@@ -6,6 +6,7 @@
  */
 import type { Muro } from './modelo';
 import { rectangulos, tipoDe } from './modelo';
+import { marcoTrasEspejo, marcoTrasGiro } from './piezasTipo';
 
 export type Punto = { x: number; y: number };
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -111,7 +112,7 @@ const centroDe = (ms: Muro[]) => {
  * ala queda pegada al alma que toca. Devuelve los muros nuevos y el nombre del grupo.
  */
 export function agrupar(muros: Muro[], ids: string[], nombre?: string): { muros: Muro[]; grupo: string } {
-  const usados = new Set(muros.map(m => m.grupo).filter(Boolean) as string[]);
+  const usados = new Set(muros.filter(m => !ids.includes(m.id)).map(m => m.grupo).filter(Boolean) as string[]);   // el nombre propio se puede conservar
   const piezas = new Set(muros.filter(m => !ids.includes(m.id)).map(m => m.piezaA));
   let g = nombre && !usados.has(nombre) ? nombre : '';
   if (!g) { const previo = muros.find(m => ids.includes(m.id) && m.piezaA)?.piezaA; g = previo && !usados.has(previo) ? previo : ''; }
@@ -126,7 +127,7 @@ export function agrupar(muros: Muro[], ids: string[], nombre?: string): { muros:
 }
 /** deshace el grupo: los muros quedan sueltos pero en la misma pieza */
 export function desagrupar(muros: Muro[], g: string): Muro[] {
-  return muros.map(m => { if (m.grupo !== g) return m; const { grupo: _g, ...resto } = m; void _g; return resto; });
+  return muros.map(m => { if (m.grupo !== g) return m; const { grupo: _g, pieza: _p, ...resto } = m; void _g; void _p; return resto; });
 }
 /** mueve el grupo entero */
 export function moverGrupo(muros: Muro[], g: string, dx: number, dy: number): Muro[] {
@@ -142,6 +143,7 @@ export function girarGrupo(muros: Muro[], g: string): Muro[] {
     if (m.grupo !== g) return m;
     const x = r2(c.x - (m.y - c.y)), y = r2(c.y + (m.x - c.x));
     const n: Muro = { ...m, x, y, dir: m.dir === 'X' ? 'Y' : 'X', rolA: '', rolB: '' };
+    if (m.pieza) n.pieza = { ...m.pieza, med: marcoTrasGiro(m.pieza.med) };
     if (tipoDe(m) === 'tubo-rect') { n.largo = m.ladoY ?? m.largo; n.ladoY = m.largo; n.dir = m.dir; }
     return n;
   });
@@ -150,5 +152,10 @@ export function girarGrupo(muros: Muro[], g: string): Muro[] {
 /** espeja el grupo respecto de un eje vertical (x) u horizontal (y) por su baricentro; los papeles se conservan */
 export function espejarGrupo(muros: Muro[], g: string, eje: 'x' | 'y'): Muro[] {
   const c = centroDe(delGrupo(muros, g));
-  return muros.map(m => (m.grupo !== g ? m : eje === 'x' ? { ...m, x: r2(2 * c.x - m.x) } : { ...m, y: r2(2 * c.y - m.y) }));
+  return muros.map(m => {
+    if (m.grupo !== g) return m;
+    const n: Muro = eje === 'x' ? { ...m, x: r2(2 * c.x - m.x) } : { ...m, y: r2(2 * c.y - m.y) };
+    if (m.pieza) n.pieza = { ...m.pieza, med: marcoTrasEspejo(m.pieza.med, eje) };
+    return n;
+  });
 }

@@ -699,3 +699,9 @@ text[data-par].ultimo { font-size: 15px; }
 .prec-panel .prec-campo input { width: 100%; min-width: 0; }
 .prec-panel .prec-fila button { padding: 3px 9px; }
 .prec-panel .prec-nota { font-size: 11.5px; color: var(--ink2); }
+.med-panel { left: auto; right: 10px; }
+.med-panel .por-parte { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+.med-panel .por-parte label { display: flex; flex-direction: column; font-size: 11px; color: var(--ink2); }
+.med-panel .por-parte input { width: 100%; }
+@media (max-width: 760px) { .med-panel { position: static; width: auto; margin: 6px 10px; } }
+.med-panel .por-parte label { align-items: flex-start; }

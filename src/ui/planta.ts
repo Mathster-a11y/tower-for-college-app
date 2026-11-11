@@ -2,7 +2,7 @@
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
-import { piezaTipo, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
+import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
@@ -275,7 +275,7 @@ export function montarPlanta(cont: HTMLElement) {
     giro.append(sg);
     const vista = document.createElement('div'); vista.className = 'vista-pieza';
     const datos = document.createElement('div'); datos.className = 'datos-pieza';
-    const ayuda = document.createElement('p'); ayuda.className = 'nota chica'; ayuda.textContent = `${info.ayuda} Hacé clic en la planta para ubicarla (el centro de la pieza va donde hacés clic). Esc: salir.`;
+    const ayuda = document.createElement('p'); ayuda.className = 'nota chica'; ayuda.textContent = `${info.ayuda} Hacé clic en la planta para ubicarla (el centro de la pieza va donde hacés clic). Después, doble clic en la pieza para cambiar sus medidas (alma y cada ala por separado). Esc: salir.`;
     const actualizar = () => {
       vista.replaceChildren(miniatura(insTipo, insMed, 96));
       const ms = piezaTipo(insTipo, insMed, 0, 0, new Set());
@@ -288,6 +288,66 @@ export function montarPlanta(cont: HTMLElement) {
     filaMed.append(campo('e', 'e', insTipo === 'columna' ? 'espesor de pared (la mitad de D: maciza)' : 'espesor (m)'), giro);
     actualizar();
     panelIns.append(tit, formas, filaMed, vista, datos, ayuda);
+  }
+  // medidas de una pieza tipo ya ubicada: doble clic en la pieza; sigue en su categoría y se ve su J
+  let medGrupo: string | null = null;
+  const panelMed = document.createElement('div');
+  panelMed.className = 'calco-panel piezas-panel med-panel';
+  panelMed.hidden = true;
+  cont.appendChild(panelMed);
+  const NOMBRE_PARTE: Record<'eA' | 'bS' | 'eS' | 'bI' | 'eI', [string, string]> = {
+    eA: ['e alma', 'espesor del alma (m)'], bS: ['b ala sup.', 'ancho del ala superior (m), medida total'], eS: ['e ala sup.', 'espesor del ala superior (m)'],
+    bI: ['b ala inf.', 'ancho del ala inferior (m), medida total'], eI: ['e ala inf.', 'espesor del ala inferior (m)'],
+  };
+  function armarPanelMed() {
+    const p = estado.proyecto, ms = medGrupo ? p.muros.filter(m => m.grupo === medGrupo) : [];
+    const info = ms[0]?.pieza;
+    if (!medGrupo || !info || modo !== 'mover') { panelMed.hidden = true; medGrupo = null; return; }
+    panelMed.hidden = false; panelPrec.hidden = true;
+    const med = info.med, tipo = info.tipo, t = TIPOS.find(x => x.tipo === tipo)!;
+    panelMed.replaceChildren();
+    const tit = document.createElement('b'); tit.textContent = `Pieza ${medGrupo} · ${t.nombre}`;
+    const cambiar = (k: keyof MedidasPieza, v: number | null) => {
+      const actual = estado.proyecto.muros.find(m => m.grupo === medGrupo)?.pieza?.med ?? med;
+      const nm: MedidasPieza = { ...actual };
+      if (v === null) delete (nm as unknown as Record<string, unknown>)[k]; else (nm as unknown as Record<string, number>)[k] = v;
+      const mal = problemaMedidas(tipo, nm);
+      if (mal) { mensaje(`Pieza ${medGrupo}: ${mal}. No se cambió.`); armarPanelMed(); return; }
+      estado.cambiar(() => { estado.proyecto.muros = rehacerPieza(estado.proyecto.muros, medGrupo!, nm); });
+      // se rehace el panel (J, dibujo) y el foco sigue en el campo donde está ahora (Enter: el mismo; Tab: el siguiente)
+      setTimeout(() => { const kf = (document.activeElement as HTMLElement | null)?.dataset?.k; armarPanelMed(); if (kf) (panelMed.querySelector(`input[data-k="${kf}"]`) as HTMLInputElement | null)?.focus(); }, 0);
+    };
+    const campo = (k: 'h' | 'b' | 'e' | 'eA' | 'bS' | 'eS' | 'bI' | 'eI', etq: string, ayuda: string, opcional: boolean, efectivo: number) => {
+      const l = document.createElement('label'); l.title = ayuda;
+      const i = document.createElement('input'); i.type = 'number'; i.step = k.startsWith('e') ? '0.05' : '0.1'; i.min = '0.05'; i.dataset.k = k;
+      const propio = (med as unknown as Record<string, number | undefined>)[k];
+      i.value = opcional ? (propio == null ? '' : String(propio)) : String(efectivo); i.placeholder = String(efectivo);
+      i.addEventListener('change', () => { const tx = i.value.trim(); if (!tx && opcional) { cambiar(k, null); return; } const v = Number(tx); if (v > 0) cambiar(k, v); else i.value = String(efectivo); });
+      l.append(etq, i); return l;
+    };
+    const ef = partes(med);
+    const gen = document.createElement('div'); gen.className = 'medidas';
+    gen.append(campo('h', tipo === 'columna' ? 'D' : 'h', tipo === 'columna' ? 'diámetro exterior (m)' : 'largo del alma, medida total (m)', false, med.h));
+    if (t.usaB) gen.append(campo('b', 'b', 'ancho de las alas (m), si no se da uno por ala', false, med.b));
+    gen.append(campo('e', 'e', 'espesor general (m), si no se da uno por parte', false, med.e));
+    const porParte = document.createElement('div'); porParte.className = 'medidas por-parte';
+    PARTES[tipo].forEach(k => porParte.append(campo(k, NOMBRE_PARTE[k][0], `${NOMBRE_PARTE[k][1]}; vacío = la general`, true, ef[k])));
+    const vista = document.createElement('div'); vista.className = 'vista-pieza';
+    vista.append(miniatura(tipo, med, 96));
+    const datos = document.createElement('div'); datos.className = 'datos-pieza';
+    const f = (x: number) => x.toLocaleString('es-AR', { maximumFractionDigits: 3 });
+    datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>${ms.length} muro${ms.length > 1 ? 's' : ''}: ${ms.map(m => m.id).join(', ')}</span>`;
+    const nota = document.createElement('p'); nota.className = 'nota chica';
+    nota.textContent = `${t.ayuda} Las partes se nombran en la posición de la pieza sin girar (alma vertical, ala superior arriba). Los cambios se aplican al salir del campo o con Enter; el centro de la pieza queda donde está.`;
+    const listo = document.createElement('button'); listo.type = 'button'; listo.textContent = 'Listo';
+    listo.addEventListener('click', () => { medGrupo = null; armarPanelMed(); dibujar(); });
+    panelMed.append(tit, gen, ...(PARTES[tipo].length ? [porParte] : []), vista, datos, nota, listo);
+  }
+  let ultimoToque: { id: string; t: number } | null = null;
+  function abrirMedidas(m: Muro) {
+    if (!m.grupo) return;
+    if (!m.pieza) { mensaje(`${m.id} está en el grupo ${m.grupo}, que no es una pieza tipo: sus muros se editan uno por uno en «Muros».`); return; }
+    medGrupo = m.grupo; armarPanelMed();
   }
   barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns);
   cont.appendChild(barra);
@@ -527,6 +587,10 @@ export function montarPlanta(cont: HTMLElement) {
         if (modo !== 'mover') return;
         ev.preventDefault();
         ultimoEspesor = m.espesor;
+        // doble clic propio (la planta se redibuja entre los dos clics y el navegador no lo cuenta): abre las medidas de la pieza
+        const ahora = performance.now();
+        if (ultimoToque && ultimoToque.id === m.id && ahora - ultimoToque.t < 450) { ultimoToque = null; abrirMedidas(m); return; }
+        ultimoToque = { id: m.id, t: ahora };
         estado.seleccion = m.id;
         const q = aMundo(ev);
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y, otros: m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo && o.id !== m.id).map(o => ({ id: o.id, x: o.x, y: o.y })) : [] };
@@ -551,6 +615,10 @@ export function montarPlanta(cont: HTMLElement) {
         forma.addEventListener('pointerdown', e0 => {
           const ev = e0 as PointerEvent;
           ev.preventDefault(); ev.stopPropagation();
+          // el segundo clic de un doble clic suele caer en un nodo del elemento recién elegido
+          const ahora = performance.now();
+          if (ultimoToque && ultimoToque.id === elegido.id && ahora - ultimoToque.t < 450) { ultimoToque = null; abrirMedidas(elegido); return; }
+          ultimoToque = { id: elegido.id, t: ahora };
           refNodo = nodosDe(elegido).findIndex(o => o.x === nd.x && o.y === nd.y); clavePrec = '';
           const ids = elegido.grupo ? p.muros.filter(o => o.grupo === elegido.grupo).map(o => o.id) : [elegido.id];
           arrastreNodo = { p: { x: nd.x, y: nd.y }, orig: p.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
@@ -562,6 +630,7 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(gg);
     }
     armarPanelPrec();
+    if (medGrupo) { panelPrec.hidden = true; if (!panelMed.contains(document.activeElement)) armarPanelMed(); }
     // pieza tipo: vista previa donde se va a insertar
     if (modo === 'insertar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -600,6 +669,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
       const q = aMundo(ev), g5 = (v: number) => +(Math.round(v / 0.05) * 0.05).toFixed(2);
+      const mal = problemaMedidas(insTipo, insMed);
+      if (mal) { mensaje(`No se puede insertar: ${mal}.`); return; }
       estado.cambiar(() => {
         const p = estado.proyecto;
         const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
@@ -691,6 +762,6 @@ export function montarPlanta(cont: HTMLElement) {
   });
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);
-  estado.suscribirSeleccion(() => { refNodo = -1; clavePrec = ''; dibujar(); });
+  estado.suscribirSeleccion(() => { refNodo = -1; clavePrec = ''; const m = estado.proyecto.muros.find(x => x.id === estado.seleccion); if (medGrupo && m?.grupo !== medGrupo) { medGrupo = null; panelMed.hidden = true; } dibujar(); });
   ponerModo('mover');
 }

@@ -64,6 +64,8 @@ export interface Muro {
   rolB?: RolMolde | '';
   /** grupo al que pertenece (pieza armada como un elemento: se mueve, gira y espeja entera) */
   grupo?: string;
+  /** si el grupo es una pieza tipo: su forma y sus medidas (para cambiarlas después sin salir de la categoría) */
+  pieza?: { tipo: import('./piezasTipo').TipoPieza; med: import('./piezasTipo').MedidasPieza };
   /** (versiones anteriores) columna circular: se convierte en «tubo-circ» al abrir el proyecto */
   circular?: { D: number; d: number } | null;
 }
