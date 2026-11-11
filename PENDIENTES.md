@@ -96,7 +96,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ### Para el uso diario
 - [ ] Lista de proyectos guardados en el navegador, con versiones
-- [ ] Exportar los dibujos (planta, cartas, diagramas) como SVG o PNG para las láminas
+- [x] Exportar los dibujos (cartas, diagramas, funiculares, perfiles) como SVG o PNG: botones «⤓ SVG · ⤓ PNG» arriba de cada dibujo
 - [ ] Carga más rápida al abrir (separar el 3D y la planilla del resto)
 
 ### Pendientes de la cátedra (preguntas abiertas, arriba)

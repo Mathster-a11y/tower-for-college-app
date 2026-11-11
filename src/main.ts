@@ -4,6 +4,7 @@ import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
 import { imprimirLaminas } from './ui/lamina';
+import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
@@ -95,6 +96,8 @@ function dibujarCentro() {
   const y = lienzo.scrollTop;
   dib.replaceChildren();
   try { e.centro(dib, tam); } catch (err) { console.error(err); dib.append(h('p', { class: 'error' }, `No se pudo dibujar: ${String(err)}`)); }
+  // cada dibujo se puede guardar como SVG o PNG
+  botonesExportar(dib, `torre3d_${e.id}_viento${estado.dir}${estado.sub[e.id] ? `_${estado.sub[e.id]}` : ''}`.replace(/[^\w-]+/g, '_'));
   lienzo.scrollTop = y;
 }
 function dibujarAvance() {

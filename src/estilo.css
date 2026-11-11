@@ -629,3 +629,8 @@ text[data-par].ultimo { font-size: 15px; }
 .lamina .lm-cebra { fill: #f2f2f0; }
 .lamina .lm-chip { fill: #eee; } .lamina .lm-chip.verifica { fill: #dcf2df; } .lamina .lm-chip.no-verifica { fill: #f8d9d7; } .lamina .lm-chip.revisar { fill: #fbecc8; }
 .lamina .lm-chip-txt { font: 600 20px var(--fuente); fill: #333; } .lamina .lm-chip-txt.verifica { fill: #1d6b2a; } .lamina .lm-chip-txt.no-verifica { fill: #a12a22; } .lamina .lm-chip-txt.revisar { fill: #8a5a00; }
+/* exportar dibujos */
+.exportar-dibujo { display: flex; justify-content: flex-end; gap: 4px; margin: 2px 0 -2px; }
+.exportar-dibujo button { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--edge); background: var(--field); color: var(--ink2); }
+.exportar-dibujo button:hover { color: var(--accent); border-color: var(--accent); }
+@media print { .exportar-dibujo { display: none; } }
