@@ -11,6 +11,7 @@ import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
+import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
 import { TENSION_ADM, type Control } from '../engine/verificaciones';
@@ -505,6 +506,61 @@ const flexion: Etapa = {
   estado: () => peor(grupoControles(['Flexocompresión'])),
 };
 
+// ------------------------------------------------------------------ Carta (la hoja M,NyQ dibujada)
+/** Datos de la carta: cada nivel con las columnas de «M,NyQ» (cara a o cara b según el viento) y la planta. */
+export function datosCarta(): DatosCarta | null {
+  const d = datos();
+  if (!d.asig) return null;
+  const A = d.dir === 'A', m = d.R.mnyq, vi = d.R.viento;
+  const niveles: NivelCarta[] = d.p.niveles.map((n, j) => {
+    const k = d.asig.filaNivel[j];
+    if (k === undefined) return null;
+    return { nombre: n.nombre, z: n.cota, h: m.C[k] || 0, D: m.D[k] || 0, p: m.G[k] || 0, pB: (vi.P[k] ?? 0) / 1000, pS: (vi.Q[k] ?? 0) / 1000,
+      Wi: (A ? m.H[k] : m.D[k] * m.F[k] * m.G[k]) || 0, Q: (A ? m.I[k] : m.N[k]) || 0, M: (A ? m.J[k] : m.O[k]) || 0, N: m.M[k] || 0 };
+  }).filter((x): x is NivelCarta => x !== null);
+  const plano = datosRotoPlano(d);
+  const PB = niveles.find(n => Math.abs(n.z) < 1e-6) ?? niveles.filter(n => n.z >= 0).pop() ?? null;
+  const cs = (estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo');
+  return {
+    dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla',
+    niveles, T: plano.T, S: plano.S, zTop: d.p.niveles[0]?.cota ?? 0, zFondo: d.p.niveles[d.p.niveles.length - 1]?.cota ?? 0,
+    W: d.W, Mv: d.Mv, hw: d.hw, PB, plano, roto: datosRoto3D(),
+    controles: cs.map(c => ({ nombre: c.nombre, valor: c.guia !== null ? `${fmt(c.guia, 1)} ${c.unidad}` : c.planilla !== null ? `${fmt(c.planilla, 1)} ${c.unidad}` : '', estado: c.estado })),
+  };
+}
+const VARIANTES: [Variante, string, string][] = [
+  ['A', 'A · Lámina M, N y Q', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja.'],
+  ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
+  ['C', 'C · Axonometría de la ménsula', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones.'],
+];
+const cartaE: Etapa = {
+  id: 'carta', nro: '▤', nombre: 'Carta', rol: '--r-resumen', dependeDir: true, conFuente: true,
+  icono: '<rect x="5" y="3" width="16" height="18" rx="1.5"/><path d="M9 7v10M9 17h8M9 9h5M9 12h7M9 15h3"/>',
+  globo: 'Carta|La hoja «M,NyQ» dibujada: el edificio con sus cotas, el viento, el corte, el momento y el peso de cada nivel, y lo que marca la planilla.',
+  panel(c) {
+    const dc = datosCarta();
+    if (!dc) return;
+    c.append(h('p', { class: 'nota' }, 'Los valores de la hoja «M,NyQ», nivel por nivel (cara ' + (dc.dir === 'A' ? 'a: columnas H, I y J' : 'b: columnas N y O') + '; N en la columna M).'));
+    c.append(seccion('M, N y Q por nivel', tablaValores(['Nivel', 'cota', 'h', 'D', 'Wi (t)', 'Q (t)', 'M (tm)', 'N (t)'],
+      dc.niveles.map(n => [n.nombre, n.z, n.h, n.D, n.Wi, n.Q, n.M, n.N]), [0, 2, 2, 2, 2, 1, 0, 0])).el);
+  },
+  centro(c, tam) {
+    const dc = datosCarta();
+    if (!dc) { c.append(h('p', { class: 'nota' }, 'Faltan datos para la carta.')); return; }
+    const vr = (estado.sub.carta as Variante) || 'A';
+    const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Propuesta' });
+    VARIANTES.forEach(([k, t]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(vr === k) }, t);
+      b.addEventListener('click', () => { estado.sub.carta = k; estado.avisarPanel(); });
+      seg.append(b);
+    });
+    c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, VARIANTES.find(x => x[0] === vr)![2]));
+    c.append(carta(dc, vr, Math.max(1000, Math.min(1300, tam.ancho ?? 1100))));
+  },
+  nombreCentro: () => `Carta de la torre · viento ${estado.dir}`,
+  estado: () => 'informativo',
+};
+
 // ------------------------------------------------------------------ Resumen y Ayuda
 const resumen: Etapa = {
   id: 'resumen', nro: '✓', nombre: 'Resumen', rol: '--r-resumen', conFuente: false,
@@ -532,7 +588,7 @@ const ayuda: Etapa = {
 };
 
 export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion];
-export const ETAPAS_FIN: Etapa[] = [resumen, ayuda];
+export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;
 export { esc };
