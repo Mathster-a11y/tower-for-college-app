@@ -60,3 +60,26 @@ describe('grupos de muros', () => {
     expect(desagrupar(ms, 'T5').some(m => m.grupo)).toBe(false);
   });
 });
+
+import { imanarNodo, nodosMuro } from './dibujo';
+describe('imán de nodos (arrastrar desde una esquina)', () => {
+  const t = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number) => ({ id, dir, x, y, largo, espesor: 0.2, llega: true, areaInf: 0, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' });
+  it('pega a la esquina de otro muro, no a su eje', () => {
+    const m = t('M1', 'Y', 0, 0, 4);
+    const r = imanarNodo({ x: 0.13, y: 2.04 }, [m], 0.2);
+    expect(r).toMatchObject({ a: 'esquina', p: { x: 0.1, y: 2 }, id: 'M1' });
+  });
+  it('columna circular: centro y cuadrantes', () => {
+    const c = { ...t('C1', 'Y', 3, 3, 0.6), tipo: 'tubo-circ' as const, espesor: 0.3 };
+    expect(nodosMuro(c).map(n => n.t)).toEqual(['centro', 'medio', 'medio', 'medio', 'medio']);
+    expect(imanarNodo({ x: 3.28, y: 3.02 }, [c], 0.1)).toMatchObject({ a: 'medio', p: { x: 3.3, y: 3 } });
+  });
+  it('sobre la cara de un muro (lejos de los nodos): queda apoyado en la cara', () => {
+    const m = t('M1', 'Y', 0, 0, 4);
+    const r = imanarNodo({ x: 0.13, y: 1.23 }, [m], 0.1);
+    expect(r).toMatchObject({ a: 'cara', p: { x: 0.1, y: 1.25 } });
+  });
+  it('lejos de todo: grilla de 5 cm', () => {
+    expect(imanarNodo({ x: 5.123, y: 7.481 }, [t('M1', 'Y', 0, 0, 4)], 0.1)).toMatchObject({ a: 'grilla', p: { x: 5.1, y: 7.5 } });
+  });
+});

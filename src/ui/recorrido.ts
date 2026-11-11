@@ -7,7 +7,7 @@ interface Paso { sel: string; titulo: string; texto: string }
 const PASOS: Paso[] = [
   { sel: '#riel', titulo: '1 · Las etapas de la planilla', texto: 'Se recorren de arriba hacia abajo, como las hojas del Excel: Diseño, Viento, Fuerzas, Estabilidad, Rigidez, Rototraslación, Flexión y la Carta. El punto de color dice si la etapa verifica.' },
   { sel: '#lateral', titulo: '2 · Los datos y las fórmulas', texto: 'En Diseño se cargan los niveles, los muros y las piezas. En las otras etapas, este panel muestra las fórmulas con la celda de la planilla de donde salen.' },
-  { sel: '#vista-planta', titulo: '3 · La planta', texto: 'Se dibujan y mueven los muros (clic en un muro y se arrastra desde sus nodos), se importa un plano de CAD, se insertan piezas tipo y se editan la losa, la carpintería y las áreas de influencia.' },
+  { sel: '#vista-planta', titulo: '3 · La planta', texto: 'Se dibujan y mueven los muros, columnas y núcleos: agarralos desde una esquina, un medio o el centro (aparecen al pasar el mouse) y se pegan a las esquinas y caras de los demás. Rueda o pellizco para acercar. También se importa un plano de CAD, se insertan piezas tipo y se editan la losa, la carpintería y las áreas de influencia.' },
   { sel: '#vista-3d', titulo: '4 · La torre en 3D', texto: 'La axonometría se actualiza sola. En Rototraslación muestra la deformada exagerada: cuánto se traslada y cuánto gira cada nivel con el viento.' },
   { sel: '#avance', titulo: '5 · El avance', texto: 'Qué etapas están completas y cuáles no verifican. Un clic lleva a la etapa.' },
   { sel: '#b-mis', titulo: '6 · Mis proyectos', texto: 'Guardá versiones con nombre en este navegador para comparar variantes. Al abrir un ejemplo u otro archivo, el proyecto actual se guarda solo.' },

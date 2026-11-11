@@ -755,3 +755,5 @@ text[data-par].ultimo { font-size: 15px; }
 .areas-panel { width: 240px; }
 .areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; }
 .areas-panel button { font-size: 12px; white-space: normal; }
+.planta .nodos-hover rect, .planta .nodos-hover polygon { stroke: var(--ink2); }
+.planta .iman-destino { fill: none; stroke: var(--elegido); stroke-width: 2; pointer-events: none; }

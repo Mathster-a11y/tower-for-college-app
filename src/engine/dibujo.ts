@@ -159,3 +159,40 @@ export function espejarGrupo(muros: Muro[], g: string, eje: 'x' | 'y'): Muro[] {
     return n;
   });
 }
+
+export type TipoNodoMuro = 'esquina' | 'medio' | 'centro';
+/** nodos de un elemento: esquinas, medios de los lados y centro (columnas circulares: centro y cuadrantes) */
+export function nodosMuro(m: Muro): (Punto & { t: TipoNodoMuro })[] {
+  if (tipoDe(m) === 'tubo-circ') { const r = m.largo / 2; return [{ x: m.x, y: m.y, t: 'centro' }, { x: m.x + r, y: m.y, t: 'medio' }, { x: m.x - r, y: m.y, t: 'medio' }, { x: m.x, y: m.y + r, t: 'medio' }, { x: m.x, y: m.y - r, t: 'medio' }]; }
+  const ax = tipoDe(m) === 'tubo-rect' ? m.largo : m.dir === 'Y' ? m.espesor : m.largo, ay = tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : m.dir === 'Y' ? m.largo : m.espesor;
+  const x0 = m.x - ax / 2, x1 = m.x + ax / 2, y0 = m.y - ay / 2, y1 = m.y + ay / 2;
+  return [{ x: x0, y: y0, t: 'esquina' }, { x: x1, y: y0, t: 'esquina' }, { x: x1, y: y1, t: 'esquina' }, { x: x0, y: y1, t: 'esquina' },
+    { x: m.x, y: y0, t: 'medio' }, { x: x1, y: m.y, t: 'medio' }, { x: m.x, y: y1, t: 'medio' }, { x: x0, y: m.y, t: 'medio' }, { x: m.x, y: m.y, t: 'centro' }];
+}
+/**
+ * Imán para arrastrar desde un nodo: primero un nodo de otro elemento (esquina, medio o centro), después un punto
+ * sobre una cara de otro elemento (para apoyarlo contra un muro); si no hay nada cerca, la grilla de 5 cm.
+ */
+export function imanarNodo(p: Punto, muros: Muro[], tol: number): { p: Punto; a: TipoNodoMuro | 'cara' | 'grilla'; id?: string } {
+  let mejor: { p: Punto; d: number; id: string; t: TipoNodoMuro } | null = null;
+  for (const m of muros) for (const n of nodosMuro(m)) {
+    const d = Math.hypot(n.x - p.x, n.y - p.y);
+    if (d <= tol && (!mejor || d < mejor.d - 1e-9 || (Math.abs(d - mejor.d) < 1e-9 && n.t === 'esquina'))) mejor = { p: n, d, id: m.id, t: n.t };
+  }
+  if (mejor) return { p: { x: r2(mejor.p.x), y: r2(mejor.p.y) }, a: mejor.t, id: mejor.id };
+  let cara: { p: Punto; d: number; id: string } | null = null;
+  for (const m of muros) {
+    if (tipoDe(m) === 'tubo-circ') continue;
+    for (const r of rectangulos(m)) {
+      const x0 = r.x - r.ax / 2, x1 = r.x + r.ax / 2, y0 = r.y - r.ay / 2, y1 = r.y + r.ay / 2;
+      const cand: Punto[] = [{ x: Math.min(x1, Math.max(x0, p.x)), y: y0 }, { x: Math.min(x1, Math.max(x0, p.x)), y: y1 }, { x: x0, y: Math.min(y1, Math.max(y0, p.y)) }, { x: x1, y: Math.min(y1, Math.max(y0, p.y)) }];
+      for (const c of cand) { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d <= tol && (!cara || d < cara.d)) cara = { p: c, d, id: m.id }; }
+    }
+  }
+  if (cara) {
+    // sobre la cara, el otro sentido va a la grilla
+    const c = cara.p, enX = Math.abs(c.y - p.y) > Math.abs(c.x - p.x);
+    return { p: enX ? { x: grilla(c.x), y: r2(c.y) } : { x: r2(c.x), y: grilla(c.y) }, a: 'cara', id: cara.id };
+  }
+  return { p: { x: grilla(p.x), y: grilla(p.y) }, a: 'grilla' };
+}

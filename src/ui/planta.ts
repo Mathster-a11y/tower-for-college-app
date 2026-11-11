@@ -1,7 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
+import { agrupar, armarPiezas, imanar, imanarNodo, muroDesdeTramo, nodosMuro, type Punto } from '../engine/dibujo';
 import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
@@ -415,12 +415,9 @@ export function montarPlanta(cont: HTMLElement) {
   // arrastre desde un nodo del elemento elegido: el nodo se pega a los nodos del CAD o de otros muros
   let arrastreNodo: { p: { x: number; y: number }; orig: { id: string; x: number; y: number }[] } | null = null;
   /** nodos del elemento: esquinas, medios de los lados y centro (en las columnas circulares, centro y cuadrantes) */
-  const nodosDe = (m: Muro): { x: number; y: number; t: 'esquina' | 'medio' | 'centro' }[] => {
-    if (tipoDe(m) === 'tubo-circ') { const r = m.largo / 2; return [{ x: m.x, y: m.y, t: 'centro' }, { x: m.x + r, y: m.y, t: 'medio' }, { x: m.x - r, y: m.y, t: 'medio' }, { x: m.x, y: m.y + r, t: 'medio' }, { x: m.x, y: m.y - r, t: 'medio' }]; }
-    const { ax, ay } = huella(m), x0 = m.x - ax / 2, x1 = m.x + ax / 2, y0 = m.y - ay / 2, y1 = m.y + ay / 2;
-    return [{ x: x0, y: y0, t: 'esquina' }, { x: x1, y: y0, t: 'esquina' }, { x: x1, y: y1, t: 'esquina' }, { x: x0, y: y1, t: 'esquina' },
-      { x: m.x, y: y0, t: 'medio' }, { x: x1, y: m.y, t: 'medio' }, { x: m.x, y: y1, t: 'medio' }, { x: x0, y: m.y, t: 'medio' }, { x: m.x, y: m.y, t: 'centro' }];
-  };
+  const nodosDe = (m: Muro) => nodosMuro(m);
+  /** elemento con el mouse encima (modo mover): se ven sus nodos para agarrarlo desde una esquina sin elegirlo antes */
+  let hoverId: string | null = null;
   const NOMBRE_NODO = ['esquina inf. izq.', 'esquina inf. der.', 'esquina sup. der.', 'esquina sup. izq.', 'medio de abajo', 'medio derecho', 'medio de arriba', 'medio izquierdo', 'centro'];
   const NOMBRE_NODO_CIRC = ['centro', 'borde derecho', 'borde izquierdo', 'borde de arriba', 'borde de abajo'];
   // mover con precisión: se elige un nodo del elemento (o del grupo) y se lo lleva a unas coordenadas o se lo corre dx, dy
@@ -672,6 +669,16 @@ export function montarPlanta(cont: HTMLElement) {
         ultimoToque = { id: m.id, t: ahora };
         estado.seleccion = m.id;
         const q = aMundo(ev);
+        // cerca de una esquina (o de otro nodo) del elemento: se agarra desde ese nodo, con imán a los nodos de los demás
+        const nd = nodosDe(m).map(n => ({ n, d: Math.hypot(n.x - q.x, n.y - q.y) * escala })).sort((a, b) => a.d - b.d || (a.n.t === 'esquina' ? -1 : 1))[0];
+        if (nd && nd.d <= 10 && nd.n.t !== 'centro') {
+          const ids = m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
+          arrastreNodo = { p: { x: nd.n.x, y: nd.n.y }, orig: estado.proyecto.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
+          refNodo = nodosDe(m).findIndex(o => o.x === nd.n.x && o.y === nd.n.y); clavePrec = '';
+          try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+          estado.cambiar();
+          return;
+        }
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y, otros: m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo && o.id !== m.id).map(o => ({ id: o.id, x: o.x, y: o.y })) : [] };
         try { svg.setPointerCapture(ev.pointerId); } catch { /* puntero sintético: se arrastra igual */ }
         estado.cambiar();
@@ -680,23 +687,27 @@ export function montarPlanta(cont: HTMLElement) {
     });
     calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 4, class: 'iman extremo' })));
     // nodos del elemento elegido (modo mover): se arrastran para ubicarlo con precisión
-    const elegido = modo === 'mover' ? p.muros.find(m => m.id === estado.seleccion) : undefined;
-    if (elegido && presenteEn(elegido, zN, zFund, zTop)) {
-      const gg = el('g', { class: 'nodos' });
+    // nodos del elegido y del que tiene el mouse encima: se arrastran desde ahí (esquinas, medios, centro)
+    const elegidoSel = modo === 'mover' ? p.muros.find(m => m.id === estado.seleccion) : undefined;
+    const enHover = modo === 'mover' && !arrastre && !arrastreNodo && hoverId && hoverId !== estado.seleccion ? p.muros.find(m => m.id === hoverId) : undefined;
+    [elegidoSel, enHover].forEach((elegido, k) => {
+      if (!elegido || !presenteEn(elegido, zN, zFund, zTop)) return;
+      const gg = el('g', { class: 'nodos' + (k ? ' nodos-hover' : '') });
       const lista = nodosDe(elegido);
       // en muros finos las esquinas y los medios de los lados cortos quedan pegados: se dibuja uno solo
       // (primero el centro, después las esquinas, después los medios)
       const puestos: [number, number][] = [];
       const prio = { centro: 0, esquina: 1, medio: 2 } as const;
       const visibles = new Set(lista.map((nd, i) => ({ nd, i })).sort((u, v) => prio[u.nd.t] - prio[v.nd.t]).filter(({ nd }) => {
-        const x = X(nd.x), y = Y(nd.y), esRef = refNodo >= 0 ? nd === lista[refNodo] : false;
+        const x = X(nd.x), y = Y(nd.y), esRef = !k && refNodo >= 0 ? nd === lista[refNodo] : false;
         if (!esRef && puestos.some(([a, b]) => Math.hypot(a - x, b - y) < 5)) return false;
         puestos.push([x, y]); return true;
       }).map(o => o.nd));
-      lista.forEach(nd => {
-        if (!visibles.has(nd)) return;
+      lista.forEach(ndDibujado => {
+        if (!visibles.has(ndDibujado)) return;
+        const nd = ndDibujado;
         const x = X(nd.x), y = Y(nd.y);
-        const esRef = refNodo >= 0 ? nd === lista[refNodo] : nd.t === 'centro';
+        const esRef = !k && (refNodo >= 0 ? nd === lista[refNodo] : nd.t === 'centro');
         // marca chica (no tapa el muro) y un círculo invisible más grande para agarrarla fácil
         const forma = el('g', { class: `nodo nodo-${nd.t}` });
         forma.appendChild(el('circle', { cx: x, cy: y, r: 8, class: 'hit' }));
@@ -707,10 +718,14 @@ export function montarPlanta(cont: HTMLElement) {
         forma.addEventListener('pointerdown', e0 => {
           const ev = e0 as PointerEvent;
           ev.preventDefault(); ev.stopPropagation();
+          // en muros finos los círculos de agarre se superponen: vale el nodo visible más cercano al puntero
+          const qq = aMundo(ev);
+          const nd = [...visibles].sort((u, v) => Math.hypot(u.x - qq.x, u.y - qq.y) - Math.hypot(v.x - qq.x, v.y - qq.y))[0] ?? ndDibujado;
           // el segundo clic de un doble clic suele caer en un nodo del elemento recién elegido
           const ahora = performance.now();
           if (ultimoToque && ultimoToque.id === elegido.id && ahora - ultimoToque.t < 450) { ultimoToque = null; abrirMedidas(elegido); return; }
           ultimoToque = { id: elegido.id, t: ahora };
+          if (k) { estado.seleccion = elegido.id; hoverId = null; }
           refNodo = nodosDe(elegido).findIndex(o => o.x === nd.x && o.y === nd.y); clavePrec = '';
           const ids = elegido.grupo ? p.muros.filter(o => o.grupo === elegido.grupo).map(o => o.id) : [elegido.id];
           arrastreNodo = { p: { x: nd.x, y: nd.y }, orig: p.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
@@ -720,7 +735,7 @@ export function montarPlanta(cont: HTMLElement) {
         gg.appendChild(forma);
       });
       svg.appendChild(gg);
-    }
+    });
     armarPanelPrec();
     if (medGrupo) { panelPrec.hidden = true; if (!panelMed.contains(document.activeElement)) armarPanelMed(); }
     // pieza tipo: vista previa donde se va a insertar
@@ -775,6 +790,18 @@ export function montarPlanta(cont: HTMLElement) {
     const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol); iman = r.a; ultimoIman = r.a; return r.p;
   };
   let ultimoIman = '';
+  /** imán al arrastrar desde un nodo: nodos del plano CAD, nodos y caras de los otros elementos, grilla */
+  const pegarNodo = (ev: PointerEvent, excluir: Set<string>) => {
+    const q = aMundo(ev), tol = 10 / escala;
+    const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
+    if (nc) { ultimoIman = nc.t; destinoIman = { x: nc.p.x, y: nc.p.y }; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
+    const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
+    const r = imanarNodo(q, estado.proyecto.muros.filter(m => !excluir.has(m.id) && presenteEn(m, zN, zF, zT)), tol);
+    ultimoIman = r.a === 'grilla' ? 'grilla' : `${r.a}${r.id ? ` de ${r.id}` : ''}`;
+    destinoIman = r.a === 'grilla' ? null : r.p;
+    return r.p;
+  };
+  let destinoIman: { x: number; y: number } | null = null;
   // --- acercar y desplazar ---
   const acercarEn = (f: number, sx: number, sy: number) => {
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
@@ -900,15 +927,24 @@ export function montarPlanta(cont: HTMLElement) {
     const co = document.getElementById('coords');
     if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
     if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
+    if (modo === 'mover' && !arrastre && !arrastreNodo && !pan) {
+      const t = ev.target as Element;
+      const enNodo = t.closest?.('.nodos-hover');
+      const id = enNodo ? hoverId : ((t.closest?.('g.muro') as SVGGElement | null)?.dataset.id ?? null);
+      if (id !== hoverId) { hoverId = id; dibujar(); }
+    }
     if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }; dibujar(); return; }
     if (modo === 'calibrar') return;
     if (arrastreNodo) {
       const excl = new Set(arrastreNodo.orig.map(o => o.id));
-      const q = pegar(ev, excl);
+      const q = pegarNodo(ev, excl);
       const dx = q.x - arrastreNodo.p.x, dy = q.y - arrastreNodo.p.y;
       arrastreNodo.orig.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(3); w.y = +(o.y + dy).toFixed(3); } });
       cursor = q; dibujar();
-      if (ultimoIman && ultimoIman !== 'grilla') svg.appendChild(el('text', { x: ox + q.x * escala + 10, y: oy - q.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+      if (destinoIman) {
+        svg.appendChild(el('circle', { cx: ox + destinoIman.x * escala, cy: oy - destinoIman.y * escala, r: 6, class: 'iman-destino' }));
+        svg.appendChild(el('text', { x: ox + q.x * escala + 10, y: oy - q.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+      }
       return;
     }
     if (modo === 'silueta') {
@@ -929,7 +965,7 @@ export function montarPlanta(cont: HTMLElement) {
     arrastre.otros.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(2); w.y = +(o.y + dy).toFixed(2); } });
     dibujar();
   });
-  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };
+  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; destinoIman = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };
   svg.addEventListener('pointerup', soltar);
   svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('keydown', ev => {
