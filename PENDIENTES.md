@@ -16,8 +16,10 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] **Niveles y Muros como Excel.** Grilla con selección, escribir encima, arrastrar el cuadradito para copiar o seguir la serie, Ctrl+C / Ctrl+V desde Excel, Supr, Ctrl+D, insertar y borrar filas
 - [x] **Importar desde Excel.** Tabla de la app (hojas Niveles y Muros, con botón para descargarla de plantilla), líneas exportadas de AutoCAD (x1, y1, x2, y2, con unidad, capa y centrado) y la planilla del curso ya llena (niveles, viento, fundación y piezas de las hojas J; el ΣJ de cada dirección coincide con la planilla)
 
+- [x] **Diagramas** (pestaña «Diagramas»): presión del viento y fuerza por piso en altura; corte V y momento M; rototraslación en planta (eje de inercia, resultante, traslación y rotación de cada pieza); rigidez (ΣJ contra J mínimo, deformada contra h/500, reparto de J); funicular
+
 ## En curso
-- [ ] **Diagramas.** Viento y esfuerzos en altura (qz, fuerza por piso, corte V y momento M); rototraslación en planta; rigidez y deformación (ΣJ contra J mínimo, deformada contra h/500)
+- Nada por ahora: el próximo es el primero de la lista de abajo.
 
 ## Próximos
 - [ ] Diagrama de flexocompresión por pieza (tensiones N/A ± M/W, descargada y cargada)

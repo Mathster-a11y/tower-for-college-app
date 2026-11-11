@@ -5,6 +5,8 @@ import { TENSION_ADM } from '../engine/verificaciones';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { calcFunicular } from '../engine/funicular';
 import { dibujoGuia, dibujoPresiones } from './funicular';
+import { datosAltura, deformada, E_DE_DIVISOR, reparto, rigidez } from '../engine/diagramas';
+import { graficoAltura, graficoReparto, graficoRigidez, tablaValores } from './diagramas';
 
 type H = HTMLElement;
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...hijos: (Node | string)[]) => {
@@ -283,6 +285,78 @@ function panelFunicular(c: H) {
   c.append(h('div', { class: 'scroll' }, t2));
 }
 
+// ------------------------------------------------------------------ Diagramas
+const SUBDIAGRAMAS = ['Viento', 'Esfuerzos', 'Rototraslación', 'Rigidez', 'Funicular'] as const;
+let subDiagrama: (typeof SUBDIAGRAMAS)[number] = 'Viento';
+
+function panelDiagramas(c: H) {
+  const { asig, corr, res } = estado.calculo;
+  if (!res) return;
+  const sel = h('div', { class: 'seg sub', role: 'group', 'aria-label': 'Diagrama' });
+  SUBDIAGRAMAS.forEach(k => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(k === subDiagrama) }, k);
+    b.addEventListener('click', () => { subDiagrama = k; c.replaceChildren(); panelDiagramas(c); });
+    sel.append(b);
+  });
+  c.append(sel);
+  const dir = estado.dir;
+  const p = estado.proyecto;
+  const g = corr.guia;
+  c.append(h('p', { class: 'nota' }, `Viento ${dir} (cambialo arriba). Valores «Guía/CIRSOC»: Kz mínimo de 5 m, sin viento en PB ni en los subsuelos. Pasá el mouse por un nivel o una barra para ver su valor.`));
+  const alt = datosAltura(p, g.viento, g.mnyq, asig.filaNivel, dir);
+  const sobrePB = alt.filter(x => x.z > 0);   // la guía no pone viento en PB
+  const W = dir === 'A' ? g.mnyq.H61 : alt.reduce((s2, x) => s2 + x.F, 0);
+  const Mv = dir === 'A' ? g.mnyq.J61 : g.mnyq.O61;
+  const hw = W > 0 ? Mv / W : NaN;
+  const zBase = alt.length ? alt[alt.length - 1].z : 0;
+  if (subDiagrama === 'Viento') {
+    c.append(graficoAltura({ titulo: 'Presión del viento en altura (CIRSOC 102: p = q·G·Cp)', eje: 'presión', unidad: 'kN/m²', decimales: 2, series: [
+      { nombre: 'barlovento (qz·G·Cp)', color: 's1', tipo: 'linea', puntos: sobrePB.map(x => ({ z: x.z, x: x.pBarlo, nivel: x.nivel })) },
+      { nombre: 'sotavento (qh·G·Cp)', color: 's2', tipo: 'linea', puntos: sobrePB.map(x => ({ z: x.z, x: x.pSota, nivel: x.nivel })) },
+    ] }));
+    c.append(h('p', { class: 'nota' }, 'Barlovento crece con la altura (Kz); sotavento es constante, con qh de la azotea. La planilla suma las dos: p neta = barlovento − sotavento.'));
+    c.append(graficoAltura({ titulo: `Fuerza del viento en cada nivel (total W = ${fmt(W, 1)} t)`, eje: 'fuerza', unidad: 't', decimales: 2,
+      series: [{ nombre: 'fuerza', color: 's1', tipo: 'barras', puntos: alt.map(x => ({ z: x.z, x: x.F, nivel: x.nivel })) }],
+      alturas: isFinite(hw) ? [{ z: zBase + hw, texto: `resultante W a hw = ${fmt(hw)} m de la base` }] : [] }));
+    c.append(tablaValores(['Nivel', 'Cota (m)', 'Barlovento (kN/m²)', 'Sotavento (kN/m²)', 'Fuerza (t)'], alt.map(x => [x.nivel, x.z, x.pBarlo, x.pSota, x.F]), [0, 2, 3, 3, 2]));
+  } else if (subDiagrama === 'Esfuerzos') {
+    c.append(graficoAltura({ titulo: `Corte V en altura (en la base: ${fmt(alt[alt.length - 1]?.V ?? 0, 1)} t)`, eje: 'corte V', unidad: 't', decimales: 1,
+      series: [{ nombre: 'corte', color: 's1', tipo: 'linea', puntos: alt.map(x => ({ z: x.z, x: x.V, nivel: x.nivel })) }] }));
+    c.append(graficoAltura({ titulo: `Momento flector M en altura (en la base: Mv = ${fmt(Mv, 0)} tm)`, eje: 'momento M', unidad: 'tm', decimales: 0,
+      series: [{ nombre: 'momento', color: 's2', tipo: 'linea', puntos: alt.map(x => ({ z: x.z, x: x.M, nivel: x.nivel })) }] }));
+    c.append(h('p', { class: 'nota' }, 'La torre trabaja como una ménsula: en cada nivel, V es la suma de las fuerzas de arriba y M es su momento (M,NyQ columnas I y J para el viento A; N y O para el B). Los dos crecen hacia la base.'));
+    c.append(tablaValores(['Nivel', 'Cota (m)', 'V (t)', 'M (tm)'], alt.map(x => [x.nivel, x.z, x.V, x.M]), [0, 2, 1, 0]));
+  } else if (subDiagrama === 'Rototraslación') {
+    const rep = reparto(dir === 'A' ? g.rotA : g.rotB, dir === 'A' ? asig.datos.rotA.H : asig.datos.rotB.H, asig.piezas, dir);
+    const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
+    const B = p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.B ?? v, null) ?? 20;
+    const L = p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.L ?? v, null) ?? 16;
+    c.append(graficoReparto(rep, dir, B, L, p.muros.filter(m => m.llega), asig.papeles));
+    c.append(h('p', { class: 'nota' }, 'Cada pieza toma una parte del viento proporcional a su J (traslación). Si el eje de inercia no coincide con la resultante del viento, aparece el momento Mt = Q · e, que se reparte según J · a (rotación): suma de un lado y resta del otro. Valores en el nivel −1º, como la planilla.'));
+    c.append(tablaValores(['Pieza', 'Posición (m)', 'J (m⁴)', '% tras.', 'Q tras. (t)', 'Q rot. (t)', 'Q total (t)'], rep.piezas.map(x => [x.nombre, x.pos, x.J, x.frac * 100, x.Qtras, x.Qrot, x.Qtot]), [0, 2, 3, 1, 2, 2, 2]));
+  } else if (subDiagrama === 'Rigidez') {
+    const rs = rigidez(g, p.hormigon || 'H30');
+    c.append(graficoRigidez(rs));
+    const r = rs.find(x => x.dir === dir)!;
+    c.append(h('p', { class: 'nota' }, `J mínimo de la planilla (fila ${r.hormigon}): J = W·h² / divisor, para que la azotea no se corra más de h/400, h/500 o h/600. La guía adopta h/500.`));
+    const E = E_DE_DIVISOR((r.W * r.h * r.h) / r.minimos.h500);
+    const def = deformada(alt, W, E, r.J);
+    const mm = (x: number) => x * 1000;
+    c.append(graficoAltura({ titulo: `Deformada, viento ${dir}: la azotea se corre ${fmt(mm(def.dTop), 1)} mm (límite h/500 = ${fmt(mm(def.limite), 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
+      series: [{ nombre: 'deformada', color: 's1', tipo: 'linea', puntos: def.puntos.map(x => ({ z: x.z, x: mm(x.d), nivel: x.nivel })) }],
+      referencias: [{ x: mm(def.limite), texto: 'h/500' }] }));
+    const ok = def.dTop <= def.limite;
+    c.append(h('p', { class: `total estado ${ok ? 'verifica' : 'no-verifica'}` }, ok ? `Verifica: ${fmt(mm(def.dTop), 1)} mm ≤ h/500 = ${fmt(mm(def.limite), 1)} mm.` : `No verifica: ${fmt(mm(def.dTop), 1)} mm > h/500 = ${fmt(mm(def.limite), 1)} mm.`));
+    c.append(h('p', { class: 'nota' }, `Ménsula empotrada en PB con E = ${fmt(E / 10, 0)} kg/cm² (el que usa la planilla para el J mínimo) y ΣJ = ${fmt(r.J, 3)} m⁴, integrando el momento real de cada nivel. Con la carga uniforme de la planilla (δ = W·h³ / 8EJ) daría ${fmt(mm(def.dUniforme), 1)} mm.`));
+    const piezasDir = asig.piezas.filter(x => x.dir === dir && x.filaHoja !== null);
+    const Jp = (i: number) => (dir === 'A' ? g.jpar : g.jort).filas[i].AY;
+    const tot = piezasDir.reduce((s2, x) => s2 + Jp(x.filaHoja!), 0);
+    c.append(graficoAltura({ titulo: 'Cómo se reparte ΣJ entre las piezas', eje: 'J', unidad: 'm⁴', decimales: 3, categorias: true,
+      series: [{ nombre: 'J', color: 's1', tipo: 'barras', puntos: [...piezasDir].sort((a, b) => Jp(a.filaHoja!) - Jp(b.filaHoja!)).map((x, i) => ({ z: i, x: Jp(x.filaHoja!), nivel: x.nombre })) }] }));
+    c.append(tablaValores(['Pieza', 'Molde', 'J (m⁴)', '% de ΣJ'], piezasDir.map(x => [x.nombre, x.molde, Jp(x.filaHoja!), (Jp(x.filaHoja!) / tot) * 100]), [0, 0, 3, 1]));
+  } else panelFunicular(c);
+}
+
 // ------------------------------------------------------------------ Avisos
 /** Observaciones sobre la planilla virgen: valen para cualquier proyecto. */
 export const NOTAS_PLANILLA = [
@@ -313,10 +387,12 @@ function panelAvisos(c: H) {
 function panelAyuda(c: H) {
   const pasos: [string, string][] = [
     ['Sitio', 'Nombre, alumno y datos del viento (CIRSOC 102). La exposición completa zg y α. El hormigón fija la tensión admisible: H30 → 30 MPa = 300 kg/cm².'],
-    ['Niveles', 'Con «Generar» armás la torre: pisos, altura del piso tipo, altura de PB y subsuelos. B y L van en la azotea y donde la planta cambia.'],
+    ['Niveles', 'Con «Generar» armás la torre: pisos, altura del piso tipo, altura de PB y subsuelos. La tabla funciona como Excel: escribí encima, arrastrá el cuadradito de la esquina para copiar o seguir una serie, Ctrl+C / Ctrl+V desde Excel. B y L van en la azotea y donde la planta cambia.'],
     ['Muros', 'El origen (0, 0) es el centro de la planta de PB. Dirección Y: paralelo al viento A; X: paralelo al viento B. Arrastrá los muros en la planta o movelos con las flechas (Mayús: de a 1 m).'],
     ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
+    ['Importar', 'Con «Abrir / importar…» o «Importar desde Excel…»: la tabla de la app (bajala con «Descargar tabla»), líneas exportadas de AutoCAD (x1, y1, x2, y2) o la planilla del curso ya llena.'],
     ['Resultados', '«Planilla» es lo que da el Excel original; «Guía/CIRSOC» son los valores corregidos. Cada control dice si verifica.'],
+    ['Diagramas', 'Viento en altura, corte y momento, rototraslación en planta, rigidez y deformada, y la verificación funicular. Pasá el mouse por el gráfico para ver los valores.'],
     ['Escribir planilla', 'Descarga la planilla del curso con tus datos. Excel o LibreOffice la recalculan al abrirla. La hoja «T3D» guarda el proyecto: con «Abrir…» la volvés a cargar.'],
   ];
   c.append(h('h3', {}, 'Cómo se usa'));
@@ -330,5 +406,5 @@ function panelAyuda(c: H) {
 }
 
 export const PANELES: Record<string, (c: H) => void> = {
-  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Funicular: panelFunicular, Avisos: panelAvisos, Ayuda: panelAyuda,
+  Sitio: panelSitio, Niveles: panelNiveles, Muros: panelMuros, Piezas: panelPiezas, Resultados: panelResultados, Diagramas: panelDiagramas, Avisos: panelAvisos, Ayuda: panelAyuda,
 };

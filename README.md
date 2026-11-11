@@ -21,12 +21,24 @@ The interface is in Spanish.
 
 1. **Ejemplo** loads the guide's example (Neuquén, 20 floors). **Nuevo** starts an empty project.
 2. **Sitio**: wind data, concrete and foundation. The concrete grade gives the admissible stress (H30 → 30 MPa = 300 kg/cm²).
-3. **Niveles**: floor levels and plan dimensions B and L. There is a generator for repeated floors.
+3. **Niveles**: floor levels and plan dimensions B and L. There is a generator for repeated floors. The table works like Excel:
+   - Select cells, then drag the fill handle to copy a value or continue a series.
+   - Copy and paste with Ctrl+C / Ctrl+V from Excel.
 4. **Muros**: walls go on the plan. Drag them with the mouse or move them with the arrow keys. Each wall belongs to one piece per direction (A and B). Where it is attached decides whether it acts as an alma or an ala.
 5. **Piezas**: the equivalent profile of each piece, as written to the J sheets.
 6. **Resultados**: «Planilla» shows the workbook's values and «Guía/CIRSOC» shows the corrected ones, with each check.
-7. **Funicular**: the graphic check from the guide (2.2). W and G are added in a force polygon, and the resultant has to cut the foundation base inside the middle third. It also draws the line of pressures floor by floor against the central core of each floor plan.
-8. **Escribir planilla .xlsx** downloads the filled workbook. Excel or LibreOffice recalculate it on opening. **Guardar proyecto** downloads a `.json`. **Abrir…** accepts either the `.json` or a workbook written by the app.
+7. **Diagramas**:
+   - Wind pressure and force per floor along the height.
+   - Shear and bending moment along the height.
+   - Rototraslación on the plan: inertia axis, wind resultant and the force each piece takes.
+   - Stiffness: ΣJ against the minimum J, the deflected shape against h/500, and how J is shared among the pieces.
+   - Funicular: W + G in a force polygon, and the resultant cutting the base inside the middle third. It also shows the line of pressures floor by floor.
+8. **Escribir planilla .xlsx** downloads the filled workbook. Excel or LibreOffice recalculate it on opening. **Guardar proyecto** downloads a `.json`. **Abrir / importar…** accepts the following:
+   - a project `.json`;
+   - a workbook written by the app;
+   - the app's table, with **Niveles** and **Muros** sheets (download it as a template with «Descargar tabla»);
+   - lines exported from AutoCAD (x1, y1, x2, y2, as `.xlsx` or `.csv`);
+   - the course workbook already filled in. Levels, wind and foundation come from the workbook. The walls come from the J sheets and are approximate, but ΣJ in each direction matches the workbook.
 
 The project is also saved in the browser (localStorage). ↶/↷ or Ctrl+Z / Ctrl+Y undo and redo. The **Ayuda** tab has these same steps inside the app.
 
