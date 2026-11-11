@@ -7,6 +7,15 @@ import { controles, type Control } from '../engine/verificaciones';
 export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
 
 const CLAVE = 'torre3d.proyecto.v1';
+
+/** todo el cálculo de un proyecto (planilla, corregido y controles) */
+export function calcularProyecto(proyecto: Proyecto): Calculo {
+  const asig = aPlanilla(proyecto);
+  const res = calcularPlanilla(asig.datos);
+  const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
+  const corr = calcularCorregido(asig.datos, asig.filaNivel[iPB] ?? 50, { proyecto, piezas: asig.piezas });
+  return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel) };
+}
 type Oyente = () => void;
 
 class Estado {
@@ -54,11 +63,7 @@ class Estado {
   avisarPanel() { this.oyentes.forEach(o => o()); }
   recalcular() {
     try {
-      const asig = aPlanilla(this.proyecto);
-      const res = calcularPlanilla(asig.datos);
-      const iPB = this.proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-      const corr = calcularCorregido(asig.datos, asig.filaNivel[iPB] ?? 50, { proyecto: this.proyecto, piezas: asig.piezas });
-      this.calculo = { asig, res, corr, controles: controles(this.proyecto, asig.datos, res, corr, this.proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel) };
+      this.calculo = calcularProyecto(this.proyecto);
     } catch (e) {
       this.calculo = { ...(this.calculo ?? {}), error: String(e) } as Calculo;
     }

@@ -7,6 +7,7 @@ import { imprimirLaminas } from './ui/lamina';
 import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
 import { recorrido, recorridoSiEsPrimeraVez } from './ui/recorrido';
+import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
@@ -330,9 +331,18 @@ function armarMis() {
     const fila = h('div', { class: 'mis-fila' });
     const abrir = h('button', { type: 'button', role: 'menuitem', title: 'Abrir esta versión (la actual se guarda antes como copia automática)' }, v.nombre, h('span', { class: 'pista' }, `${fechaCorta(v.fecha)} · ${v.pisos} niveles · ${v.muros} muros${v.auto ? ' · copia automática' : ''}`));
     abrir.addEventListener('click', () => { const p = leerVersion(v.id); if (!p) return; reemplazarConCopia(p); cerrarMenus(); mensaje(`Abierta la versión «${v.nombre}».`); });
+    const cmp = h('button', { type: 'button', class: 'glifo', title: `Comparar «${v.nombre}» con el proyecto actual`, 'aria-label': `Comparar ${v.nombre}` }, '⇄');
+    cmp.addEventListener('click', ev => {
+      ev.stopPropagation(); cerrarMenus();
+      const p = leerVersion(v.id); if (!p) return;
+      try {
+        const html = tablaComparacion(comparar(p, estado.proyecto), v.nombre, 'Actual');
+        dialogo(`<h2>Comparar con «${v.nombre.replace(/</g, '&lt;')}»</h2><p class="nota">Valores según la guía/CIRSOC. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+      } catch (e) { fallo('No se pudo comparar', e); }
+    });
     const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');
     borrar.addEventListener('click', ev => { ev.stopPropagation(); if (window.confirm(`¿Borrar la versión «${v.nombre}»?`)) { borrarVersion(v.id); armarMis(); } });
-    fila.append(abrir, borrar); m.append(fila);
+    fila.append(abrir, cmp, borrar); m.append(fila);
   });
 }
 /** antes de cambiar de proyecto, el actual queda guardado como copia automática */

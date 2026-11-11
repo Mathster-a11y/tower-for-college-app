@@ -98,7 +98,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ### Para entender (didáctica)
 - [x] Recorrido guiado para la primera vez (Mostrar ▾ → Recorrido guiado)
-- [ ] Comparar dos variantes del proyecto: antes y después de mover o cambiar un muro (ΔJ, Δe, Δδ)
+- [x] Comparar una versión guardada con la actual (Mis proyectos → ⇄): ΣJ, e, Mt y cada control
 - [ ] Rototraslación animada también en la planta (no solo en el 3D)
 - [ ] «Qué pasa si…»: deslizadores para largo y posición de un muro con el resultado en vivo
 

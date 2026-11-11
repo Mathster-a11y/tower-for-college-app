@@ -740,3 +740,15 @@ text[data-par].ultimo { font-size: 15px; }
 .zoom-planta button { border: 0; border-radius: 0; width: 30px; height: 28px; padding: 0; font-size: 16px; line-height: 1; background: transparent; }
 .zoom-planta button + button { border-top: 1px solid var(--edge); }
 .zoom-planta button:hover { background: var(--tint); }
+/* comparar versiones */
+.cmp-caja { max-height: 60vh; overflow: auto; margin: 8px 0; }
+.tabla-cmp { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.tabla-cmp th, .tabla-cmp td { padding: 3px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.tabla-cmp th:first-child, .tabla-cmp td:first-child { text-align: left; white-space: normal; }
+.tabla-cmp thead th { position: sticky; top: 0; background: var(--field); }
+.tabla-cmp .cmp-grupo th { text-align: left; background: var(--zebra); font-weight: 600; color: var(--ink2); }
+.tabla-cmp .cmp-u { color: var(--dim); font-size: 11px; }
+.tabla-cmp .cmp-ok { color: var(--ok); font-weight: 700; }
+.tabla-cmp .cmp-no { color: var(--mal); font-weight: 700; }
+.tabla-cmp .cmp-info { color: var(--dim); font-size: 11px; }
+.tabla-cmp tr.cmp-cambia td { background: color-mix(in srgb, #f5c400 18%, transparent); }
