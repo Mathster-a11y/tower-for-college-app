@@ -136,7 +136,7 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
         return false;
       }));
       const X0 = X(ext.x), Y0 = Z(ext.z);
-      const cand: [number, number, 'start' | 'end'][] = [[X0 + 8, yv, 'start'], [X0 + 8, Y0 - 8, 'start'], [X0 + 8, Y0 + 16, 'start'], [X0 - 8, Y0 - 8, 'end'], [X0 - 8, Y0 + 16, 'end']];
+      const cand: [number, number, 'start' | 'end'][] = [[X0 + 8, yv, 'start'], [X0 + 8, Y0 - 8, 'start'], [X0 + 8, Y0 + 16, 'start'], [X0 - 8, Y0 - 8, 'end'], [X0 - 8, Y0 + 16, 'end'], [X0 - 4, Y0 - 22, 'end'], [X0 - 4, Y0 - 34, 'end'], [X0 + 4, Y0 - 22, 'start']];
       if (aIzq) cand.unshift([X0 - 8, yv, 'end']);
       const [xv, yv2, ancla] = cand.find(([x, y, a]) => { const x0 = a === 'start' ? x : x - anchoT; return x0 > mi && x0 + anchoT < ancho - 2 && y < alto - mb && y - 11 > 0 && !cruza(x0, y - 11, x0 + anchoT, y + 2); }) ?? cand[0];   // sin bajar a la fila de las marcas del eje
       svg.append(el('text', { x: xv, y: yv2, class: 'd-valor', 'text-anchor': ancla }, texto));
