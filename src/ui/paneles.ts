@@ -1,4 +1,5 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
+import { dibujoPerfil } from './perfil';
 import { estado, fmt, COLORES } from './estado';
 import { tipoDe, type Muro, type Nivel, type TipoElemento } from '../engine/modelo';
 import { TENSION_ADM } from '../engine/verificaciones';
@@ -201,7 +202,12 @@ export function panelPiezas(c: H) {
     const tb = h('tbody');
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
-      tb.append(h('tr', {}, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${pz.filaHoja + 4})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x))));
+      const clave = `${dir}:${pz.nombre}`;
+      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente' }, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${pz.filaHoja + 4})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+      const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
+      tr.addEventListener('click', elegir);
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });
+      tb.append(tr);
       pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '6' }, a))));
     });
     t.append(tb);
@@ -211,6 +217,14 @@ export function panelPiezas(c: H) {
   const ley = h('div', { class: 'leyenda' });
   Object.entries(COLORES).forEach(([k, v]) => ley.append(h('span', {}, h('i', { style: `background:${v}` }), k)));
   c.append(ley);
+  // perfil equivalente de la pieza elegida (o la primera)
+  const elegida = asig.piezas.find(pz => `${pz.dir}:${pz.nombre}` === estado.sub.perfil) ?? asig.piezas.find(pz => pz.filaHoja !== null);
+  if (elegida && elegida.filaHoja !== null) {
+    const fila = (elegida.dir === 'A' ? asig.datos.jpar : asig.datos.jort)[elegida.filaHoja];
+    const fr = (elegida.dir === 'A' ? res.jpar : res.jort).filas[elegida.filaHoja];
+    const muros = elegida.muros.map(id => estado.proyecto.muros.find(m => m.id === id)).filter((m): m is Muro => !!m);
+    c.append(seccion(`Perfil equivalente · ${elegida.nombre}`, dibujoPerfil(elegida, fila, fr, muros), h('p', { class: 'nota chica' }, 'Elegí una fila de las tablas para ver otra pieza. A la izquierda, los muros como están en la planta; a la derecha, el perfil que la app escribe en la hoja J. Tienen que tener el mismo largo de alma y las alas del mismo lado.')).el);
+  }
 }
 
 // ------------------------------------------------------------------ Resultados
