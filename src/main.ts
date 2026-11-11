@@ -6,6 +6,7 @@ import { imprimirInforme } from './ui/informe';
 import { imprimirLaminas } from './ui/lamina';
 import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
+import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, chip, h } from './ui/comp';
@@ -204,7 +205,7 @@ async function abrirArchivo(f: File) {
   if (f.name.toLowerCase().endsWith('.json')) {
     const p: unknown = JSON.parse(new TextDecoder().decode(buf));
     if (!proyectoValido(p)) throw new Error('El archivo no es un proyecto de Torre 3D.');
-    plantillaAbierta = null; estado.reemplazar(p); return;
+    plantillaAbierta = null; reemplazarConCopia(p); return;
   }
   const nombre = f.name.toLowerCase();
   if (/\.(csv|tsv|txt)$/.test(nombre)) { dialogoImportar(interpretar(leerTexto(new TextDecoder().decode(buf), f.name)), f.name, null); return; }
@@ -212,7 +213,7 @@ async function abrirArchivo(f: File) {
   if (leido.proyecto) {
     if (!proyectoValido(leido.proyecto)) throw new Error('La hoja «T3D» de la planilla está dañada.');
     plantillaAbierta = buf;
-    estado.reemplazar(leido.proyecto); return;
+    reemplazarConCopia(leido.proyecto); return;
   }
   const imp = interpretar(await leerLibro(buf));
   dialogoImportar(imp, f.name, imp.tipo === 'planilla' ? buf : null);
@@ -301,18 +302,45 @@ document.addEventListener('keydown', ev => {
 window.addEventListener('error', e => fallo('Error inesperado', e.error ?? e.message));
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
-$('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
-$('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
-$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
+$('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
+$('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
+$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
 $('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas(); });
 
+// «Mis proyectos»: versiones en el navegador
+function armarMis() {
+  const m = $('m-mis'); m.replaceChildren();
+  const guardar = h('button', { type: 'button', role: 'menuitem' }, 'Guardar una versión ahora', h('span', { class: 'pista' }, 'Con nombre, en este navegador'));
+  guardar.addEventListener('click', () => {
+    const n = window.prompt('Nombre de la versión:', `${estado.proyecto.nombre || 'Proyecto'} · ${fechaCorta(Date.now())}`);
+    if (n === null) return;
+    mensaje(guardarVersion(estado.proyecto, n) ? `Versión guardada: ${n}.` : 'El navegador no tiene más lugar: borrá versiones viejas o guardá el proyecto como .json.');
+    cerrarMenus();
+  });
+  m.append(guardar);
+  const vs = versiones();
+  if (!vs.length) m.append(h('p', { class: 'menu-nota' }, 'Todavía no hay versiones. Se guarda una copia sola cada vez que abrís un ejemplo u otro archivo.'));
+  vs.forEach(v => {
+    const fila = h('div', { class: 'mis-fila' });
+    const abrir = h('button', { type: 'button', role: 'menuitem', title: 'Abrir esta versión (la actual se guarda antes como copia automática)' }, v.nombre, h('span', { class: 'pista' }, `${fechaCorta(v.fecha)} · ${v.pisos} niveles · ${v.muros} muros${v.auto ? ' · copia automática' : ''}`));
+    abrir.addEventListener('click', () => { const p = leerVersion(v.id); if (!p) return; reemplazarConCopia(p); cerrarMenus(); mensaje(`Abierta la versión «${v.nombre}».`); });
+    const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');
+    borrar.addEventListener('click', ev => { ev.stopPropagation(); if (window.confirm(`¿Borrar la versión «${v.nombre}»?`)) { borrarVersion(v.id); armarMis(); } });
+    fila.append(abrir, borrar); m.append(fila);
+  });
+}
+/** antes de cambiar de proyecto, el actual queda guardado como copia automática */
+function reemplazarConCopia(p: Proyecto) {
+  guardarVersion(estado.proyecto, `${estado.proyecto.nombre || 'Proyecto'} (antes de abrir otro)`, true);
+  estado.reemplazar(p);
+}
 // menús desplegables (tarjetas)
 function cerrarMenus() { document.querySelectorAll('.menu.abierto').forEach(m => { m.classList.remove('abierto'); (m.previousElementSibling as HTMLElement | null)?.setAttribute('aria-expanded', 'false'); }); }
-([['b-ejemplos', 'm-ejemplos'], ['b-mostrar', 'm-mostrar'], ['b-exportar-menu', 'm-exportar']] as const).forEach(([b, m]) => {
-  $(b).addEventListener('click', ev => { ev.stopPropagation(); const abierto = $(m).classList.contains('abierto'); cerrarMenus(); if (!abierto) { $(m).classList.add('abierto'); $(b).setAttribute('aria-expanded', 'true'); } });
+([['b-ejemplos', 'm-ejemplos'], ['b-mis', 'm-mis'], ['b-mostrar', 'm-mostrar'], ['b-exportar-menu', 'm-exportar']] as const).forEach(([b, m]) => {
+  $(b).addEventListener('click', ev => { ev.stopPropagation(); if (m === 'm-mis') armarMis(); const abierto = $(m).classList.contains('abierto'); cerrarMenus(); if (!abierto) { $(m).classList.add('abierto'); $(b).setAttribute('aria-expanded', 'true'); } });
 });
 document.addEventListener('click', ev => { if (!(ev.target as Element).closest('.menu')) cerrarMenus(); });
 // aspecto: sistema, clásico o tablero oscuro
