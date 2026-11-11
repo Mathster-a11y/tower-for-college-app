@@ -94,12 +94,12 @@ export interface Construccion {
   zR: number; xR: number;
 }
 
-export function poligonoFunicular(fuerzasIn: { z: number; F: number; nivel: string }[], x0 = 0): Construccion {
+export function poligonoFunicular(fuerzasIn: { z: number; F: number; nivel: string }[], x0 = 0, Hpolo?: number): Construccion {
   const fuerzas = fuerzasIn.filter(f => f.F > 1e-9).sort((a, b) => b.z - a.z);
   const W = fuerzas.reduce((s, f) => s + f.F, 0);
   const S = [0];
   fuerzas.forEach(f => S.push(S[S.length - 1] + f.F));
-  const polo = { x: W / 2, H: W * 0.9 || 1 };
+  const polo = { x: W / 2, H: Hpolo ?? (W * 0.9 || 1) };
   const m = S.map(Sk => (Sk - polo.x) / polo.H);
   const vertices: { x: number; z: number }[] = [];
   fuerzas.forEach((f, k) => {

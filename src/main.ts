@@ -6,7 +6,7 @@ import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, type Etapa } from './ui/etapas';
 import { activarGlobos, chip, h } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
-import { ejemploGuia, proyectoVacio, type Proyecto } from './engine/modelo';
+import { ejemploGuia, ejemploAsimetrico, proyectoVacio, type Proyecto } from './engine/modelo';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
@@ -296,6 +296,7 @@ window.addEventListener('error', e => fallo('Error inesperado', e.error ?? e.mes
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
+$('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; estado.reemplazar(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });

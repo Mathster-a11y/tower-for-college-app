@@ -6,8 +6,9 @@
 import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, type EstadoChip } from './comp';
 import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelProyecto, panelResultados, seccionViento, cantidadAvisos } from './paneles';
-import { graficoAltura, graficoReparto, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
+import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
+import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { datosAltura, deformada, E_DE_DIVISOR, reparto, rigidez, rigidezPorNivel, type PuntoAltura } from '../engine/diagramas';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
@@ -290,8 +291,7 @@ const rototrasl: Etapa = {
     cu.append(
       formula('Centro de rigidez (eje de inercia)', `${v('X', 'r')}${op('=')}Σ ${v('J')}·${v('x')} / Σ ${v('J')}${op('=')}${n(rot.I25, 2)} / ${n(rot.B25, 2)}${op('=')}${r(rep.d, 2, 'm')}`, `${hoja}!J7`),
       formula('Momento de rotación', `${v('M', 't')}${op('=')}${v('Q')} · ${v('e')}${op('=')}${n(rep.Q, 1)} · ${n(rep.d, 2)}${op('=')}${r(rep.Mt, 1, 'tm')}`, `${hoja}!J15`),
-      formula('Traslación de la pieza j', `${v('Q', 'j')}${op('=')}${v('J', 'j')} / Σ${v('J')} · ${v('Q')}`, `${hoja} columna E`),
-      formula('Rotación de la pieza j', `${v('Q', 'rot,j')}${op('=')}−${v('M', 't')} · ${v('J', 'j')} · ${v('a', 'j')} / Σ ${v('J')}·${v('a')}²`, `${hoja} columna N`),
+      formula('Rototraslación (clase 5 y guía): lo que toma el tabique j', `${v('W', 'j')}${op('=')}${v('W')} · ${v('J', 'j')} / Σ${v('J', 'j')}${op('±')}${v('W')} · ${v('e')} · ${v('J', 'j')} · ${v('a', 'j')} / Σ${v('J', 'jt')} · ${v('a', 'j')}²`, `${hoja}: traslación columna E, rotación columna N · ΣJjt incluye los perpendiculares (filas 31 a 50)`),
     );
     const t = h('table', { class: 'tabla' });
     t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'J (m⁴)', '%', 'Q tras.', 'Q rot.', 'Q total'].map(x => h('th', {}, x)))));
@@ -302,16 +302,49 @@ const rototrasl: Etapa = {
   },
   centro(c, tam) {
     const d = datos();
-    const rot = d.dir === 'A' ? d.R.rotA : d.R.rotB;
-    const rep = reparto(rot, d.dir === 'A' ? d.asig.datos.rotA.H : d.asig.datos.rotB.H, d.asig.piezas, d.dir);
-    const iPB = d.iPB;
-    const B = d.p.niveles.slice(0, iPB + 1).reduce<number | null>((x, y) => y.B ?? x, null) ?? 20;
-    const L = d.p.niveles.slice(0, iPB + 1).reduce<number | null>((x, y) => y.L ?? x, null) ?? 16;
-    c.append(graficoReparto(rep, d.dir, B, L, d.p.muros.filter(m => m.llega), d.asig.papeles, { ancho: Math.min(tam.ancho ?? 600, 980), alto: Math.max(420, (tam.alto ?? 560) - 80) }));
+    const dp = datosRotoPlano(d);
+    const paso = (Number(estado.sub.pasoRoto) || 1) as Paso;
+    const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Paso' });
+    (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación'] as const).forEach((t, i) => {
+      const b2 = h('button', { type: 'button', 'aria-pressed': String(paso === i + 1) }, t);
+      b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
+      seg.append(b2);
+    });
+    const textos: Record<Paso, string> = {
+      1: 'El J de cada tabique es un vector dibujado sobre el tabique (más grueso y más largo cuanto mayor es J). Con el polígono de los J, el polo O y los rayos se traza el funicular debajo de la planta: cada lado va entre las rectas de acción de dos tabiques, paralelo a su rayo. Los lados extremos se cortan sobre la recta de la resultante de los J: el eje de inercia. Donde cruza el eje de inercia de la otra dirección está el centro de rigidez CR.',
+      2: 'Traslación: el viento W actúa en el eje de simetría y cada tabique toma una parte proporcional a su J: Wj = W · Jj / ΣJ. La flecha está sobre la recta de acción del tabique; su grosor es su J y su largo, la fuerza.',
+      3: 'Rotación: como el eje de inercia no coincide con el eje de simetría, el viento gira la planta con Mt = W · e alrededor del CR. Cada tabique toma ± W · e · Jj · aj / ΣJt·aj² (aj: distancia al eje de inercia). Del lado del viento se suma (+) y del otro se resta (−). Los perpendiculares no toman traslación pero colaboran en la rotación.',
+      4: 'Rototraslación = traslación ± rotación. En azul la parte de traslación; en violeta la de rotación, que se suma (+) o se resta (−).',
+    };
+    c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, textos[paso]));
+    const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) });
+    c.append(svg);
+    const ley = h('div', { class: 'leyenda' });
+    const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
+    ley.append(mu('var(--accent)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
+    c.append(ley);
   },
   nombreCentro: () => `Planta · rototraslación, viento ${estado.dir}`,
   estado: () => (estado.calculo.asig?.piezas.length ? (grupoControles(['Reparto']).some(c => c.estado === 'no verifica') ? 'revisar' : 'completa') : 'pendiente'),
 };
+
+/** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
+function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano {
+  const A = d.dir === 'A';
+  const rot = A ? d.R.rotA : d.R.rotB;
+  const H = A ? d.asig.datos.rotA.H : d.asig.datos.rotB.H;
+  const porId = new Map(d.p.muros.map(m => [m.id, m]));
+  const B = d.p.niveles.slice(0, d.iPB + 1).reduce<number | null>((x, y) => y.B ?? x, null) ?? 20;
+  const L = d.p.niveles.slice(0, d.iPB + 1).reduce<number | null>((x, y) => y.L ?? x, null) ?? 16;
+  const elem = (otra: boolean) => d.asig.piezas.filter(pz => (otra ? pz.dir !== d.dir : pz.dir === d.dir) && pz.filaHoja !== null).map(pz => {
+    const i = (otra ? 26 : 0) + pz.filaHoja!;
+    const rotF = isFinite(rot.N[i]) ? rot.N[i] : 0, tras = otra ? 0 : rot.E[i];
+    // en el viento B la planta está girada: la posición transversal es −y
+    const pos = (H[i] ?? 0) * (!A && !otra ? -1 : 1) * (A && otra ? 1 : 1);
+    return { nombre: pz.nombre, pos, J: rot.B[i], frac: otra ? 0 : rot.C[i], tras, rot: rotF, total: tras + rotF, a: rot.K[i], muros: pz.muros.map(id => porId.get(id)!).filter(Boolean) } as ElementoPlano;
+  });
+  return { dir: d.dir, T: A ? B : L, S: A ? L : B, Xr: rot.J7 * (A ? 1 : -1), Yr: rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, paralelos: elem(false), perpendiculares: elem(true), muros: d.p.muros.filter(m => m.llega), papeles: d.asig.papeles };
+}
 
 // ------------------------------------------------------------------ 07 Flexión
 function verifs() {

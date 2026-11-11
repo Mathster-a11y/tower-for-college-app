@@ -361,3 +361,24 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .grilla2, .formulario { grid-template-columns: 1fr; }
   .barra .proyecto { display: none; }
 }
+
+/* rototraslación en planta */
+.rototrasl .rt-planta { fill: color-mix(in srgb, var(--grilla) 45%, transparent); stroke: var(--ink2); stroke-width: 1.2; }
+.rototrasl .rt-girada { fill: none; stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 6 4; opacity: .8; }
+.rototrasl .rt-muro { fill: var(--ink2); opacity: .35; }
+.rototrasl .rt-muro.paralelo { fill: var(--ink); opacity: .8; }
+.rototrasl .rt-simetria { stroke: var(--carga); stroke-width: 1.2; stroke-dasharray: 8 5; }
+.rototrasl .rt-inercia { stroke: var(--elegido); stroke-width: 2; stroke-dasharray: 10 4 2 4; }
+.rototrasl .rt-cr { fill: var(--elegido); stroke: var(--lienzo); stroke-width: 1.5; }
+.rototrasl .rt-cota { stroke: var(--ink); stroke-width: 1; }
+.rototrasl .rt-accion { stroke: var(--ink2); stroke-width: .8; stroke-dasharray: 2 4; opacity: .7; }
+.rototrasl .rt-J, .rototrasl .rt-tras { stroke: var(--accent); stroke-linecap: butt; }
+.rototrasl .rt-rot { stroke: var(--corte); stroke-linecap: butt; }
+.rototrasl .rt-rot.resta { stroke-dasharray: 3 2; }
+.rototrasl .rt-rayo { stroke: var(--ink2); stroke-width: .8; }
+.rototrasl .rt-rayo.extremo { stroke: var(--elegido); stroke-width: 1.5; }
+.rototrasl .rt-funicular { fill: none; stroke: var(--elegido); stroke-width: 2; }
+.rototrasl .rt-funicular.extremo { stroke-width: 1.5; stroke-dasharray: 6 3; }
+.rototrasl .rt-W { stroke: var(--carga); stroke-width: 3; }
+.rototrasl .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 2; }
+.rototrasl .rt-flecha:hover line { filter: drop-shadow(0 0 3px var(--elegido)); }

@@ -29,10 +29,23 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] **Verificación funicular gráfica**: polígono de fuerzas con polo y rayos, polígono funicular en el alzado (da hw), W + G y tercio medio, línea de presiones
 - [x] **Plantas por piso**: «Desde» y «Hasta» de cada muro, planta de cada nivel, 3D por tramos, ΣJ por nivel en la deformada
 
+- [x] **Consistencia matemática.** Pruebas cruzadas entre módulos (J de la hoja = J del dibujo, flexocompresión = hoja Flex con los mismos datos, ΣQ, ΣM, funicular = M,NyQ). Corregido el solape alma–ala en el J y el J mínimo según el hormigón.
+- [x] **Interfaz con el sistema de diseño de la app Truss.**
+  - Etapas 01–07 con su color.
+  - Fórmulas con números y celda de la planilla.
+  - Tablero oscuro y aspecto clásico.
+  - Selector único de valores (Planilla / Guía/CIRSOC).
+- [x] **Rototraslación en planta, paso a paso** (clase 5):
+  - El J de cada tabique como vector sobre el tabique; polígono de los J, polo, rayos y funicular hasta el eje de inercia y el CR.
+  - Traslación, rotación y rototraslación con flechas en la recta de cada tabique: grosor según J y largo según la fuerza.
+- [x] Segundo ejemplo: el Anexo de la guía (T5 aislado, la planta rota)
+
 ## En curso
+- [ ] **Propuesta de la rototraslación en planta:** esperando la opinión del usuario. Hay que decidir si los perpendiculares entran en la rotación muro por muro (como la guía) o por pieza (como la planilla).
 - Nada por ahora: el próximo es el primero de la lista de abajo.
 
 ## Próximos
+- [ ] Silueta de cada piso: editarla o importarla de CAD (contornos con segmentos y arcos de círculo)
 - [ ] Dibujar los muros con el mouse en la planta (clic en el inicio y clic en el fin), con imán a los extremos de otros muros
 - [ ] Armar las piezas solas: los muros que se tocan forman una pieza y el ala sabe a qué alma está pegada
 - [ ] Calcar un plano: poner una imagen o un PDF de fondo en la planta, con escala
@@ -48,4 +61,6 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Área de la pieza (columna O de las hojas J): no suma el ala inferior AH · AI del molde asimétrico
 - [ ] Flexocompresión: la planilla combina Ng con la compresión y Nq con la tracción (el caso más desfavorable es al revés)
 - [ ] Flexocompresión: la planilla verifica la pieza entera (N total / área total); la guía separa almas y alas, cada una con su N. ¿Cuál se usa en la entrega?
+- [ ] Guía, Anexo de rototraslación: con las posiciones que da (T1–T4 a ±10 m, T5 a −6 m, T6 a +4,14 m) el eje de inercia queda a 1,77 m, no a 0,37 m. Con e = 0,37 m la rotación no se anula: entre todos los tabiques toman 990 de 1000. Con e = 1,77 m los porcentajes son T1 14,25 %, T2 7,09 %, T5 8,94 % y T6 48,38 % (la guía da 10,77, 9,34, 7,32 y 51,37).
+- [ ] Rotación: la guía suma en ΣJt·a² cada muro perpendicular con su J propio (las alas de T6, 2,083 m⁴ a ±1,90 m). La planilla toma la pieza perpendicular entera en su baricentro, y una U en el eje no aporta nada.
 - [ ] Guía, T1: el largo traccionado x del triángulo de tracción figura como 78 cm (y 1,05 m en el esquema); con σ = +137,78 / −788 t/m² sale x = 4,50 · 137,78 / 925,8 = 0,67 m

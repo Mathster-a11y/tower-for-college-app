@@ -111,3 +111,36 @@ export function rigidezPorNivel(p: Proyecto, piezas: PiezaEquivalente[], dir: 'A
   const J0 = JdeNivel(p.niveles[iPB]?.cota ?? 0) || 1;
   return p.niveles.filter(n => n.cota >= (p.niveles[iPB]?.cota ?? 0)).map(n => ({ z: n.cota, nivel: n.nombre, J: (Jplanilla * JdeNivel(n.cota)) / J0 }));
 }
+
+/**
+ * Rototraslación como la guía (Anexo «Caso particular con rototraslación»):
+ *   Wj = W · Jj / ΣJ  ±  W · e · Jj · aj / Σ Jjt · aj²
+ * ΣJ: piezas paralelas al viento. ΣJjt·aj²: paralelas (a = distancia al eje de inercia) y perpendiculares
+ * (cada muro con su J propio, a = distancia al eje de inercia de la otra dirección).
+ * Devuelve la fuerza de cada elemento para W dado; el signo de la rotación es + del lado en que la rotación
+ * se suma a la traslación.
+ */
+export interface ElementoRot { nombre: string; J: number; pos: number; perpendicular?: boolean }
+export interface RepartoGuia {
+  Xr: number; e: number; SJ: number; SJa2: number;
+  elementos: (ElementoRot & { a: number; tras: number; rot: number; total: number })[];
+}
+export function repartoGuia(paralelos: ElementoRot[], perpendiculares: ElementoRot[], W: number, opciones: { e?: number; Yr?: number; ejeSimetria?: number } = {}): RepartoGuia {
+  const SJ = paralelos.reduce((s, x) => s + x.J, 0);
+  const Xr = SJ > 0 ? paralelos.reduce((s, x) => s + x.J * x.pos, 0) / SJ : 0;
+  const e = opciones.e ?? Xr - (opciones.ejeSimetria ?? 0);
+  const Yr = opciones.Yr ?? (() => { const s = perpendiculares.reduce((t, x) => t + x.J, 0); return s > 0 ? perpendiculares.reduce((t, x) => t + x.J * x.pos, 0) / s : 0; })();
+  const xr = (opciones.ejeSimetria ?? 0) + e;
+  const conA = [...paralelos.map(x => ({ ...x, perpendicular: false, a: x.pos - xr })), ...perpendiculares.map(x => ({ ...x, perpendicular: true, a: x.pos - Yr }))];
+  const SJa2 = conA.reduce((s, x) => s + x.J * x.a * x.a, 0);
+  const Mt = W * e;
+  return {
+    Xr: xr, e, SJ, SJa2,
+    elementos: conA.map(x => {
+      const tras = x.perpendicular ? 0 : (W * x.J) / SJ;
+      // la rotación carga a los del lado opuesto a la excentricidad (los que se suman a la traslación)
+      const rot = SJa2 > 0 ? (-Mt * x.J * x.a) / SJa2 : 0;
+      return { ...x, tras, rot, total: tras + rot };
+    }),
+  };
+}

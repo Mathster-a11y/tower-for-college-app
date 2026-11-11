@@ -147,6 +147,16 @@ export function ejemploGuia(): Proyecto {
   };
 }
 
+/** Anexo de la guía («Caso particular con rototraslación»): T5 aislado, un tabique de 4,00 × 0,20 m; el eje de
+ *  inercia se corre hacia T6 y la planta, además de trasladarse, rota. */
+export function ejemploAsimetrico(): Proyecto {
+  const p = ejemploGuia();
+  return {
+    ...p, nombre: 'Ejemplo de la guía: T5 aislado (rototraslación)',
+    muros: p.muros.filter(m => m.id !== 'M6' && m.id !== 'M7').map(m => (m.id === 'M5' ? { ...m, largo: 4, pegadoB: '' } : m)),
+  };
+}
+
 export function proyectoVacio(): Proyecto {
   const p = ejemploGuia();
   return { ...p, nombre: 'Proyecto nuevo', niveles: [{ nombre: 'Azotea', cota: 3, B: 20, L: 16 }, { nombre: 'PB', cota: 0 }], muros: [] };
