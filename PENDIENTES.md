@@ -91,19 +91,19 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ### Para armar la torre más rápido
 - [x] Biblioteca de piezas tipo para insertar con medidas: tabique, L, T, C, U, doble T, núcleo (tubo), columna, con su J a la vista (planta → «Insertar pieza…»)
-- [ ] Importar muros desde DXF (no solo líneas en CSV), con capas
-- [ ] Calcar un PDF directamente (sin exportarlo antes como imagen)
-- [ ] Edición táctil en celular y tablet: arrastrar muros con el dedo, pellizcar para acercar
+- [x] Importar muros desde DXF (no solo líneas en CSV), con capas
+- [x] Calcar un PDF directamente (sin exportarlo antes como imagen)
+- [x] Planta con zoom: rueda, pellizcar con dos dedos, arrastrar el fondo y botones + − ⤢
 - [ ] Vista en corte (alzado) para editar «desde» y «hasta» de cada muro arrastrando
 
 ### Para entender (didáctica)
-- [ ] Recorrido guiado por las etapas para la primera vez (qué mirar en cada una)
+- [x] Recorrido guiado para la primera vez (Mostrar ▾ → Recorrido guiado)
 - [ ] Comparar dos variantes del proyecto: antes y después de mover o cambiar un muro (ΔJ, Δe, Δδ)
 - [ ] Rototraslación animada también en la planta (no solo en el 3D)
 - [ ] «Qué pasa si…»: deslizadores para largo y posición de un muro con el resultado en vivo
 
 ### Para el uso diario
-- [ ] Lista de proyectos guardados en el navegador, con versiones
+- [x] Mis proyectos: versiones guardadas en el navegador (y copia automática antes de abrir otro)
 - [x] Exportar los dibujos (cartas, diagramas, funiculares, perfiles) como SVG o PNG: botones «⤓ SVG · ⤓ PNG» arriba de cada dibujo
 - [ ] Carga más rápida al abrir (separar el 3D y la planilla del resto)
 

@@ -477,6 +477,9 @@ export function montarPlanta(cont: HTMLElement) {
     [cdx.i, cdy.i].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') mover.click(); }));
   }
   let escala = 20, ox = 0, oy = 0;
+  // vista: acercar (rueda, pellizco, botones) y desplazar (arrastrar el fondo); zoom 1 = toda la planta
+  let zoom = 1, centroVista = { x: 0, y: 0 };
+  const ZMIN = 0.5, ZMAX = 16;
 
   const aMundo = (ev: PointerEvent) => {
     const r = svg.getBoundingClientRect();
@@ -501,18 +504,18 @@ export function montarPlanta(cont: HTMLElement) {
     const zN = nivel?.cota ?? 0;
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
     const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
-    escala = Math.min(w, h) / ext;
-    ox = w / 2; oy = h / 2;
+    escala = (Math.min(w, h) / ext) * zoom;
+    ox = w / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.replaceChildren();
     const X = (x: number) => ox + x * escala, Y = (y: number) => oy - y * escala;
     // grilla de 1 m
     const g = el('g', { class: 'grilla' });
     const n = Math.ceil(ext / 2);
-    for (let i = -n; i <= n; i++) {
-      g.appendChild(el('line', { x1: X(i), y1: Y(-n), x2: X(i), y2: Y(n), class: i % 5 ? 'g1' : 'g5' }));
-      g.appendChild(el('line', { x1: X(-n), y1: Y(i), x2: X(n), y2: Y(i), class: i % 5 ? 'g1' : 'g5' }));
-    }
+    // la grilla cubre lo que se ve (con zoom y desplazamiento)
+    const gx0 = Math.floor(-ox / escala) - 1, gx1 = Math.ceil((w - ox) / escala) + 1, gy0 = Math.floor((oy - h) / escala) - 1, gy1 = Math.ceil(oy / escala) + 1;
+    for (let i = gx0; i <= gx1; i++) g.appendChild(el('line', { x1: X(i), y1: Y(gy0), x2: X(i), y2: Y(gy1), class: i % 5 ? 'g1' : 'g5' }));
+    for (let i = gy0; i <= gy1; i++) g.appendChild(el('line', { x1: X(gx0), y1: Y(i), x2: X(gx1), y2: Y(i), class: i % 5 ? 'g1' : 'g5' }));
     svg.appendChild(g);
     const c = estado.calco;
     if (c) {
@@ -772,6 +775,75 @@ export function montarPlanta(cont: HTMLElement) {
     const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol); iman = r.a; ultimoIman = r.a; return r.p;
   };
   let ultimoIman = '';
+  // --- acercar y desplazar ---
+  const acercarEn = (f: number, sx: number, sy: number) => {
+    const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
+    const q = { x: (sx - ox) / escala, y: -(sy - oy) / escala };      // punto del mundo bajo el cursor
+    const z2 = Math.max(ZMIN, Math.min(ZMAX, zoom * f));
+    const s2 = escala * (z2 / zoom);
+    zoom = z2;
+    centroVista = { x: q.x - (sx - w / 2) / s2, y: q.y + (sy - h / 2) / s2 };
+    dibujar();
+  };
+  const encuadrar = () => { zoom = 1; centroVista = { x: 0, y: 0 }; dibujar(); };
+  svg.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const r = svg.getBoundingClientRect();
+    acercarEn(Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015)), ev.clientX - r.left, ev.clientY - r.top);
+  }, { passive: false });
+  const punteros = new Map<number, { x: number; y: number }>();
+  let pan: { sx: number; sy: number; c: { x: number; y: number } } | null = null;
+  let pellizco: { d: number; z: number; mx: number; my: number; c: { x: number; y: number } } | null = null;
+  const local = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+  const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .editando, .areas-inf text');
+  svg.addEventListener('pointerdown', ev => {
+    punteros.set(ev.pointerId, local(ev));
+    if (punteros.size === 2) {
+      // dos dedos: se suelta lo que se estaba arrastrando y se pellizca
+      ev.stopImmediatePropagation(); ev.preventDefault();
+      arrastre = null; arrastreNodo = null; arrastreV = null; pan = null;
+      const [a, b] = [...punteros.values()];
+      pellizco = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, c: { ...centroVista } };
+      try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+      return;
+    }
+    if (ev.button === 1 || (ev.button === 0 && modo === 'mover' && esFondo(ev.target))) {
+      ev.preventDefault();
+      pan = { sx: ev.clientX, sy: ev.clientY, c: { ...centroVista } };
+      try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+      if (ev.button === 1) ev.stopImmediatePropagation();
+    }
+  }, true);
+  svg.addEventListener('pointermove', ev => {
+    if (punteros.has(ev.pointerId)) punteros.set(ev.pointerId, local(ev));
+    if (pellizco && punteros.size >= 2) {
+      ev.stopImmediatePropagation();
+      const [a, b] = [...punteros.values()];
+      const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
+      const base = escala / zoom;                                     // escala con zoom 1
+      const z2 = Math.max(ZMIN, Math.min(ZMAX, pellizco.z * Math.hypot(a.x - b.x, a.y - b.y) / pellizco.d));
+      const s0 = base * pellizco.z, s2 = base * z2;
+      const q = { x: pellizco.c.x + (pellizco.mx - w / 2) / s0, y: pellizco.c.y - (pellizco.my - h / 2) / s0 };   // punto bajo el centro del pellizco
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      zoom = z2; centroVista = { x: q.x - (mx - w / 2) / s2, y: q.y + (my - h / 2) / s2 };
+      dibujar();
+      return;
+    }
+    if (pan) {
+      ev.stopImmediatePropagation();
+      centroVista = { x: pan.c.x - (ev.clientX - pan.sx) / escala, y: pan.c.y + (ev.clientY - pan.sy) / escala };
+      dibujar();
+    }
+  }, true);
+  const finPuntero = (ev: PointerEvent) => { punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null; };
+  svg.addEventListener('pointerup', finPuntero, true);
+  svg.addEventListener('pointercancel', finPuntero, true);
+  // botones de la vista
+  const zoomBar = document.createElement('div'); zoomBar.className = 'zoom-planta';
+  ([['+', 'Acercar', () => acercarEn(1.4, (svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['−', 'Alejar', () => acercarEn(1 / 1.4, (svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['⤢', 'Encuadrar: toda la planta', encuadrar]] as const).forEach(([t, a, f]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = `${a} (también: rueda del mouse o pellizcar; arrastrar el fondo para desplazar)`; b.setAttribute('aria-label', a); b.addEventListener('click', f); zoomBar.append(b);
+  });
+  cont.appendChild(zoomBar);
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();

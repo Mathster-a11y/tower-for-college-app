@@ -735,3 +735,8 @@ text[data-par].ultimo { font-size: 15px; }
 .recorrido-pie { display: flex; align-items: center; gap: 6px; }
 .recorrido-pie span { margin-right: auto; font-size: 12px; color: var(--dim); }
 @media print { .recorrido { display: none; } }
+/* acercar / alejar la planta */
+.zoom-planta { position: absolute; right: 10px; bottom: 40px; z-index: 2; display: flex; flex-direction: column; border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; background: var(--field); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.zoom-planta button { border: 0; border-radius: 0; width: 30px; height: 28px; padding: 0; font-size: 16px; line-height: 1; background: transparent; }
+.zoom-planta button + button { border-top: 1px solid var(--edge); }
+.zoom-planta button:hover { background: var(--tint); }
