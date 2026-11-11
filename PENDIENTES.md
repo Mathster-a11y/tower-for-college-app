@@ -82,7 +82,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Elegir la carta principal (A, B, C, D o una combinación)
 
 ### Para armar la torre más rápido
-- [ ] Biblioteca de piezas tipo para insertar con medidas: tabique, L, T, C, U, doble T, núcleo (tubo), con su J a la vista
+- [x] Biblioteca de piezas tipo para insertar con medidas: tabique, L, T, C, U, doble T, núcleo (tubo), columna, con su J a la vista (planta → «Insertar pieza…»)
 - [ ] Importar muros desde DXF (no solo líneas en CSV), con capas
 - [ ] Calcar un PDF directamente (sin exportarlo antes como imagen)
 - [ ] Edición táctil en celular y tablet: arrastrar muros con el dedo, pellizcar para acercar

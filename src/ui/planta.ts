@@ -1,7 +1,9 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
-import { armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
+import { agrupar, armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
+import { piezaTipo, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
+import { Jreal } from '../engine/mapping';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -31,7 +33,10 @@ export function montarPlanta(cont: HTMLElement) {
   });
   cont.appendChild(ley);
   // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
-  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' = 'mover';
+  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' = 'mover';
+  // pieza tipo a insertar (biblioteca)
+  let insTipo: TipoPieza = 'C';
+  const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
   let iNivel = 0;
   let arrastreV: number | null = null;
   let calib: Punto[] = [];
@@ -46,7 +51,7 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; dibujar(); };
+  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo('dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
@@ -117,7 +122,70 @@ export function montarPlanta(cont: HTMLElement) {
       boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
       boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'));
   }
-  barra.append(bMover, bDibujar, bArmar, bCalco, bSil);
+  // biblioteca de piezas tipo: se eligen forma y medidas, se ve su J y se ubica con un clic en la planta
+  const bIns = document.createElement('button');
+  bIns.type = 'button'; bIns.textContent = 'Insertar pieza…';
+  bIns.title = 'Piezas tipo (tabique, L, T, C, U, doble T, núcleo, columna) con sus medidas y su J; se ubican con un clic y quedan agrupadas.';
+  bIns.addEventListener('click', () => ponerModo(modo === 'insertar' ? 'mover' : 'insertar'));
+  const panelIns = document.createElement('div');
+  panelIns.className = 'calco-panel piezas-panel';
+  panelIns.hidden = true;
+  cont.appendChild(panelIns);
+  const NS2 = 'http://www.w3.org/2000/svg';
+  /** dibujito de la pieza (en su marco: el viento A sube) */
+  const miniatura = (t: TipoPieza, med: MedidasPieza, tam: number) => {
+    const s2 = document.createElementNS(NS2, 'svg');
+    s2.setAttribute('viewBox', `0 0 ${tam} ${tam}`); s2.setAttribute('width', String(tam)); s2.setAttribute('height', String(tam));
+    const ms = piezaTipo(t, med, 0, 0, new Set());
+    const rs = ms.flatMap(m => (tipoDe(m) === 'tubo-circ' ? [] : rectangulos(m)));
+    const ext = Math.max(0.5, ...rs.map(r => Math.max(Math.abs(r.x) + r.ax / 2, Math.abs(r.y) + r.ay / 2)), ...ms.filter(m => tipoDe(m) === 'tubo-circ').map(m => m.largo / 2));
+    const k = (tam / 2 - 4) / ext;
+    rs.forEach(r => { const q = document.createElementNS(NS2, 'rect'); q.setAttribute('x', String(tam / 2 + (r.x - r.ax / 2) * k)); q.setAttribute('y', String(tam / 2 - (r.y + r.ay / 2) * k)); q.setAttribute('width', String(Math.max(1.5, r.ax * k))); q.setAttribute('height', String(Math.max(1.5, r.ay * k))); s2.append(q); });
+    ms.filter(m => tipoDe(m) === 'tubo-circ').forEach(m => { const q = document.createElementNS(NS2, 'circle'); q.setAttribute('cx', String(tam / 2)); q.setAttribute('cy', String(tam / 2)); q.setAttribute('r', String((m.largo / 2) * k)); s2.append(q); });
+    return s2;
+  };
+  function armarPanelIns() {
+    panelIns.replaceChildren();
+    const tit = document.createElement('b'); tit.textContent = 'Insertar pieza';
+    const formas = document.createElement('div'); formas.className = 'formas';
+    TIPOS.forEach(t => {
+      const b = document.createElement('button'); b.type = 'button'; b.title = `${t.nombre}: ${t.ayuda}`;
+      b.setAttribute('aria-pressed', String(t.tipo === insTipo));
+      b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : 2, e: t.tipo === 'columna' ? 2 : 0.3 }, 30));
+      const sp = document.createElement('span'); sp.textContent = t.nombre; b.append(sp);
+      b.addEventListener('click', () => { insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (insMed.h < 1) { insMed.h = 4; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
+      formas.append(b);
+    });
+    const info = TIPOS.find(t => t.tipo === insTipo)!;
+    const campo = (t: string, k: 'h' | 'b' | 'e', ayuda: string) => {
+      const l = document.createElement('label'); l.title = ayuda;
+      const i = document.createElement('input'); i.type = 'number'; i.step = k === 'e' ? '0.05' : '0.1'; i.min = '0.05'; i.value = String(insMed[k]);
+      i.addEventListener('input', () => { const v = Number(i.value); if (v > 0) { insMed[k] = v; actualizar(); dibujar(); } });
+      l.append(t, i); return l;
+    };
+    const giro = document.createElement('label'); giro.append('giro');
+    const sg = document.createElement('select');
+    [0, 90, 180, 270].forEach(g => { const o = document.createElement('option'); o.value = String(g); o.textContent = `${g}°`; sg.append(o); });
+    sg.value = String(insMed.giro);
+    sg.addEventListener('change', () => { insMed.giro = Number(sg.value) as MedidasPieza['giro']; actualizar(); dibujar(); });
+    giro.append(sg);
+    const vista = document.createElement('div'); vista.className = 'vista-pieza';
+    const datos = document.createElement('div'); datos.className = 'datos-pieza';
+    const ayuda = document.createElement('p'); ayuda.className = 'nota chica'; ayuda.textContent = `${info.ayuda} Hacé clic en la planta para ubicarla (el centro de la pieza va donde hacés clic). Esc: salir.`;
+    const actualizar = () => {
+      vista.replaceChildren(miniatura(insTipo, insMed, 96));
+      const ms = piezaTipo(insTipo, insMed, 0, 0, new Set());
+      const f = (x: number) => x.toLocaleString('es-AR', { maximumFractionDigits: 3 });
+      datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>área <b>${f(ms.reduce((q, m) => q + (tipoDe(m) === 'tubo-circ' ? Math.PI / 4 * (m.largo ** 2 - Math.max(0, m.largo - 2 * m.espesor) ** 2) : rectangulos(m).reduce((z, r) => z + r.ax * r.ay, 0)), 0))}</b> m²</span>`;
+    };
+    const filaMed = document.createElement('div'); filaMed.className = 'medidas';
+    filaMed.append(campo(insTipo === 'columna' ? 'D' : 'h', 'h', insTipo === 'columna' ? 'diámetro exterior (m)' : 'largo del alma, medida total (m)'));
+    if (info.usaB) filaMed.append(campo('b', 'b', 'ancho de las alas (m)'));
+    filaMed.append(campo('e', 'e', insTipo === 'columna' ? 'espesor de pared (la mitad de D: maciza)' : 'espesor (m)'), giro);
+    actualizar();
+    panelIns.append(tit, formas, filaMed, vista, datos, ayuda);
+  }
+  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -273,6 +341,15 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(grupo);
     });
     calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 5, class: 'iman extremo' })));
+    // pieza tipo: vista previa donde se va a insertar
+    if (modo === 'insertar' && cursor) {
+      const pr = el('g', { class: 'previa' });
+      piezaTipo(insTipo, insMed, cursor.x, cursor.y, new Set()).forEach(m => {
+        if (tipoDe(m) === 'tubo-circ') pr.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.largo / 2) * escala }));
+        else rectangulos(m).forEach(r => pr.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: Math.max(2, r.ax * escala), height: Math.max(2, r.ay * escala) })));
+      });
+      svg.appendChild(pr);
+    }
     // muro en dibujo: vista previa con su largo y el imán
     if (modo === 'dibujar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -292,6 +369,18 @@ export function montarPlanta(cont: HTMLElement) {
   let ultimoEspesor = 0.2;
   const pegar = (ev: PointerEvent) => { const r = imanar(aMundo(ev), estado.proyecto.muros, 8 / escala + 0.05); iman = r.a; return r.p; };
   svg.addEventListener('pointerdown', ev => {
+    if (modo === 'insertar' && ev.button === 0) {
+      ev.preventDefault();
+      const q = aMundo(ev), g5 = (v: number) => +(Math.round(v / 0.05) * 0.05).toFixed(2);
+      estado.cambiar(() => {
+        const p = estado.proyecto;
+        const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
+        p.muros = agrupar([...p.muros, ...nuevos], nuevos.map(m => m.id)).muros;
+        estado.seleccion = nuevos[0].id;
+      });
+      ponerModo('mover');
+      return;
+    }
     if (modo === 'calibrar' && ev.button === 0 && estado.calco) {
       ev.preventDefault();
       calib.push(aMundo(ev));
@@ -327,12 +416,13 @@ export function montarPlanta(cont: HTMLElement) {
   });
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
   svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
-  document.addEventListener('keydown', ev => { if (modo === 'calibrar' && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
+  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar') && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
     if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
     if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
+    if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }; dibujar(); return; }
     if (modo === 'calibrar') return;
     if (modo === 'silueta') {
       if (arrastreV === null) return;
