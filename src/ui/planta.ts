@@ -325,6 +325,61 @@ export function montarPlanta(cont: HTMLElement) {
     return [{ x: x0, y: y0, t: 'esquina' }, { x: x1, y: y0, t: 'esquina' }, { x: x1, y: y1, t: 'esquina' }, { x: x0, y: y1, t: 'esquina' },
       { x: m.x, y: y0, t: 'medio' }, { x: x1, y: m.y, t: 'medio' }, { x: m.x, y: y1, t: 'medio' }, { x: x0, y: m.y, t: 'medio' }, { x: m.x, y: m.y, t: 'centro' }];
   };
+  const NOMBRE_NODO = ['esquina inf. izq.', 'esquina inf. der.', 'esquina sup. der.', 'esquina sup. izq.', 'medio de abajo', 'medio derecho', 'medio de arriba', 'medio izquierdo', 'centro'];
+  const NOMBRE_NODO_CIRC = ['centro', 'borde derecho', 'borde izquierdo', 'borde de arriba', 'borde de abajo'];
+  // mover con precisión: se elige un nodo del elemento (o del grupo) y se lo lleva a unas coordenadas o se lo corre dx, dy
+  let refNodo = -1;   // −1 = el centro
+  const valPrec = { x: '', y: '', dx: '', dy: '' };
+  const panelPrec = document.createElement('div');
+  panelPrec.className = 'calco-panel prec-panel';
+  panelPrec.hidden = true;
+  cont.appendChild(panelPrec);
+  let clavePrec = '';
+  function armarPanelPrec() {
+    const p = estado.proyecto, m = modo === 'mover' ? p.muros.find(x => x.id === estado.seleccion) : undefined;
+    panelPrec.hidden = !m;
+    if (!m) { clavePrec = ''; return; }
+    const nodos = nodosDe(m), circ = tipoDe(m) === 'tubo-circ';
+    const iRef = refNodo >= 0 && refNodo < nodos.length ? refNodo : nodos.findIndex(n => n.t === 'centro');
+    const ref = nodos[iRef];
+    const f2 = (v: number) => v.toFixed(3).replace(/\.?0+$/, '').replace('.', ',');
+    const clave = `${m.id}|${iRef}|${ref.x}|${ref.y}`;
+    if (clave === clavePrec && panelPrec.contains(document.activeElement)) return;
+    clavePrec = clave;
+    const ids = m.grupo ? p.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
+    const correr = (dx: number, dy: number, texto: string) => {
+      if (!isFinite(dx) || !isFinite(dy) || (dx === 0 && dy === 0)) return;
+      estado.cambiar(() => { estado.proyecto.muros.forEach(w => { if (ids.includes(w.id)) { w.x = +(w.x + dx).toFixed(3); w.y = +(w.y + dy).toFixed(3); } }); });
+      mensaje(texto);
+    };
+    const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
+    const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+    const campo = (k: keyof typeof valPrec, etq: string, ph: string) => {
+      const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.placeholder = ph; i.value = valPrec[k]; i.setAttribute('aria-label', etq);
+      i.addEventListener('input', () => { valPrec[k] = i.value; });
+      const l = mk('label', '', 'prec-campo'); l.append(mk('span', etq), i); return { l, i };
+    };
+    panelPrec.replaceChildren();
+    panelPrec.append(mk('b', `Mover con precisión · ${m.id}${m.grupo ? ` (grupo ${m.grupo}: ${ids.length} muros)` : ''}`));
+    const sel = mk('select'); sel.setAttribute('aria-label', 'Nodo de referencia');
+    nodos.forEach((n, i) => { const o = mk('option', (circ ? NOMBRE_NODO_CIRC : NOMBRE_NODO)[i] ?? n.t); o.value = String(i); sel.append(o); });
+    sel.value = String(iRef);
+    sel.addEventListener('change', () => { refNodo = +sel.value; clavePrec = ''; armarPanelPrec(); dibujar(); });
+    const fr = mk('div', '', 'prec-fila'); fr.append(mk('span', 'Tomar desde'), sel); panelPrec.append(fr);
+    panelPrec.append(mk('span', `está en x ${f2(ref.x)} · y ${f2(ref.y)} m (clic en un nodo para elegirlo)`, 'prec-nota'));
+    const cx = campo('x', 'x', f2(ref.x)), cy = campo('y', 'y', f2(ref.y));
+    const llevar = mk('button', 'Llevar'); (llevar as HTMLButtonElement).type = 'button';
+    llevar.title = 'Lleva el nodo elegido a esas coordenadas (m, desde el centro de la planta); un campo vacío deja esa coordenada igual';
+    llevar.addEventListener('click', () => { const x = cx.i.value.trim() ? num(cx.i.value) : ref.x, y = cy.i.value.trim() ? num(cy.i.value) : ref.y; valPrec.x = valPrec.y = ''; correr(x - ref.x, y - ref.y, `${m.id}: ${(circ ? NOMBRE_NODO_CIRC : NOMBRE_NODO)[iRef]} llevado a x ${f2(x)} · y ${f2(y)} m.`); });
+    const f1 = mk('div', '', 'prec-fila'); f1.append(mk('span', 'Llevar a'), cx.l, cy.l, llevar); panelPrec.append(f1);
+    const cdx = campo('dx', 'dx', '0'), cdy = campo('dy', 'dy', '0');
+    const mover = mk('button', 'Mover'); (mover as HTMLButtonElement).type = 'button';
+    mover.title = 'Corre el elemento (o su grupo) esas distancias en m';
+    mover.addEventListener('click', () => { const dx = cdx.i.value.trim() ? num(cdx.i.value) : 0, dy = cdy.i.value.trim() ? num(cdy.i.value) : 0; valPrec.dx = valPrec.dy = ''; correr(dx, dy, `${m.id}: movido dx ${f2(dx)} · dy ${f2(dy)} m.`); });
+    const f3 = mk('div', '', 'prec-fila'); f3.append(mk('span', 'Correr'), cdx.l, cdy.l, mover); panelPrec.append(f3);
+    [cx.i, cy.i].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') llevar.click(); }));
+    [cdx.i, cdy.i].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') mover.click(); }));
+  }
   let escala = 20, ox = 0, oy = 0;
 
   const aMundo = (ev: PointerEvent) => {
@@ -485,8 +540,10 @@ export function montarPlanta(cont: HTMLElement) {
     const elegido = modo === 'mover' ? p.muros.find(m => m.id === estado.seleccion) : undefined;
     if (elegido && presenteEn(elegido, zN, zFund, zTop)) {
       const gg = el('g', { class: 'nodos' });
-      nodosDe(elegido).forEach(nd => {
+      const lista = nodosDe(elegido);
+      lista.forEach(nd => {
         const x = X(nd.x), y = Y(nd.y);
+        const esRef = refNodo >= 0 ? nd === lista[refNodo] : nd.t === 'centro';
         const forma = nd.t === 'esquina' ? el('rect', { x: x - 4.5, y: y - 4.5, width: 9, height: 9 })
           : nd.t === 'medio' ? el('polygon', { points: `${x},${y - 6} ${x - 5.5},${y + 4.5} ${x + 5.5},${y + 4.5}` })
             : el('polygon', { points: `${x},${y - 7} ${x + 7},${y} ${x},${y + 7} ${x - 7},${y}`, class: 'centro' });
@@ -494,14 +551,17 @@ export function montarPlanta(cont: HTMLElement) {
         forma.addEventListener('pointerdown', e0 => {
           const ev = e0 as PointerEvent;
           ev.preventDefault(); ev.stopPropagation();
+          refNodo = nodosDe(elegido).findIndex(o => o.x === nd.x && o.y === nd.y); clavePrec = '';
           const ids = elegido.grupo ? p.muros.filter(o => o.grupo === elegido.grupo).map(o => o.id) : [elegido.id];
           arrastreNodo = { p: { x: nd.x, y: nd.y }, orig: p.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
           try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
         });
+        if (esRef) forma.classList.add('ref');
         gg.appendChild(forma);
       });
       svg.appendChild(gg);
     }
+    armarPanelPrec();
     // pieza tipo: vista previa donde se va a insertar
     if (modo === 'insertar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -631,6 +691,6 @@ export function montarPlanta(cont: HTMLElement) {
   });
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);
-  estado.suscribirSeleccion(dibujar);
+  estado.suscribirSeleccion(() => { refNodo = -1; clavePrec = ''; dibujar(); });
   ponerModo('mover');
 }
