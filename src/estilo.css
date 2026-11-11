@@ -413,3 +413,15 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .campo-linea { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .campo-linea input[type=range] { width: 160px; accent-color: var(--accent); }
 .mono { font-family: var(--mono); }
+.etiquetas3d { position: absolute; inset: 0; pointer-events: none; }
+.et3d { font: 600 11px/1.2 var(--mono); color: var(--ink); white-space: nowrap; text-shadow: 0 0 2px var(--lienzo), 0 0 2px var(--lienzo), 0 0 3px var(--lienzo), 0 0 4px var(--lienzo); }
+.et3d.pieza { color: var(--accent); font-size: 12px; }
+.et3d.cr { color: var(--elegido); }
+.et3d.eje { color: var(--ink2); font-weight: 500; font-size: 10.5px; }
+.et3d.cota { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }
+.et3d.nivel { color: var(--ink2); font-weight: 500; font-size: 10.5px; translate: -50% 0; }
+.et3d.nivel { translate: calc(-50% - 4px) 0; text-align: right; }
+.et3d.nivel span { color: var(--dim); }
+.et3d.delta { color: var(--deformada); }
+.et3d.delta { translate: calc(50% + 6px) 0; }
+.et3d.pieza { translate: 0 -4px; }

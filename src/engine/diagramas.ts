@@ -181,10 +181,10 @@ export function movimientoEn(r: Rototraslacion3D, z: number): { d: number; th: n
   const u = n[n.length - 1];
   return { d: u.d, th: u.th };
 }
-/** Posición en planta del punto (x, y) a la cota z, con los movimientos multiplicados por f (exageración). */
-export function desplazar(r: Rototraslacion3D, x: number, y: number, z: number, f = 1): { x: number; y: number } {
+/** Posición en planta del punto (x, y) a la cota z, con la traslación multiplicada por f y el giro por fGiro (exageraciones). */
+export function desplazar(r: Rototraslacion3D, x: number, y: number, z: number, f = 1, fGiro = f): { x: number; y: number } {
   const { d, th } = movimientoEn(r, z);
-  const a = th * f, c = Math.cos(a), s = Math.sin(a);
+  const a = th * fGiro, c = Math.cos(a), s = Math.sin(a);
   const dx = x - r.cr.x, dy = y - r.cr.y;
   return { x: r.cr.x + c * dx - s * dy + f * d * r.viento.x, y: r.cr.y + s * dx + c * dy + f * d * r.viento.y };
 }

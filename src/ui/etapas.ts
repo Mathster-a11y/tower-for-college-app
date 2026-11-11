@@ -10,7 +10,7 @@ import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
-import { montar3D, exageracionAuto } from './vista3d';
+import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
 import { TENSION_ADM, type Control } from '../engine/verificaciones';
@@ -364,7 +364,7 @@ function visor3DRoto(): HTMLElement {
   if (!visorRoto) {
     visorRoto = h('div', { class: 'vista3d grande' });
     const v = visorRoto;
-    requestAnimationFrame(() => montar3D(v, { deformada: () => true, roto: datosRoto3D, rotulo: true }));
+    requestAnimationFrame(() => montar3D(v, { deformada: () => true, roto: datosRoto3D, rotulo: true, etiquetas: true }));
   }
   return visorRoto;
 }
@@ -378,26 +378,35 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
   const f = estado.roto3d.exag ?? auto;
   const gira = !!r && Math.abs(r.thTop) > 1e-12;
   const texto = !r ? 'Todavía no hay piezas para deformar la torre.'
-    : `Versión exagerada (× ${fmt(f, 0)}) de cómo se mueve la torre con el viento ${dp.dir}. Cada piso se traslada δ(z) en el sentido del viento (la deformada de la etapa Rigidez) ` +
+    : `Versión exagerada de cómo se mueve la torre con el viento ${dp.dir}. Cada piso se traslada δ(z) en el sentido del viento (la deformada de la etapa Rigidez) ` +
       (gira ? `y gira alrededor del CR (eje naranja) un ángulo θ(z) = δ(z) · e · ΣJ / ΣJt·a², en sentido ${r.thTop < 0 ? 'horario' : 'antihorario'} visto desde arriba. Así cada tabique se corre δ·(1 ± e·ΣJ·a/ΣJt·a²): los del lado del viento más (+) y los del otro lado menos (−), como en el reparto de la rototraslación.`
         : 'y no gira: el eje de inercia coincide con el eje de simetría, la planta solo se traslada.') +
-      ' En trazos, la torre sin deformar.';
-  const exag = h('input', { type: 'range', min: '0', max: '1', step: '0.01', 'aria-label': 'Exageración' }) as HTMLInputElement;
-  // escala logarítmica de ×(auto/10) a ×(auto·10)
-  exag.value = String((Math.log10(f / auto) + 1) / 2);
-  const val = h('span', { class: 'mono' }, `× ${fmt(f, 0)}`);
-  exag.addEventListener('input', () => { const x = auto * 10 ** (Number(exag.value) * 2 - 1); const v2 = Number(x.toPrecision(2)); val.textContent = `× ${fmt(v2, 0)}`; });
-  exag.addEventListener('change', () => { estado.roto3d.exag = Number((auto * 10 ** (Number(exag.value) * 2 - 1)).toPrecision(2)); estado.avisarPanel(); });
-  const bAuto = h('button', { type: 'button', class: 'mini' }, 'automática');
-  bAuto.addEventListener('click', () => { estado.roto3d.exag = null; estado.avisarPanel(); });
-  const orig = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d.original) }, h('i', {}), 'Torre sin deformar');
-  (orig.firstChild as HTMLElement).style.setProperty('--c', 'var(--ink2)');
-  orig.addEventListener('click', () => { estado.roto3d.original = !estado.roto3d.original; estado.avisarPanel(); });
-  const anim = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d.animar) }, h('i', {}), 'Animar ráfaga');
-  (anim.firstChild as HTMLElement).style.setProperty('--c', 'var(--carga)');
-  anim.addEventListener('click', () => { estado.roto3d.animar = !estado.roto3d.animar; anim.setAttribute('aria-pressed', String(estado.roto3d.animar)); });
+      ' En trazos, la torre sin deformar. El giro se exagera aparte (× extra) para que se vea el revirado; el recuadro da los valores reales.';
+  // controles: exageración de la traslación y extra del giro (escala logarítmica alrededor del valor automático)
+  const deslizador = (nombre: string, actual: number, auto2: number, poner: (x: number | null) => void, globo: string) => {
+    const inp = h('input', { type: 'range', min: '0', max: '1', step: '0.01', 'aria-label': nombre }) as HTMLInputElement;
+    const desde = (x: number) => Number((auto2 * 10 ** (x * 2 - 1)).toPrecision(2));
+    inp.value = String((Math.log10(actual / auto2) + 1) / 2);
+    const val = h('span', { class: 'mono' }, `× ${fmt(actual, 0)}`);
+    inp.addEventListener('input', () => { val.textContent = `× ${fmt(desde(Number(inp.value)), 0)}`; });
+    inp.addEventListener('change', () => { poner(Math.max(1, desde(Number(inp.value)))); estado.avisarPanel(); });
+    return h('label', { class: 'campo-linea', 'data-globo': globo }, `${nombre} `, inp, val);
+  };
+  const giroAuto = r ? giroExtraAuto(r, f) : 1;
+  const kg = estado.roto3d.giro ?? giroAuto;
+  const bAuto = h('button', { type: 'button', class: 'mini' }, 'automáticas');
+  bAuto.addEventListener('click', () => { estado.roto3d.exag = null; estado.roto3d.giro = null; estado.avisarPanel(); });
+  const chipT = (t: string, col: string, k: 'original' | 'animar' | 'rotulos', redibujar: boolean) => {
+    const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d[k]) }, h('i', {}), t);
+    (b.firstChild as HTMLElement).style.setProperty('--c', col);
+    b.addEventListener('click', () => { estado.roto3d[k] = !estado.roto3d[k]; b.setAttribute('aria-pressed', String(estado.roto3d[k])); if (redibujar) estado.avisarPanel(); });
+    return b;
+  };
   c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, texto),
-    h('div', { class: 'fila-acciones controles3d' }, h('label', { class: 'campo-linea' }, 'Exageración ', exag, val), bAuto, orig, anim));
+    h('div', { class: 'fila-acciones controles3d' },
+      deslizador('Traslación', f, auto, x => { estado.roto3d.exag = x; }, 'Exageración de la traslación|Multiplica el corrimiento δ de cada piso para que se vea. Los números del recuadro son los reales.'),
+      ...(gira ? [deslizador('Giro extra', kg, giroAuto, x => { estado.roto3d.giro = x; }, 'Giro exagerado aparte|El giro es mucho más chico que la traslación; se multiplica además por este número para que el revirado se vea. El sentido y la forma son los reales.')] : []),
+      bAuto, chipT('Rótulos y cotas', 'var(--ink)', 'rotulos', true), chipT('Torre sin deformar', 'var(--ink2)', 'original', true), chipT('Animar ráfaga', 'var(--carga)', 'animar', false)));
   c.append(visor3DRoto());
   if (r) {
     const ley = h('div', { class: 'leyenda' });

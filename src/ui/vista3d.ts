@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
 import { entraEnCalculo, rectangulos, tipoDe } from '../engine/modelo';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
@@ -20,6 +21,19 @@ export function exageracionAuto(r: Rototraslacion3D, B: number, L: number): numb
   const f = (0.16 * Math.max(B, L)) / mov;
   const p = 10 ** Math.floor(Math.log10(f));
   return [5, 2, 1].map(k => k * p).find(v => v <= f) ?? p;
+}
+
+/**
+ * Extra del giro: la rotación es mucho más chica que la traslación, así que se multiplica aparte para que el
+ * revirado se vea (la azotea gira unos 20° en el dibujo). Es solo para dibujar: los números son los reales.
+ */
+export function giroExtraAuto(r: Rototraslacion3D, f: number): number {
+  const th = Math.abs(r.thTop) * f;
+  if (th < 1e-12) return 1;
+  const x = 0.35 / th;
+  if (x <= 1.5) return 1;
+  const p = 10 ** Math.floor(Math.log10(x));
+  return [1, 2, 5, 10].map(k => k * p).reduce((a, b) => (Math.abs(Math.log(b / x)) < Math.abs(Math.log(a / x)) ? b : a));
 }
 
 /**
@@ -53,11 +67,11 @@ class Prisma {
     this.bordes = new THREE.LineSegments(gb, matB);
   }
   /** planta (x, y) y cota z → three (x, z, −y), con el movimiento de cada cota multiplicado por f */
-  mover(r: Rototraslacion3D | null, f: number) {
+  mover(r: Rototraslacion3D | null, f: number, fg = f) {
     const poner = (src: number[], attr: THREE.BufferAttribute) => {
       const a = attr.array as Float32Array;
       for (let i = 0; i < src.length; i += 3) {
-        const q = r && f ? desplazar(r, src[i], src[i + 1], this.zMover ?? src[i + 2], f) : { x: src[i], y: src[i + 1] };
+        const q = r && f ? desplazar(r, src[i], src[i + 1], this.zMover ?? src[i + 2], f, fg) : { x: src[i], y: src[i + 1] };
         a[i] = q.x; a[i + 1] = src[i + 2]; a[i + 2] = -q.y;
       }
       attr.needsUpdate = true;
@@ -77,6 +91,8 @@ export interface Opciones3D {
   roto: () => Rototraslacion3D | null;
   /** rótulo con la exageración y los movimientos */
   rotulo?: boolean;
+  /** nombres de las piezas, CR, ejes y cotas sobre el dibujo */
+  etiquetas?: boolean;
 }
 
 export function montar3D(cont: HTMLElement, op: Opciones3D) {
@@ -87,6 +103,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   info.className = 'info3d';
   info.hidden = true;
   cont.appendChild(info);
+  const capaEt = new CSS2DRenderer();
+  capaEt.domElement.className = 'etiquetas3d';
+  if (op.etiquetas) cont.appendChild(capaEt.domElement);
   const escena = new THREE.Scene();
   const camara = new THREE.PerspectiveCamera(40, 1, 0.5, 2000);
   const controles = new OrbitControls(camara, renderer.domElement);
@@ -101,14 +120,14 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   let prismas: Prisma[] = [];
   let extras: { mover: (f: number) => void }[] = [];
   let roto: Rototraslacion3D | null = null;
-  let fMax = 0;
+  let fMax = 0, kGiro = 1;
 
   function fondo() { escena.background = new THREE.Color(css('--lienzo', '#ffffff')); }
 
   function construir() {
     if (!cont.isConnected) return;
     fondo();
-    grupo.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
+    grupo.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); if (o instanceof CSS2DObject) o.element.remove(); });
     grupo.clear();
     prismas = []; extras = [];
     const p = estado.proyecto;
@@ -120,6 +139,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     let B = 0, L = 0;
     p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; });
     fMax = roto ? (estado.roto3d.exag ?? exageracionAuto(roto, B, L)) : 0;
+    kGiro = roto ? (estado.roto3d.giro ?? giroExtraAuto(roto, fMax)) : 1;
     const cotas = p.niveles.map(n => n.cota).sort((a, b) => a - b);
     const tinta = new THREE.LineBasicMaterial({ color: new THREE.Color(css('--ink2', '#556')), transparent: true, opacity: 0.55 });
     // losas
@@ -165,6 +185,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const origen = estado.dir === 'A' ? new THREE.Vector3(0, top * 0.6, L / 2 + largo + 3) : new THREE.Vector3(-B / 2 - largo - 3, top * 0.6, 0);
     if (estado.capas.viento) grupo.add(new THREE.ArrowHelper(dirV, origen, largo, new THREE.Color(css('--carga', '#e07b00')).getHex(), 2.5, 1.6));
     if (roto) agregarRoto(roto, B, L, top, fondoCota, cotas);
+    if (roto && op.etiquetas && estado.roto3d.rotulos) agregarRotulos(roto, B, L, top, fondoCota);
     mover(fMax);
     // la cámara se vuelve a encuadrar cuando cambia el tamaño de la torre (no al mover un muro)
     const clave = [B, L, top, fondoCota].map(v => v.toFixed(1)).join('|') + (roto ? estado.dir : '');
@@ -194,7 +215,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     grupo.add(ejeD);
     extras.push({ mover: f => {
       const a = gE.getAttribute('position') as THREE.BufferAttribute;
-      zsE.forEach((z, i) => { const q = desplazar(r, r.cr.x, r.cr.y, Math.min(z, top), f); a.setXYZ(i, q.x, z, -q.y); });
+      zsE.forEach((z, i) => { const q = desplazar(r, r.cr.x, r.cr.y, Math.min(z, top), f, f * kGiro); a.setXYZ(i, q.x, z, -q.y); });
       a.needsUpdate = true; gE.computeBoundingSphere();
     } });
     // flecha curva del giro sobre la azotea (sentido de θ), como en las láminas de la clase
@@ -212,16 +233,113 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       arco.add(cono);
       grupo.add(arco);
       extras.push({ mover: f => {
-        const q = desplazar(r, r.cr.x, r.cr.y, top, f);
+        const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro);
         arco.position.set(q.x, top + 1.2, -q.y);
-        arco.rotation.y = movimientoEn(r, top).th * f;
+        arco.rotation.y = movimientoEn(r, top).th * f * kGiro;
         arco.visible = f > 0;
       } });
     }
   }
 
+  /** etiqueta HTML pegada a un punto 3D */
+  function etiqueta(texto: string, clase: string, globo?: string): CSS2DObject {
+    const e = document.createElement('div');
+    e.className = `et3d ${clase}`;
+    e.innerHTML = texto;
+    if (globo) e.title = globo;
+    const o = new CSS2DObject(e);
+    grupo.add(o);
+    return o;
+  }
+  /** línea de cota con topes (en coordenadas de three) */
+  function cota(a: THREE.Vector3, b: THREE.Vector3, texto: string, color: THREE.Color, globo?: string) {
+    const mat = new THREE.LineBasicMaterial({ color });
+    const u = b.clone().sub(a).normalize();
+    const n = Math.abs(u.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const t = n.clone().multiplyScalar(0.6);
+    const pts = [a, b, a.clone().add(t), a.clone().sub(t), b.clone().add(t), b.clone().sub(t)];
+    grupo.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat));
+    etiqueta(texto, 'cota', globo).position.copy(a.clone().add(b).multiplyScalar(0.5));
+  }
+
+  /**
+   * Lo que marca la planilla, sobre el dibujo: el nombre de cada pieza (en la azotea, se mueve con ella), el CR
+   * (punto de giro) con el eje de inercia y el de simetría en el suelo, y las cotas de análisis: B, L, h, e,
+   * los niveles y la δ de la azotea.
+   */
+  function agregarRotulos(r: Rototraslacion3D, B: number, L: number, top: number, zFondo: number) {
+    const p = estado.proyecto;
+    const z0 = Math.max(0, zFondo);
+    const cTin = new THREE.Color(css('--ink', '#223'));
+    const cEle = new THREE.Color(css('--elegido', '#e8a317'));
+    const cCar = new THREE.Color(css('--carga', '#e07b00'));
+    const A = estado.dir === 'A';
+    // piezas: nombre en la azotea, en el baricentro de sus muros
+    const porId = new Map(p.muros.map(m => [m.id, m]));
+    (estado.calculo.asig?.piezas ?? []).filter(pz => pz.dir === estado.dir && pz.filaHoja !== null).forEach(pz => {
+      const ms = pz.muros.map(id => porId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+      if (!ms.length) return;
+      const a = ms.reduce((s2, m) => s2 + m.largo * m.espesor, 0) || 1;
+      const x = ms.reduce((s2, m) => s2 + m.x * m.largo * m.espesor, 0) / a, y = ms.reduce((s2, m) => s2 + m.y * m.largo * m.espesor, 0) / a;
+      const zt = Math.min(top, Math.max(...ms.map(m => m.zHasta ?? top)));
+      const o = etiqueta(pz.nombre, 'pieza', `${pz.nombre}: ${pz.muros.join(', ')}`);
+      extras.push({ mover: f => { const q = desplazar(r, x, y, zt, f, f * kGiro); o.position.set(q.x, zt + 1.6, -q.y); } });
+    });
+    // CR: punto de giro arriba y abajo
+    const crAbajo = etiqueta('CR', 'cr', 'Centro de rigidez: la planta gira alrededor de este punto');
+    crAbajo.position.set(r.cr.x, z0 + 0.4, -r.cr.y);
+    const crArriba = etiqueta('CR · punto de giro', 'cr arriba');
+    extras.push({ mover: f => { const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro); crArriba.position.set(q.x, top + 6, -q.y); } });
+    // ejes en el suelo, en el sentido del viento: simetría (donde actúa W) e inercia (por el CR)
+    const largoEje = (A ? L : B) / 2 + 3;
+    const eje = (t: number, color: THREE.Color, texto: string, trazos: boolean, alFinal = false) => {
+      const a = A ? new THREE.Vector3(t, z0 + 0.05, largoEje) : new THREE.Vector3(-largoEje, z0 + 0.05, -t);
+      const b = A ? new THREE.Vector3(t, z0 + 0.05, -largoEje) : new THREE.Vector3(largoEje, z0 + 0.05, -t);
+      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), trazos ? new THREE.LineDashedMaterial({ color, dashSize: 0.7, gapSize: 0.5 }) : new THREE.LineBasicMaterial({ color }));
+      ln.computeLineDistances();
+      grupo.add(ln);
+      etiqueta(texto, 'eje').position.copy(alFinal ? b : a);
+    };
+    // t del eje de inercia en planta: A: x = Xr · B: y = −Xr (marco del viento)
+    eje(0, cCar, 'eje de simetría (W)', true);
+    if (Math.abs(r.e) > 1e-3) eje(A ? r.cr.x : r.cr.y, cEle, 'eje de inercia', false, true);
+    // cotas: B y L en el suelo (del lado de sotavento), e entre los ejes (barlovento), h y los niveles en la esquina
+    // de barlovento más cercana a la cámara, hacia afuera, así no tapan la torre
+    const d2 = 2.2;
+    cota(new THREE.Vector3(-B / 2, z0, A ? -L / 2 - d2 : L / 2 + d2), new THREE.Vector3(B / 2, z0, A ? -L / 2 - d2 : L / 2 + d2), `B = ${fmt(B)} m`, cTin, 'Largo del edificio en x');
+    cota(new THREE.Vector3(B / 2 + d2, z0, L / 2), new THREE.Vector3(B / 2 + d2, z0, -L / 2), `L = ${fmt(L)} m`, cTin, 'Ancho del edificio en y');
+    if (Math.abs(r.e) > 1e-3) {
+      const ze = z0 + 0.1;
+      const a = A ? new THREE.Vector3(0, ze, L / 2 + d2) : new THREE.Vector3(-B / 2 - d2, ze, 0);
+      const b = A ? new THREE.Vector3(r.cr.x, ze, L / 2 + d2) : new THREE.Vector3(-B / 2 - d2, ze, -r.cr.y);
+      cota(a, b, `e = ${fmt(Math.abs(r.e))} m`, cEle, 'Excentricidad: distancia del eje de simetría (donde actúa W) al eje de inercia. Mt = W · e');
+    }
+    // esquina de barlovento del lado de la cámara (three): A → (B/2, L/2 + 4) · B → (−B/2 − 4, L/2)
+    const esq = A ? new THREE.Vector3(B / 2, 0, L / 2 + 4.5) : new THREE.Vector3(-B / 2 - 4.5, 0, L / 2);
+    cota(esq.clone().setY(z0), esq.clone().setY(top), `h = ${fmt(top - z0)} m`, cTin, 'Altura sobre PB (la del J mínimo: h/500)');
+    const nivs = p.niveles.filter(n => n.cota >= z0).sort((a2, b2) => a2.cota - b2.cota);
+    const paso = Math.max(1, Math.ceil(nivs.length / 7));
+    const tick = new THREE.LineBasicMaterial({ color: cTin });
+    nivs.forEach((n, i) => {
+      if (i % paso && i !== nivs.length - 1) return;
+      const pt = esq.clone().setY(n.cota);
+      grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pt.clone().add(new THREE.Vector3(A ? 0 : 0, 0, A ? 0.5 : 0)), pt.clone().add(A ? new THREE.Vector3(0, 0, 1.2) : new THREE.Vector3(-1.2, 0, 0))]), tick));
+      etiqueta(`${n.nombre} <span>${n.cota > 0 ? '+' : ''}${fmt(n.cota)}</span>`, 'nivel').position.copy(pt.add(A ? new THREE.Vector3(0, 0, 1.4) : new THREE.Vector3(-1.4, 0, 0)));
+    });
+    // δ en la azotea: del CR sin deformar al CR corrido (solo la traslación)
+    const gD = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    grupo.add(new THREE.Line(gD, new THREE.LineBasicMaterial({ color: new THREE.Color(css('--deformada', '#2a9d5c')) })));
+    const etD = etiqueta(`δ = ${fmt(r.dTop * 1000, 1)} mm`, 'delta', 'Corrimiento real de la azotea (el dibujo está exagerado)');
+    extras.push({ mover: f => {
+      const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro);
+      const a = gD.getAttribute('position') as THREE.BufferAttribute;
+      a.setXYZ(0, r.cr.x, top + 2, -r.cr.y); a.setXYZ(1, q.x, top + 2, -q.y); a.needsUpdate = true; gD.computeBoundingSphere();
+      etD.position.set(q.x, top + 2, -q.y);
+    } });
+  }
+
   function mover(f: number) {
-    prismas.forEach(pr => pr.mover(roto, f));
+    prismas.forEach(pr => pr.mover(roto, f, f * kGiro));
     extras.forEach(x => x.mover(f));
   }
 
@@ -229,8 +347,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     info.hidden = !(op.rotulo && roto);
     if (!roto || info.hidden) return;
     const giro = Math.abs(roto.thTop);
-    info.innerHTML = `<b>Deformada × ${fmt(fMax, 0)}</b><br>azotea: δ = ${fmt(roto.dTop * 1000, 1)} mm` +
-      (giro > 1e-12 ? ` · giro ${fmt(giro * 1e3, 3)} ‰ rad (${roto.thTop < 0 ? 'horario' : 'antihorario'})` : ' · sin giro (solo traslación)');
+    info.innerHTML = `<b>Traslación × ${fmt(fMax, 0)}${giro > 1e-12 ? ` · giro × ${fmt(fMax * kGiro, 0)}` : ''}</b><br>azotea: δ = ${fmt(roto.dTop * 1000, 1)} mm` +
+      (giro > 1e-12 ? ` · θ = ${fmt(giro * 1e3, 3)} ‰ rad = ${fmt((giro * 180) / Math.PI * 60, 2)}′ (${roto.thTop < 0 ? 'horario' : 'antihorario'})` : ' · sin giro (solo traslación)');
   }
 
   let medidas = { B: 20, L: 16, h: 20, top: 20, fondoCota: 0 };
@@ -257,6 +375,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   function tamaño() {
     const w = cont.clientWidth || 400, h = cont.clientHeight || 400;
     renderer.setSize(w, h, false);
+    capaEt.setSize(w, h);
     const antes = camara.aspect;
     camara.aspect = w / h;
     camara.updateProjectionMatrix();
@@ -277,6 +396,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     else if (animando) { animando = false; mover(fMax); }
     controles.update();
     renderer.render(escena, camara);
+    if (op.etiquetas) capaEt.render(escena, camara);
   });
   return { construir, encuadrar, tamaño };
 }
