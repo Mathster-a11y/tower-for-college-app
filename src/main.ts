@@ -3,6 +3,7 @@ import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
+import { imprimirLaminas } from './ui/lamina';
 import { avisoActual } from './autoria';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
@@ -303,6 +304,7 @@ $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; estado.r
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
+$('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas(); });
 
 // menús desplegables (tarjetas)
 function cerrarMenus() { document.querySelectorAll('.menu.abierto').forEach(m => { m.classList.remove('abierto'); (m.previousElementSibling as HTMLElement | null)?.setAttribute('aria-expanded', 'false'); }); }

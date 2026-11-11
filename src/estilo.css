@@ -498,7 +498,7 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 /* informe para imprimir */
 .informe { display: none; }
 @media print {
-  body.imprimiendo > *:not(.informe) { display: none !important; }
+  body.imprimiendo > *:not(.informe):not(.lamina-doc) { display: none !important; }
   body.imprimiendo { background: #fff; overflow: visible; height: auto; }
   body.imprimiendo .informe { display: block; color: #111; font: 10.5pt var(--fuente); }
   .informe .inf-portada { border-bottom: 2px solid #111; margin-bottom: 10mm; padding-bottom: 4mm; }
@@ -606,3 +606,26 @@ text[data-par].ultimo { font-size: 15px; }
 /* el panel de piezas va a la derecha (debajo del selector de nivel), así la planta queda libre para hacer clic */
 .piezas-panel { left: auto; right: 10px; top: 46px; max-height: calc(100% - 60px); overflow: auto; }
 @media (max-width: 760px) { .piezas-panel { position: static; width: auto; margin: 6px 10px; } }
+/* lámina de entrega A3 */
+.lamina-doc { display: none; }
+@media print {
+  body.imprimiendo .lamina-doc { display: block; }
+  .lamina-hoja { width: 420mm; height: 297mm; break-after: page; overflow: hidden; }
+  .lamina-hoja:last-child { break-after: auto; }
+  .lamina-hoja svg.lamina { width: 420mm; height: 297mm; display: block; }
+}
+.lamina .lm-fondo { fill: #fff; }
+.lamina .lm-marco { fill: none; stroke: #111; stroke-width: 5; }
+.lamina .lm-linea { stroke: #111; stroke-width: 3; }
+.lamina .lm-linea.fina { stroke-width: 1.5; }
+.lamina .lm-rotulo { fill: none; stroke: #111; stroke-width: 4; }
+.lamina .lm-tit { font: 700 34px var(--fuente); fill: #111; }
+.lamina .lm-marca { font: 700 40px var(--mono); fill: #111; letter-spacing: 4px; }
+.lamina .lm-cab { font: 600 22px var(--fuente); fill: #555; }
+.lamina .lm-val { font: 600 36px var(--fuente); fill: #111; }
+.lamina .lm-txt { font: 24px var(--fuente); fill: #111; }
+.lamina .lm-num { font: 24px var(--mono); fill: #111; }
+.lamina .lm-nota { font: 20px var(--fuente); fill: #555; }
+.lamina .lm-cebra { fill: #f2f2f0; }
+.lamina .lm-chip { fill: #eee; } .lamina .lm-chip.verifica { fill: #dcf2df; } .lamina .lm-chip.no-verifica { fill: #f8d9d7; } .lamina .lm-chip.revisar { fill: #fbecc8; }
+.lamina .lm-chip-txt { font: 600 20px var(--fuente); fill: #333; } .lamina .lm-chip-txt.verifica { fill: #1d6b2a; } .lamina .lm-chip-txt.no-verifica { fill: #a12a22; } .lamina .lm-chip-txt.revisar { fill: #8a5a00; }

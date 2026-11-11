@@ -77,7 +77,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 ## Próximos pasos (propuesta, noviembre 2026)
 
 ### Para la entrega
-- [ ] Lámina de entrega A3 apaisada para imprimir: rótulo (alumno, curso, fecha, cátedra), carta elegida, planta y verificaciones
+- [x] Lámina de entrega A3 apaisada para imprimir (Exportar ▾): una hoja por viento con ficha, vuelco, lámina M-N-Q, verificaciones y rótulo
 - [ ] Prueba de punta a punta con una entrega real: escribir la planilla, abrirla en Excel/LibreOffice y comparar celda por celda (con piezas agrupadas y alas intermedias)
 - [ ] Elegir la carta principal (A, B, C, D o una combinación)
 
