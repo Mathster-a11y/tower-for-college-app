@@ -66,23 +66,39 @@ export function montar3D(cont: HTMLElement) {
     grupo.add(new THREE.ArrowHelper(dir, origen, largo, 0x1f6f8b, 2.5, 1.6));
     // la cámara se vuelve a encuadrar cuando cambia el tamaño de la torre (no al mover un muro)
     const clave = [B, L, top, fondoCota].map(v => v.toFixed(1)).join('|');
-    if (clave !== encuadre) {
-      const d = Math.max(B, L, h) * 1.6;
-      camara.position.set(-d * 0.7, fondoCota + h * 0.7, d * 0.9);
-      controles.target.set(0, (top + fondoCota) / 2, 0);
-      encuadre = clave;
-    }
+    medidas = { B, L, h, top, fondoCota };
+    if (clave !== encuadre) { encuadrar(); encuadre = clave; }
   }
+
+  let medidas = { B: 20, L: 16, h: 20, top: 20, fondoCota: 0 };
+  /** la torre entera entra en el visor, sea ancho o angosto */
+  function encuadrar() {
+    const { B, L, h, top, fondoCota } = medidas;
+    const r = 0.5 * Math.sqrt(B * B + L * L + h * h) + 4;
+    const fovV = (camara.fov * Math.PI) / 180;
+    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * camara.aspect);
+    const d = r / Math.sin(Math.min(fovV, fovH) / 2);
+    const dir = new THREE.Vector3(-0.62, 0.38, 0.69).normalize();
+    controles.target.set(0, (top + fondoCota) / 2, 0);
+    camara.position.copy(controles.target).addScaledVector(dir, d);
+    camara.far = Math.max(2000, d * 4);
+    camara.updateProjectionMatrix();
+  }
+  renderer.domElement.addEventListener('dblclick', encuadrar);
+  renderer.domElement.title = 'Arrastrar: girar · rueda: acercar · doble clic: encuadrar la torre';
 
   function tamaño() {
     const w = cont.clientWidth || 400, h = cont.clientHeight || 400;
     renderer.setSize(w, h, false);
+    const antes = camara.aspect;
     camara.aspect = w / h;
     camara.updateProjectionMatrix();
+    if (Math.abs(antes - camara.aspect) > 0.05) encuadrar();
   }
   new ResizeObserver(tamaño).observe(cont);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fondo);
   estado.suscribir(construir);
+  estado.suscribirSeleccion(construir);
   construir();
   tamaño();
   renderer.setAnimationLoop(() => { controles.update(); renderer.render(escena, camara); });

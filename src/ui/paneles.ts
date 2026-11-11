@@ -2,6 +2,7 @@
 import { estado, fmt, COLORES } from './estado';
 import type { Muro, Nivel } from '../engine/modelo';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { calcFunicular } from '../engine/funicular';
 import { dibujoGuia, dibujoPresiones } from './funicular';
 
@@ -69,7 +70,7 @@ function panelSitio(c: H) {
 // ------------------------------------------------------------------ Niveles
 function panelNiveles(c: H) {
   const p = estado.proyecto;
-  c.append(h('p', { class: 'nota' }, 'De la azotea al último subsuelo. B y L se escriben en la primera fila y donde la planta cambia; vacío = igual al de arriba. Hasta 50 pisos sobre PB y 3 subsuelos.'));
+  c.append(h('p', { class: 'nota' }, 'De la azotea al último subsuelo. B y L van en la primera fila y donde la planta cambia; vacío = igual al de arriba. Hasta 50 pisos sobre PB y 3 subsuelos.'));
   const gen = h('div', { class: 'fila-acciones' });
   const nP = h('input', { type: 'number', value: '20', min: '1', max: '50', 'aria-label': 'Pisos sobre PB', id: 'gen-n' });
   const hT = h('input', { type: 'number', value: '3', step: 'any', 'aria-label': 'Altura del piso tipo', id: 'gen-h' });
@@ -87,86 +88,91 @@ function panelNiveles(c: H) {
   }));
   gen.append(h('span', {}, 'Generar:'), nP, h('span', {}, 'pisos de'), hT, h('span', {}, 'm, PB de'), hPB, h('span', {}, 'm y'), nS, h('span', {}, 'subsuelos'), bGen);
   c.append(gen);
-  const t = h('table', { class: 'tabla' });
-  t.append(h('thead', {}, h('tr', {}, ...['Nivel', 'Cota (m)', 'B (m)', 'L (m)', ''].map(x => h('th', {}, x)))));
-  const tb = h('tbody');
-  p.niveles.forEach((n, i) => {
-    const tr = h('tr');
-    const inp = (v: string | number | null | undefined, f: (x: string) => void, tipo = 'number', lab = '') => {
-      const e = h('input', { type: tipo, value: v === null || v === undefined ? '' : String(v), 'aria-label': lab });
-      if (tipo === 'number') e.step = 'any';
-      e.addEventListener('change', () => estado.cambiar(() => f(e.value)));
-      return h('td', {}, e);
-    };
-    tr.append(inp(n.nombre, v => (n.nombre = v), 'text', 'Nombre del nivel'), inp(n.cota, v => (n.cota = num(v) ?? n.cota), 'number', 'Cota'),
-      inp(n.B, v => (n.B = num(v)), 'number', 'B'), inp(n.L, v => (n.L = num(v)), 'number', 'L'));
-    const del = h('button', { type: 'button', class: 'mini', 'aria-label': `Borrar ${n.nombre}` }, '×');
-    del.addEventListener('click', () => estado.cambiar(() => p.niveles.splice(i, 1)));
-    tr.append(h('td', {}, del));
-    tb.append(tr);
+  c.append(h('p', { class: 'nota' }, 'Como en Excel: elegí celdas con el mouse o Mayús + flechas, escribí encima, arrastrá el cuadradito de la esquina para copiar o seguir la serie (cotas: elegí dos y arrastrá), Ctrl+C / Ctrl+V para copiar y pegar desde Excel, Supr para borrar.'));
+  const numCol = (titulo: string, clave: 'cota' | 'B' | 'L', opcional: boolean): Columna<Nivel> => ({
+    titulo, clave, tipo: 'numero',
+    leer: n => n[clave] ?? null,
+    escribir: (n, v) => { const x = aNumero(v); if (x === null) { if (!opcional) return false; delete n[clave]; return; } if (Number.isNaN(x)) return false; n[clave] = x; },
   });
-  t.append(tb);
+  c.append(grilla<Nivel>([
+    { titulo: 'Nivel', clave: 'nombre', leer: n => n.nombre, escribir: (n, v) => { n.nombre = v.trim(); } },
+    numCol('Cota (m)', 'cota', false), numCol('B (m)', 'B', true), numCol('L (m)', 'L', true),
+  ], { id: 'niveles', filas: () => estado.proyecto.niveles, nueva: () => { const u = estado.proyecto.niveles.at(-1); return { nombre: '', cota: +((u?.cota ?? 0) - 3).toFixed(2) }; } }));
+  const acc = h('div', { class: 'fila-acciones' });
+  const ins = h('button', { type: 'button' }, 'Insertar fila');
+  ins.addEventListener('click', () => estado.cambiar(() => { const r = filasElegidas('niveles')?.[0] ?? p.niveles.length; p.niveles.splice(r, 0, { nombre: '', cota: p.niveles[r]?.cota ?? 0 }); }));
+  const borr = h('button', { type: 'button' }, 'Borrar filas elegidas');
+  borr.addEventListener('click', () => estado.cambiar(() => { const s = filasElegidas('niveles'); if (s) p.niveles.splice(s[0], s[1] - s[0] + 1); }));
   const add = h('button', { type: 'button' }, 'Agregar nivel abajo');
   add.addEventListener('click', () => estado.cambiar(() => { const u = p.niveles[p.niveles.length - 1]; p.niveles.push({ nombre: 'nuevo', cota: (u?.cota ?? 0) - 3 }); }));
-  c.append(h('div', { class: 'scroll' }, t), add);
+  acc.append(ins, borr, add);
+  c.append(acc);
+  const imp = h('button', { type: 'button' }, 'Importar desde Excel…');
+  imp.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:importar')));
+  const tab = h('button', { type: 'button' }, 'Descargar tabla (.xlsx)');
+  tab.title = 'Niveles y muros del proyecto en un Excel: sirve de plantilla para llenar y volver a importar';
+  tab.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:tabla')));
+  c.append(h('div', { class: 'fila-acciones' }, imp, tab));
 }
 
 // ------------------------------------------------------------------ Muros
 let contador = 1;
+function nuevoMuro(): Muro {
+  const p = estado.proyecto;
+  while (p.muros.some(m => m.id === `M${contador}`)) contador++;
+  return { id: `M${contador}`, dir: 'Y', x: 0, y: 0, largo: 3, espesor: 0.2, llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' };
+}
 function panelMuros(c: H) {
   const p = estado.proyecto;
   const acc = h('div', { class: 'fila-acciones' });
   const nuevo = h('button', { type: 'button' }, 'Nuevo muro');
-  nuevo.addEventListener('click', () => estado.cambiar(() => {
-    while (p.muros.some(m => m.id === `M${contador}`)) contador++;
-    const m: Muro = { id: `M${contador}`, dir: 'Y', x: 0, y: 0, largo: 3, espesor: 0.2, llega: true, areaInf: 10, piezaA: `T${contador}`, pegadoA: '', piezaB: '', pegadoB: '' };
-    p.muros.push(m); estado.seleccion = m.id;
-  }));
+  nuevo.addEventListener('click', () => estado.cambiar(() => { const m = nuevoMuro(); m.piezaA = `T${contador}`; p.muros.push(m); estado.seleccion = m.id; }));
   const dup = h('button', { type: 'button' }, 'Duplicar');
   dup.addEventListener('click', () => estado.cambiar(() => {
     const s = p.muros.find(m => m.id === estado.seleccion); if (!s) return;
-    while (p.muros.some(m => m.id === `M${contador}`)) contador++;
-    const m = { ...s, id: `M${contador}`, x: +(s.x + 1).toFixed(2) }; p.muros.push(m); estado.seleccion = m.id;
+    const m = { ...nuevoMuro(), ...s, id: nuevoMuro().id, x: +(s.x + 1).toFixed(2) }; p.muros.push(m); estado.seleccion = m.id;
   }));
-  const borrar = h('button', { type: 'button' }, 'Borrar');
-  borrar.addEventListener('click', () => estado.cambiar(() => { p.muros = p.muros.filter(m => m.id !== estado.seleccion); estado.seleccion = null; }));
-  acc.append(nuevo, dup, borrar);
+  const borrar = h('button', { type: 'button' }, 'Borrar filas elegidas');
+  borrar.addEventListener('click', () => estado.cambiar(() => {
+    const s = filasElegidas('muros');
+    const ids = s ? p.muros.slice(s[0], s[1] + 1).map(m => m.id) : estado.seleccion ? [estado.seleccion] : [];
+    p.muros = p.muros.filter(m => !ids.includes(m.id)); estado.seleccion = null;
+  }));
+  const imp = h('button', { type: 'button' }, 'Importar desde Excel…');
+  imp.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:importar')));
+  const tab = h('button', { type: 'button' }, 'Descargar tabla (.xlsx)');
+  tab.title = 'Niveles y muros del proyecto en un Excel: sirve de plantilla para llenar y volver a importar';
+  tab.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:tabla')));
+  acc.append(nuevo, dup, borrar, imp, tab);
   c.append(acc);
-  const m = p.muros.find(x => x.id === estado.seleccion);
-  if (m) {
-    const set = (f: () => void) => estado.cambiar(f);
-    const pap = estado.calculo.asig?.papeles[m.id];
-    c.append(h('h3', {}, `Muro ${m.id}`),
-      h('p', { class: 'nota' }, `Papel: viento A «${pap?.A ?? '—'}», viento B «${pap?.B ?? '—'}». Flechas del teclado para moverlo (Mayús: de a 1 m).`),
-      h('div', { class: 'grilla2' },
-        campo('Nombre', 'm-id', m.id, v => set(() => { const viejo = m.id; m.id = v || viejo; p.muros.forEach(o => { if (o.pegadoA === viejo) o.pegadoA = m.id; if (o.pegadoB === viejo) o.pegadoB = m.id; }); estado.seleccion = m.id; })),
-        campo('Dirección', 'm-dir', m.dir, v => set(() => (m.dir = v === 'X' ? 'X' : 'Y')), { lista: ['Y', 'X'], ayuda: 'Y: paralelo al viento A' }),
-        campo('x centro (m)', 'm-x', m.x, v => set(() => (m.x = num(v) ?? m.x)), { tipo: 'number' }),
-        campo('y centro (m)', 'm-y', m.y, v => set(() => (m.y = num(v) ?? m.y)), { tipo: 'number' }),
-        campo('Largo (m)', 'm-l', m.largo, v => set(() => (m.largo = Math.max(0.05, num(v) ?? m.largo))), { tipo: 'number' }),
-        campo('Espesor (m)', 'm-e', m.espesor, v => set(() => (m.espesor = Math.max(0.05, num(v) ?? m.espesor))), { tipo: 'number' }),
-        campo('¿Llega a la fundación?', 'm-llega', m.llega ? 'sí' : 'no', v => set(() => (m.llega = v === 'sí')), { lista: ['sí', 'no'], ayuda: 'no: apeado o arranca más arriba' }),
-        campo('Área de influencia (m²)', 'm-ai', m.areaInf, v => set(() => (m.areaInf = num(v) ?? m.areaInf)), { tipo: 'number' }),
-        campo('Pieza viento A', 'm-pa', m.piezaA, v => set(() => (m.piezaA = v.trim()))),
-        campo('Pegado a (alma) A', 'm-ga', m.pegadoA, v => set(() => (m.pegadoA = v.trim())), { ayuda: 'solo para alas' }),
-        campo('Pieza viento B', 'm-pb', m.piezaB, v => set(() => (m.piezaB = v.trim()))),
-        campo('Pegado a (alma) B', 'm-gb', m.pegadoB, v => set(() => (m.pegadoB = v.trim())), { ayuda: 'solo para alas' }),
-        campo('Columna circular: D (m)', 'm-D', m.circular?.D ?? '', v => set(() => { const D = num(v); m.circular = D ? { D, d: m.circular?.d ?? 0 } : null; }), { tipo: 'number', ayuda: 'vacío = tabique' }),
-        campo('d interior (m)', 'm-d', m.circular?.d ?? '', v => set(() => { if (m.circular) m.circular.d = num(v) ?? 0; }), { tipo: 'number', ayuda: '0 = maciza' }),
-      ));
-  } else c.append(h('p', { class: 'nota' }, 'Elegí un muro en la planta o agregá uno nuevo.'));
-  const t = h('table', { class: 'tabla compacta' });
-  t.append(h('thead', {}, h('tr', {}, ...['Muro', 'Dir.', 'x', 'y', 'Largo', 'Esp.', 'Pieza A', 'Pieza B'].map(x => h('th', {}, x)))));
-  const tb = h('tbody');
-  p.muros.forEach(mm => {
-    const tr = h('tr', { class: mm.id === estado.seleccion ? 'sel' : '', tabindex: '0' }, ...[mm.id, mm.dir, fmt(mm.x), fmt(mm.y), fmt(mm.largo), fmt(mm.espesor), mm.piezaA, mm.piezaB].map(x => h('td', {}, x)));
-    const elegir = () => { estado.seleccion = mm.id; estado.cambiar(); };
-    tr.addEventListener('click', elegir);
-    tr.addEventListener('keydown', e => { if (e.key === 'Enter') elegir(); });
-    tb.append(tr);
+  c.append(h('p', { class: 'nota' }, 'Una fila por muro. Se puede pegar una tabla copiada de Excel (con las columnas en este orden) o importarla con «Importar…». Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. Columna circular: diámetro D (y d interior; vacío = tabique).'));
+  const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
+    titulo, clave, tipo: 'numero', leer: m => m[clave],
+    escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; m[clave] = x; },
   });
-  t.append(tb);
-  c.append(h('div', { class: 'scroll' }, t));
+  const txt = (titulo: string, clave: 'piezaA' | 'pegadoA' | 'piezaB' | 'pegadoB'): Columna<Muro> => ({ titulo, clave, leer: m => m[clave], escribir: (m, v) => { m[clave] = v.trim(); } });
+  const iSel = p.muros.findIndex(m => m.id === estado.seleccion);
+  if (iSel >= 0) elegirFila('muros', iSel);
+  c.append(grilla<Muro>([
+    { titulo: 'Muro', clave: 'id', leer: m => m.id, escribir: (m, v) => {
+      const nuevoId = v.trim(); if (!nuevoId || (nuevoId !== m.id && p.muros.some(o => o.id === nuevoId))) return false;
+      const viejo = m.id; m.id = nuevoId;
+      p.muros.forEach(o => { if (o.pegadoA === viejo) o.pegadoA = nuevoId; if (o.pegadoB === viejo) o.pegadoB = nuevoId; });
+      if (estado.seleccion === viejo) estado.seleccion = nuevoId;
+    } },
+    { titulo: 'Dir.', clave: 'dir', tipo: 'lista', opciones: ['Y', 'X'], leer: m => m.dir, escribir: (m, v) => { const d = v.trim().toUpperCase(); if (d !== 'X' && d !== 'Y') return false; m.dir = d; } },
+    numM('x (m)', 'x'), numM('y (m)', 'y'), numM('Largo', 'largo', 0.01), numM('Esp.', 'espesor', 0.01),
+    { titulo: 'Llega', clave: 'llega', tipo: 'lista', opciones: ['sí', 'no'], ayuda: '¿Llega a la fundación?', leer: m => (m.llega ? 'sí' : 'no'),
+      escribir: (m, v) => { const t = v.trim().toLowerCase(); if (['sí', 'si', 's', '1', 'true', 'x', ''].includes(t)) m.llega = true; else if (['no', 'n', '0', 'false'].includes(t)) m.llega = false; else return false; } },
+    numM('Área inf. (m²)', 'areaInf', 0),
+    txt('Pieza A', 'piezaA'), txt('Pegado a (A)', 'pegadoA'), txt('Pieza B', 'piezaB'), txt('Pegado a (B)', 'pegadoB'),
+    { titulo: 'D col.', clave: 'D', tipo: 'numero', ayuda: 'Columna circular: diámetro exterior', leer: m => m.circular?.D ?? null,
+      escribir: (m, v) => { const x = aNumero(v); if (x === null || x === 0) { m.circular = null; return; } if (Number.isNaN(x) || x < 0) return false; m.circular = { D: x, d: m.circular?.d ?? 0 }; } },
+    { titulo: 'd int.', clave: 'd', tipo: 'numero', ayuda: 'Columna circular: diámetro interior (0 = maciza)', leer: m => m.circular?.d ?? null,
+      escribir: (m, v) => { const x = aNumero(v) ?? 0; if (Number.isNaN(x) || x < 0) return false; if (m.circular) m.circular.d = x; } },
+  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null) }));
+  const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];
+  if (pap) c.append(h('p', { class: 'nota' }, `Muro ${estado.seleccion}: viento A «${pap.A}», viento B «${pap.B}». En la planta: arrastrar o flechas para moverlo (Mayús: de a 1 m).`));
 }
 
 // ------------------------------------------------------------------ Piezas

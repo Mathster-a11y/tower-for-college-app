@@ -13,10 +13,14 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] **Verificación funicular.** Pestaña «Funicular»: suma gráfica de W y G (guía 2.2) con el polígono de fuerzas y el tercio medio de la base, y la línea de presiones piso a piso contra el núcleo central. Para los vientos A y B.
 - [x] Flexocompresión «Guía/CIRSOC» con el módulo de cada pieza, su área real y su peso propio
 
+- [x] **Niveles y Muros como Excel.** Grilla con selección, escribir encima, arrastrar el cuadradito para copiar o seguir la serie, Ctrl+C / Ctrl+V desde Excel, Supr, Ctrl+D, insertar y borrar filas
+- [x] **Importar desde Excel.** Tabla de la app (hojas Niveles y Muros, con botón para descargarla de plantilla), líneas exportadas de AutoCAD (x1, y1, x2, y2, con unidad, capa y centrado) y la planilla del curso ya llena (niveles, viento, fundación y piezas de las hojas J; el ΣJ de cada dirección coincide con la planilla)
+
 ## En curso
-- Nada por ahora: el próximo es el primero de la lista de abajo.
+- [ ] **Diagramas.** Viento y esfuerzos en altura (qz, fuerza por piso, corte V y momento M); rototraslación en planta; rigidez y deformación (ΣJ contra J mínimo, deformada contra h/500)
 
 ## Próximos
+- [ ] Diagrama de flexocompresión por pieza (tensiones N/A ± M/W, descargada y cargada)
 - [ ] Dibujar los muros con el mouse en la planta (clic en el inicio y clic en el fin), con imán a los extremos de otros muros
 - [ ] Armar las piezas solas: los muros que se tocan forman una pieza y el ala sabe a qué alma está pegada
 - [ ] Calcar un plano: poner una imagen o un PDF de fondo en la planta, con escala

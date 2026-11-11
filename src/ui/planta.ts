@@ -63,6 +63,7 @@ export function montarPlanta(cont: HTMLElement) {
     svg.appendChild(fl);
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
+    const yaRotuladas = new Set<string>();
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const [dx, dy] = m.circular ? [m.circular.D, m.circular.D] : m.dir === 'Y' ? [m.espesor, m.largo] : [m.largo, m.espesor];
@@ -77,7 +78,12 @@ export function montarPlanta(cont: HTMLElement) {
       const lx = m.dir === 'Y' || m.circular ? (izq ? X(m.x - dx / 2) - 4 : X(m.x + dx / 2) + 4) : X(m.x);
       const ly = m.dir === 'Y' || m.circular ? Y(m.y) + 4 : abajo ? Y(m.y - dy / 2) + 13 : Y(m.y + dy / 2) - 5;
       const ancla = m.dir === 'Y' || m.circular ? (izq ? 'end' : 'start') : 'middle';
-      grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, `${m.id}${pieza ? ' · ' + pieza : ''}`));
+      // con muchos muros, un solo rótulo por pieza (el del primer muro) para que la planta se pueda leer
+      const muchos = p.muros.length > 24;
+      const rotulo = !muchos ? `${m.id}${pieza ? ' · ' + pieza : ''}` : pieza && !yaRotuladas.has(pieza) ? pieza : '';
+      if (pieza) yaRotuladas.add(pieza);
+      if (rotulo) grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, rotulo));
+      grupo.appendChild(el('title', {}, `${m.id}${pieza ? ' · pieza ' + pieza : ''} · ${papel}`));
       grupo.addEventListener('pointerdown', ev => {
         ev.preventDefault();
         estado.seleccion = m.id;
@@ -112,5 +118,6 @@ export function montarPlanta(cont: HTMLElement) {
   });
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);
+  estado.suscribirSeleccion(dibujar);
   dibujar();
 }

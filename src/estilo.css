@@ -128,3 +128,22 @@ button:disabled { opacity: .45; cursor: default; border-color: var(--linea); }
 .funicular .f-fuerza { font-weight: 600; }
 .funicular .f-nota { fill: var(--suave); font-size: 10px; }
 p.total.estado { white-space: normal; }
+
+/* grilla tipo planilla */
+.grilla-envoltura { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.grilla-caja { position: relative; overflow: auto; max-height: 60vh; border: 1px solid var(--linea); border-radius: 3px; background: var(--panel); outline: none; user-select: none; -webkit-user-select: none; touch-action: none; }
+.grilla-caja:focus-visible { box-shadow: 0 0 0 2px var(--acento); }
+.grilla { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12.5px; min-width: 100%; }
+.grilla th { position: sticky; top: 0; background: var(--fila); color: var(--suave); font-weight: 600; font-size: 11.5px; padding: 3px 6px; border: 1px solid var(--linea); white-space: nowrap; z-index: 1; text-align: left; }
+.grilla tbody th { position: sticky; left: 0; top: auto; z-index: 1; text-align: right; cursor: pointer; min-width: 2.2em; }
+.grilla td { border: 1px solid var(--linea); padding: 2px 6px; min-width: 3.6em; height: 22px; white-space: nowrap; cursor: cell; }
+.grilla td.n { text-align: right; }
+.grilla td.sel { background: color-mix(in srgb, var(--acento) 16%, transparent); }
+.grilla td.activa { outline: 2px solid var(--acento); outline-offset: -2px; }
+.grilla td.llenar { background: color-mix(in srgb, var(--acento) 8%, transparent); outline: 1px dashed var(--acento); outline-offset: -1px; }
+.grilla td .editor { font: inherit; width: 100%; min-width: 4em; border: 0; padding: 0; margin: 0; background: var(--fondo); color: var(--texto); outline: none; }
+.tirador { position: absolute; width: 8px; height: 8px; background: var(--acento); border: 1px solid var(--panel); cursor: crosshair; z-index: 2; touch-action: none; }
+.grilla-aviso:empty { display: none; }
+dialog .campo { margin-top: 10px; }
+dialog .grilla2 .campo { margin-top: 0; }
+dialog .avisos { margin-top: 12px; }

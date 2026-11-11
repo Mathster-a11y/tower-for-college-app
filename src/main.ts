@@ -6,6 +6,8 @@ import { PANELES, cantidadAvisos } from './ui/paneles';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, proyectoVacio, type Proyecto } from './engine/modelo';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
+import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
+import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let pestana = 'Sitio';
@@ -102,22 +104,81 @@ async function abrirArchivo(f: File) {
     if (!proyectoValido(p)) throw new Error('El archivo no es un proyecto de Torre 3D.');
     plantillaAbierta = null; estado.reemplazar(p); return;
   }
+  const nombre = f.name.toLowerCase();
+  if (/\.(csv|tsv|txt)$/.test(nombre)) { dialogoImportar(interpretar(leerTexto(new TextDecoder().decode(buf), f.name)), f.name, null); return; }
   const leido = await leerPlanilla(buf);
-  plantillaAbierta = buf;
   if (leido.proyecto) {
     if (!proyectoValido(leido.proyecto)) throw new Error('La hoja «T3D» de la planilla está dañada.');
+    plantillaAbierta = buf;
     estado.reemplazar(leido.proyecto); return;
   }
-  // planilla sin hoja T3D: se toman los datos del viento y las cotas; los muros se dibujan en la app
-  const p = { ...estado.proyecto, sitio: { ...estado.proyecto.sitio, ...Object.fromEntries(Object.entries(leido.sitio).filter(([, v]) => v !== undefined)) } };
-  const cotas = leido.cotas;
-  const nombres = Array.from({ length: 54 }, (_, i) => (i <= 50 ? `${50 - i}º` : `${i - 50}º SS`));
-  nombres[50] = 'PB';
-  const niveles = cotas.map((z, i) => ({ nombre: nombres[i], cota: z })).filter((n, i) => i >= 50 || n.cota > 0);
-  if (niveles.length) { niveles[0].nombre = 'Azotea'; (niveles[0] as { B?: number; L?: number }).B = p.niveles[0]?.B ?? 20; (niveles[0] as { L?: number }).L = p.niveles[0]?.L ?? 16; p.niveles = niveles; }
-  estado.reemplazar(p);
-  dialogo('<h2>Planilla abierta</h2><p>La planilla no tenía la hoja «T3D»: se cargaron los datos del viento y las cotas. Dibujá los muros en la planta.</p>', [['Entendido', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+  const imp = interpretar(await leerLibro(buf));
+  dialogoImportar(imp, f.name, imp.tipo === 'planilla' ? buf : null);
 }
+
+/** Resumen de lo que se va a importar, con las opciones de cada tipo; nada cambia hasta «Importar». */
+function dialogoImportar(imp: Importacion, archivo: string, planilla: ArrayBuffer | null) {
+  const hayMuros = imp.muros.length > 0 || imp.lineas.length > 0;
+  const capas = [...new Set(imp.lineas.map(l => l.capa).filter(Boolean))] as string[];
+  const unidad = imp.lineas.length ? unidadProbable(imp.lineas) : 'm';
+  const titulo = imp.tipo === 'planilla' ? 'Importar la planilla del curso' : imp.tipo === 'lineas' ? 'Importar líneas (AutoCAD)' : 'Importar tabla';
+  const partes: string[] = [];
+  if (imp.niveles) partes.push(`${imp.niveles.length} niveles`);
+  if (imp.muros.length) partes.push(`${imp.muros.length} muros`);
+  if (imp.lineas.length) partes.push(`${imp.lineas.length} líneas`);
+  if (imp.sitio) partes.push('datos del viento y de la fundación');
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  dialogo(`<h2>${titulo}</h2>
+    <p>«${esc(archivo)}»: ${partes.join(', ') || 'nada para importar'}.</p>
+    ${imp.lineas.length ? `<div class="grilla2">
+      <label class="campo"><span>Unidad del dibujo</span><select id="imp-unidad">${['m', 'cm', 'mm'].map(u => `<option ${u === unidad ? 'selected' : ''}>${u}</option>`).join('')}</select><small>la app la estimó por el largo de las líneas</small></label>
+      <label class="campo"><span>Espesor de los muros (m)</span><input id="imp-esp" type="number" step="any" value="0.2"><small>si la tabla no lo trae</small></label>
+      ${capas.length > 1 ? `<label class="campo"><span>Capa</span><select id="imp-capa"><option value="">todas</option>${capas.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>` : ''}
+      <label class="campo"><span>Centrar</span><select id="imp-centrar"><option value="1">sí: centro del dibujo en (0, 0)</option><option value="0">no: coordenadas como vienen</option></select></label>
+    </div><p class="nota">Cada línea es el eje de un muro. Después asigná las piezas en la pestaña «Muros».</p>` : ''}
+    ${hayMuros ? `<label class="campo"><span>Muros</span><select id="imp-modo"><option value="reemplazar">reemplazar los muros actuales</option><option value="agregar">agregar a los actuales</option></select></label>` : ''}
+    ${imp.niveles ? `<label class="campo"><span>Niveles</span><select id="imp-niv"><option value="1">reemplazar los niveles</option><option value="0">dejar los actuales</option></select></label>` : ''}
+    ${imp.sitio ? `<label class="campo"><span>Viento y fundación</span><select id="imp-sitio"><option value="1">tomar los de la planilla</option><option value="0">dejar los actuales</option></select></label>` : ''}
+    ${imp.avisos.length ? `<ul class="avisos nota">${imp.avisos.slice(0, 8).map(a => `<li>${esc(a)}</li>`).join('')}${imp.avisos.length > 8 ? `<li>… y ${imp.avisos.length - 8} avisos más</li>` : ''}</ul>` : ''}`, [
+    ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
+    ['Importar', () => {
+      const d = $<HTMLDialogElement>('dialogo');
+      const v = (id: string) => (d.querySelector(`#${id}`) as HTMLInputElement | HTMLSelectElement | null)?.value;
+      const avisos: string[] = [];
+      let muros = imp.muros;
+      if (imp.lineas.length) {
+        const capa = v('imp-capa') || '';
+        const escala = { m: 1, cm: 0.01, mm: 0.001 }[v('imp-unidad') as 'm' | 'cm' | 'mm'] ?? 1;
+        muros = [...muros, ...murosDeLineas(imp.lineas.filter(l => !capa || l.capa === capa), { escala, centrar: v('imp-centrar') !== '0', espesor: Number(v('imp-esp')) || 0.2 }, avisos)];
+      }
+      estado.cambiar(p => {
+        if (hayMuros) {
+          if (v('imp-modo') === 'agregar') {
+            const ids = new Set(p.muros.map(m => m.id));
+            muros = muros.map(m => { let id = m.id, k = 2; while (ids.has(id)) id = `${m.id}_${k++}`; ids.add(id); return { ...m, id }; });
+            p.muros = [...p.muros, ...muros];
+          } else p.muros = muros;
+        }
+        if (imp.niveles && v('imp-niv') !== '0') p.niveles = imp.niveles;
+        if (imp.sitio && v('imp-sitio') !== '0') { p.sitio = { ...p.sitio, ...imp.sitio }; if (imp.fundacion) p.fundacion = imp.fundacion; }
+        if (imp.tipo === 'planilla' && v('imp-modo') !== 'agregar') p.nombre = archivo.replace(/\.[^.]+$/, '');
+      });
+      if (planilla) plantillaAbierta = planilla;
+      estado.seleccion = null;
+      d.close();
+      if (avisos.length) dialogo(`<h2>Importado</h2><ul class="avisos">${avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul>`, [['Entendido', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+    }, true],
+  ]);
+}
+
+async function descargarTabla() {
+  try {
+    const bytes = await escribirLibro(tablaDelProyecto(estado.proyecto.niveles, estado.proyecto.muros));
+    descargar(nombreArchivo('_tabla.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } catch (e) { fallo('No se pudo armar la tabla', e); }
+}
+document.addEventListener('torre:importar', () => $<HTMLInputElement>('b-abrir').click());
+document.addEventListener('torre:tabla', () => { void descargarTabla(); });
 
 function cambiarDir(d: 'A' | 'B') {
   estado.dir = d;

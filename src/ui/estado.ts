@@ -28,6 +28,10 @@ class Estado {
     this.ultimo = JSON.stringify(this.proyecto);
   }
   suscribir(f: Oyente) { this.oyentes.push(f); }
+  /** solo cambia el muro elegido: redibuja las vistas (planta, 3D) sin rearmar el panel */
+  private oyentesSel: Oyente[] = [];
+  suscribirSeleccion(f: Oyente) { this.oyentesSel.push(f); }
+  elegir(id: string | null) { if (this.seleccion === id) return; this.seleccion = id; this.oyentesSel.forEach(o => o()); }
   recalcular() {
     try {
       const asig = aPlanilla(this.proyecto);
