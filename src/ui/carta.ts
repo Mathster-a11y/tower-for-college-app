@@ -407,7 +407,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     const dMax = Math.max(...d.roto.niveles.map(n => Math.abs(n.d)), 1e-12), kd = (S * 0.35) / dMax;
     g.append(el('polyline', { points: pts(d.roto.niveles.map(n => P(cr.t, cr.s + n.d * kd, n.z))), class: 'ct-deformada' }));
     const t = d.roto.niveles[d.roto.niveles.length - 1], q = P(cr.t, cr.s + t.d * kd, t.z);
-    txt(g, q.x + 8, q.y + 30, `δ = ${fmt(d.roto.dTop * 1000, 1)} mm (exagerada)`, 'd-valor ct-verde', 'start');
+    void q;
   }
   txt(g, c1.x + 5, c1.y, 'CR', 'ct-cr-txt');
   // diagrama de momentos en el plano del costado cercano (t = T/2), detrás de la torre en el sentido del viento:
@@ -449,7 +449,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0 && !(Math.abs(Yfake(n.z) - yW) < 22)) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
   // leyenda de lectura
   const xl = ancho - 290;
-  [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'deformada exagerada del eje (por el CR)']].forEach(([c, t], i) => {
+  [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', `deformada exagerada del eje (por el CR)${d.roto ? ` · δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm` : ''}`]].forEach(([c, t], i) => {
     g.append(el('rect', { x: xl, y: 60 + i * 18, width: 14, height: 4, rx: 2, class: `ct-ley ${c}` }));
     txt(g, xl + 20, 65 + i * 18, t, 'd-eje');
   });

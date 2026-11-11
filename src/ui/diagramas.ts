@@ -128,8 +128,18 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
       const texto = fmt(ext.x, dec), anchoT = texto.length * 7;
       // a la izquierda solo si entra sin meterse en el margen de los rótulos de los niveles
       const aIzq = !izquierda && (derecha || ext.x < 0) && X(ext.x) - 6 - anchoT > mi;
-      const xv = aIzq ? X(ext.x) - 8 : X(ext.x) + 8;
-      svg.append(el('text', { x: xv, y: yv, class: 'd-valor', 'text-anchor': aIzq ? 'end' : 'start' }, texto));
+      // posiciones posibles alrededor del punto: la primera que no cruza ninguna curva del gráfico
+      const curvas = g.series.filter(q => q.tipo !== 'barras').map(q => q.puntos.filter(p => isFinite(p.x)).sort((a, b) => b.z - a.z).map(p => ({ x: X(p.x), y: Z(p.z) })));
+      const cruza = (x0: number, y0: number, x1: number, y1: number) => curvas.some(c => c.some((a, i) => {
+        const b = c[i + 1]; if (!b) return false;
+        for (let t = 0; t <= 1; t += 0.05) { const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t; if (x > x0 && x < x1 && y > y0 && y < y1) return true; }
+        return false;
+      }));
+      const X0 = X(ext.x), Y0 = Z(ext.z);
+      const cand: [number, number, 'start' | 'end'][] = [[X0 + 8, yv, 'start'], [X0 + 8, Y0 - 8, 'start'], [X0 + 8, Y0 + 16, 'start'], [X0 - 8, Y0 - 8, 'end'], [X0 - 8, Y0 + 16, 'end']];
+      if (aIzq) cand.unshift([X0 - 8, yv, 'end']);
+      const [xv, yv2, ancla] = cand.find(([x, y, a]) => { const x0 = a === 'start' ? x : x - anchoT; return x0 > mi && x0 + anchoT < ancho - 2 && !cruza(x0, y - 11, x0 + anchoT, y + 2); }) ?? cand[0];
+      svg.append(el('text', { x: xv, y: yv2, class: 'd-valor', 'text-anchor': ancla }, texto));
     }
   });
   // referencias
