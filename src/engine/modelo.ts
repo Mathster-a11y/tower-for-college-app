@@ -25,6 +25,11 @@ export interface Nivel {
    * arco de círculo con b = tan(ángulo / 4); b = 0 es recto.
    */
   silueta?: { x: number; y: number; b?: number }[] | null;
+  /**
+   * contorno de la carpintería (cerramiento) del nivel; vacío = el del nivel de arriba. Su caja da el a máx
+   * (ancho) y el b máx (largo) del perfil al que se le aplica el viento; B y L se cargan a mano.
+   */
+  carpinteria?: { x: number; y: number; b?: number }[] | null;
 }
 
 export interface Muro {

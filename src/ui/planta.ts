@@ -3,6 +3,8 @@ import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, imanar, muroDesdeTramo, type Punto } from '../engine/dibujo';
 import { piezaTipo, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
+import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
+import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
@@ -58,13 +60,16 @@ export function montarPlanta(cont: HTMLElement) {
   // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
   const bCalco = document.createElement('label');
   bCalco.className = 'boton';
-  bCalco.textContent = 'Calcar plano…';
-  bCalco.title = 'Poner una imagen del plano (PNG o JPG) de fondo para dibujar los muros encima. Un PDF se puede exportar antes como imagen.';
+  bCalco.textContent = 'Importar plano…';
+  bCalco.title = 'Plano de fondo para ubicar los elementos: DXF de AutoCAD (con capas e imán a los nodos), PDF o imagen (PNG, JPG).';
   const inCalco = document.createElement('input');
-  inCalco.type = 'file'; inCalco.accept = 'image/*'; inCalco.hidden = true;
+  inCalco.type = 'file'; inCalco.accept = '.dxf,.pdf,image/png,image/jpeg,image/*'; inCalco.hidden = true;
   bCalco.append(inCalco);
-  inCalco.addEventListener('change', () => {
+  inCalco.addEventListener('change', async () => {
     const f = inCalco.files?.[0]; if (!f) return;
+    const ext = f.name.toLowerCase().split('.').pop();
+    if (ext === 'dxf') { inCalco.value = ''; cargarDXF(f.name, await f.text()); return; }
+    if (ext === 'pdf') { inCalco.value = ''; await cargarPDF(f); return; }
     const url = URL.createObjectURL(f);
     const img = new Image();
     img.onload = () => {
@@ -76,6 +81,82 @@ export function montarPlanta(cont: HTMLElement) {
     img.src = url;
     inCalco.value = '';
   });
+  // ---- DXF de fondo: capas, uso de cada capa e imán a sus nodos
+  const dock = document.createElement('div');
+  dock.className = 'dock-planta';
+  cont.appendChild(dock);
+  // clic en el título de un panel: se pliega o se despliega
+  dock.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel')) t.parentElement.classList.toggle('plegado'); });
+  const panelCad = document.createElement('div');
+  panelCad.className = 'calco-panel cad-panel';
+  panelCad.hidden = true;
+  dock.appendChild(panelCad);
+  const COLOR_USO: Record<string, string> = { referencia: 'var(--dim)', muros: 'var(--ink)', losa: 'var(--ink2)', 'carpintería': 'var(--serie-1)' };
+  function cargarDXF(nombre: string, texto: string) {
+    const d = leerDXFCompleto(texto);
+    if (!d.entidades.length) { mensaje(`${nombre}: no tiene líneas, polilíneas ni círculos en la sección de entidades.`); return; }
+    const { factor, unidad } = factorUnidad(d);
+    const ents = aMetros(d.entidades, factor);
+    const adivinar = (c: string) => (/muro|tabiq|wall|column|pilar|estruct/i.test(c) ? 'muros' : /carp|cerram|facha|vidri|ventan/i.test(c) ? 'carpintería' : /losa|slab|forjado|borde/i.test(c) ? 'losa' : 'referencia') as 'referencia' | 'muros' | 'losa' | 'carpintería';
+    const capas = Object.fromEntries(d.capas.map(c => [c, { ver: true, uso: adivinar(c) }]));
+    estado.cad = { archivo: nombre, unidad, omitidas: d.omitidas, ents, capas, nodos: [] };
+    recalcularNodos();
+    armarPanelCad(); dibujar();
+    mensaje(`${nombre}: ${ents.length} entidades en ${d.capas.length} capas, en ${unidad}${d.unidad === 'desconocida' ? ' (unidad estimada por el tamaño)' : ''}.`);
+  }
+  function recalcularNodos() {
+    const c = estado.cad; if (!c) return;
+    c.nodos = Object.keys(c.capas).filter(k => c.capas[k].ver).flatMap(k => nodosCAD(c.ents.filter(e => e.capa === k)).map(n => ({ ...n, capa: k })));
+  }
+  const mensaje = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+  async function cargarPDF(f: File) {
+    try {
+      const { pdfAImagen } = await import('./pdf');
+      const { url, aspecto } = await pdfAImagen(f);
+      const B = estado.proyecto.niveles.find(n => n.B)?.B ?? 20;
+      estado.calco = { url, aspecto, ancho: B * 1.2, x: 0, y: 0, opacidad: 0.5 };
+      armarPanelCalco(); dibujar();
+      mensaje(`${f.name}: primera página como imagen de fondo. Ajustá la escala con «Escala con dos puntos».`);
+    } catch (e) { mensaje(`No se pudo leer el PDF: ${String(e)}`); }
+  }
+  function armarPanelCad() {
+    const c = estado.cad;
+    panelCad.hidden = !c;
+    panelCad.replaceChildren();
+    if (!c) return;
+    const tit = document.createElement('b'); tit.textContent = `Plano: ${c.archivo}`;
+    const info = document.createElement('span'); info.className = 'nota chica'; info.textContent = `${c.ents.length} entidades · ${c.unidad}${c.omitidas ? ` · ${c.omitidas} bloques o textos sin leer` : ''}`;
+    const lista = document.createElement('div'); lista.className = 'capas-cad';
+    Object.entries(c.capas).forEach(([nombre, cfg]) => {
+      const fila = document.createElement('div'); fila.className = 'capa-cad';
+      const ver = document.createElement('input'); ver.type = 'checkbox'; ver.checked = cfg.ver; ver.title = 'Mostrar la capa (y usar sus nodos para el imán)';
+      ver.addEventListener('change', () => { cfg.ver = ver.checked; recalcularNodos(); dibujar(); });
+      const n = document.createElement('span'); n.textContent = nombre; n.title = `${c.ents.filter(e => e.capa === nombre).length} entidades`;
+      const sel = document.createElement('select'); sel.title = 'Para qué se usa la capa';
+      ['referencia', 'muros', 'losa', 'carpintería'].forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u === 'muros' ? 'muros y columnas' : u; sel.append(o); });
+      sel.value = cfg.uso; sel.style.borderLeft = `4px solid ${COLOR_USO[cfg.uso]}`;
+      sel.addEventListener('change', () => { cfg.uso = sel.value as typeof cfg.uso; armarPanelCad(); dibujar(); });
+      fila.append(ver, n, sel);
+      lista.append(fila);
+    });
+    const deUso = (u: string) => c.ents.filter(e => c.capas[e.capa]?.uso === u && c.capas[e.capa]?.ver);
+    const boton = (t: string, titulo: string, f: () => void) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = titulo; b.addEventListener('click', f); return b; };
+    const bMuros = boton('Crear muros y columnas', 'Los pares de líneas paralelas (8 a 60 cm) y los rectángulos cerrados de las capas «muros» pasan a ser tabiques; los círculos, columnas. Después se arman las piezas.', () => {
+      const nuevos = murosDesdeCAD(deUso('muros'), new Set(estado.proyecto.muros.map(m => m.id)));
+      if (!nuevos.length) { mensaje('No encontré muros en las capas marcadas como «muros» (pares de líneas paralelas, rectángulos o círculos).'); return; }
+      estado.cambiar(() => { estado.proyecto.muros = armarPiezas([...estado.proyecto.muros, ...nuevos]); });
+      mensaje(`Se crearon ${nuevos.length} elementos. Revisalos en la tabla de muros y agrupá las piezas que correspondan.`);
+    });
+    const contorno = (u: 'losa' | 'carpintería') => boton(u === 'losa' ? 'Usar como losa' : 'Usar como carpintería', u === 'losa' ? 'El contorno cerrado más grande de las capas «losa» pasa a ser la silueta de este nivel.' : 'El contorno cerrado más grande de las capas «carpintería» pasa a ser la carpintería de este nivel: su caja da a máx y b máx.', () => {
+      const v = contornoDesdeCAD(deUso(u));
+      if (!v) { mensaje(`No hay un contorno cerrado (polilínea cerrada) en las capas marcadas como «${u}».`); return; }
+      estado.cambiar(() => { const n = estado.proyecto.niveles[iNivel]; if (u === 'losa') n.silueta = v.map(q => ({ ...q })); else n.carpinteria = v.map(q => ({ ...q })); });
+    });
+    const quitar = boton('Quitar plano', 'Saca el dibujo de fondo (lo creado con él queda)', () => { estado.cad = null; armarPanelCad(); dibujar(); });
+    const acciones = document.createElement('div'); acciones.className = 'acciones-cad';
+    acciones.append(bMuros, contorno('losa'), contorno('carpintería'), quitar);
+    panelCad.append(tit, info, lista, acciones);
+  }
   // silueta del piso: mover vértices, doble clic en un borde agrega uno, clic derecho en un vértice lo borra
   const bSil = document.createElement('button');
   bSil.type = 'button'; bSil.textContent = 'Silueta';
@@ -84,7 +165,7 @@ export function montarPlanta(cont: HTMLElement) {
   const panelSil = document.createElement('div');
   panelSil.className = 'calco-panel silueta-panel';
   panelSil.hidden = true;
-  cont.appendChild(panelSil);
+  dock.appendChild(panelSil);
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
@@ -190,7 +271,7 @@ export function montarPlanta(cont: HTMLElement) {
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
   panelCalco.hidden = true;
-  cont.appendChild(panelCalco);
+  dock.appendChild(panelCalco);
   function armarPanelCalco() {
     const c = estado.calco;
     panelCalco.hidden = !c;
@@ -212,6 +293,15 @@ export function montarPlanta(cont: HTMLElement) {
   }
   const nuevoId = () => { let k = 1; while (estado.proyecto.muros.some(m => m.id === `M${k}`)) k++; return `M${k}`; };
   let arrastre: { id: string; x0: number; y0: number; mx: number; my: number; otros: { id: string; x: number; y: number }[] } | null = null;
+  // arrastre desde un nodo del elemento elegido: el nodo se pega a los nodos del CAD o de otros muros
+  let arrastreNodo: { p: { x: number; y: number }; orig: { id: string; x: number; y: number }[] } | null = null;
+  /** nodos del elemento: esquinas, medios de los lados y centro (en las columnas circulares, centro y cuadrantes) */
+  const nodosDe = (m: Muro): { x: number; y: number; t: 'esquina' | 'medio' | 'centro' }[] => {
+    if (tipoDe(m) === 'tubo-circ') { const r = m.largo / 2; return [{ x: m.x, y: m.y, t: 'centro' }, { x: m.x + r, y: m.y, t: 'medio' }, { x: m.x - r, y: m.y, t: 'medio' }, { x: m.x, y: m.y + r, t: 'medio' }, { x: m.x, y: m.y - r, t: 'medio' }]; }
+    const { ax, ay } = huella(m), x0 = m.x - ax / 2, x1 = m.x + ax / 2, y0 = m.y - ay / 2, y1 = m.y + ay / 2;
+    return [{ x: x0, y: y0, t: 'esquina' }, { x: x1, y: y0, t: 'esquina' }, { x: x1, y: y1, t: 'esquina' }, { x: x0, y: y1, t: 'esquina' },
+      { x: m.x, y: y0, t: 'medio' }, { x: x1, y: m.y, t: 'medio' }, { x: m.x, y: y1, t: 'medio' }, { x: x0, y: m.y, t: 'medio' }, { x: m.x, y: m.y, t: 'centro' }];
+  };
   let escala = 20, ox = 0, oy = 0;
 
   const aMundo = (ev: PointerEvent) => {
@@ -254,6 +344,30 @@ export function montarPlanta(cont: HTMLElement) {
     if (c) {
       const alto = c.ancho * c.aspecto;
       svg.appendChild(el('image', { href: c.url, x: X(c.x - c.ancho / 2), y: Y(c.y + alto / 2), width: c.ancho * escala, height: alto * escala, opacity: c.opacidad, preserveAspectRatio: 'none', class: 'calco' }));
+    }
+    // dibujo de CAD (capas visibles), color según el uso de la capa
+    const cad = estado.cad;
+    if (cad) {
+      const gc = el('g', { class: 'cad' });
+      cad.ents.forEach((e: Entidad) => {
+        const cfg = cad.capas[e.capa]; if (!cfg?.ver) return;
+        const cl = `cad-${cfg.uso === 'carpintería' ? 'carpinteria' : cfg.uso}`;
+        if (e.t === 'linea') gc.appendChild(el('line', { x1: X(e.a.x), y1: Y(e.a.y), x2: X(e.b.x), y2: Y(e.b.y), class: cl }));
+        else if (e.t === 'poli') { const pp = puntosSilueta(e.v, 8); gc.appendChild(el(e.cerrada ? 'polygon' : 'polyline', { points: pp.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: cl })); }
+        else if (e.t === 'circulo') gc.appendChild(el('circle', { cx: X(e.c.x), cy: Y(e.c.y), r: e.r * escala, class: cl }));
+        else { const a0 = (e.a0 * Math.PI) / 180, a1 = (e.a1 * Math.PI) / 180, d = ((e.a1 - e.a0 + 360) % 360); gc.appendChild(el('path', { d: `M${X(e.c.x + e.r * Math.cos(a0))},${Y(e.c.y + e.r * Math.sin(a0))} A${e.r * escala},${e.r * escala} 0 ${d > 180 ? 1 : 0} 0 ${X(e.c.x + e.r * Math.cos(a1))},${Y(e.c.y + e.r * Math.sin(a1))}`, class: cl })); }
+      });
+      svg.appendChild(gc);
+    }
+    // carpintería del nivel: contorno y su caja (a máx × b máx), que es lo que se carga a mano como B y L
+    const car = carpinteriaDeNivel(p, iN);
+    if (car) {
+      const pc = puntosSilueta(car.v);
+      svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' }));
+      const xs = pc.map(q => q.x), ys = pc.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      svg.appendChild(el('rect', { x: X(x0), y: Y(y1), width: (x1 - x0) * escala, height: (y1 - y0) * escala, class: 'caja-carpinteria' }));
+      const tx = el('text', { x: X(x0) + 4, y: Y(y1) - 6, class: 'etiqueta caja-txt' }, `carpintería: a máx ${car.a.toFixed(2).replace('.', ',')} × b máx ${car.b.toFixed(2).replace('.', ',')} m (B y L se cargan en Niveles)`);
+      svg.appendChild(tx);
     }
     const contorno = puntosSilueta(pl.silueta);
     const pathC = el('polygon', { points: contorno.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'contorno' + (modo === 'silueta' ? ' editando' : '') });
@@ -341,6 +455,27 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(grupo);
     });
     calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 5, class: 'iman extremo' })));
+    // nodos del elemento elegido (modo mover): se arrastran para ubicarlo con precisión
+    const elegido = modo === 'mover' ? p.muros.find(m => m.id === estado.seleccion) : undefined;
+    if (elegido && presenteEn(elegido, zN, zFund, zTop)) {
+      const gg = el('g', { class: 'nodos' });
+      nodosDe(elegido).forEach(nd => {
+        const x = X(nd.x), y = Y(nd.y);
+        const forma = nd.t === 'esquina' ? el('rect', { x: x - 4.5, y: y - 4.5, width: 9, height: 9 })
+          : nd.t === 'medio' ? el('polygon', { points: `${x},${y - 6} ${x - 5.5},${y + 4.5} ${x + 5.5},${y + 4.5}` })
+            : el('polygon', { points: `${x},${y - 7} ${x + 7},${y} ${x},${y + 7} ${x - 7},${y}`, class: 'centro' });
+        forma.appendChild(el('title', {}, `Arrastrar desde ${nd.t === 'esquina' ? 'esta esquina' : nd.t === 'medio' ? 'el medio de este lado' : 'el centro'}: se pega a los nodos del plano o de otros muros${elegido.grupo ? ' (mueve el grupo entero)' : ''}`));
+        forma.addEventListener('pointerdown', e0 => {
+          const ev = e0 as PointerEvent;
+          ev.preventDefault(); ev.stopPropagation();
+          const ids = elegido.grupo ? p.muros.filter(o => o.grupo === elegido.grupo).map(o => o.id) : [elegido.id];
+          arrastreNodo = { p: { x: nd.x, y: nd.y }, orig: p.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
+          try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+        });
+        gg.appendChild(forma);
+      });
+      svg.appendChild(gg);
+    }
     // pieza tipo: vista previa donde se va a insertar
     if (modo === 'insertar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -363,11 +498,18 @@ export function montarPlanta(cont: HTMLElement) {
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
       }
       pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 3 : 6, class: `iman ${iman}` }));
+      if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
       svg.appendChild(pr);
     }
   }
   let ultimoEspesor = 0.2;
-  const pegar = (ev: PointerEvent) => { const r = imanar(aMundo(ev), estado.proyecto.muros, 8 / escala + 0.05); iman = r.a; return r.p; };
+  const pegar = (ev: PointerEvent, excluir?: Set<string>) => {
+    const q = aMundo(ev), tol = 8 / escala + 0.05;
+    const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
+    if (nc) { iman = nc.t === 'intersección' || nc.t === 'centro' ? 'extremo' : 'eje'; ultimoIman = nc.t; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
+    const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol); iman = r.a; ultimoIman = r.a; return r.p;
+  };
+  let ultimoIman = '';
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
@@ -424,6 +566,15 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
     if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }; dibujar(); return; }
     if (modo === 'calibrar') return;
+    if (arrastreNodo) {
+      const excl = new Set(arrastreNodo.orig.map(o => o.id));
+      const q = pegar(ev, excl);
+      const dx = q.x - arrastreNodo.p.x, dy = q.y - arrastreNodo.p.y;
+      arrastreNodo.orig.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(3); w.y = +(o.y + dy).toFixed(3); } });
+      cursor = q; dibujar();
+      if (ultimoIman && ultimoIman !== 'grilla') svg.appendChild(el('text', { x: ox + q.x * escala + 10, y: oy - q.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+      return;
+    }
     if (modo === 'silueta') {
       if (arrastreV === null) return;
       const q = aMundo(ev), v = estado.proyecto.niveles[iNivel].silueta;
@@ -442,7 +593,7 @@ export function montarPlanta(cont: HTMLElement) {
     arrastre.otros.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(2); w.y = +(o.y + dy).toFixed(2); } });
     dibujar();
   });
-  const soltar = () => { if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };
+  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };
   svg.addEventListener('pointerup', soltar);
   svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('keydown', ev => {

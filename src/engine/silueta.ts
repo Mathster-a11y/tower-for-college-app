@@ -82,3 +82,12 @@ export function ajustarContorno(v: Vertice[], factor: number, centrar: boolean):
   const c = cajaSilueta(m);
   return m.map(q => ({ ...q, x: +(q.x - c.cx).toFixed(4), y: +(q.y - c.cy).toFixed(4) }));
 }
+
+/** contorno de la carpintería que rige en el nivel i (heredado del nivel de arriba) y su caja (a máx, b máx) */
+export function carpinteriaDeNivel(p: Proyecto, i: number): { v: Vertice[]; a: number; b: number; propia: boolean } | null {
+  const arriba = p.niveles.slice(0, i + 1);
+  const v = arriba.reduce<Nivel['carpinteria']>((x, n) => (n.carpinteria && n.carpinteria.length >= 3 ? n.carpinteria : x), null);
+  if (!v) return null;
+  const c = cajaSilueta(v);
+  return { v, a: c.B, b: c.L, propia: !!(p.niveles[i]?.carpinteria && p.niveles[i].carpinteria!.length >= 3) };
+}

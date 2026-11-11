@@ -648,3 +648,33 @@ text[data-par].ultimo { font-size: 15px; }
 .carta .ct-muro { stroke: var(--ink); stroke-width: 1.2; }
 .carta .ct-planta { stroke: color-mix(in srgb, var(--ink2) 50%, transparent); stroke-width: 1; }
 .perfil .pf-muro { stroke: var(--ink); stroke-width: 1.2; }
+/* plano de CAD de fondo (capas según su uso) y carpintería del nivel */
+.planta .cad line, .planta .cad polyline, .planta .cad polygon, .planta .cad circle, .planta .cad path { fill: none; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.planta .cad .cad-referencia { stroke: color-mix(in srgb, var(--ink2) 45%, transparent); }
+.planta .cad .cad-muros { stroke: color-mix(in srgb, var(--ink) 70%, transparent); }
+.planta .cad .cad-losa { stroke: color-mix(in srgb, var(--ink2) 60%, transparent); stroke-dasharray: 5 3; }
+.planta .cad .cad-carpinteria { stroke: var(--serie-1); stroke-width: 1.6; }
+.planta .carpinteria { fill: none; stroke: var(--serie-1); stroke-width: 2.2; pointer-events: none; }
+.planta .caja-carpinteria { fill: none; stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 6 4; pointer-events: none; }
+.planta .caja-txt { fill: var(--serie-1); }
+.planta .iman-txt { fill: var(--elegido); font-weight: 600; }
+.cad-panel { width: 270px; max-height: calc(100% - 60px); overflow: auto; }
+.cad-panel .capas-cad { display: grid; gap: 3px; margin: 4px 0; }
+.cad-panel .capa-cad { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; font-size: 12px; }
+.cad-panel .capa-cad span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cad-panel .capa-cad select { font-size: 11.5px; max-width: 128px; }
+.cad-panel .acciones-cad { display: flex; flex-wrap: wrap; gap: 4px; }
+.cad-panel .acciones-cad button { font-size: 11.5px; }
+/* paneles de la planta apilados a la izquierda; cada uno se pliega con su título */
+.dock-planta { position: absolute; top: 44px; left: 10px; z-index: 2; display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 90px); overflow: auto; pointer-events: none; }
+.dock-planta > * { pointer-events: auto; }
+.dock-planta .calco-panel { position: static; max-height: none; }
+.dock-planta .calco-panel > b { cursor: pointer; }
+.dock-planta .calco-panel > b::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
+.dock-planta .calco-panel.plegado > b::after { content: ' ▸'; }
+.dock-planta .calco-panel.plegado > :not(b) { display: none !important; }
+@media (max-width: 760px) { .dock-planta { position: static; max-height: none; margin: 6px 10px; } }
+/* nodos del elemento elegido */
+.planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: move; }
+.planta .nodos polygon.centro { fill: var(--accent); }
+.planta .nodos :hover { fill: var(--accent); }

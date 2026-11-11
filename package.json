@@ -17,6 +17,7 @@
     "@fontsource/jetbrains-mono": "^5.2.5",
     "@ibm/plex-math": "^1.1.0",
     "jszip": "^3.10.1",
+    "pdfjs-dist": "^4.4.168",
     "three": "^0.170.0"
   },
   "devDependencies": {
