@@ -57,7 +57,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Silueta de cada piso: editarla o importarla de CAD (contornos con segmentos y arcos de círculo)
 - [x] Dibujar los muros con el mouse en la planta (clic en el inicio y clic en el fin, encadenados), con imán a los extremos y al eje de otros muros
 - [x] Armar las piezas solas: los muros que se tocan forman una pieza (T1 / T1B) y el ala sabe a qué alma está pegada (botón «Armar piezas» y al dibujar)
-- [ ] Calcar un plano: poner una imagen o un PDF de fondo en la planta, con escala
+- [x] Calcar un plano: imagen de fondo en la planta, con escala por dos puntos, posición y opacidad (un PDF se exporta antes como imagen)
 - [ ] Dibujo del perfil equivalente de cada pieza tal como queda en la hoja J, para controlarlo
 - [x] Informe imprimible (PDF) con datos, cartas de los dos vientos, rototraslación y controles (Exportar ▾)
 - [ ] Publicar la app con link: el workflow ya compila y prueba; falta activar Settings → Pages → Source «GitHub Actions» en el repositorio (lo hace el dueño)

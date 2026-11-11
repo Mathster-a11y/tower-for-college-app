@@ -22,6 +22,8 @@ class Estado {
   capas = { losas: true, viento: true, fuera: true, deformada: false };
   /** rototraslación en 3D: exageración de la traslación y extra del giro (null = automáticas), torre sin deformar, animación y rótulos */
   roto3d: { exag: number | null; giro: number | null; original: boolean; animar: boolean; rotulos: boolean } = { exag: null, giro: null, original: true, animar: false, rotulos: true };
+  /** plano para calcar en la planta (no se guarda en el proyecto): imagen, ancho real (m), centro (m) y opacidad */
+  calco: { url: string; aspecto: number; ancho: number; x: number; y: number; opacidad: number } | null = null;
   /** pieza elegida en Flexión */
   piezaFlex: string | null = null;
   /** cota del nivel cuya planta se muestra (null = PB) */

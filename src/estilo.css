@@ -512,3 +512,9 @@ svg.planta.dibujando .muro { cursor: crosshair; }
 .planta .iman { fill: none; stroke: var(--elegido); stroke-width: 1.5; }
 .planta .iman.extremo { stroke-width: 2.2; fill: color-mix(in srgb, var(--elegido) 25%, transparent); }
 .planta .iman.eje { stroke-dasharray: 2 2; stroke-width: 2; }
+.calco-panel { position: absolute; top: 44px; left: 10px; z-index: 2; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--edge); border-radius: 8px; background: color-mix(in srgb, var(--panel) 94%, transparent); font-size: 12px; width: 190px; }
+.calco-panel label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.calco-panel input[type=number] { width: 80px; }
+.calco-panel input[type=range] { width: 90px; }
+.herr-planta .boton { font-size: 12.5px; }
+.planta image.calco { pointer-events: none; }

@@ -30,7 +30,8 @@ export function montarPlanta(cont: HTMLElement) {
   });
   cont.appendChild(ley);
   // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
-  let modo: 'mover' | 'dibujar' = 'mover';
+  let modo: 'mover' | 'dibujar' | 'calibrar' = 'mover';
+  let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
   barra.className = 'herr-planta seg chico';
@@ -42,12 +43,56 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); svg.classList.toggle('dibujando', m === 'dibujar'); dibujar(); };
+  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); svg.classList.toggle('dibujando', m !== 'mover'); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo('dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
-  barra.append(bMover, bDibujar, bArmar);
+  // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
+  const bCalco = document.createElement('label');
+  bCalco.className = 'boton';
+  bCalco.textContent = 'Calcar plano…';
+  bCalco.title = 'Poner una imagen del plano (PNG o JPG) de fondo para dibujar los muros encima. Un PDF se puede exportar antes como imagen.';
+  const inCalco = document.createElement('input');
+  inCalco.type = 'file'; inCalco.accept = 'image/*'; inCalco.hidden = true;
+  bCalco.append(inCalco);
+  inCalco.addEventListener('change', () => {
+    const f = inCalco.files?.[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const p = estado.proyecto;
+      const B = p.niveles.find(n => n.B)?.B ?? 20;
+      estado.calco = { url, aspecto: img.naturalHeight / img.naturalWidth || 1, ancho: B * 1.2, x: 0, y: 0, opacidad: 0.5 };
+      armarPanelCalco(); dibujar();
+    };
+    img.src = url;
+    inCalco.value = '';
+  });
+  barra.append(bMover, bDibujar, bArmar, bCalco);
   cont.appendChild(barra);
+  const panelCalco = document.createElement('div');
+  panelCalco.className = 'calco-panel';
+  panelCalco.hidden = true;
+  cont.appendChild(panelCalco);
+  function armarPanelCalco() {
+    const c = estado.calco;
+    panelCalco.hidden = !c;
+    panelCalco.replaceChildren();
+    if (!c) return;
+    const campo = (t: string, k: 'ancho' | 'x' | 'y' | 'opacidad', paso: string, min?: string, max?: string) => {
+      const l = document.createElement('label'); const i = document.createElement('input');
+      i.type = k === 'opacidad' ? 'range' : 'number'; i.step = paso; if (min) i.min = min; if (max) i.max = max; i.value = String(+c[k].toFixed(k === 'opacidad' ? 2 : 3));
+      i.addEventListener('input', () => { const v = Number(i.value); if (isFinite(v) && estado.calco) { estado.calco[k] = v; dibujar(); } });
+      l.append(t, i); return l;
+    };
+    const cal = document.createElement('button'); cal.type = 'button'; cal.textContent = 'Escala con dos puntos';
+    cal.title = 'Clic en dos puntos del plano cuya distancia real conocés (por ejemplo, los extremos de una cota) y escribí esa distancia.';
+    cal.addEventListener('click', () => ponerModo('calibrar'));
+    const quitar = document.createElement('button'); quitar.type = 'button'; quitar.textContent = 'Quitar';
+    quitar.addEventListener('click', () => { if (estado.calco) URL.revokeObjectURL(estado.calco.url); estado.calco = null; armarPanelCalco(); dibujar(); });
+    const tit = document.createElement('b'); tit.textContent = 'Plano de fondo';
+    panelCalco.append(tit, campo('ancho (m)', 'ancho', '0.1', '0.1'), campo('centro x', 'x', '0.05'), campo('centro y', 'y', '0.05'), campo('opacidad', 'opacidad', '0.05', '0.05', '1'), cal, quitar);
+  }
   const nuevoId = () => { let k = 1; while (estado.proyecto.muros.some(m => m.id === `M${k}`)) k++; return `M${k}`; };
   let arrastre: { id: string; x0: number; y0: number; mx: number; my: number } | null = null;
   let escala = 20, ox = 0, oy = 0;
@@ -86,6 +131,11 @@ export function montarPlanta(cont: HTMLElement) {
       g.appendChild(el('line', { x1: X(-n), y1: Y(i), x2: X(n), y2: Y(i), class: i % 5 ? 'g1' : 'g5' }));
     }
     svg.appendChild(g);
+    const c = estado.calco;
+    if (c) {
+      const alto = c.ancho * c.aspecto;
+      svg.appendChild(el('image', { href: c.url, x: X(c.x - c.ancho / 2), y: Y(c.y + alto / 2), width: c.ancho * escala, height: alto * escala, opacity: c.opacidad, preserveAspectRatio: 'none', class: 'calco' }));
+    }
     svg.appendChild(el('rect', { x: X(-B / 2), y: Y(L / 2), width: B * escala, height: L * escala, class: 'contorno' }));
     svg.appendChild(el('line', { x1: X(0), y1: Y(-n), x2: X(0), y2: Y(n), class: 'eje' }));
     svg.appendChild(el('line', { x1: X(-n), y1: Y(0), x2: X(n), y2: Y(0), class: 'eje' }));
@@ -140,7 +190,7 @@ export function montarPlanta(cont: HTMLElement) {
       if (rot && esta) grupo.appendChild(el('text', { x: lx, y: ly, class: 'etiqueta', 'text-anchor': ancla }, rot));
       grupo.appendChild(el('title', {}, `${m.id}${pieza ? ' · pieza ' + pieza : ''} · ${papel}${esta ? '' : ' · no está en este nivel'}`));
       grupo.addEventListener('pointerdown', ev => {
-        if (modo === 'dibujar') return;
+        if (modo !== 'mover') return;
         ev.preventDefault();
         ultimoEspesor = m.espesor;
         estado.seleccion = m.id;
@@ -151,6 +201,7 @@ export function montarPlanta(cont: HTMLElement) {
       });
       svg.appendChild(grupo);
     });
+    calib.forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 5, class: 'iman extremo' })));
     // muro en dibujo: vista previa con su largo y el imán
     if (modo === 'dibujar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -170,6 +221,24 @@ export function montarPlanta(cont: HTMLElement) {
   let ultimoEspesor = 0.2;
   const pegar = (ev: PointerEvent) => { const r = imanar(aMundo(ev), estado.proyecto.muros, 8 / escala + 0.05); iman = r.a; return r.p; };
   svg.addEventListener('pointerdown', ev => {
+    if (modo === 'calibrar' && ev.button === 0 && estado.calco) {
+      ev.preventDefault();
+      calib.push(aMundo(ev));
+      dibujar();
+      if (calib.length === 2) {
+        const medida = Math.hypot(calib[1].x - calib[0].x, calib[1].y - calib[0].y);
+        const txt = window.prompt(`Distancia real entre los dos puntos, en metros (en el dibujo mide ${medida.toFixed(2).replace('.', ',')} m):`);
+        const real = Number(String(txt ?? '').replace(',', '.'));
+        if (real > 0 && medida > 1e-6) {
+          const f = real / medida, c = estado.calco;
+          // escala alrededor del primer punto: ese punto queda en su lugar
+          c.x = +(calib[0].x + (c.x - calib[0].x) * f).toFixed(3); c.y = +(calib[0].y + (c.y - calib[0].y) * f).toFixed(3); c.ancho = +(c.ancho * f).toFixed(3);
+          armarPanelCalco();
+        }
+        ponerModo('mover');
+      }
+      return;
+    }
     if (modo !== 'dibujar' || ev.button !== 0) return;
     ev.preventDefault();
     const q = pegar(ev);
@@ -187,12 +256,13 @@ export function montarPlanta(cont: HTMLElement) {
   });
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
   svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
-  document.addEventListener('keydown', ev => { if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
+  document.addEventListener('keydown', ev => { if (modo === 'calibrar' && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
     if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
     if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
+    if (modo === 'calibrar') return;
     if (!arrastre) return;
     const q = aMundo(ev);
     const snap = (v: number) => Math.round(v / 0.05) * 0.05;
