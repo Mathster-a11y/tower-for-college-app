@@ -60,7 +60,14 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Calcar un plano: imagen de fondo en la planta, con escala por dos puntos, posición y opacidad (un PDF se exporta antes como imagen)
 - [x] Dibujo del perfil equivalente de cada pieza tal como queda en la hoja J, al lado de sus muros en planta (Diseño → Piezas)
 - [x] Informe imprimible (PDF) con datos, cartas de los dos vientos, rototraslación y controles (Exportar ▾)
-- [ ] Publicar la app con link: el workflow ya compila y prueba; falta activar Settings → Pages → Source «GitHub Actions» en el repositorio (lo hace el dueño)
+- [x] Publicar la app con link (GitHub Pages)
+- [x] Importar plano (DXF con capas, PDF, imagen), imán a los nodos y mover elementos desde sus nodos
+- [x] Importar corte (DXF): las losas proponen los niveles y sus cotas
+- [x] Contornos: carpintería del nivel editable como la silueta, con a máx × b máx (B y L siguen manuales)
+- [x] Mover con precisión: nodo de referencia, llevar a x, y o correr dx, dy
+- [x] Piezas tipo editables: doble clic abre las medidas (alma, ala sup. e inf. por separado) con J en vivo
+- [x] Áreas de influencia de la losa (botón «Áreas» en la planta) y copiarlas a «Área inf.» de los muros
+- [ ] Exoesqueletos (diagrid, tubo arriostrado, megapórtico, torre inclinada): propuesta 5b, esperando qué tipos van primero
 
 ## Esperando a la cátedra
 - [ ] Filas de las piezas 8 y 9 de «J Tabiques paralelos»: faltan fórmulas en la planilla virgen
@@ -73,6 +80,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Guía, Anexo de rototraslación: con las posiciones que da (T1–T4 a ±10 m, T5 a −6 m, T6 a +4,14 m) el eje de inercia queda a 1,77 m, no a 0,37 m. Con e = 0,37 m la rotación no se anula: entre todos los tabiques toman 990 de 1000. Con e = 1,77 m los porcentajes son T1 14,25 %, T2 7,09 %, T5 8,94 % y T6 48,38 % (la guía da 10,77, 9,34, 7,32 y 51,37).
 - [ ] Rotación: la guía suma en ΣJt·a² cada muro perpendicular con su J propio (las alas de T6, 2,083 m⁴ a ±1,90 m). La planilla toma la pieza perpendicular entera en su baricentro, y una U en el eje no aporta nada.
 - [ ] Guía, T1: el largo traccionado x del triángulo de tracción figura como 78 cm (y 1,05 m en el esquema); con σ = +137,78 / −788 t/m² sale x = 4,50 · 137,78 / 925,8 = 0,67 m
+- [ ] Áreas de influencia: la app reparte la losa por cercanía (cada punto va al elemento más cercano, la «mitad de la luz»). En el ejemplo de la guía (20 × 16 m = 320 m²) eso da 50,6 m² a cada ala de los núcleos, 22,4 a las T1–T4 y 14,0 a las almas; la guía carga 30,4, 10,5 y 17,2 (suman 198 m², no 320). ¿Qué criterio usa la cátedra: líneas a 45°, fajas, o una parte de la losa va a columnas que no están en el modelo?
 
 ## Próximos pasos (propuesta, noviembre 2026)
 

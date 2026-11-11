@@ -6,6 +6,7 @@ import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type M
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
+import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -51,7 +52,7 @@ export function montarPlanta(cont: HTMLElement) {
   barra.setAttribute('aria-label', 'Herramienta');
   const bMover = document.createElement('button'), bDibujar = document.createElement('button'), bArmar = document.createElement('button');
   bMover.type = bDibujar.type = bArmar.type = 'button';
-  bMover.textContent = 'Mover'; bDibujar.textContent = 'Dibujar muro'; bArmar.textContent = 'Armar piezas';
+  bMover.textContent = 'Mover'; bDibujar.textContent = 'Dibujar'; bArmar.textContent = 'Armar';
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
@@ -62,7 +63,7 @@ export function montarPlanta(cont: HTMLElement) {
   // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
   const bCalco = document.createElement('label');
   bCalco.className = 'boton';
-  bCalco.textContent = 'Importar plano…';
+  bCalco.textContent = 'Importar…';
   bCalco.title = 'Plano de fondo para ubicar los elementos: DXF de AutoCAD (con capas e imán a los nodos), PDF o imagen (PNG, JPG).';
   const inCalco = document.createElement('input');
   inCalco.type = 'file'; inCalco.accept = '.dxf,.pdf,image/png,image/jpeg,image/*'; inCalco.hidden = true;
@@ -228,7 +229,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // biblioteca de piezas tipo: se eligen forma y medidas, se ve su J y se ubica con un clic en la planta
   const bIns = document.createElement('button');
-  bIns.type = 'button'; bIns.textContent = 'Insertar pieza…';
+  bIns.type = 'button'; bIns.textContent = 'Insertar…';
   bIns.title = 'Piezas tipo (tabique, L, T, C, U, doble T, núcleo, columna) con sus medidas y su J; se ubican con un clic y quedan agrupadas.';
   bIns.addEventListener('click', () => ponerModo(modo === 'insertar' ? 'mover' : 'insertar'));
   const panelIns = document.createElement('div');
@@ -349,7 +350,42 @@ export function montarPlanta(cont: HTMLElement) {
     if (!m.pieza) { mensaje(`${m.id} está en el grupo ${m.grupo}, que no es una pieza tipo: sus muros se editan uno por uno en «Muros».`); return; }
     medGrupo = m.grupo; armarPanelMed();
   }
-  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns);
+  // áreas de influencia de la losa (cada punto descarga en el elemento más cercano)
+  let verAreas = false, areasCache: { clave: string; a: AreasInfluencia } | null = null;
+  const bAreas = document.createElement('button');
+  bAreas.type = 'button'; bAreas.textContent = 'Áreas';
+  bAreas.title = 'Áreas de influencia de la losa de este nivel: cada punto descarga en el muro o columna más cercano (mitad de la luz). Se pueden copiar a la columna «Área inf.» de los muros.';
+  bAreas.setAttribute('aria-pressed', 'false');
+  bAreas.addEventListener('click', () => { verAreas = !verAreas; bAreas.setAttribute('aria-pressed', String(verAreas)); dibujar(); });
+  const panelAreas = document.createElement('div');
+  panelAreas.className = 'calco-panel areas-panel';
+  panelAreas.hidden = true;
+  dock.appendChild(panelAreas);
+  const areasDe = (i: number): AreasInfluencia => {
+    const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta])]);
+    if (!areasCache || areasCache.clave !== clave) areasCache = { clave, a: areasInfluencia(p, i) };
+    return areasCache.a;
+  };
+  function armarPanelAreas(i: number, a: AreasInfluencia) {
+    panelAreas.hidden = !verAreas;
+    if (!verAreas) return;
+    const p = estado.proyecto, f1 = (v: number) => v.toFixed(1).replace('.', ',');
+    const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+    panelAreas.replaceChildren(mk('b', `Áreas de influencia · ${p.niveles[i]?.nombre ?? ''}`));
+    const suma = a.ids.reduce((q, id) => q + a.area[id], 0);
+    panelAreas.append(mk('span', `losa ${f1(a.total)} m² · ${a.ids.length} elementos`, 'nota-chica'));
+    const tabla = mk('table', '', 'areas-tabla');
+    const fila = (c: string[], th = false) => { const tr = mk('tr'); c.forEach(t => tr.append(mk(th ? 'th' : 'td', t))); return tr; };
+    tabla.append(fila(['Muro', 'Calculada', 'Cargada'], true));
+    [...a.ids].sort((x, y) => a.area[y] - a.area[x]).forEach(id => { const m = p.muros.find(o => o.id === id); tabla.append(fila([id, `${f1(a.area[id])} m²`, m ? `${f1(m.areaInf)} m²` : '—'])); });
+    panelAreas.append(tabla);
+    if (Math.abs(suma - a.total) > 0.05) panelAreas.append(mk('span', `suma ${f1(suma)} m²`, 'nota-chica'));
+    const copiar = mk('button', 'Copiar a «Área inf.» de los muros') as HTMLButtonElement; copiar.type = 'button';
+    copiar.title = 'Escribe estas áreas en la columna «Área inf.» de cada muro (la usa la flexocompresión, por cada losa que el muro tiene arriba). Los muros que no están en esta planta no cambian.';
+    copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.length} muros.`); });
+    panelAreas.append(copiar, mk('span', 'Criterio: cada punto de la losa va al elemento más cercano (el borde queda a mitad de camino). Elegí la planta tipo arriba antes de copiar.', 'nota-chica'));
+  }
+  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns, bAreas);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -530,6 +566,46 @@ export function montarPlanta(cont: HTMLElement) {
         svg.appendChild(hnd);
       });
     }
+    if (verAreas) {
+      const a = areasDe(iN);
+      // bordes entre áreas: cuadrados de 4 centros de celda; donde cambia el dueño se unen los medios de los lados
+      // (como las curvas de nivel): queda una línea quebrada fina en vez de escalones
+      let d = '';
+      const own = (j: number, k: number) => (j < 0 || k < 0 || j >= a.ny || k >= a.nx ? -1 : a.duenio[j * a.nx + k]);
+      const cx = (k: number) => X(a.x0 + (k + 0.5) * a.paso), cy = (j: number) => Y(a.y0 + (j + 0.5) * a.paso);
+      for (let j = 0; j < a.ny - 1; j++) for (let k = 0; k < a.nx - 1; k++) {
+        const o0 = own(j, k), o1 = own(j, k + 1), o2 = own(j + 1, k + 1), o3 = own(j + 1, k);
+        if (o0 < 0 || o1 < 0 || o2 < 0 || o3 < 0) continue;
+        const xa = cx(k), xb = cx(k + 1), ya = cy(j), yb = cy(j + 1), xm = (xa + xb) / 2, ym = (ya + yb) / 2;
+        const ms2: [number, number][] = [];
+        if (o0 !== o1) ms2.push([xm, ya]);
+        if (o1 !== o2) ms2.push([xb, ym]);
+        if (o3 !== o2) ms2.push([xm, yb]);
+        if (o0 !== o3) ms2.push([xa, ym]);
+        if (ms2.length === 2) d += `M${ms2[0][0].toFixed(1)},${ms2[0][1].toFixed(1)}L${ms2[1][0].toFixed(1)},${ms2[1][1].toFixed(1)}`;
+        else if (ms2.length > 2) ms2.forEach(([x, y]) => { d += `M${x.toFixed(1)},${y.toFixed(1)}L${xm.toFixed(1)},${ym.toFixed(1)}`; });
+      }
+      const ga = el('g', { class: 'areas-inf' });
+      ga.appendChild(el('path', { d, class: 'areas-borde' }));
+      a.ids.forEach(id => {
+        const v = a.area[id];
+        if (!v) return;
+        // el rótulo va en el centro del área; si ahí pisa otro texto o un muro, se prueban lugares alrededor (al final)
+        const c = a.centro[id];
+        const mu = p.muros.find(o => o.id === id);
+        const cands: [number, number][] = [[c.x, c.y]];
+        if (mu) {
+          const { ax, ay } = huella(mu);
+          for (const dd of [1.2, 2, 3]) cands.push([c.x, c.y + dd], [c.x, c.y - dd], [mu.x + ax / 2 + dd, mu.y], [mu.x - ax / 2 - dd, mu.y], [mu.x, mu.y + ay / 2 + dd * 0.7], [mu.x, mu.y - ay / 2 - dd * 0.7]);
+        }
+        const t = el('text', { x: X(c.x), y: Y(c.y) + 4, class: 'etiqueta areas-txt', 'text-anchor': 'middle' }, `${v.toFixed(1).replace('.', ',')} m²`);
+        t.appendChild(el('title', {}, `${id}: ${v.toFixed(2).replace('.', ',')} m² de losa`));
+        t.dataset.cands = JSON.stringify(cands.map(([x, y]) => [X(x), Y(y) + 4]));
+        ga.appendChild(t);
+      });
+      svg.appendChild(ga);
+      armarPanelAreas(iN, a);
+    } else panelAreas.hidden = true;
     svg.appendChild(el('line', { x1: X(0), y1: Y(-n), x2: X(0), y2: Y(n), class: 'eje' }));
     svg.appendChild(el('line', { x1: X(-n), y1: Y(0), x2: X(n), y2: Y(0), class: 'eje' }));
     // ejes de inercia y centro de rigidez (con los valores elegidos: planilla o guía/CIRSOC)
@@ -656,6 +732,24 @@ export function montarPlanta(cont: HTMLElement) {
       if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
       svg.appendChild(pr);
     }
+    if (verAreas) acomodarAreas();
+  }
+  /** rótulos de las áreas: el primer lugar libre (sin pisar textos ni muros) entre los candidatos */
+  function acomodarAreas() {
+    const ts = [...svg.querySelectorAll<SVGTextElement>('text.areas-txt')];
+    const otros = [...svg.querySelectorAll<SVGGraphicsElement>('text:not(.areas-txt), .muro rect, .muro circle')].map(e => { try { return e.getBBox(); } catch { return null; } }).filter((b): b is DOMRect => !!b && b.width > 0);
+    const puestos: DOMRect[] = [];
+    const choca = (b: DOMRect) => [...otros, ...puestos].some(o => b.x < o.x + o.width + 2 && o.x < b.x + b.width + 2 && b.y < o.y + o.height + 1 && o.y < b.y + b.height + 1);
+    ts.forEach(t => {
+      const cands: [number, number][] = JSON.parse(t.dataset.cands ?? '[]');
+      for (const [x, y] of cands) {
+        t.setAttribute('x', String(x)); t.setAttribute('y', String(y));
+        const b = t.getBBox();
+        if (!choca(b)) { puestos.push(b); return; }
+      }
+      t.setAttribute('x', String(cands[0][0])); t.setAttribute('y', String(cands[0][1]));
+      puestos.push(t.getBBox());
+    });
   }
   let ultimoEspesor = 0.2;
   const pegar = (ev: PointerEvent, excluir?: Set<string>) => {
