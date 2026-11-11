@@ -400,6 +400,6 @@ export function panelAyuda(c: H) {
   c.append(h('p', { class: 'nota' }, `Torre 3D · © ${ANIO} ${AUTOR}. `, lic, vigente()
     ? `: hasta el ${HASTA} se puede usar, compartir y adaptar citando al autor, sin fines comerciales. Después de esa fecha queda con todos los derechos reservados, salvo que el autor la renueve.`
     : `: venció el ${HASTA}. La app queda con todos los derechos reservados; para seguir usándola, consultá al autor.`));
-  c.append(h('p', { class: 'nota chica' }, 'La planilla del curso es material de la cátedra (FAUD-UNMDP) y el CIRSOC 102 pertenece a sus autores; no están incluidos en esta licencia.'));
+  c.append(h('p', { class: 'nota chica' }, 'Material de la cátedra (Electiva Edificios en Torre, FAUD-UNMDP): la planilla del curso, las guías, las clases y el CIRSOC 102 que toma como referencia conservan los derechos de sus autores y no están incluidos en esta licencia.'));
 }
 

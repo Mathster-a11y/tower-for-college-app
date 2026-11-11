@@ -32,12 +32,13 @@ LICENCIA DE USO NO COMERCIAL POR UN AÑO
    los resultados deben verificarse con la planilla del curso, el Reglamento CIRSOC y la cátedra. El autor
    no se hace responsable por el uso de los resultados en proyectos u obras.
 
-6. Contenido de terceros (no incluido en esta licencia):
-   - La planilla del curso «Edificios en torre» (src/assets/planilla_virgen.xlsx) es material de la cátedra
-     (FAUD-UNMDP) y conserva los derechos de sus autores.
-   - El Reglamento CIRSOC 102 y las guías de la cátedra se citan como referencia; sus derechos pertenecen a
-     sus autores y editores.
-   - Las bibliotecas de código usadas (three.js, JSZip, fuentes IBM Plex y JetBrains Mono) conservan sus
-     propias licencias.
+6. Material de la cátedra (no incluido en esta licencia). Lo que no es obra del autor pertenece a la
+   cátedra de la Electiva Edificios en Torre (FAUD-UNMDP) y a las fuentes que ella usa, y conserva los
+   derechos de sus autores:
+   - la planilla del curso «Edificios en torre» (src/assets/planilla_virgen.xlsx);
+   - las guías, las clases (Rigidez, Resistencia) y los ejemplos de la cátedra, que la app cita y sigue;
+   - el Reglamento CIRSOC 102 y demás normas que la cátedra toma como referencia.
+   Las bibliotecas de código que usa la app (three.js, JSZip, fuentes IBM Plex y JetBrains Mono) conservan
+   sus propias licencias.
 
 Para usos que esta licencia no permite (por ejemplo, comerciales, o después del plazo), consultar al autor.
