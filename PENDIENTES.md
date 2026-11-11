@@ -78,7 +78,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ### Para la entrega
 - [x] Lámina de entrega A3 apaisada para imprimir (Exportar ▾): una hoja por viento con ficha, vuelco, lámina M-N-Q, verificaciones y rótulo
-- [ ] Prueba de punta a punta con una entrega real: escribir la planilla, abrirla en Excel/LibreOffice y comparar celda por celda (con piezas agrupadas y alas intermedias)
+- [x] Prueba de punta a punta: torre con una C de la biblioteca y la pieza de la cátedra (alas intermedias, más de dos almas), escrita y recalculada en LibreOffice: 91 de 91 celdas iguales (tools/escribir_prueba.ts y tools/comparar_libreoffice.py)
 - [ ] Elegir la carta principal (A, B, C, D o una combinación)
 
 ### Para armar la torre más rápido
