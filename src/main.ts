@@ -3,6 +3,7 @@ import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
+import { avisoActual } from './autoria';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, chip, h } from './ui/comp';
@@ -341,3 +342,5 @@ let rz: number | undefined;
 activarGlobos();
 dibujarCapas();
 dibujarTodo();
+// aviso de autoría: si la licencia ya venció, el pie lo dice
+{ const a = document.getElementById('autoria'); if (a) a.textContent = avisoActual(); }

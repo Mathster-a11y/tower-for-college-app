@@ -88,6 +88,6 @@ These are open questions for the cátedra:
 
 Torre 3D · © 2026 **Augusto Andrés Marsella**.
 
-The app (source code, design, drawings and texts) is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**: it can be used, shared and adapted with credit to the author and for non-commercial purposes only. See [`LICENSE`](LICENSE) (in Spanish) and the [license summary](https://creativecommons.org/licenses/by-nc/4.0/deed.es).
+The app (source code, design, drawings and texts) is covered by the author's own **one-year non-commercial license**, valid from 11 November 2026 to 11 November 2027. During that period it can be used, shared and adapted with credit to the author and for non-commercial purposes only. After that date all rights are reserved unless the author renews it. See [`LICENSE`](LICENSE) (in Spanish).
 
 The course workbook (`src/assets/planilla_virgen.xlsx`), the CIRSOC 102 regulation and the course guides belong to their authors and are not covered by this license. The libraries (three.js, JSZip, IBM Plex and JetBrains Mono fonts) keep their own licenses.

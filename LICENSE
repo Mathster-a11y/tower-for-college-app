@@ -4,30 +4,40 @@ Torre 3D — app web que acompaña la planilla «Edificios en torre» (Electiva 
 
 Copyright © 2026 Augusto Andrés Marsella. Todos los derechos de autor pertenecen a su autor.
 
-Esta obra (el código fuente de la app, su diseño, sus dibujos y sus textos) se distribuye bajo la licencia
-Creative Commons Atribución-NoComercial 4.0 Internacional (CC BY-NC 4.0).
 
-Usted es libre de:
-  - Compartir: copiar y redistribuir la obra en cualquier medio o formato.
-  - Adaptar: remezclar, transformar y construir a partir de la obra.
+LICENCIA DE USO NO COMERCIAL POR UN AÑO
 
-Bajo las siguientes condiciones:
-  - Atribución: debe dar crédito al autor (Augusto Andrés Marsella), incluir un enlace a la licencia e
-    indicar si hizo cambios. Puede hacerlo de cualquier forma razonable, pero no de una que sugiera que el
-    autor lo respalda a usted o al uso que hace de la obra.
-  - NoComercial: no puede usar la obra con fines comerciales.
-  - Sin restricciones adicionales: no puede aplicar términos legales ni medidas tecnológicas que impidan a
-    otros hacer lo que la licencia permite.
+1. Plazo. Esta licencia rige desde el 11 de noviembre de 2026 hasta el 11 de noviembre de 2027, inclusive.
+   Vencido el plazo, la obra queda con todos los derechos reservados, salvo que el autor publique una
+   renovación o una licencia nueva.
 
-Resumen de la licencia: https://creativecommons.org/licenses/by-nc/4.0/deed.es
-Texto legal completo:   https://creativecommons.org/licenses/by-nc/4.0/legalcode.es
+2. Qué se permite durante el plazo, sin pedir permiso:
+   - Usar la app, para estudiar, enseñar o hacer trabajos prácticos y entregas.
+   - Copiar y compartir la app, en cualquier medio o formato.
+   - Adaptarla: modificarla y construir a partir de ella.
 
-Contenido de terceros (no incluido en esta licencia):
-  - La planilla del curso «Edificios en torre» (src/assets/planilla_virgen.xlsx) es material de la cátedra
-    (FAUD-UNMDP) y conserva los derechos de sus autores.
-  - El Reglamento CIRSOC 102 y las guías de la cátedra se citan como referencia; sus derechos pertenecen a
-    sus autores y editores.
-  - Las bibliotecas de código usadas (three.js, JSZip, fuentes IBM Plex y JetBrains Mono) conservan sus
-    propias licencias.
+3. Condiciones:
+   - Atribución: hay que dar crédito al autor (Augusto Andrés Marsella), mantener este aviso de copyright y
+     esta licencia en las copias y en las adaptaciones, e indicar si se hicieron cambios. No se puede
+     sugerir que el autor respalda a quien la usa ni el uso que hace de ella.
+   - No comercial: no se puede vender, cobrar por su uso ni usarla con fines comerciales.
+   - Mismo plazo: las copias y las adaptaciones quedan sujetas a este mismo plazo; esta licencia no
+     permite otorgar a terceros derechos más amplios ni más largos.
 
-Para usos que esta licencia no permite (por ejemplo, comerciales), consulte al autor.
+4. Después del plazo. No se pueden hacer copias, adaptaciones ni redistribuciones nuevas sin permiso del
+   autor. Lo ya entregado durante el plazo (por ejemplo, trabajos prácticos y planillas hechas con la app)
+   no se ve afectado.
+
+5. Sin garantía. La app se entrega «tal cual», sin garantía de ningún tipo. Es una herramienta de estudio:
+   los resultados deben verificarse con la planilla del curso, el Reglamento CIRSOC y la cátedra. El autor
+   no se hace responsable por el uso de los resultados en proyectos u obras.
+
+6. Contenido de terceros (no incluido en esta licencia):
+   - La planilla del curso «Edificios en torre» (src/assets/planilla_virgen.xlsx) es material de la cátedra
+     (FAUD-UNMDP) y conserva los derechos de sus autores.
+   - El Reglamento CIRSOC 102 y las guías de la cátedra se citan como referencia; sus derechos pertenecen a
+     sus autores y editores.
+   - Las bibliotecas de código usadas (three.js, JSZip, fuentes IBM Plex y JetBrains Mono) conservan sus
+     propias licencias.
+
+Para usos que esta licencia no permite (por ejemplo, comerciales, o después del plazo), consultar al autor.
