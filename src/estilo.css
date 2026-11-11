@@ -378,7 +378,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-rayo { stroke: var(--ink2); stroke-width: .8; }
 .rototrasl .rt-rayo.extremo { stroke: var(--elegido); stroke-width: 1.5; }
 .rototrasl .rt-funicular { fill: none; stroke: var(--elegido); stroke-width: 2; }
-.rototrasl .rt-funicular.extremo { stroke-width: 1.5; stroke-dasharray: 6 3; }
+.rototrasl .rt-funicular.extremo { stroke-width: 1.6; }
+.rototrasl .rt-resultante { stroke: var(--accent); stroke-width: 2; }
 .rototrasl .rt-W { stroke: var(--carga); stroke-width: 3; }
 .rototrasl .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 2; }
 .rototrasl .rt-flecha:hover line { filter: drop-shadow(0 0 3px var(--elegido)); }
@@ -397,3 +398,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-W .tronco { stroke: var(--carga); }
 .rototrasl .rt-W .punta { fill: var(--carga); }
 .rototrasl g.rt-flecha:hover .tronco { filter: drop-shadow(0 0 2px var(--elegido)); }
+.rototrasl .rt-num circle { fill: var(--lienzo); stroke: var(--ink2); stroke-width: .8; }
+.rototrasl .rt-num text { fill: var(--ink2); font: 600 9px var(--mono); }
+.rototrasl .rt-num.extremo circle { stroke: var(--elegido); stroke-width: 1.2; }
+.rototrasl .rt-num.extremo text { fill: var(--ink); }
+.rototrasl .rt-vertice { fill: var(--elegido); }

@@ -144,3 +144,47 @@ export function repartoGuia(paralelos: ElementoRot[], perpendiculares: ElementoR
     }),
   };
 }
+
+/**
+ * Rototraslación en altura (para el 3D): cada nivel se traslada δ(z) en el sentido del viento y gira θ(z)
+ * alrededor del centro de rigidez CR. Con el modelo de la clase 5, cada tabique es una ménsula que toma
+ *   Wj = W·Jj/ΣJ − W·e·Jj·aj/ΣJt·a²   (aj = tj − Xr, e = Xr: distancia del eje de simetría al eje de inercia),
+ * así que se corre δ(z)·(1 − e·ΣJ·aj/ΣJt·a²) = δ(z) + θ(z)·aj, con θ(z) = −δ(z)·e·ΣJ / ΣJt·a²
+ * (θ antihorario positivo; con e > 0 la planta gira en sentido horario).
+ * Todo en el «marco del viento»: t transversal, s en el sentido del viento.
+ */
+export interface Rototraslacion3D {
+  dir: 'A' | 'B';
+  niveles: { nivel: string; z: number; d: number; th: number }[];
+  /** CR en planta (coordenadas x, y del proyecto) */
+  cr: { x: number; y: number };
+  /** sentido del viento en planta (vector unitario) */
+  viento: { x: number; y: number };
+  e: number; dTop: number; thTop: number;
+}
+export function rototraslacion3D(def: Deformada, dir: 'A' | 'B', Xr: number, Yr: number, SJ: number, SJa2: number): Rototraslacion3D {
+  const k = SJa2 > 1e-12 ? (Xr * SJ) / SJa2 : 0;
+  const niveles = def.puntos.map(p => ({ nivel: p.nivel, z: p.z, d: p.d, th: -p.d * k }));
+  const top = niveles[niveles.length - 1];
+  // marco del viento → planta: A: t = x, s = y · B: t = −y, s = x (las dos conservan el sentido de giro)
+  const cr = dir === 'A' ? { x: Xr, y: Yr } : { x: Yr, y: -Xr };
+  return { dir, niveles, cr, viento: dir === 'A' ? { x: 0, y: 1 } : { x: 1, y: 0 }, e: Xr, dTop: top?.d ?? 0, thTop: top?.th ?? 0 };
+}
+/** δ y θ en una cota cualquiera (interpolados; debajo de PB no se mueve). */
+export function movimientoEn(r: Rototraslacion3D, z: number): { d: number; th: number } {
+  const n = r.niveles;
+  if (!n.length || z <= n[0].z) return { d: 0, th: 0 };
+  for (let i = 1; i < n.length; i++) if (z <= n[i].z) {
+    const u = (z - n[i - 1].z) / (n[i].z - n[i - 1].z || 1);
+    return { d: n[i - 1].d + u * (n[i].d - n[i - 1].d), th: n[i - 1].th + u * (n[i].th - n[i - 1].th) };
+  }
+  const u = n[n.length - 1];
+  return { d: u.d, th: u.th };
+}
+/** Posición en planta del punto (x, y) a la cota z, con los movimientos multiplicados por f (exageración). */
+export function desplazar(r: Rototraslacion3D, x: number, y: number, z: number, f = 1): { x: number; y: number } {
+  const { d, th } = movimientoEn(r, z);
+  const a = th * f, c = Math.cos(a), s = Math.sin(a);
+  const dx = x - r.cr.x, dy = y - r.cr.y;
+  return { x: r.cr.x + c * dx - s * dy + f * d * r.viento.x, y: r.cr.y + s * dx + c * dy + f * d * r.viento.y };
+}

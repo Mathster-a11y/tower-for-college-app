@@ -12,7 +12,6 @@
  */
 import type { Muro } from '../engine/modelo';
 import { rectangulos, tipoDe } from '../engine/modelo';
-import { poligonoFunicular } from '../engine/funicular';
 import { fmt } from './estado';
 import type { Tam } from './diagramas';
 
@@ -164,6 +163,14 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     g.append(el('text', { x, y: yy, class: clase, 'text-anchor': ancla }, texto));
   };
 
+  // número en un círculo chico: relaciona cada rayo con el lado del funicular paralelo a él
+  const numero = (x: number, y: number, i: number, ext: boolean) => {
+    const gg = el('g', { class: `rt-num${ext ? ' extremo' : ''}` });
+    gg.append(el('circle', { cx: x, cy: y, r: 6.5 }));
+    gg.append(el('text', { x, y: y + 3.3, 'text-anchor': 'middle' }, String(i)));
+    g.append(gg);
+  };
+
   if (paso === 1) {
     // vectores J sobre cada tabique (largo ∝ J), recta de acción hasta el funicular
     const Lmax = 0.7 * d.S * k;
@@ -173,39 +180,83 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       g.append(flecha(x, yc - L / 2, x, yc + L / 2, grosor(p.J), 'rt-J', tip(p)));
       rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, 2)}`);
     });
-    // polígono de los J (vertical), polo y rayos; funicular debajo de la planta, a la escala de la planta, con los
-    // lados paralelos a los rayos: la distancia al polo se elige para que el funicular entre en su franja
-    const W0 = d.paralelos.reduce((s2, p) => s2 + p.J, 0) || 1;
-    const pos = d.paralelos.map(p => p.pos);
-    const span = Math.max(1, Math.max(...pos) - Math.min(...pos));
-    const altoM = Math.max(1, (altoFuni - 34) / k);                          // metros de dibujo disponibles
-    const Hp = (W0 * span) / (2 * altoM) * 1.05;
-    const cons = poligonoFunicular(d.paralelos.map(p => ({ z: p.pos, F: p.J, nivel: p.nombre })), 0, Hp);
-    const px = ancho - md + 44, pTop = ms + 22;
-    const kf = Math.min((alto * 0.5) / cons.W, (md - 64) / Hp);              // escala del polígono de fuerzas (px por m⁴)
-    const PY = (sAc: number) => pTop + sAc * kf;
-    const O = { x: px + Hp * kf, y: pTop + (cons.W / 2) * kf };
-    g.append(el('text', { x: px - 10, y: pTop - 12, class: 'd-eje' }, 'polígono de los J'));
-    cons.fuerzas.forEach((f, i) => {
-      g.append(flecha(px, PY(cons.S[i]), px, PY(cons.S[i + 1]), 1.8, 'rt-J', `${f.nivel}: J = ${fmt(f.F, 3)} m⁴`));
-      if ((cons.S[i + 1] - cons.S[i]) * kf > 9) g.append(el('text', { x: px - 6, y: (PY(cons.S[i]) + PY(cons.S[i + 1])) / 2 + 4, class: 'd-eje', 'text-anchor': 'end' }, f.nivel));
+    // Determinación gráfica como en la clase 5: los J se ordenan de izquierda a derecha y se ponen uno a
+    // continuación del otro (polígono de los J). Los tabiques sobre la misma recta de acción (T1 y T3) van seguidos,
+    // sin rayo entre ellos. Rayos 1…m+1 desde el polo O; el lado i del funicular es paralelo al rayo i y va de una
+    // recta de acción a la siguiente. El primer y el último lado se prolongan hasta cortarse en R, debajo del
+    // funicular: por R pasa la resultante ΣJ (el eje de inercia), que sube hasta el CR.
+    const orden = [...d.paralelos].sort((a, b) => a.pos - b.pos);
+    const gruposJ: { pos: number; J: number; ps: ElementoPlano[] }[] = [];
+    orden.forEach(p => {
+      const u = gruposJ[gruposJ.length - 1];
+      if (u && Math.abs(u.pos - p.pos) < 0.01) { u.ps.push(p); u.J += p.J; } else gruposJ.push({ pos: p.pos, J: p.J, ps: [p] });
     });
-    cons.S.forEach((sAc, i) => g.append(el('line', { x1: px, y1: PY(sAc), x2: O.x, y2: O.y, class: i === 0 || i === cons.S.length - 1 ? 'rt-rayo extremo' : 'rt-rayo' })));
+    const m = gruposJ.length;
+    const W0 = gruposJ.reduce((s2, x) => s2 + x.J, 0) || 1;
+    const Sg = [0];
+    gruposJ.forEach(x => Sg.push(Sg[Sg.length - 1] + x.J));
+    // funicular con distancia polar 1 (en m): t horizontal, v hacia abajo; el lado i baja (W0/2 − Sg[i]) / H por metro
+    const pend = Sg.map(sv => W0 / 2 - sv);
+    const vs = [0];
+    for (let i = 1; i < m; i++) vs.push(vs[i - 1] + pend[i] * (gruposJ[i].pos - gruposJ[i - 1].pos));
+    const t0 = gruposJ[0].pos, tm = gruposJ[m - 1].pos;
+    const tR = m > 1 ? (vs[m - 1] - vs[0] + pend[0] * t0 - pend[m] * tm) / (pend[0] - pend[m]) : t0;
+    const vR1 = vs[0] + pend[0] * (tR - t0);
+    const ext = 30 / k;                                                         // prolongación hacia afuera (m)
+    const vE0 = vs[0] - pend[0] * ext, vEm = vs[m - 1] + pend[m] * ext;
+    const vMin1 = Math.min(...vs, vE0, vEm);
+    const disp = Math.max(1, (altoFuni - 70) / k);
+    const Hp = Math.max(1e-9, (vR1 - vMin1) / disp);                              // distancia polar que llena la franja
+    const FY = (v1: number) => Y(-d.S / 2) + 40 + ((v1 - vMin1) / Hp) * k;
+    const verts = gruposJ.map((x, i) => ({ x: X(x.pos), y: FY(vs[i]) }));
+    const R = { x: X(tR), y: FY(vR1) };
+    const E0 = { x: X(t0 - ext), y: FY(vE0) }, Em = { x: X(tm + ext), y: FY(vEm) };
+
+    // polígono de los J, a la derecha
+    const px = ancho - md + 44, pTop = ms + 22;
+    const kf = Math.min((alto * 0.5) / W0, (md - 64) / Hp);
+    const PY = (sAc: number) => pTop + sAc * kf;
+    const O = { x: px + Hp * kf, y: pTop + (W0 / 2) * kf };
+    g.append(el('text', { x: px - 10, y: pTop - 12, class: 'd-eje' }, 'polígono de los J'));
+    let acc = 0;
+    orden.forEach(p => {
+      g.append(flecha(px, PY(acc), px, PY(acc + p.J), 1.8, 'rt-J', `${p.nombre}: J = ${fmt(p.J, 3)} m⁴`));
+      if (p.J * kf > 9) g.append(el('text', { x: px - 6, y: PY(acc + p.J / 2) + 4, class: 'd-eje', 'text-anchor': 'end' }, p.nombre));
+      acc += p.J;
+    });
+    const numeros: { x: number; y: number }[] = [];
+    Sg.forEach((sAc, i) => {
+      const extremo = i === 0 || i === m;
+      g.append(el('line', { x1: px, y1: PY(sAc), x2: O.x, y2: O.y, class: extremo ? 'rt-rayo extremo' : 'rt-rayo' }));
+      for (const dx of [16, 32, 48, 64, 80, 96]) {
+        const rx = px + dx, ry = PY(sAc) + (O.y - PY(sAc)) * (dx / (O.x - px));
+        if (dx === 96 || !numeros.some(q => Math.hypot(q.x - rx, q.y - ry) < 14)) { numeros.push({ x: rx, y: ry }); numero(rx, ry, i + 1, extremo); break; }
+      }
+    });
     g.append(el('circle', { cx: O.x, cy: O.y, r: 3.5, class: 'rt-cr' }));
     g.append(el('text', { x: O.x + 6, y: O.y + 4, class: 'd-eje' }, 'O'));
-    // funicular: corrimiento hacia abajo, misma escala que la planta (k)
-    const y0 = Y(-d.S / 2) + 30;
-    const offs = cons.vertices.map(v => v.x).concat(cons.xR);
-    const oMin = Math.min(...offs);
-    const FY = (off: number) => y0 + (off - oMin) * k;
-    const verts = cons.vertices.map(v => ({ x: X(v.z), y: FY(v.x) }));
-    g.append(el('polyline', { points: verts.map(v => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' '), class: 'rt-funicular' }));
-    const R = { x: X(cons.zR), y: FY(cons.xR) };
-    g.append(el('line', { x1: verts[0].x, y1: verts[0].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
-    g.append(el('line', { x1: verts[verts.length - 1].x, y1: verts[verts.length - 1].y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
+    g.append(el('text', { x: px - 10, y: PY(W0) + 22, class: 'd-eje' }, 'rayo i ∥ lado i'));
+
+    // funicular: primer lado (desde afuera, por el primer vértice, hasta R), lados intermedios, último lado
+    g.append(el('line', { x1: E0.x, y1: E0.y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
+    g.append(el('line', { x1: Em.x, y1: Em.y, x2: R.x, y2: R.y, class: 'rt-funicular extremo' }));
+    if (m > 1) g.append(el('polyline', { points: verts.map(v => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' '), class: 'rt-funicular' }));
+    verts.forEach(v => g.append(el('circle', { cx: v.x, cy: v.y, r: 2.6, class: 'rt-vertice' })));
+    numero((E0.x + verts[0].x) / 2, (E0.y + verts[0].y) / 2 - 10, 1, true);
+    for (let i = 1; i < m; i++) {
+      const a2 = verts[i - 1], b2 = verts[i];
+      if (Math.hypot(b2.x - a2.x, b2.y - a2.y) > 24) {
+        const mx = (a2.x + b2.x) / 2;
+        numero(Math.abs(mx - R.x) < 12 ? R.x + 16 : mx, (a2.y + b2.y) / 2 - 10, i + 1, false);     // sin tapar la resultante
+      }
+    }
+    numero((Em.x + verts[m - 1].x) / 2, (Em.y + verts[m - 1].y) / 2 - 10, m + 1, true);
+    // resultante: de R sube por el eje de inercia hasta el CR (como la recta azul de la clase)
+    g.append(el('line', { x1: R.x, x2: R.x, y1: R.y, y2: Y(d.Yr), class: 'rt-resultante' }));
+    g.append(flecha(R.x, R.y - 34, R.x, R.y - 3, 3, 'rt-J', `ΣJ = ${fmt(W0, 3)} m⁴`));
     g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));
-    g.append(el('text', { x: R.x, y: R.y + 18, class: 'd-valor', 'text-anchor': 'middle' }, `resultante de los J: ΣJ = ${fmt(cons.W, 2)} m⁴`));
-    g.append(el('text', { x: R.x, y: R.y + 31, class: 'd-eje', 'text-anchor': 'middle' }, `sobre el eje de inercia, a ${fmt(Math.abs(cons.zR))} m del eje de simetría`));
+    g.append(el('text', { x: R.x, y: R.y + 18, class: 'd-valor', 'text-anchor': 'middle' }, `R: ΣJ = ${fmt(W0, 2)} m⁴`));
+    g.append(el('text', { x: R.x, y: R.y + 31, class: 'd-eje', 'text-anchor': 'middle' }, `a ${fmt(Math.abs(tR))} m del eje de simetría`));
   }
 
   if (paso >= 2) {
