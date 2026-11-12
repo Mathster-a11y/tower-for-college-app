@@ -191,18 +191,21 @@ export function ejemploAsimetrico(): Proyecto {
  * sobre la iglesia de San Pedro. Los chevrones de acero de 8 pisos por cara (el «exoesqueleto») llevan las cargas
  * de las esquinas a esas columnas. Arriba, un amortiguador de masa sintonizada de unas 400 t.
  *
- * Modelo para empezar a calcular, con supuestos (marcados): la planilla admite 49 niveles sobre PB, así que los
- * 50 pisos de oficinas se toman como 47 niveles de 4,73 m más la corona. El núcleo central es de hormigón y llega
+ * Modelo para empezar a calcular, con supuestos (marcados): 48 pisos de oficinas de 3,89 m (pisos 10 a 57, seis
+ * módulos de 8) más la corona: 49 niveles sobre PB, el máximo de la planilla. El núcleo central es de hormigón y llega
  * al suelo (así lo muestran los dibujos de la obra); sus medidas (21 × 21 m, pared de 0,90 m) son supuestas. Las
  * supercolumnas son reticuladas de acero; acá van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de
  * 0,60 m), también supuestos. Los chevrones del perímetro todavía no suman rigidez: entran cuando esté la
  * herramienta de exoesqueleto.
  */
 export function ejemploCiticorp(): Proyecto {
-  const lado = 47.85, base = 34.75, paso = 4.73;
+  const lado = 47.85, base = 34.75, paso = 3.89;
+  // pisos 1 a 9: la base abierta sobre las supercolumnas (plaza, iglesia, vestíbulos), 34,75 m; pisos 10 a 57: 48 pisos
+  // de oficinas de 3,89 m (12 ft 9 in), que llenan justo los 6 módulos de chevrones de 8 pisos; arriba, la corona
+  // inclinada a 45° hacia el sur con los pisos técnicos y el amortiguador, hasta 279 m. Son 49 niveles sobre PB: el
+  // máximo que admite la planilla.
   const niveles: Nivel[] = [{ nombre: 'Azotea (corona)', cota: 279, B: lado, L: lado }];
-  // el primer piso de la torre, sobre las supercolumnas, es el 9º; después, 46 niveles de 4,73 m y la corona
-  for (let k = 47; k >= 1; k--) niveles.push({ nombre: k === 1 ? '9º (sobre las supercolumnas)' : `${k + 8}º`, cota: +(base + paso * (k - 1)).toFixed(2) });
+  for (let piso = 57; piso >= 10; piso--) niveles.push({ nombre: piso === 10 ? '10º (primer piso sobre las supercolumnas)' : `${piso}º`, cota: +(base + paso * (piso - 10)).toFixed(2) });
   niveles.push({ nombre: 'PB (plaza)', cota: 0 }, { nombre: 'Subsuelo', cota: -9, B: lado, L: lado });
   const d = lado / 2 - 3.65;     // centro de cada supercolumna: a 3,65 m de la cara
   const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
