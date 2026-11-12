@@ -28,7 +28,7 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true, deformada: false };
+  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true };
   /** rototraslación en 3D: exageración de la traslación y extra del giro (null = automáticas), torre sin deformar, animación y rótulos */
   roto3d: { exag: number | null; giro: number | null; original: boolean; animar: boolean; rotulos: boolean } = { exag: null, giro: null, original: true, animar: false, rotulos: true };
   /** plano para calcar en la planta (no se guarda en el proyecto): imagen, ancho real (m), centro (m) y opacidad */

@@ -56,7 +56,7 @@ const CON_SUB: Record<string, [string, string]> = {
   Mtras: ['M', 'tras'], Mrot: ['M', 'rot'], Qrot: ['Q', 'rot'], Qtras: ['Q', 'tras'], Mv: ['M', 'v'], Me: ['M', 'e'], Mt: ['M', 't'],
   Kzt: ['K', 'zt'], Kz: ['K', 'z'], Kd: ['K', 'd'], Cp: ['C', 'p'], qz: ['q', 'z'], qh: ['q', 'h'], hW: ['h', 'W'], Xr: ['X', 'r'],
   Pi: ['P', 'i'], Wi: ['W', 'i'], Ji: ['J', 'i'], xi: ['x', 'i'], yG: ['y', 'G'], zg: ['z', 'g'], 'σG': ['σ', 'G'], 'σV': ['σ', 'V'], 'σP': ['σ', 'P'],
-  'σmáx': ['σ', 'máx'], 'σmín': ['σ', 'mín'], 'Jmín': ['J', 'mín'],
+  'σmáx': ['σ', 'máx'], 'σmín': ['σ', 'mín'], 'Jmín': ['J', 'mín'], hw: ['h', 'w'], Qi: ['Q', 'i'], Mi: ['M', 'i'], Jt: ['J', 't'],
 };
 const UNIDADES = new Set(['m', 't', 'tm', 'kg', 'cm', 'N', 'kN', 's', 'Hz', 'MPa']);
 /** Fórmula escrita como texto («Mv = Σ Q · h») a HTML con las variables en cursiva matemática y los subíndices. */
@@ -67,8 +67,15 @@ export function mat(s: string): string {
     const t = partes[i];
     if (i % 2 === 0) { o += esc(t); continue; }
     const antes = partes[i - 1] ?? '', despues = partes[i + 1] ?? '';
-    const esUnidad = UNIDADES.has(t) && (/\d\s*$/.test(antes) || /^\s*\/$/.test(antes) && i > 1 && UNIDADES.has(partes[i - 2]) || /^[²³⁴]/.test(despues) && /\d\s*$/.test(antes));
+    const esUnidad = UNIDADES.has(t) && (/\d\s*$/.test(antes) || /^\s*\/$/.test(antes) && i > 1 && UNIDADES.has(partes[i - 2]) || /^[²³⁴]/.test(despues) && /\d\s*$/.test(antes)
+      || (/[(/·]\s*$/.test(antes) && /^[²³⁴⁵⁶]?\s*[)/·]/.test(despues)));
+    // «viento A», «cara B»: letras que nombran, no variables; T1, M12: nombres de piezas y muros
+    const nombra = t.length === 1 && ((/^\s+$/.test(antes) && /^(viento|cara|dirección)$/i.test(partes[i - 2] ?? '')) || (/[A-Z]/.test(t) && /^\d/.test(despues)));
     if (esUnidad) o += `<span class="u">${esc(t)}</span>`;
+    else if (nombra || t === 'π' || (t === 'N' && /^\.º/.test(despues))) o += esc(t);
+    else if (t.length === 1 && /[a-z]/.test(t) && /^\d\b/.test(despues)) { o += v(t, despues[0]); partes[i + 1] = despues.slice(1); }
+    else if (t === 'GCpi') o += v('G') + v('C', 'pi');
+    else if (t[0] === 'Σ' && t.length > 1) o += 'Σ' + mat(t.slice(1));
     else if (CON_SUB[t]) o += v(...CON_SUB[t]);
     else if (t.length === 1 && t !== 'Σ') o += v(t);
     else o += esc(t);
@@ -120,4 +127,18 @@ export function activarGlobos() {
   });
   document.addEventListener('pointerdown', cerrar);
   document.addEventListener('keydown', cerrar);
+}
+
+/**
+ * Notación matemática en toda la interfaz: los rótulos de campos, indicadores, encabezados de tablas, títulos de
+ * figuras y fórmulas escritas como texto pasan por mat() (variables en cursiva matemática de IBM Plex Math).
+ */
+export const SELECTOR_MAT = '.kpi .cap, .formulario > label, .tabla-valores th, .panel th, .centro th, figcaption, .dg-f';
+export function aplicarMat(raiz: ParentNode) {
+  raiz.querySelectorAll<HTMLElement>(SELECTOR_MAT).forEach(e => {
+    if (e.dataset.mat || e.children.length) return;
+    const t = e.textContent ?? '';
+    if (!/[A-Za-zα-ω]/.test(t)) return;
+    e.innerHTML = mat(t); e.dataset.mat = '1';
+  });
 }

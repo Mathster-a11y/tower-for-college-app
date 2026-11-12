@@ -70,6 +70,21 @@ class Prisma {
     this.malla = new THREE.Mesh(g, mat);
     this.bordes = new THREE.LineSegments(gb, matB);
   }
+  /**
+   * Espectro de la deformada: cada vértice se pinta según su corrimiento real (traslación más giro, sin exagerar),
+   * de blanco (casi cero) a verde (el mayor de la torre), como en la app de estéreo-estructuras.
+   */
+  colorear(r: Rototraslacion3D, maximo: number, blanco: THREE.Color, verde: THREE.Color) {
+    const col = new Float32Array(this.base.length), c = new THREE.Color();
+    for (let i = 0; i < this.base.length; i += 3) {
+      const x = this.base[i], y = this.base[i + 1], z = this.zMover ?? this.base[i + 2];
+      const q = desplazar(r, x, y, z, 1, 1);
+      const t = maximo > 0 ? Math.min(1, Math.hypot(q.x - x, q.y - y) / maximo) : 0;
+      c.copy(blanco).lerp(verde, Math.pow(t, 0.8));
+      col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b;
+    }
+    this.malla.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
   /** planta (x, y) y cota z → three (x, z, −y), con el movimiento de cada cota multiplicado por f */
   mover(r: Rototraslacion3D | null, f: number, fg = f) {
     const poner = (src: number[], attr: THREE.BufferAttribute) => {
@@ -146,8 +161,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     kGiro = roto ? (estado.roto3d.giro ?? giroExtraAuto(roto, fMax)) : 1;
     const cotas = p.niveles.map(n => n.cota).sort((a, b) => a - b);
     const tinta = new THREE.LineBasicMaterial({ color: new THREE.Color(css('--ink2', '#556')), transparent: true, opacity: 0.55 });
-    // losas
-    const matLosa = new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
+    // losas (con el espectro, también se pintan según su corrimiento)
+    const espectro = !!roto && estado.capas.espectro;
+    const matLosa = espectro
+      ? new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, roughness: 0.9, side: THREE.DoubleSide })
+      : new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas) return;
@@ -167,10 +185,10 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     }
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
-      const color = new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
+      const color = espectro ? new THREE.Color(0xffffff) : new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
       const entra = entraEnCalculo(m, fondoCota, top);
       if (!entra && !estado.capas.fuera) return;
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4, flatShading: true,
+      const mat = new THREE.MeshStandardMaterial({ color, vertexColors: espectro, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4, flatShading: true,
         emissive: estado.seleccion === m.id ? new THREE.Color(0x1f6f8b) : new THREE.Color(0x000000), emissiveIntensity: 0.6 });
       const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
       if (z1 - z0 <= 0) return;
@@ -180,6 +198,13 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         : rectangulos(m).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
       pols.forEach(pol => { const pr = new Prisma(pol, zs, mat, tinta); pr.conBordes = def; prismas.push(pr); });
     });
+    if (espectro && roto) {
+      // el mayor corrimiento real de la torre: el de la esquina más alejada del CR en la azotea
+      const rmax = Math.hypot(B / 2 + Math.abs(roto.cr.x), L / 2 + Math.abs(roto.cr.y));
+      const maximo = Math.max(...roto.niveles.map(nv => Math.abs(nv.d) + Math.abs(nv.th) * rmax), 1e-12);
+      const blanco = new THREE.Color(0xffffff), verde = new THREE.Color(css('--deformada', '#1d9e75'));
+      prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
+    }
     prismas.forEach(pr => { grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
     // viento
     const largo = 8;
@@ -357,7 +382,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     if (!roto || info.hidden) return;
     const giro = Math.abs(roto.thTop);
     info.innerHTML = `<b>Traslación × ${fmt(fMax, 0)}${giro > 1e-12 ? ` · giro × ${fmt(fMax * kGiro, 0)}` : ''}</b><br>azotea: δ = ${fmt(roto.dTop * 1000, 1)} mm` +
-      (giro > 1e-12 ? ` · θ = ${fmt(giro * 1e3, 3)} ‰ rad = ${fmt((giro * 180) / Math.PI * 60, 2)}′ (${roto.thTop < 0 ? 'horario' : 'antihorario'})` : ' · sin giro (solo traslación)');
+      (giro > 1e-12 ? ` · θ = ${fmt(giro * 1e3, 3)} ‰ rad = ${fmt((giro * 180) / Math.PI * 60, 2)}′ (${roto.thTop < 0 ? 'horario' : 'antihorario'})` : ' · sin giro (solo traslación)') +
+      (estado.capas.espectro ? (() => {
+        const { B, L } = medidas, rmax = Math.hypot(B / 2 + Math.abs(roto.cr.x), L / 2 + Math.abs(roto.cr.y));
+        const max = Math.max(...roto.niveles.map(nv => Math.abs(nv.d) + Math.abs(nv.th) * rmax));
+        return `<div class="espectro"><span>0</span><i></i><span>${fmt(max * 1000, 1)} mm</span></div><small>corrimiento real de cada punto (traslación + giro)</small>`;
+      })() : '');
   }
 
   let medidas = { B: 20, L: 16, h: 20, top: 20, fondoCota: 0 };

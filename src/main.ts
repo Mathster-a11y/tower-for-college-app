@@ -14,7 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, chip, h } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, h } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, ejemploAsimetrico, proyectoVacio, type Proyecto } from './engine/modelo';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
@@ -117,7 +117,7 @@ function dibujarAvance() {
 }
 function dibujarCapas() {
   const c = $('capas');
-  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ['deformada', 'Deformada (exagerada)', 'var(--deformada)']];
+  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [keyof typeof estado.capas, string, string]] : [])];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
     b.style.setProperty('--c', col);
@@ -455,3 +455,11 @@ $('b-sheets').addEventListener('click', () => {
 });
 // si la última vez quedó conectada, se vuelve a conectar sola
 try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).catch(e => { mensaje(`Google Sheets no responde: ${(e as Error).message}`); pistaSheets('Sin conexión: revisá la dirección'); }); } catch { /* sin almacenamiento */ }
+
+// notación matemática en toda la interfaz (sistema de diseño 2.1): se aplica a lo que se va dibujando
+{
+  let pend = false;
+  const pasar = () => { pend = false; aplicarMat(document); };
+  new MutationObserver(() => { if (!pend) { pend = true; requestAnimationFrame(pasar); } }).observe(document.body, { childList: true, subtree: true });
+  pasar();
+}

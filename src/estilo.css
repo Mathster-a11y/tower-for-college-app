@@ -821,3 +821,6 @@ dialog.tarjeta input { width: 100%; margin-top: 12px; }
 .tarjeta-botones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .planta .viga-portico, svg .viga-portico { stroke: var(--ink2); stroke-width: 3; stroke-dasharray: 7 4; stroke-linecap: round; }
+
+.espectro { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 11px var(--mono); color: var(--ink2); }
+.espectro i { flex: 1; height: 8px; border-radius: 4px; border: 1px solid var(--edge); background: linear-gradient(90deg, #ffffff, var(--deformada)); }
