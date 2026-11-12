@@ -95,21 +95,30 @@ export function dibujoGuia(f: Funicular, perfil: PerfilTorre[], tam: { ancho?: n
 export function dibujoPresiones(f: Funicular, tam: { ancho?: number; alto?: number } = {}): SVGSVGElement {
   const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(300, tam.alto ?? 360), mi = 54, md = 14, ms = 18, mb = 34;
   const puntos = f.puntos;
-  const eMax = Math.max(f.tercio, ...puntos.map(p => Math.max(p.nucleo, Math.abs(p.e))), Math.abs(f.e) || 0, 0.1) * 1.1;
-  const X = (x: number) => mi + ((x + eMax) / (2 * eMax)) * (ancho - mi - md);
+  // la torre en proporción: la misma escala en horizontal y en vertical (el lado de cada planta es 6 × su núcleo central)
   const zMin = f.zBase, zMax = f.zTop;
-  const Z = (z: number) => ms + ((zMax - z) / Math.max(zMax - zMin, 1)) * (alto - ms - mb);
+  const k = (alto - ms - mb) / Math.max(zMax - zMin, 1);
+  const eMax = Math.max(f.tercio * 3, ...puntos.map(p => Math.max(p.nucleo * 3, Math.abs(p.e))), Math.abs(f.e) || 0, 0.1) * 1.08;
+  const cx = mi + Math.max(eMax * k, (ancho - mi - md) / 2);
+  const X = (x: number) => cx + x * k;
+  const Z = (z: number) => ms + (zMax - z) * k;
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'funicular', role: 'img', 'aria-label': `Línea de presiones, viento ${f.dir}: ${puntos.filter(p => !p.dentro).length} niveles fuera del núcleo central` }) as SVGSVGElement;
   // núcleo central de cada nivel (banda) y tercio medio de la fundación
   const banda: string[] = [];
   const der = puntos.map(p => `${X(p.nucleo).toFixed(1)},${Z(p.z).toFixed(1)}`);
   const izq = puntos.map(p => `${X(-p.nucleo).toFixed(1)},${Z(p.z).toFixed(1)}`).reverse();
   banda.push(...der, `${X(f.tercio).toFixed(1)},${Z(f.zBase).toFixed(1)}`, `${X(-f.tercio).toFixed(1)},${Z(f.zBase).toFixed(1)}`, ...izq);
+  // contorno de la torre (lado de cada nivel) y losas
+  const contorno = [...puntos.map(p => `${X(p.nucleo * 3).toFixed(1)},${Z(p.z).toFixed(1)}`), `${X(f.tercio * 3).toFixed(1)},${Z(f.zBase).toFixed(1)}`, `${X(-f.tercio * 3).toFixed(1)},${Z(f.zBase).toFixed(1)}`, ...puntos.map(p => `${X(-p.nucleo * 3).toFixed(1)},${Z(p.z).toFixed(1)}`).reverse()];
+  if (puntos.length) svg.appendChild(el('polygon', { points: contorno.join(' '), class: 'f-torre', fill: 'none', stroke: 'var(--ink2)', 'stroke-width': 1 }));
+  puntos.forEach(p => svg.appendChild(el('line', { x1: X(-p.nucleo * 3), x2: X(p.nucleo * 3), y1: Z(p.z), y2: Z(p.z), stroke: 'var(--grilla)', 'stroke-width': .6 })));
   if (puntos.length) svg.appendChild(el('polygon', { points: banda.join(' '), class: 'f-banda' }));
   svg.appendChild(el('line', { x1: X(0), x2: X(0), y1: ms - 6, y2: alto - mb + 4, class: 'f-eje' }));
   // ejes y rótulos
-  [-eMax, 0, eMax].forEach(v => svg.appendChild(el('text', { x: X(v), y: alto - mb + 18, class: 'f-txt f-nota', 'text-anchor': v < 0 ? 'start' : v > 0 ? 'end' : 'middle' }, `${fmt(v, 1)} m`)));
-  svg.appendChild(el('text', { x: X(0), y: alto - 4, class: 'f-txt f-nota', 'text-anchor': 'middle' }, 'distancia al eje (escala horizontal ampliada)'));
+  const lb = f.tercio * 3;
+  svg.appendChild(el('text', { x: X(-lb) - 4, y: alto - mb + 16, class: 'f-txt f-nota', 'text-anchor': 'end' }, `${fmt(-lb, 1)} m`));
+  svg.appendChild(el('text', { x: X(lb) + 4, y: alto - mb + 16, class: 'f-txt f-nota', 'text-anchor': 'start' }, `+${fmt(lb, 1)} m`));
+  svg.appendChild(el('text', { x: X(0), y: alto - 4, class: 'f-txt f-nota', 'text-anchor': 'middle' }, 'la torre en proporción: misma escala en horizontal y en vertical'));
   const cada = Math.max(1, Math.ceil(puntos.length / 12));
   puntos.forEach((p, i) => { if ((i % cada === 0 || i === puntos.length - 1) && Math.abs(Z(p.z) - Z(f.zBase)) > 10) svg.appendChild(el('text', { x: mi - 6, y: Z(p.z) + 4, class: 'f-txt f-nota', 'text-anchor': 'end' }, p.nivel)); });
   svg.appendChild(el('text', { x: mi - 6, y: Z(f.zBase) + 4, class: 'f-txt f-nota', 'text-anchor': 'end' }, 'base'));
