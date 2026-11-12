@@ -789,3 +789,9 @@ text[data-par].ultimo { font-size: 15px; }
 .sem.verde { color: var(--ok); background: var(--ok-fill); }
 .sem.amarillo { color: var(--revisar); background: var(--revisar-fill); }
 .sem.rojo { color: var(--mal); background: var(--mal-fill); }
+@media print {
+  .desglose .dg-dibujos { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .desglose .dg-dibujos figure { margin: 0; break-inside: avoid; }
+  .desglose .dg-dibujos img { width: 100%; height: auto; border: .5px solid #ccc; }
+  .desglose .dg-dibujos figcaption { font-size: 8pt; color: #555; }
+}

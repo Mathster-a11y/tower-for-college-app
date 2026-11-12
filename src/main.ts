@@ -311,7 +311,7 @@ $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplaz
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
-$('b-desglose').addEventListener('click', () => { cerrarMenus(); try { imprimirDesglose(); } catch (e) { fallo('No se pudo armar el desglose', e); } });
+$('b-desglose').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
 $('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();

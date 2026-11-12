@@ -6,6 +6,7 @@
 import { estado } from './estado';
 import { AUTOR, AVISO } from '../autoria';
 import { h } from './comp';
+import { dibujosPorHoja, type Dibujo } from './dibujosDesglose';
 import { desglosar, num, resumenHoja, textoDiferencia, type EntradaDesglose, type HojaDesglose } from '../engine/desglose';
 
 export function entradaDesglose(): EntradaDesglose {
@@ -31,7 +32,7 @@ const cumple = (b: boolean | null) => (b === null ? '—' : b ? '✓ verifica' :
 const fecha = () => new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 
 // ------------------------------------------------------------------ PDF (documento para imprimir)
-export function armarDesglose(hojas: HojaDesglose[]): HTMLElement {
+export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): HTMLElement {
   const p = estado.proyecto;
   const doc = h('div', { class: 'informe desglose' });
   doc.append(h('header', { class: 'inf-portada' },
@@ -51,7 +52,17 @@ export function armarDesglose(hojas: HojaDesglose[]): HTMLElement {
   t.append(h('tr', {}, h('td', {}, '7 · Flex comp PB paralelos'), h('td', { colspan: '6' }, 'Fuera del desglose: su matemática se revisa aparte (ver la última página).')));
   intro.append(t);
   doc.append(intro);
-  hojas.forEach((hj, i) => doc.append(seccionHoja(hj, i + 1)));
+  hojas.forEach((hj, i) => {
+    const sec = seccionHoja(hj, i + 1);
+    const dib = dibujos[i] ?? [];
+    if (dib.length) {
+      sec.append(h('h3', {}, 'Dibujos'));
+      const g = h('div', { class: 'dg-dibujos' });
+      dib.forEach(d => g.append(h('figure', {}, h('img', { src: d.png, alt: d.titulo }), h('figcaption', {}, d.titulo))));
+      sec.append(g);
+    }
+    doc.append(sec);
+  });
   const s7 = h('section', { class: 'inf-hoja' }, h('h2', {}, '7 · Flex comp PB paralelos — pendiente de revisión'));
   s7.append(h('p', {}, 'Esta hoja no entra en el desglose: la matemática no está terminada. Lo que se sabe hasta ahora:'));
   s7.append(h('ul', {}, ...PENDIENTE_FLEX.map(x => h('li', {}, x))));
@@ -102,11 +113,12 @@ function seccionHoja(hj: HojaDesglose, n: number): HTMLElement {
   return s;
 }
 
-export function imprimirDesglose() {
+export async function imprimirDesglose() {
   document.querySelector('.informe')?.remove();
+  const dib = await dibujosPorHoja();
   const raiz = document.documentElement, temaAntes = raiz.getAttribute('data-theme');
   raiz.setAttribute('data-theme', 'light');
-  const doc = armarDesglose(desglosar(entradaDesglose()));
+  const doc = armarDesglose(desglosar(entradaDesglose()), dib);
   document.body.append(doc);
   document.body.classList.add('imprimiendo');
   const fin = () => {
@@ -114,6 +126,7 @@ export function imprimirDesglose() {
     if (temaAntes === null) raiz.removeAttribute('data-theme'); else raiz.setAttribute('data-theme', temaAntes);
   };
   window.addEventListener('afterprint', fin);
+  await Promise.all([...doc.querySelectorAll('img')].map(i => (i as HTMLImageElement).decode().catch(() => undefined)));
   setTimeout(() => window.print(), 60);
 }
 
@@ -124,7 +137,7 @@ const SEM: Record<string, { c: string; f: string }> = { verde: { c: '1A7A3A', f:
 const FUENTE = 'Calibri';
 
 /** arma el .pptx (pptxgenjs se carga recién al usarlo) y devuelve el archivo */
-export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): Promise<{ escribir: (nombre: string) => Promise<unknown>; diapositivas: number }> {
+export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string, dibujos: Dibujo[][] = []): Promise<{ escribir: (nombre: string) => Promise<unknown>; diapositivas: number }> {
   const { default: PptxGenJS } = await import('pptxgenjs');
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';                                   // 13,33 × 7,5 in
@@ -166,6 +179,22 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): 
     st.addShape('rect', { x: 8.4, y: 1.45, w: 4.4, h: 5.3, fill: { color: 'F4F6F8' }, line: { color: 'D0D7DE' } });
     st.addText([{ text: 'Datos\n', options: { bold: true, fontSize: 15 } }, ...hj.datos.map(d => ({ text: `${d.nombre} = ${d.valor}\n`, options: { fontSize: 13 } }))] as never,
       { x: 8.6, y: 1.6, w: 4.0, h: 5.0, fontFace: FUENTE, color: TINTA, valign: 'top' });
+    // dibujos de la app que explican la hoja: dos por diapositiva (uno solo si es muy ancho)
+    const dib = dibujos[i] ?? [];
+    for (let k = 0; k < dib.length;) {
+      const solo = (d: Dibujo) => d.ancho / d.alto > 1.6 || d.ancho > 900;
+      const a = dib[k];
+      const par = solo(a) ? [a] : dib.slice(k, k + 2).filter(d => !solo(d));
+      k += par.length || 1;
+      const sd = nueva(`${i + 1} · ${hj.hoja}: dibujos`, par.map(d => d.titulo).join('  ·  '));
+      const caja = { x: 0.4, y: 1.4, w: 12.5, h: 5.5 };
+      const wCol = (caja.w - 0.3 * (par.length - 1)) / par.length;
+      par.forEach((d, j) => {
+        const esc = Math.min(wCol / d.ancho, caja.h / d.alto);
+        const w = d.ancho * esc, hh = d.alto * esc;
+        sd.addImage({ data: d.png, x: caja.x + j * (wCol + 0.3) + (wCol - w) / 2, y: caja.y + (caja.h - hh) / 2, w, h: hh });
+      });
+    }
     // pasos (6 por diapositiva)
     for (let k = 0; k < hj.pasos.length; k += 6) {
       const sp = nueva(`${i + 1} · ${hj.hoja}: paso por paso${hj.pasos.length > 6 ? ` (${k / 6 + 1}/${Math.ceil(hj.pasos.length / 6)})` : ''}`, 'Fórmula, sustitución con los números, resultado analítico y resultado de la planilla');
@@ -222,7 +251,7 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): 
 
 export async function descargarPPTX() {
   const p = estado.proyecto;
-  const a = await armarPPTX(desglosar(entradaDesglose()), p.nombre || 'Proyecto');
+  const a = await armarPPTX(desglosar(entradaDesglose()), p.nombre || 'Proyecto', await dibujosPorHoja());
   const nombre = `${(p.nombre || 'proyecto').replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g, '_').slice(0, 60)}_desglose.pptx`;
   await a.escribir(nombre);
   return a.diapositivas;
