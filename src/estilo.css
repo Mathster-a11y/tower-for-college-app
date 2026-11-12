@@ -346,11 +346,19 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 
 /* ------------------------------------------------------------------ pantallas más chicas */
 @media (max-width: 1280px) {
-  .app { grid-template-columns: 70px minmax(300px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow: auto; }
+  /* tablets: la fila de trabajo (riel, panel, planta) nunca queda más baja que 560 px; el 3D y el avance van debajo y se llega desplazando */
+  .app { grid-template-columns: 70px minmax(300px, 360px) minmax(0, 1fr); grid-template-rows: minmax(560px, 1fr) auto; overflow: auto; -webkit-overflow-scrolling: touch; }
   .derecha { grid-column: 2 / 4; border-left: 0; border-top: 5px solid var(--edge); flex-direction: row; flex-wrap: wrap; overflow: visible; }
   .derecha .bloque3d { flex: 1 1 380px; }
   .derecha .vista3d { height: 300px; }
   .derecha .avance { flex: 1 1 260px; }
+}
+/* pantallas táctiles: botones y casillas con lugar para el dedo (44 px es lo recomendado) */
+@media (pointer: coarse) {
+  .riel button { padding: 10px 2px 8px; }
+  .menu button { padding: 10px 12px; }
+  .zoom-planta button { min-width: 40px; min-height: 40px; }
+  input, select { min-height: 36px; }
 }
 @media (max-width: 760px) {
   body { height: auto; }

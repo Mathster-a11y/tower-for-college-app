@@ -1,0 +1,16 @@
+{
+  "name": "Torre 3D · Edificios en torre",
+  "short_name": "Torre 3D",
+  "description": "Cálculo de edificios en torre (viento, estabilidad, rigidez, rototraslación y flexión) para el curso de la FAUD-UNMDP.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f5f3",
+  "theme_color": "#1a6bbd",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

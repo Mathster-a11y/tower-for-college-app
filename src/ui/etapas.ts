@@ -346,7 +346,7 @@ const rototrasl: Etapa = {
         bt('◀', 'Quitar el último rayo y su lado', () => ir(Math.max(1, (hasta ?? nPares) - 1)), hasta === 1),
         bt('▶ Paso a paso', 'Agregar el próximo rayo y su lado paralelo', () => ir(hasta === undefined ? 1 : Math.min(nPares, hasta + 1)), hasta === nPares),
         bt('Todo', 'Ver la construcción completa', () => ir(undefined), hasta === undefined),
-        h('span', { class: 'nota' }, hasta === undefined ? 'Pasá el mouse por un rayo o un lado: se resaltan los dos.' : `Rayo O${L(hasta - 1)} y lado ${L(hasta - 1)} (${hasta} de ${nPares})${hasta === nPares ? ': el primer y el último lado se cortan en R' : ''}`)));
+        h('span', { class: 'nota' }, hasta === undefined ? 'Pasá el mouse (o tocá) un rayo o un lado: se resaltan los dos.' : `Rayo O${L(hasta - 1)} y lado ${L(hasta - 1)} (${hasta} de ${nPares})${hasta === nPares ? ': el primer y el último lado se cortan en R' : ''}`)));
     }
     const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) }, { hasta: paso === 1 ? hasta : undefined });
     c.append(svg);

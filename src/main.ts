@@ -1,3 +1,4 @@
+import './compat';
 import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
 import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
@@ -463,4 +464,9 @@ try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).cat
   const pasar = () => { pend = false; aplicarMat(document); };
   new MutationObserver(() => { if (!pend) { pend = true; requestAnimationFrame(pasar); } }).observe(document.body, { childList: true, subtree: true });
   pasar();
+}
+
+// instalar como app (tablet o compu): con el link publicado se guarda una copia para usarla sin internet
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !import.meta.env.DEV) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* sin copia: la app igual funciona en línea */ }); });
 }
