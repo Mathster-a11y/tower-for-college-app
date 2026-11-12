@@ -3,6 +3,7 @@ import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
+import { imprimirDesglose, descargarPPTX } from './ui/desglose';
 import { imprimirLaminas } from './ui/lamina';
 import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
@@ -310,6 +311,8 @@ $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplaz
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
+$('b-desglose').addEventListener('click', () => { cerrarMenus(); try { imprimirDesglose(); } catch (e) { fallo('No se pudo armar el desglose', e); } });
+$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
 $('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas(); });

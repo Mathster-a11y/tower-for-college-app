@@ -757,3 +757,20 @@ text[data-par].ultimo { font-size: 15px; }
 .areas-panel button { font-size: 12px; white-space: normal; }
 .planta .nodos-hover rect, .planta .nodos-hover polygon { stroke: var(--ink2); }
 .planta .iman-destino { fill: none; stroke: var(--elegido); stroke-width: 2; pointer-events: none; }
+/* desglose analítico (PDF) */
+@media print {
+  .desglose .dg-tabla { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin: 1mm 0 3mm; }
+  .desglose .dg-tabla th { background: #eef2f6; font-weight: 600; color: #444; }
+  .desglose .dg-tabla th, .desglose .dg-tabla td { border-bottom: .5px solid #bbb; padding: .8mm 1.5mm; vertical-align: top; }
+  .desglose .dg-tabla td.n, .desglose .dg-tabla th.n { text-align: right; white-space: nowrap; font-family: var(--mono); }
+  .desglose .dg-tabla tr { break-inside: avoid; }
+  .desglose .dg-pasos .dg-f { font-weight: 600; }
+  .desglose .dg-pasos .dg-s { font-family: var(--mono); font-size: 8pt; color: #333; }
+  .desglose .dg-nota { font-size: 7.5pt; color: #7a5600; font-style: italic; margin-top: .5mm; }
+  .desglose .dg-celda { font-size: 7pt; color: #777; font-family: var(--mono); }
+  .desglose tr.dg-dif td { background: #fbf1dc; }
+  .desglose .dg-veredicto { font-weight: 600; }
+  .desglose .dg-fuente { color: #666; }
+  .desglose .dg-niveles { font-size: 7.5pt; }
+  .desglose .dg-difs li { margin-bottom: 1mm; }
+}
