@@ -55,12 +55,24 @@ export interface HojaDesglose {
   diferencias: string[];
 }
 
-/** tolerancia: 0,5 % del mayor o 1e-4 en absoluto */
+export type Semaforo = 'verde' | 'amarillo' | 'rojo';
+/**
+ * Diferencia entre la planilla y el analítico: Δ = Excel − analítico y el % sobre el analítico.
+ * Semáforo: verde < 0,5 % (o |Δ| ≤ 0,0001), amarillo de 0,5 % a 5 %, rojo > 5 %.
+ * Si el analítico da 0 y la planilla no, el % no existe: se marca rojo y se muestra solo Δ.
+ */
+export function diferencia(a: number, e: number | null): { delta: number; pct: number | null; nivel: Semaforo } | null {
+  if (e === null) return null;
+  if (!isFinite(a) || !isFinite(e)) return { delta: NaN, pct: null, nivel: !isFinite(a) && !isFinite(e) ? 'verde' : 'rojo' };
+  const delta = e - a;
+  if (Math.abs(delta) <= 1e-4) return { delta, pct: Math.abs(a) > 1e-12 ? (Math.abs(delta) / Math.abs(a)) * 100 : 0, nivel: 'verde' };
+  if (Math.abs(a) <= 1e-12) return { delta, pct: null, nivel: 'rojo' };
+  const pct = (Math.abs(delta) / Math.abs(a)) * 100;
+  return { delta, pct, nivel: pct < 0.5 ? 'verde' : pct <= 5 ? 'amarillo' : 'rojo' };
+}
 export function comparar(a: number, e: number | null): Resultado {
-  if (e === null) return 'solo analítico';
-  if (!isFinite(a) && !isFinite(e)) return 'coincide';
-  if (!isFinite(a) || !isFinite(e)) return 'difiere';
-  return Math.abs(a - e) <= Math.max(1e-4, 0.005 * Math.max(Math.abs(a), Math.abs(e))) ? 'coincide' : 'difiere';
+  const d = diferencia(a, e);
+  return d === null ? 'solo analítico' : d.nivel === 'verde' ? 'coincide' : 'difiere';
 }
 export const num = (x: number, d = 2) => (!isFinite(x) ? '—' : x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d }).replace('-', '−'));
 const n0 = (x: number | null | undefined) => (x == null || !isFinite(x) ? 0 : x);
@@ -98,14 +110,14 @@ function hojaViento(x: EntradaDesglose): HojaDesglose {
     const zc = Math.max(f.z, 5);
     pasos.push({ titulo: `Coeficiente de exposición Kz · ${f.nombre} (z = ${num(f.z)} m)`, formula: 'Kz = 2,01 · (z / zg)^(2/α)',
       sustitucion: `Kz = 2,01 · (${num(zc)} / ${num(v.zg, 0)})^(2/${num(v.alfa, 1)})${f.z < 5 ? '  (z < 5 m: se toma z = 5 m)' : ''}`,
-      analitico: Kz(f.z), excel: rv.Kz[f.k], celda: `viento!C${f.k + 5}`, unidad: '', dec: 3,
+      analitico: Kz(f.z), excel: rv.Kz[f.k], celda: `viento!H${f.k + 5}`, unidad: '', dec: 3,
       nota: f.z < 5 ? 'CIRSOC 102, Tabla 5, nota 2: debajo de 5 m se usa Kz de z = 5 m. La planilla usa la altura real.' : undefined });
     pasos.push({ titulo: `Presión dinámica qz · ${f.nombre}`, formula: 'qz = 0,613 · Kzt · Kd · V² · I · Kz',
       sustitucion: `qz = 0,613 · ${num(v.Kzt)} · ${num(v.Kd)} · ${num(v.V, 0)}² · ${num(v.I)} · ${num(Kz(f.z), 3)}`,
-      analitico: qz(f.z), excel: rv.qz[f.k], celda: `viento!D${f.k + 5}`, unidad: 'N/m²', dec: 1 });
+      analitico: qz(f.z), excel: rv.qz[f.k], celda: `viento!M${f.k + 5}`, unidad: 'N/m²', dec: 1 });
   });
   pasos.push({ titulo: 'Presión dinámica en la altura media de la cubierta qh', formula: 'qh = qz (z = h)', sustitucion: `qh = qz(${num(zh)} m)`,
-    analitico: qh, excel: rv.qh, celda: 'viento!máx(D)', unidad: 'N/m²', dec: 1 });
+    analitico: qh, excel: rv.qh, celda: 'viento!N4', unidad: 'N/m²', dec: 1 });
   pasos.push({ titulo: `Presión a barlovento · ${top?.nombre ?? ''}`, formula: 'p = qz · G · Cp', sustitucion: `p = ${num(top ? qz(top.z) : 0, 1)} · ${num(v.G)} · ${num(v.Cpb)}`,
     analitico: top ? pb(top.z) : 0, excel: top ? rv.P[top.k] : null, celda: top ? `viento!P${top.k + 5}` : '', unidad: 'N/m²', dec: 1 });
   pasos.push({ titulo: 'Succión a sotavento (igual en toda la altura)', formula: 'p = qh · G · Cp', sustitucion: `p = ${num(qh, 1)} · ${num(v.G)} · (${num(v.Cps)})`,
@@ -140,8 +152,9 @@ function hojaViento(x: EntradaDesglose): HojaDesglose {
 }
 
 // ------------------------------------------------------------------ 2 · M, N y Q
-function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
-  const d = x.d, m = x.r.mnyq, Z = d.viento.Z;
+/** fuerzas de viento por nivel según la guía (sin viento en PB ni subsuelos), en las dos direcciones */
+function fuerzasAnaliticas(x: EntradaDesglose) {
+  const d = x.d, Z = d.viento.Z;
   const ks = x.filaNivel;                                            // filas de los niveles, de arriba hacia abajo
   const iPB = ks.findIndex((k, j) => n0(Z[k]) <= 0 && (j === 0 || n0(Z[ks[j - 1]]) > 0));
   const zs = ks.map(k => n0(Z[k]));
@@ -152,6 +165,12 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
   // altura de influencia: mitad del entrepiso de arriba y mitad del de abajo; en la azotea, medio entrepiso; sin viento en PB y abajo
   const hInf = zs.map((z, j) => (iPB >= 0 && j >= iPB ? 0 : j === 0 ? (zs.length > 1 ? (z - zs[1]) / 2 : 0) : (zs[j - 1] - (zs[j + 1] ?? z)) / 2));
   const WA = hInf.map((h, j) => h * Bv[j] * p[j]), WB = hInf.map((h, j) => h * Lv[j] * p[j]);
+  return { d, ks, iPB, zs, Bv, Lv, p, hInf, WA, WB };
+}
+
+function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
+  const m = x.r.mnyq;
+  const { d, ks, iPB, zs, Bv, Lv, p, hInf, WA, WB } = fuerzasAnaliticas(x);
   const QA: number[] = [], MA: number[] = [], QB: number[] = [], MB: number[] = [];
   ks.forEach((_, j) => {
     QA[j] = j ? QA[j - 1] + WA[j - 1] : 0; QB[j] = j ? QB[j - 1] + WB[j - 1] : 0;
@@ -195,6 +214,7 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
   ];
   const vis = ks.map((k, j) => ({ k, j })).filter(o => o.j <= (iPB >= 0 ? iPB : last));
   const dif: string[] = [];
+  if (ks[0] === 0) dif.push('Más de 49 niveles sobre PB: el nivel más alto cae en la fila 4 de M,NyQ, que la planilla deja siempre en 0 (B4 = 0). El primer entrepiso sale con altura negativa y el corte, el momento y el vuelco de la planilla no sirven. Error de la planilla (límite de 49 niveles).');
   if (comparar(W, m.G65) === 'difiere') dif.push('Viento en PB: la planilla suma la fuerza de la fila de PB (altura de influencia hacia abajo); la guía no, porque esa franja descarga directo en el terreno. Por eso W, Q, M y el vuelco dan algo distintos.');
   return {
     hoja: 'M,NyQ',
@@ -274,19 +294,24 @@ function hojaJ(x: EntradaDesglose, orto: boolean): HojaDesglose {
   pasos.push({ titulo: `Suma de los J (viento ${dir})`, formula: 'ΣJ = Σ J de cada pieza', sustitucion: usadas.map(o => num(o.a.total, 3)).slice(0, 8).join(' + ') + (usadas.length > 8 ? ' + …' : ''),
     analitico: total, excel: res.AY24, celda: `${orto ? 'J ortog.' : 'J paral.'}!AY24`, unidad: 'm⁴', dec: 3 });
   // J mínimo por deformación: δ = W·h³ / (8·E·J) ≤ h / k  →  J ≥ k · W · h² / (8 · E)
-  const m = x.r.mnyq;
-  const W = jmin.W, hT = Math.max(...m.B.filter(isFinite));
+  const fz = fuerzasAnaliticas(x);
+  const W = sum(orto ? fz.WB : fz.WA);                                // corte en la base de la dirección, calculado acá
+  const hT = fz.zs[0] - (fz.iPB >= 0 ? fz.zs[fz.iPB] : 0);           // altura total de la torre sobre PB
   const E = (DIV[x.hormigon] ?? DIV.H30) * 400 / 8;
   const Jmin = (500 * W * hT ** 2) / (8 * E);
   const JminE = jmin.tabla.find(t => t.hormigon === x.hormigon)?.h500 ?? jmin.tabla[0].h500;
-  pasos.push({ titulo: `Altura total de la torre`, formula: 'h = cota de la azotea', sustitucion: `h = ${num(hT)} m`, analitico: hT, excel: jmin.h, celda: orto ? 'M,NyQ!G69' : 'máx(M,NyQ!B4:B43)', unidad: 'm', dec: 2,
-    nota: !orto && comparar(hT, jmin.h) === 'difiere' ? 'La hoja de paralelos toma la altura de las primeras 40 filas solamente.' : undefined });
+  pasos.push({ titulo: `Fuerza del viento ${dir} en la base`, formula: `W = Σ h influencia · ${orto ? 'L' : 'B'} · p neta`, sustitucion: `W = ${num(W, 2)} t`, analitico: W, excel: jmin.W, celda: orto ? 'M,NyQ!G65·F49/E49' : 'M,NyQ!G65', unidad: 't', dec: 2,
+    nota: orto ? 'La planilla no calcula el viento B: escala el W del viento A con los anchos de una fila (L/B de la fila 49).' : undefined });
+  pasos.push({ titulo: `Altura total de la torre`, formula: 'h = cota de la azotea − cota de PB', sustitucion: `h = ${num(hT)} m`, analitico: hT, excel: jmin.h, celda: orto ? 'M,NyQ!G69' : 'máx(M,NyQ!B4:B43)', unidad: 'm', dec: 2,
+    nota: !orto && comparar(hT, jmin.h) === 'difiere' ? (jmin.h === 0 ? 'Error de la planilla: con 10 niveles o menos, las filas 4 a 43 de M,NyQ están vacías y h da 0; el J mínimo da 0 y el control de rigidez verifica siempre.' : 'La hoja de paralelos toma la altura de las filas 4 a 43 solamente.') : undefined });
   pasos.push({ titulo: `J mínimo para h/500 (${x.hormigon})`, formula: 'δ = W·h³ / (8·E·J) ≤ h/500  →  J ≥ 500 · W · h² / (8 · E)',
     sustitucion: `J ≥ 500 · ${num(W, 2)} · ${num(hT)}² / (8 · ${num(E, 0)})`, analitico: Jmin, excel: JminE, celda: `${orto ? 'J ortog.' : 'J paral.'}!M37`, unidad: 'm⁴', dec: 2,
     nota: `E = ${num(E / 1e5, 1)}·10⁵ t/m², el que resulta de los divisores de la planilla (${num(DIV[x.hormigon] ?? DIV.H30, 0)} para h/400).` });
   const dif: string[] = [];
   if (usadas.some(o => comparar(o.a.sim, res.filas[o.i].N - (orto && o.i === 19 ? res.filas[o.i].U : 0)) === 'difiere')) dif.push('Piezas simétricas con alas distintas: la planilla calcula el J respecto del medio del alma; el baricentro real se corre hacia el ala más grande y el J verdadero es menor.');
   if (orto && usadas.some(o => o.i === 19 && o.a.circ > 0)) dif.push('Fila 23 de «ortogonales»: N ya suma el tubo circular (U) y AY lo vuelve a sumar: el tubo cuenta dos veces.');
+  if (!orto && jmin.h === 0 && hT > 0) dif.push('J mínimo: la hoja de paralelos toma h = MAX(M,NyQ!B4:B43). Los niveles se cargan desde abajo, así que con 10 niveles o menos esas filas están vacías: h = 0, J mínimo = 0 y el control verifica siempre. Error de la planilla; la columna Guía/CIRSOC de la app usa la altura total.');
+  if (comparar(W, jmin.W) === 'difiere') dif.push(`W de la J mínima: la planilla usa ${orto ? 'el W del viento A escalado por L/B de la fila 49, con el viento en PB' : 'el W total de M,NyQ, con el viento en PB'}; el analítico suma las fuerzas de la dirección ${dir} sin PB (criterio de la guía, pendiente de decidir).`);
   if (usadas.some(o => o.f.sinYAC)) dif.push('Filas 11 y 12 de «paralelos»: faltan las fórmulas Y y AC en la planilla virgen; el alma y el ala superior de esas piezas no se suman.');
   return {
     hoja: orto ? 'J Tabiques ortogonales' : 'J Tabiques paralelos',
@@ -316,6 +341,7 @@ function hojaRoto(x: EntradaDesglose, menor: boolean): HojaDesglose {
   const SJ = sum(par.map(o => o.J)), xr = SJ ? sum(par.map(o => o.J * o.x)) / SJ : NaN;
   const SJp = sum(perp.map(o => o.J)), yr = SJp ? sum(perp.map(o => o.J * o.x)) / SJp : 0;
   const Mt = Q * xr;
+  const hW = Q ? Mv / Q : 0;                                          // altura de la resultante: M rot = Q rot · hW
   const SJa2 = sum(par.map(o => o.J * (o.x - xr) ** 2)) + sum(perp.map(o => o.J * (o.x - yr) ** 2));
   const tras = (J: number) => (SJ ? (Q * J) / SJ : 0);
   const rot = (J: number, a: number) => (SJa2 ? (-Mt * J * a) / SJa2 : 0);
@@ -334,13 +360,16 @@ function hojaRoto(x: EntradaDesglose, menor: boolean): HojaDesglose {
     const a = ej.x - xr;
     pasos.push({ titulo: `Traslación · ${nom(ej.i)}`, formula: 'Qtras = Q · J / ΣJ', sustitucion: `Qtras = ${num(Q, 2)} · ${num(ej.J, 3)} / ${num(SJ, 3)}`, analitico: tras(ej.J), excel: rr.E[ej.i], celda: `${hoja}!E${ej.i + 5}`, unidad: 't', dec: 3 });
     pasos.push({ titulo: `Rotación · ${nom(ej.i)} (a = ${num(a, 2)} m)`, formula: 'Qrot = − Mt · J · a / Σ J·a²', sustitucion: `Qrot = − ${num(Mt, 2)} · ${num(ej.J, 3)} · ${num(a, 2)} / ${num(SJa2, 2)}`, analitico: rot(ej.J, a), excel: rr.N[ej.i], celda: `${hoja}!N${ej.i + 5}`, unidad: 't', dec: 3 });
-    pasos.push({ titulo: `Corte total · ${nom(ej.i)}`, formula: 'Q = Qtras + Qrot', sustitucion: `Q = ${num(tras(ej.J), 3)} + (${num(rot(ej.J, a), 3)})`, analitico: tras(ej.J) + rot(ej.J, a), excel: rr.O[ej.i], celda: `${hoja}!O${ej.i + 5}`, unidad: 't', dec: 3,
-      nota: 'La planilla suma en O la columna G (la parte del momento, en tm) con N (corte de rotación, en t): mezcla unidades.' });
+    pasos.push({ titulo: `Corte total · ${nom(ej.i)}`, formula: 'Q = Qtras + Qrot', sustitucion: `Q = ${num(tras(ej.J), 3)} + (${num(rot(ej.J, a), 3)})`, analitico: tras(ej.J) + rot(ej.J, a), excel: rr.E[ej.i] + rr.N[ej.i], celda: `${hoja}!E${ej.i + 5} + N${ej.i + 5}`, unidad: 't', dec: 3,
+      nota: 'La planilla no tiene una columna con el corte total: se suman E y N.' });
     pasos.push({ titulo: `Momento de traslación · ${nom(ej.i)}`, formula: 'Mtras = Mv · J / ΣJ', sustitucion: `M = ${num(Mv, 1)} · ${num(ej.J, 3)} / ${num(SJ, 3)}`, analitico: SJ ? (Mv * ej.J) / SJ : 0, excel: rr.G[ej.i], celda: `${hoja}!G${ej.i + 5}`, unidad: 'tm', dec: 1 });
+    pasos.push({ titulo: `Momento total · ${nom(ej.i)}`, formula: 'M = Mtras + Qrot · hW   (hW = Mv / Q)', sustitucion: `M = ${num(SJ ? (Mv * ej.J) / SJ : 0, 1)} + (${num(rot(ej.J, a), 3)}) · ${num(hW, 2)}`,
+      analitico: (SJ ? (Mv * ej.J) / SJ : 0) + rot(ej.J, a) * hW, excel: rr.O[ej.i], celda: `${hoja}!O${ej.i + 5}`, unidad: 'tm', dec: 1,
+      nota: 'La planilla calcula O = G + N: suma el corte de rotación (t) sin multiplicarlo por hW. Da bien solo cuando no hay rotación.' });
   }
   const dif: string[] = [];
-  if (par.some(o => comparar(tras(o.J) + rot(o.J, o.x - xr), rr.O[o.i]) === 'difiere')) dif.push('Columna O (total): la planilla suma G + N, es decir el momento de traslación (tm) más el corte de rotación (t). El total correcto de cada pieza es Q tras + Q rot (en t) y su momento M tras + Q rot · hW (en tm).');
-  if (menor && perp.some(o => o.i >= 34)) dif.push('Cara menor: B51 e I51 suman solo las filas 28 a 38; las piezas perpendiculares de las filas 39 a 50 quedan afuera del eje de la otra dirección.');
+  if (par.some(o => comparar((SJ ? (Mv * o.J) / SJ : 0) + rot(o.J, o.x - xr) * hW, rr.O[o.i]) === 'difiere')) dif.push(`Columna O (momento total): la planilla calcula O = G + N, es decir el momento de traslación (tm) más el corte de rotación (t) sin multiplicarlo por hW = ${num(hW, 2)} m. El momento correcto es M tras + Q rot · hW. «Flex comp PB paralelos» lee O como momento y arrastra el error. La columna Guía/CIRSOC de la app usa el momento correcto.`);
+  if (menor && perp.some(o => o.i >= 34)) dif.push('Cara menor: B51 e I51 suman solo las filas 28 a 38, es decir las piezas de las filas 1 a 8 de «J paralelos». Las de las filas 9 a 20, entre ellas las asimétricas (L, C, T), que la app ubica primero en las filas 13 y 14, quedan afuera: el eje de las perpendiculares se corre y todas las rotaciones cambian en el mismo porcentaje. Error de la planilla; la columna Guía/CIRSOC de la app usa todas las piezas.');
   if (!menor && par.some(o => o.i >= 15)) dif.push('L25 (control Σ J·a) suma solo las filas 5 a 19: con piezas en las filas 20 a 24 no da cero aunque el cálculo esté bien.');
   if (comparar(SJa2, rr.M51) === 'difiere' && perp.some(o => o.i === 23 || o.i === 24)) dif.push('Filas 28–29 (atajo): la planilla las refiere a su propio promedio en vez del eje de las perpendiculares.');
   return {
@@ -354,8 +383,8 @@ function hojaRoto(x: EntradaDesglose, menor: boolean): HojaDesglose {
     datos: [{ nombre: 'Q (corte)', valor: `${num(Q, 2)} t` }, { nombre: 'Mv (momento)', valor: `${num(Mv, 1)} tm` }, { nombre: 'Piezas paralelas', valor: String(par.length) }, { nombre: 'Piezas perpendiculares', valor: String(perp.length) }],
     pasos,
     tablas: [{
-      titulo: 'Reparto en cada pieza paralela', columnas: [{ nombre: 'J / ΣJ', unidad: '', dec: 4 }, { nombre: 'Q tras', unidad: 't', dec: 3 }, { nombre: 'Q rot', unidad: 't', dec: 3 }, { nombre: 'Q total', unidad: 't', dec: 3 }],
-      filas: par.map(o => ({ etiqueta: `${nom(o.i)} · x = ${num(o.x)} m`, valores: [[SJ ? o.J / SJ : 0, rr.C[o.i]], [tras(o.J), rr.E[o.i]], [rot(o.J, o.x - xr), rr.N[o.i]], [tras(o.J) + rot(o.J, o.x - xr), rr.O[o.i]]] })),
+      titulo: 'Reparto en cada pieza paralela', columnas: [{ nombre: 'J / ΣJ', unidad: '', dec: 4 }, { nombre: 'Q tras', unidad: 't', dec: 3 }, { nombre: 'Q rot', unidad: 't', dec: 3 }, { nombre: 'Q total (E+N)', unidad: 't', dec: 3 }, { nombre: 'M total (O)', unidad: 'tm', dec: 1 }],
+      filas: par.map(o => ({ etiqueta: `${nom(o.i)} · x = ${num(o.x)} m`, valores: [[SJ ? o.J / SJ : 0, rr.C[o.i]], [tras(o.J), rr.E[o.i]], [rot(o.J, o.x - xr), rr.N[o.i]], [tras(o.J) + rot(o.J, o.x - xr), rr.E[o.i] + rr.N[o.i]], [(SJ ? (Mv * o.J) / SJ : 0) + rot(o.J, o.x - xr) * hW, rr.O[o.i]]] })),
     }],
     controles: [
       { nombre: 'Equilibrio de la traslación', criterio: 'Σ Q tras = Q', unidad: 't', dec: 3, analitico: sum(par.map(o => tras(o.J))), excel: rr.E25, cumpleAnalitico: comparar(sum(par.map(o => tras(o.J))), Q) === 'coincide', cumpleExcel: comparar(rr.E25, Q) === 'coincide' },
@@ -373,8 +402,21 @@ export function desglosar(x: EntradaDesglose): HojaDesglose[] {
 /** resumen de una hoja: cuántos pasos coinciden y si los controles verifican con los dos cálculos */
 export function resumenHoja(h: HojaDesglose) {
   const todos = [...h.pasos.map(p => comparar(p.analitico, p.excel)), ...h.tablas.flatMap(t => t.filas.flatMap(f => f.valores.map(([a, e]) => comparar(a, e))))];
+  const niveles = [...h.pasos.map(p => diferencia(p.analitico, p.excel)?.nivel), ...h.tablas.flatMap(t => t.filas.flatMap(f => f.valores.map(([a, e]) => diferencia(a, e)?.nivel)))];
   return {
+    amarillos: niveles.filter(n => n === 'amarillo').length, rojos: niveles.filter(n => n === 'rojo').length,
     coinciden: todos.filter(t => t === 'coincide').length, difieren: todos.filter(t => t === 'difiere').length, total: todos.length,
     verificaAnalitico: h.controles.every(c => c.cumpleAnalitico), verificaExcel: h.controles.every(c => c.cumpleExcel !== false),
   };
+}
+
+/** texto corto de la diferencia: «✓ coincide», «≠ 3,2 % · Δ +0,41 t» o «≠ Δ +3,74 t (analítico 0)» */
+export function textoDiferencia(a: number, e: number | null, unidad = '', dec = 2): { texto: string; corto: string; nivel: Semaforo | null } {
+  const d = diferencia(a, e);
+  if (!d) return { texto: '—', corto: '', nivel: null };
+  const u = unidad ? ` ${unidad}` : '';
+  const delta = isFinite(d.delta) ? `${d.delta >= 0 ? '+' : '−'}${num(Math.abs(d.delta), dec)}${u}` : '';
+  const pct = d.pct === null ? '' : `${num(d.pct, d.pct < 10 ? 1 : 0)} %`;
+  if (d.nivel === 'verde') return { texto: '✓ coincide', corto: '✓', nivel: 'verde' };
+  return { texto: d.pct === null ? `≠ Δ ${delta} (analítico 0)` : `≠ ${pct} · Δ ${delta}`, corto: d.pct === null ? `Δ ${delta}` : pct, nivel: d.nivel };
 }

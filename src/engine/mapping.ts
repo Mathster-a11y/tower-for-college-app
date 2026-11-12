@@ -272,7 +272,8 @@ export function aPlanilla(p: Proyecto): Asignacion {
   if (iPB < 0) avisos.push('No hay ningún nivel con cota ≥ 0 (PB).');
   const arriba = niveles.slice(0, iPB + 1);
   const subs = niveles.slice(iPB + 1);
-  if (arriba.length - 1 > 50) avisos.push('La planilla admite hasta 50 pisos sobre PB.');
+  // la fila 4 de M,NyQ es siempre 0: el nivel más alto que entra es el de la fila 5 → 49 niveles sobre PB
+  if (arriba.length - 1 > 49) avisos.push(`La planilla admite hasta 49 niveles sobre PB (este proyecto tiene ${arriba.length - 1}): el más alto cae en la fila 4 de «M,NyQ», que la planilla deja siempre en 0, y el corte, el momento y el vuelco salen mal. Sacá niveles o juntá los de arriba.`);
   if (subs.length > 3) avisos.push('La planilla admite hasta 3 subsuelos.');
   if (subs.length < 3) avisos.push(`La planilla tiene 3 subsuelos fijos; ${3 - subs.length === 1 ? 'el que falta se carga' : `los ${3 - subs.length} que faltan se cargan`} con altura 0 y sin superficie.`);
 

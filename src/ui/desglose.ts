@@ -6,7 +6,7 @@
 import { estado } from './estado';
 import { AUTOR, AVISO } from '../autoria';
 import { h } from './comp';
-import { comparar, desglosar, num, resumenHoja, type EntradaDesglose, type HojaDesglose } from '../engine/desglose';
+import { desglosar, num, resumenHoja, textoDiferencia, type EntradaDesglose, type HojaDesglose } from '../engine/desglose';
 
 export function entradaDesglose(): EntradaDesglose {
   const p = estado.proyecto, c = estado.calculo;
@@ -27,7 +27,6 @@ export const PENDIENTE_FLEX = [
   'Lee el momento de la columna O de la rototraslación, que suma momento (tm) con corte (t).',
 ];
 
-const marca = (a: number, e: number | null) => { const r = comparar(a, e); return r === 'coincide' ? '✓ coincide' : r === 'difiere' ? '≠ difiere' : '—'; };
 const cumple = (b: boolean | null) => (b === null ? '—' : b ? '✓ verifica' : '✗ no verifica');
 const fecha = () => new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -40,16 +39,16 @@ export function armarDesglose(hojas: HojaDesglose[]): HTMLElement {
     h('h1', {}, 'Desglose analítico de la planilla'),
     h('p', {}, `${p.nombre || 'Proyecto'} · ${fecha()} · hormigón ${p.hormigon || 'H30'} · ${AUTOR}`)));
   const intro = h('section', { class: 'inf-hoja dg-resumen' }, h('h2', {}, 'Cómo leer este desglose'));
-  intro.append(h('p', {}, 'Cada hoja del Excel se vuelve a calcular a mano, paso por paso, con las fórmulas del CIRSOC 102 y de la guía de la cátedra. Al lado va el resultado de la planilla (el que da Excel con estos mismos datos) y la celda donde está. «✓ coincide» = la diferencia es menor que 0,5 %; «≠ difiere» = hay una diferencia, y la hoja explica por qué.'));
+  intro.append(h('p', {}, 'Cada hoja del Excel se vuelve a calcular a mano, paso por paso, con las fórmulas del CIRSOC 102 y de la guía de la cátedra. Al lado va el resultado de la planilla (el que da Excel con estos mismos datos) y la celda donde está. Al lado va la diferencia: Δ = Excel − analítico y su porcentaje sobre el analítico, con un semáforo: verde menos de 0,5 % (coincide), amarillo de 0,5 % a 5 % (revisar), rojo más de 5 % (preocupa). Cada hoja explica por qué difiere.'));
   intro.append(h('p', {}, 'Cada hoja usa como datos los mismos valores que recibe en la planilla, así cada diferencia aparece en la hoja donde nace. Los controles se verifican con los dos resultados.'));
   const t = h('table', { class: 'dg-tabla' });
-  t.append(h('tr', {}, ...['Hoja', 'Valores comparados', 'Coinciden', 'Difieren', 'Analítico', 'Excel'].map(x => h('th', {}, x))));
+  t.append(h('tr', {}, ...['Hoja', 'Valores comparados', 'Verde', 'Amarillo', 'Rojo', 'Analítico', 'Excel'].map(x => h('th', {}, x))));
   hojas.forEach((hj, i) => {
     const r = resumenHoja(hj);
-    t.append(h('tr', {}, h('td', {}, `${i + 1} · ${hj.hoja}`), h('td', { class: 'n' }, String(r.total)), h('td', { class: 'n' }, String(r.coinciden)), h('td', { class: 'n' }, String(r.difieren)),
+    t.append(h('tr', {}, h('td', {}, `${i + 1} · ${hj.hoja}`), h('td', { class: 'n' }, String(r.total)), h('td', { class: 'n sem-verde' }, String(r.coinciden)), h('td', { class: `n ${r.amarillos ? 'sem-amarillo' : ''}` }, String(r.amarillos)), h('td', { class: `n ${r.rojos ? 'sem-rojo' : ''}` }, String(r.rojos)),
       h('td', {}, cumple(r.verificaAnalitico)), h('td', {}, cumple(r.verificaExcel))));
   });
-  t.append(h('tr', {}, h('td', {}, '7 · Flex comp PB paralelos'), h('td', { colspan: '5' }, 'Fuera del desglose: su matemática se revisa aparte (ver la última página).')));
+  t.append(h('tr', {}, h('td', {}, '7 · Flex comp PB paralelos'), h('td', { colspan: '6' }, 'Fuera del desglose: su matemática se revisa aparte (ver la última página).')));
   intro.append(t);
   doc.append(intro);
   hojas.forEach((hj, i) => doc.append(seccionHoja(hj, i + 1)));
@@ -64,7 +63,7 @@ export function armarDesglose(hojas: HojaDesglose[]): HTMLElement {
 function seccionHoja(hj: HojaDesglose, n: number): HTMLElement {
   const s = h('section', { class: 'inf-hoja dg-hoja' }, h('h2', {}, `${n} · Hoja «${hj.hoja}»`));
   const r = resumenHoja(hj);
-  s.append(h('p', { class: 'dg-veredicto' }, `${r.coinciden} de ${r.total} valores coinciden · analítico: ${cumple(r.verificaAnalitico)} · Excel: ${cumple(r.verificaExcel)}`));
+  s.append(h('p', { class: 'dg-veredicto' }, `${r.coinciden} de ${r.total} valores en verde · ${r.amarillos} en amarillo · ${r.rojos} en rojo · analítico: ${cumple(r.verificaAnalitico)} · Excel: ${cumple(r.verificaExcel)}`));
   s.append(h('h3', {}, 'Temas de la hoja'));
   s.append(h('ul', { class: 'dg-temas' }, ...hj.temas.map(x => h('li', {}, h('b', {}, `${x.titulo}. `), x.texto, h('span', { class: 'dg-fuente' }, ` (${x.fuente})`)))));
   s.append(h('p', { class: 'dg-datos' }, h('b', {}, 'Datos: '), hj.datos.map(x => `${x.nombre} = ${x.valor}`).join(' · ')));
@@ -73,19 +72,23 @@ function seccionHoja(hj: HojaDesglose, n: number): HTMLElement {
   t.append(h('tr', {}, ...['#', 'Paso', 'Fórmula y sustitución', 'Analítico', 'Excel', ''].map(x => h('th', {}, x))));
   hj.pasos.forEach((p, i) => {
     const u = p.unidad ? ` ${p.unidad}` : '';
-    t.append(h('tr', { class: comparar(p.analitico, p.excel) === 'difiere' ? 'dg-dif' : '' },
+    const df = textoDiferencia(p.analitico, p.excel, p.unidad, p.dec);
+    t.append(h('tr', { class: df.nivel && df.nivel !== 'verde' ? `dg-dif dg-${df.nivel}` : '' },
       h('td', { class: 'n' }, String(i + 1)), h('td', {}, p.titulo),
       h('td', {}, h('div', { class: 'dg-f' }, p.formula), h('div', { class: 'dg-s' }, p.sustitucion), ...(p.nota ? [h('div', { class: 'dg-nota' }, p.nota)] : [])),
       h('td', { class: 'n' }, `${num(p.analitico, p.dec)}${u}`),
       h('td', { class: 'n' }, p.excel === null ? '—' : `${num(p.excel, p.dec)}${u}`, h('div', { class: 'dg-celda' }, p.celda)),
-      h('td', {}, marca(p.analitico, p.excel))));
+      h('td', { class: df.nivel ? `sem-${df.nivel}` : '' }, df.texto)));
   });
   s.append(t);
   hj.tablas.forEach(tb => {
     s.append(h('h3', {}, tb.titulo));
-    const tt = h('table', { class: 'dg-tabla dg-niveles' });
-    tt.append(h('tr', {}, h('th', {}, ''), ...tb.columnas.flatMap(c => [h('th', { class: 'n' }, `${c.nombre}${c.unidad ? ` (${c.unidad})` : ''} analítico`), h('th', { class: 'n' }, 'Excel'), h('th', {}, '')])));
-    tb.filas.forEach(f => tt.append(h('tr', {}, h('td', {}, f.etiqueta), ...f.valores.flatMap(([a, e], k) => [h('td', { class: 'n' }, num(a, tb.columnas[k].dec)), h('td', { class: 'n' }, e === null ? '—' : num(e, tb.columnas[k].dec)), h('td', {}, comparar(a, e) === 'coincide' ? '✓' : comparar(a, e) === 'difiere' ? '≠' : '')]))));
+    const tt = h('table', { class: `dg-tabla dg-niveles${tb.columnas.length > 3 ? ' dg-ancha' : ''}` });
+    tt.append(h('tr', {}, h('th', {}, ''), ...tb.columnas.flatMap(c => [h('th', { class: 'n' }, `${c.nombre}${c.unidad ? ` (${c.unidad})` : ''}`), h('th', { class: 'n' }, 'Excel'), h('th', {}, 'Δ')])));
+    tb.filas.forEach(f => tt.append(h('tr', {}, h('td', {}, f.etiqueta), ...f.valores.flatMap(([a, e], k) => {
+      const df = textoDiferencia(a, e, tb.columnas[k].unidad, tb.columnas[k].dec);
+      return [h('td', { class: 'n' }, num(a, tb.columnas[k].dec)), h('td', { class: 'n' }, e === null ? '—' : num(e, tb.columnas[k].dec)), h('td', { class: `n ${df.nivel ? `sem-${df.nivel}` : ''}` }, df.corto)];
+    }))));
     s.append(tt);
   });
   s.append(h('h3', {}, 'Controles'));
@@ -116,6 +119,8 @@ export function imprimirDesglose() {
 
 // ------------------------------------------------------------------ PowerPoint
 const AZUL = '1A6BBD', TINTA = '1F2328', GRIS = '5F6B76', OK = '1A7A3A', MAL = 'C62828', AMARILLO = 'FBF1DC', FONDO_OK = 'EAF6EC';
+/** semáforo: color del texto y del fondo */
+const SEM: Record<string, { c: string; f: string }> = { verde: { c: '1A7A3A', f: 'EAF6EC' }, amarillo: { c: '8A5F00', f: 'FBF1DC' }, rojo: { c: 'C62828', f: 'FBE9E9' } };
 const FUENTE = 'Calibri';
 
 /** arma el .pptx (pptxgenjs se carga recién al usarlo) y devuelve el archivo */
@@ -136,7 +141,7 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): 
   };
   const celda = (t: string, o: Record<string, unknown> = {}) => ({ text: t, options: { fontFace: FUENTE, fontSize: 12, color: TINTA, valign: 'middle', ...o } });
   const cab = (t: string) => celda(t, { bold: true, fill: { color: 'EEF2F6' }, color: GRIS, fontSize: 11 });
-  const estadoCelda = (a: number, e: number | null) => { const r = comparar(a, e); return celda(r === 'coincide' ? '✓ coincide' : r === 'difiere' ? '≠ difiere' : '—', { color: r === 'coincide' ? OK : r === 'difiere' ? MAL : GRIS, bold: true }); };
+  const estadoCelda = (a: number, e: number | null, unidad = '', dec = 2) => { const d = textoDiferencia(a, e, unidad, dec); return celda(d.texto, { color: d.nivel ? SEM[d.nivel].c : GRIS, fill: d.nivel && d.nivel !== 'verde' ? { color: SEM[d.nivel].f } : undefined, bold: true, fontSize: 10 }); };
   const verifica = (b: boolean | null) => celda(b === null ? '—' : b ? '✓ verifica' : '✗ no verifica', { color: b === null ? GRIS : b ? OK : MAL, bold: true });
 
   // portada
@@ -146,16 +151,16 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): 
   s0.addText(`${nombreProyecto} · Edificios en torre · FAUD-UNMDP`, { x: 0.7, y: 3.3, w: 12, h: 0.6, fontFace: FUENTE, fontSize: 20, color: '9AA8B6' });
   s0.addText(`Cada hoja del Excel calculada a mano, paso por paso, y comparada con el resultado de la planilla.\n${fecha()} · ${AUTOR}`, { x: 0.7, y: 4.3, w: 12, h: 1, fontFace: FUENTE, fontSize: 16, color: 'DCE4EC' });
   // resumen
-  const sr = nueva('Resumen por hoja', '✓ coincide = diferencia menor que 0,5 % · los controles se verifican con los dos resultados');
-  const filas = [[cab('Hoja'), cab('Comparados'), cab('Coinciden'), cab('Difieren'), cab('Analítico'), cab('Excel')]];
-  hojas.forEach((hj, i) => { const r = resumenHoja(hj); filas.push([celda(`${i + 1} · ${hj.hoja}`), celda(String(r.total), { align: 'right' }), celda(String(r.coinciden), { align: 'right', color: OK }), celda(String(r.difieren), { align: 'right', color: r.difieren ? MAL : GRIS }), verifica(r.verificaAnalitico), verifica(r.verificaExcel)]); });
-  filas.push([celda('7 · Flex comp PB paralelos'), celda('pendiente: la matemática se revisa aparte', { colspan: 5, color: GRIS, italic: true })] as never);
-  sr.addTable(filas as never, { x: 0.5, y: 1.5, w: 12.3, colW: [4.3, 1.4, 1.4, 1.4, 1.9, 1.9], border: { type: 'solid', pt: 0.5, color: 'D0D7DE' }, rowH: 0.45 });
+  const sr = nueva('Resumen por hoja', 'Verde < 0,5 % · amarillo 0,5 % a 5 % · rojo > 5 % (diferencia sobre el analítico) · los controles se verifican con los dos');
+  const filas = [[cab('Hoja'), cab('Comparados'), cab('Verde'), cab('Amarillo'), cab('Rojo'), cab('Analítico'), cab('Excel')]];
+  hojas.forEach((hj, i) => { const r = resumenHoja(hj); filas.push([celda(`${i + 1} · ${hj.hoja}`), celda(String(r.total), { align: 'right' }), celda(String(r.coinciden), { align: 'right', color: SEM.verde.c, fill: { color: SEM.verde.f } }), celda(String(r.amarillos), { align: 'right', color: r.amarillos ? SEM.amarillo.c : GRIS, fill: r.amarillos ? { color: SEM.amarillo.f } : undefined }), celda(String(r.rojos), { align: 'right', color: r.rojos ? SEM.rojo.c : GRIS, fill: r.rojos ? { color: SEM.rojo.f } : undefined }), verifica(r.verificaAnalitico), verifica(r.verificaExcel)]); });
+  filas.push([celda('7 · Flex comp PB paralelos'), celda('pendiente: la matemática se revisa aparte', { colspan: 6, color: GRIS, italic: true })] as never);
+  sr.addTable(filas as never, { x: 0.5, y: 1.5, w: 12.3, colW: [4.0, 1.3, 1.15, 1.15, 1.15, 1.8, 1.75], border: { type: 'solid', pt: 0.5, color: 'D0D7DE' }, rowH: 0.45 });
 
   hojas.forEach((hj, i) => {
     const r = resumenHoja(hj);
     // temas
-    const st = nueva(`${i + 1} · Hoja «${hj.hoja}»`, `${r.coinciden} de ${r.total} valores coinciden · analítico ${r.verificaAnalitico ? 'verifica' : 'no verifica'} · Excel ${r.verificaExcel ? 'verifica' : 'no verifica'}`);
+    const st = nueva(`${i + 1} · Hoja «${hj.hoja}»`, `${r.coinciden} de ${r.total} en verde · ${r.amarillos} en amarillo · ${r.rojos} en rojo · analítico ${r.verificaAnalitico ? 'verifica' : 'no verifica'} · Excel ${r.verificaExcel ? 'verifica' : 'no verifica'}`);
     st.addText(hj.temas.map(t => ({ text: `${t.titulo}: `, options: { bold: true, breakLine: false } as never })).flatMap((x, k) => [x, { text: `${hj.temas[k].texto}  `, options: {} }, { text: `(${hj.temas[k].fuente})`, options: { color: GRIS, fontSize: 12, breakLine: true } }]) as never,
       { x: 0.5, y: 1.45, w: 7.6, h: 5.3, fontFace: FUENTE, fontSize: 15, color: TINTA, valign: 'top', paraSpaceAfter: 8, bullet: false });
     st.addShape('rect', { x: 8.4, y: 1.45, w: 4.4, h: 5.3, fill: { color: 'F4F6F8' }, line: { color: 'D0D7DE' } });
@@ -171,18 +176,19 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string): 
           { text: [{ text: p.formula, options: { bold: true, breakLine: true } }, { text: p.sustitucion, options: { color: GRIS, fontSize: 10, breakLine: !!p.nota } }, ...(p.nota ? [{ text: p.nota, options: { color: '8A5F00', fontSize: 9, italic: true } }] : [])], options: { fontFace: FUENTE, fontSize: 11, color: TINTA, valign: 'middle' } } as never,
           celda(`${num(p.analitico, p.dec)}${u}`, { align: 'right' }),
           { text: [{ text: p.excel === null ? '—' : `${num(p.excel, p.dec)}${u}`, options: { breakLine: true } }, { text: p.celda, options: { color: GRIS, fontSize: 8 } }], options: { fontFace: FUENTE, fontSize: 12, color: TINTA, align: 'right', valign: 'middle' } } as never,
-          estadoCelda(p.analitico, p.excel)]);
+          estadoCelda(p.analitico, p.excel, p.unidad, p.dec)]);
       });
-      sp.addTable(f as never, { x: 0.4, y: 1.4, w: 12.5, colW: [0.45, 2.6, 5.2, 1.5, 1.6, 1.15], border: { type: 'solid', pt: 0.5, color: 'D0D7DE' }, autoPage: false });
+      sp.addTable(f as never, { x: 0.4, y: 1.4, w: 12.5, colW: [0.45, 2.45, 4.75, 1.45, 1.55, 1.85], border: { type: 'solid', pt: 0.5, color: 'D0D7DE' }, autoPage: false });
     }
     // tablas por nivel / pieza (12 filas por diapositiva), con gráfico en viento y M,NyQ
     hj.tablas.forEach(tb => {
       for (let k = 0; k < tb.filas.length; k += 12) {
-        const sl = nueva(`${i + 1} · ${hj.hoja}: ${tb.titulo.charAt(0).toLowerCase() + tb.titulo.slice(1)}${tb.filas.length > 12 ? ` (${k / 12 + 1}/${Math.ceil(tb.filas.length / 12)})` : ''}`, 'Analítico | Excel | ✓ coincide · ≠ difiere');
+        const sl = nueva(`${i + 1} · ${hj.hoja}: ${tb.titulo.charAt(0).toLowerCase() + tb.titulo.slice(1)}${tb.filas.length > 12 ? ` (${k / 12 + 1}/${Math.ceil(tb.filas.length / 12)})` : ''}`, 'Analítico | Excel | diferencia: ✓ verde < 0,5 % · amarillo 0,5–5 % · rojo > 5 %');
         const f = [[cab(''), ...tb.columnas.flatMap(c => [cab(`${c.nombre}${c.unidad ? ` (${c.unidad})` : ''}`), cab('Excel'), cab('')])]];
         tb.filas.slice(k, k + 12).forEach(fl => f.push([celda(fl.etiqueta, { fontSize: 10 }), ...fl.valores.flatMap(([a, e], c) => {
-          const rr = comparar(a, e);
-          return [celda(num(a, tb.columnas[c].dec), { align: 'right', fontSize: 10 }), celda(e === null ? '—' : num(e, tb.columnas[c].dec), { align: 'right', fontSize: 10, fill: rr === 'difiere' ? { color: AMARILLO } : undefined }), celda(rr === 'coincide' ? '✓' : rr === 'difiere' ? '≠' : '', { color: rr === 'coincide' ? OK : MAL, bold: true, fontSize: 10, align: 'center' })];
+          const dd = textoDiferencia(a, e, tb.columnas[c].unidad, tb.columnas[c].dec);
+          const sm = dd.nivel ? SEM[dd.nivel] : null;
+          return [celda(num(a, tb.columnas[c].dec), { align: 'right', fontSize: 10 }), celda(e === null ? '—' : num(e, tb.columnas[c].dec), { align: 'right', fontSize: 10, fill: sm && dd.nivel !== 'verde' ? { color: sm.f } : undefined }), celda(dd.corto, { color: sm ? sm.c : GRIS, bold: true, fontSize: 9, align: 'center', fill: sm && dd.nivel !== 'verde' ? { color: sm.f } : undefined })];
         })]));
         const ancho = tb.columnas.length > 2 ? 12.5 : 8;
         const resto = ancho - 2.6;

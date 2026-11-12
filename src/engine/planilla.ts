@@ -192,7 +192,7 @@ export function calcHojaJ(filas: FilaJ[], ortogonales: boolean): HojaJRes {
 }
 
 export interface JMinimo { W: number; h: number; tabla: { hormigon: string; h400: number; h500: number; h600: number }[]; }
-const DIVISORES: [string, number, number, number][] = [
+export const DIVISORES: [string, number, number, number][] = [
   ['H30', 68000, 54400, 45333], ['H47', 78000, 62400, 52000], ['H60', 81200, 64960, 54134], ['H80', 90200, 72160, 60134]];
 
 export function calcJMinimo(m: MNyQRes, ortogonales: boolean): JMinimo {

@@ -2,7 +2,7 @@
  * Lo que daría la planilla con las correcciones acordadas, sin cambiar la planilla:
  * la app muestra siempre los dos valores lado a lado.
  */
-import { calcularPlanilla, type PlanillaDatos, type PlanillaRes, type RotoRes } from './planilla';
+import { calcularPlanilla, DIVISORES, type JMinimo, type PlanillaDatos, type PlanillaRes, type RotoRes } from './planilla';
 import { entraEnCalculo, rectangulos, tipoDe, dInterior, type Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
 
@@ -94,8 +94,17 @@ export function repartoGuiaPorFila(r: RotoRes, rg: RotoGuia): PiezaRot[] {
   });
 }
 
+/**
+ * J mínimo con la altura total de la torre. La hoja de paralelos toma h = MAX(M,NyQ!B4:B43): con 10 niveles o menos
+ * esas filas están vacías, h = 0 y el J mínimo da 0 (el control verifica siempre). Ortogonales usa G69 (bien).
+ */
+export function jMinimoConAlturaTotal(j: JMinimo, h: number): JMinimo {
+  return { W: j.W, h, tabla: DIVISORES.map(([hormigon, a, b, c]) => ({ hormigon, h400: (j.W * h * h) / a, h500: (j.W * h * h) / b, h600: (j.W * h * h) / c })) };
+}
+
 export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[] }): ResultadoCorregido {
   const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true });
+  guia.jminA = jMinimoConAlturaTotal(guia.jminA, guia.mnyq.G69);
   if (!extra) return { guia, rotA: repartoCorregido(guia.rotA), rotB: repartoCorregido(guia.rotB) };
   const rotoA = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotA.H, 'A');
   const rotoB = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotB.H, 'B');

@@ -768,9 +768,24 @@ text[data-par].ultimo { font-size: 15px; }
   .desglose .dg-pasos .dg-s { font-family: var(--mono); font-size: 8pt; color: #333; }
   .desglose .dg-nota { font-size: 7.5pt; color: #7a5600; font-style: italic; margin-top: .5mm; }
   .desglose .dg-celda { font-size: 7pt; color: #777; font-family: var(--mono); }
-  .desglose tr.dg-dif td { background: #fbf1dc; }
+  .desglose .sem-verde { color: #1a7a3a; }
+  .desglose .sem-amarillo { background: #fbf1dc; color: #7a5600; font-weight: 600; }
+  .desglose .sem-rojo { background: #fbe9e9; color: #b42318; font-weight: 700; }
+  .desglose tr.dg-amarillo td { background: #fdf7e6; }
+  .desglose tr.dg-rojo td { background: #fdf0ee; }
+  .desglose tr.dg-dif td.sem-amarillo { background: #fbf1dc; }
+  .desglose tr.dg-dif td.sem-rojo { background: #fbe9e9; }
   .desglose .dg-veredicto { font-weight: 600; }
   .desglose .dg-fuente { color: #666; }
   .desglose .dg-niveles { font-size: 7.5pt; }
+  .desglose .dg-niveles td:first-child { white-space: nowrap; }
+  .desglose .dg-ancha { font-size: 6.6pt; }
+  .desglose .dg-ancha th, .desglose .dg-ancha td { padding: .6mm 1mm; }
   .desglose .dg-difs li { margin-bottom: 1mm; }
 }
+
+/* semáforo de diferencias (planilla contra Guía/CIRSOC) */
+.sem { font: 600 11px var(--mono); padding: 1px 6px; border-radius: 99px; white-space: nowrap; }
+.sem.verde { color: var(--ok); background: var(--ok-fill); }
+.sem.amarillo { color: var(--revisar); background: var(--revisar-fill); }
+.sem.rojo { color: var(--mal); background: var(--mal-fill); }

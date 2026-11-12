@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { desglosar, resumenHoja, comparar, type EntradaDesglose } from './desglose';
+import { desglosar, resumenHoja, comparar, diferencia, type EntradaDesglose } from './desglose';
 import { ejemploGuia, ejemploAsimetrico, type Proyecto } from './modelo';
 import { aPlanilla } from './mapping';
 import { calcularPlanilla } from './planilla';
@@ -27,7 +27,19 @@ describe('desglose analítico', () => {
   }
   it('una pieza simétrica con alas iguales: J igual al de la planilla', () => {
     const hs = desglosar(entrada(ejemploGuia()));
-    const j = hs[2];
-    expect(comparar(j.pasos.at(-3)!.analitico, j.pasos.at(-3)!.excel)).toBe('coincide');   // ΣJ
+    const sj = hs[2].pasos.find(p => p.titulo.startsWith('Suma de los J'))!;
+    expect(comparar(sj.analitico, sj.excel)).toBe('coincide');
+  });
+  it('semáforo: verde < 0,5 %, amarillo hasta 5 %, rojo más; Δ y % sobre el analítico', () => {
+    expect(diferencia(100, 100.4)).toMatchObject({ nivel: 'verde' });
+    expect(diferencia(100, 103)).toMatchObject({ nivel: 'amarillo', pct: 3 });
+    expect(diferencia(100, 90)).toMatchObject({ nivel: 'rojo', pct: 10, delta: -10 });
+    expect(diferencia(0, 2)).toMatchObject({ nivel: 'rojo', pct: null, delta: 2 });
+    expect(diferencia(5, null)).toBeNull();
+  });
+  it('rototraslación: el momento total M tras + Q rot · hW coincide con O cuando no hay rotación', () => {
+    const r = desglosar(entrada(ejemploGuia()))[4];
+    const mt = r.pasos.find(p => p.titulo.startsWith('Momento total'))!;
+    expect(comparar(mt.analitico, mt.excel)).toBe('coincide');
   });
 });

@@ -4,6 +4,7 @@
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
 import { estado, fmt } from './estado';
+import { textoDiferencia } from '../engine/desglose';
 import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, type EstadoChip } from './comp';
 import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelProyecto, panelResultados, seccionViento, cantidadAvisos } from './paneles';
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
@@ -51,11 +52,14 @@ const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => 
 /** Tabla de controles: planilla, guía y estado. */
 export function tablaControles(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', ''].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
   cs.forEach(k => {
-    tb.append(h('tr', {}, h('td', {}, k.nombre, h('small', {}, `${k.criterio} · ${k.fuente}`)), h('td', { class: 'n' }, fmt(k.planilla)), h('td', { class: 'n' }, fmt(k.guia)), h('td', {}, chip(k.estado === 'atención' ? 'revisar' : k.estado))));
-    if (k.nota) tb.append(h('tr', { class: 'nota-fila' }, h('td', { colspan: '4' }, k.nota)));
+    // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
+    const df = k.planilla !== null && k.guia !== null ? textoDiferencia(k.guia, k.planilla, k.unidad, 2) : null;
+    const celdaDif = df && df.nivel ? h('span', { class: `sem ${df.nivel}`, title: df.texto }, df.nivel === 'verde' ? '✓' : df.corto) : h('span', {}, '—');
+    tb.append(h('tr', {}, h('td', {}, k.nombre, h('small', {}, `${k.criterio} · ${k.fuente}`)), h('td', { class: 'n' }, fmt(k.planilla)), h('td', { class: 'n' }, fmt(k.guia)), h('td', { class: 'n' }, celdaDif), h('td', {}, chip(k.estado === 'atención' ? 'revisar' : k.estado))));
+    if (k.nota) tb.append(h('tr', { class: 'nota-fila' }, h('td', { colspan: '5' }, k.nota)));
   });
   t.append(tb);
   return h('div', { class: 'scroll' }, t);
