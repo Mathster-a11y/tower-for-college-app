@@ -1,4 +1,5 @@
-import { pedirTexto, confirmar } from './ui/tarjeta';
+import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
+import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
 import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
@@ -397,3 +398,60 @@ dibujarCapas();
 dibujarTodo();
 // aviso de autoría: si la licencia ya venció, el pie lo dice
 { const a = document.getElementById('autoria'); if (a) a.textContent = avisoActual(); }
+
+// ------------------------------------------------------------------ Google Sheets (dos vías)
+const CLAVE_SHEETS = 'torre3d.sheets';
+let sincro: SincroSheets | null = null;
+let aplicandoRemoto = false;
+const paqueteActual = () => paquete(estado.proyecto, celdasAEscribir(estado.calculo.asig.datos, estado.calculo.res));
+function pistaSheets(t: string) { const e = document.getElementById('b-sheets-pista'); if (e) e.textContent = t; }
+function traerDeLaHoja(l: Lectura) {
+  let base = estado.proyecto;
+  if (l.t3d) { try { const p = JSON.parse(l.t3d) as unknown; if (proyectoValido(p)) base = p; } catch { /* el proyecto de la hoja está dañado: se usa el de la app */ } }
+  const { proyecto, avisos } = proyectoDesdeHoja(base, l);
+  aplicandoRemoto = true;
+  try { estado.reemplazar(proyecto); } finally { aplicandoRemoto = false; }
+  mensaje(`Cambios traídos de Google Sheets (versión ${l.version})${avisos.length ? ` · ${avisos.length} aviso${avisos.length > 1 ? 's' : ''}: ${avisos[0]}` : ''}.`);
+}
+async function conectarSheets(url: string) {
+  sincro?.detener();
+  const s = new SincroSheets(url, { remoto: traerDeLaHoja, estado: (t, error) => { mensaje(t); if (error) pistaSheets('Sin conexión: revisá la dirección'); } });
+  const r = await s.conectar(paqueteActual);
+  sincro = s; s.iniciar(5000);
+  try { localStorage.setItem(CLAVE_SHEETS, url); } catch { /* sin almacenamiento: hay que volver a conectar la próxima vez */ }
+  pistaSheets('Conectado: los cambios van y vienen solos');
+  mensaje(r === 'leido' ? 'Conectado con Google Sheets: se trajo el edificio de la planilla.' : 'Conectado con Google Sheets: se escribió el edificio en la planilla.');
+}
+function desconectarSheets() {
+  sincro?.detener(); sincro = null;
+  try { localStorage.removeItem(CLAVE_SHEETS); } catch { /* nada */ }
+  pistaSheets('Editar el edificio desde la planilla o desde la app');
+  mensaje('Desconectado de Google Sheets.');
+}
+estado.suscribir(() => { if (sincro && !aplicandoRemoto && !estado.calculo.error) sincro.programar(paqueteActual); });
+$('b-sheets').addEventListener('click', () => {
+  cerrarMenus();
+  const actual = sincro?.url ?? '';
+  dialogo(`<h2>Sincronizar con Google Sheets</h2>
+    <p>La planilla del curso en Google Sheets y la app quedan unidas: lo que cambiás en una aparece en la otra en unos segundos.</p>
+    <ol class="nota">
+      <li>Subí la planilla a Google Drive y abrila con Google Sheets.</li>
+      <li>Extensiones → Apps Script: pegá el código de <a href="https://github.com/mathster-a11y/tower-for-college-app/blob/main/docs/sheets/Codigo.gs" target="_blank" rel="noopener">docs/sheets/Codigo.gs</a> y guardá.</li>
+      <li>Implementar → Nueva implementación → Aplicación web · Ejecutar como: yo · Acceso: cualquier persona.</li>
+      <li>Pegá acá la dirección que termina en <code>/exec</code>.</li>
+    </ol>
+    <label class="campo"><span>Dirección de la aplicación web</span><input id="sh-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${actual.replace(/"/g, '&quot;')}"></label>
+    <p class="nota">Desde la planilla se editan las hojas «T3D Niveles», «T3D Muros» y los datos de la hoja «viento». Si la planilla ya tiene un edificio, al conectar se trae ese; si está vacía, se escribe el de la app. La dirección es la llave: no la compartas.</p>`, [
+    ...(sincro ? [['Desconectar', () => { desconectarSheets(); $<HTMLDialogElement>('dialogo').close(); }] as [string, () => void]] : []),
+    ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
+    ['Conectar', async () => {
+      const url = ($('sh-url') as HTMLInputElement).value.trim();
+      if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { await avisar('error', 'Dirección no válida', 'Tiene que ser la dirección de la aplicación web de Apps Script: empieza con https://script.google.com/ y termina en /exec.'); return; }
+      $<HTMLDialogElement>('dialogo').close();
+      mensaje('Conectando con Google Sheets…');
+      try { await conectarSheets(url); } catch (e) { fallo('No se pudo conectar con Google Sheets', e); }
+    }, true],
+  ]);
+});
+// si la última vez quedó conectada, se vuelve a conectar sola
+try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).catch(e => { mensaje(`Google Sheets no responde: ${(e as Error).message}`); pistaSheets('Sin conexión: revisá la dirección'); }); } catch { /* sin almacenamiento */ }
