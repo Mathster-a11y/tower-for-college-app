@@ -184,6 +184,44 @@ export function ejemploAsimetrico(): Proyecto {
   };
 }
 
+/**
+ * Citicorp Center (hoy 601 Lexington Avenue, Nueva York, 1977; Hugh Stubbins, arquitecto; William LeMessurier,
+ * ingeniero). 59 pisos, unos 279 m, planta cuadrada de unos 47,85 m (157 ft). La torre se apoya en cuatro
+ * supercolumnas de unos 34,7 m (114 ft) en el medio de cada cara, no en las esquinas, que vuelan unos 22 m (72 ft)
+ * sobre la iglesia de San Pedro. Los chevrones de acero de 8 pisos por cara (el «exoesqueleto») llevan las cargas
+ * de las esquinas a esas columnas. Arriba, un amortiguador de masa sintonizada de unas 400 t.
+ *
+ * Modelo para empezar a calcular, con supuestos (marcados): la planilla admite 49 niveles sobre PB, así que los
+ * 50 pisos de oficinas se toman como 47 niveles de 4,73 m más la corona. El núcleo central es de hormigón y llega
+ * al suelo (así lo muestran los dibujos de la obra); sus medidas (21 × 21 m, pared de 0,90 m) son supuestas. Las
+ * supercolumnas son reticuladas de acero; acá van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de
+ * 0,60 m), también supuestos. Los chevrones del perímetro todavía no suman rigidez: entran cuando esté la
+ * herramienta de exoesqueleto.
+ */
+export function ejemploCiticorp(): Proyecto {
+  const lado = 47.85, base = 34.75, paso = 4.73;
+  const niveles: Nivel[] = [{ nombre: 'Azotea (corona)', cota: 279, B: lado, L: lado }];
+  // el primer piso de la torre, sobre las supercolumnas, es el 9º; después, 46 niveles de 4,73 m y la corona
+  for (let k = 47; k >= 1; k--) niveles.push({ nombre: k === 1 ? '9º (sobre las supercolumnas)' : `${k + 8}º`, cota: +(base + paso * (k - 1)).toFixed(2) });
+  niveles.push({ nombre: 'PB (plaza)', cota: 0 }, { nombre: 'Subsuelo', cota: -9, B: lado, L: lado });
+  const d = lado / 2 - 3.65;     // centro de cada supercolumna: a 3,65 m de la cara
+  const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
+    ({ id, dir: 'Y', x, y, largo: 7.3, ladoY: 7.3, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 290, piezaA, pegadoA: '', piezaB, pegadoB: '' });
+  return {
+    version: 1,
+    nombre: 'Citicorp Center (Nueva York, 1977) · modelo aproximado',
+    alumno: '',
+    sitio: { V: 49, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: lado, a1: lado },
+    hormigon: 'H40',
+    muros: [
+      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 21, ladoY: 21, espesor: 0.9, tipo: 'tubo-rect', llega: true, areaInf: 1130, piezaA: 'Núcleo', pegadoA: '', piezaB: 'Núcleo B', pegadoB: '' },
+      col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
+    ],
+  };
+}
+
 export function proyectoVacio(): Proyecto {
   const p = ejemploGuia();
   return { ...p, nombre: 'Proyecto nuevo', niveles: [{ nombre: 'Azotea', cota: 3, B: 20, L: 16 }, { nombre: 'PB', cota: 0 }], muros: [] };

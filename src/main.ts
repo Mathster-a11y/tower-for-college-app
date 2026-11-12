@@ -16,7 +16,7 @@ import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, h } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
-import { ejemploGuia, ejemploAsimetrico, proyectoVacio, type Proyecto } from './engine/modelo';
+import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
@@ -310,6 +310,7 @@ window.addEventListener('error', e => fallo('Error inesperado', e.error ?? e.mes
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
+$('b-ejemplo-citicorp').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorp()); cerrarMenus(); mensaje('Cargado el Citicorp Center: núcleo y cuatro supercolumnas; los chevrones del perímetro entran con la herramienta de exoesqueleto.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
