@@ -186,26 +186,27 @@ export function ejemploAsimetrico(): Proyecto {
 
 /**
  * Citicorp Center (hoy 601 Lexington Avenue, Nueva York, 1977; Hugh Stubbins, arquitecto; William LeMessurier,
- * ingeniero). 59 pisos, unos 279 m, planta cuadrada de unos 47,85 m (157 ft). La torre se apoya en cuatro
+ * ingeniero). 59 pisos, 278,6 m (914 ft), planta cuadrada de unos 47,85 m (157 ft). La torre se apoya en cuatro
  * supercolumnas de unos 34,7 m (114 ft) en el medio de cada cara, no en las esquinas, que vuelan unos 22 m (72 ft)
  * sobre la iglesia de San Pedro. Los chevrones de acero de 8 pisos por cara (el «exoesqueleto») llevan las cargas
  * de las esquinas a esas columnas. Arriba, un amortiguador de masa sintonizada de unas 400 t.
  *
- * Modelo para empezar a calcular, con supuestos (marcados): 48 pisos de oficinas de 3,89 m (pisos 10 a 57, seis
- * módulos de 8) más la corona: 49 niveles sobre PB, el máximo de la planilla. El núcleo central es de hormigón y llega
+ * Modelo para empezar a calcular, con supuestos (marcados): 48 pisos de oficinas de 4,064 m (13'-4", pisos 8 a 56,
+ * seis módulos de 8, leídos del plano de elevación) más la corona: 49 niveles sobre PB, el máximo de la planilla. El núcleo central es de hormigón y llega
  * al suelo (así lo muestran los dibujos de la obra); sus medidas (21 × 21 m, pared de 0,90 m) son supuestas. Las
  * supercolumnas son reticuladas de acero; acá van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de
  * 0,60 m), también supuestos. Los chevrones del perímetro todavía no suman rigidez: entran cuando esté la
  * herramienta de exoesqueleto.
  */
 export function ejemploCiticorp(): Proyecto {
-  const lado = 47.85, base = 34.75, paso = 3.89;
-  // pisos 1 a 9: la base abierta sobre las supercolumnas (plaza, iglesia, vestíbulos), 34,75 m; pisos 10 a 57: 48 pisos
-  // de oficinas de 3,89 m (12 ft 9 in), que llenan justo los 6 módulos de chevrones de 8 pisos; arriba, la corona
-  // inclinada a 45° hacia el sur con los pisos técnicos y el amortiguador, hasta 279 m. Son 49 niveles sobre PB: el
-  // máximo que admite la planilla.
-  const niveles: Nivel[] = [{ nombre: 'Azotea (corona)', cota: 279, B: lado, L: lado }];
-  for (let piso = 57; piso >= 10; piso--) niveles.push({ nombre: piso === 10 ? '10º (primer piso sobre las supercolumnas)' : `${piso}º`, cota: +(base + paso * (piso - 10)).toFixed(2) });
+  const lado = 47.85, base = 34.75, paso = 4.064;
+  // Medidas del plano de elevación original: 914'-0" (278,6 m) de alto. Pisos 1 a 7: la base abierta sobre las
+  // supercolumnas (plaza, iglesia, vestíbulos), hasta 114 ft (34,75 m). Pisos 8 a 56: 48 pisos de 13'-4" (4,064 m), que
+  // llenan los 6 módulos de chevrones de 8 pisos (106'-8"). Arriba del piso 56, la corona: pisos técnicos, el
+  // amortiguador de 400 t y el techo inclinado hasta 278,6 m. Son 49 niveles sobre PB, el máximo de la planilla: el
+  // piso 56 y la corona se juntan en la azotea.
+  const niveles: Nivel[] = [{ nombre: 'Azotea (piso 56 y corona)', cota: 278.6, B: lado, L: lado }];
+  for (let piso = 55; piso >= 8; piso--) niveles.push({ nombre: piso === 8 ? '8º (primer piso sobre las supercolumnas)' : `${piso}º`, cota: +(base + paso * (piso - 8)).toFixed(2) });
   niveles.push({ nombre: 'PB (plaza)', cota: 0 }, { nombre: 'Subsuelo', cota: -9, B: lado, L: lado });
   const d = lado / 2 - 3.65;     // centro de cada supercolumna: a 3,65 m de la cara
   const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
