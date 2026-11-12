@@ -17,7 +17,7 @@
   --serie-1: #2a78d6; --serie-2: #eb6834; --serie-3: #1baf7a; --serie-4: #eda100; --serie-5: #e87ba4; --serie-6: #008300; --serie-7: #6250d6; --serie-8: #e34948;
   --fuente: 'IBM Plex Sans', 'IBM Plex Math', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'IBM Plex Math', ui-monospace, monospace;
-  --math: 'IBM Plex Sans', 'IBM Plex Math', serif;
+  --math: 'IBM Plex Math', 'IBM Plex Sans', serif;
   --window: #f5f5f3; --toolbar: #ebebea; --panel: #f0f0ee; --rail: #eef2f6; --header: #e6eaee; --field: #ffffff; --zebra: #f7f8f9; --lienzo: #ffffff;
   --edge: #c3cad1; --field-edge: #b3bcc5; --rule: #dfe3e7; --hair: #e1e5ea;
   --ink: #1f2328; --ink2: #5f6b76; --head: #6b7781; --dim: #8a949e;
@@ -220,7 +220,8 @@ p.estado { white-space: normal; margin: 0; }
 .formula { border: 1px solid var(--edge); border-radius: 8px; background: var(--field); padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; }
 .formula .que { font-size: 12px; color: var(--ink2); }
 .formula .ec { font-family: var(--math); font-size: 14px; line-height: 1.65; }
-.formula .ec i { font-style: italic; }
+.formula .ec .mv, .mv { font-family: 'IBM Plex Math', serif; font-style: normal; }
+.formula .ec sub { font-size: .72em; }
 .formula .ec .num { font-family: var(--mono); color: var(--num); font-size: 13px; }
 .formula .ec .res { font-family: var(--mono); color: var(--num); font-weight: 600; font-size: 13px; }
 .formula .ec .u { color: var(--ink2); font-size: 12.5px; }
@@ -277,7 +278,8 @@ svg.grafico { display: block; width: 100%; height: auto; }
 .grafico .d-ref { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 5 3; opacity: .7; }
 .grafico .d-ref.fuerte { stroke-width: 2; opacity: 1; }
 .grafico .d-ref-txt { fill: var(--ink); }
-.grafico .d-valor, .grafico .d-ref-txt, .grafico .d-eje { paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; stroke-linejoin: round; }
+.grafico .d-fondo { fill: var(--lienzo); opacity: .92; }
+.grafico .d-valor, .grafico .d-ref-txt, .grafico .d-eje { paint-order: stroke; stroke: var(--lienzo); stroke-width: 5px; stroke-linejoin: round; }
 .grafico .d-linea { fill: none; stroke-width: 2; stroke-linejoin: round; }
 .grafico .punteada { stroke-dasharray: 6 4; }
 .grafico .d-banda { fill: transparent; }
@@ -764,7 +766,7 @@ text[data-par].ultimo { font-size: 15px; }
   .desglose .dg-tabla th, .desglose .dg-tabla td { border-bottom: .5px solid #bbb; padding: .8mm 1.5mm; vertical-align: top; }
   .desglose .dg-tabla td.n, .desglose .dg-tabla th.n { text-align: right; white-space: nowrap; font-family: var(--mono); }
   .desglose .dg-tabla tr { break-inside: avoid; }
-  .desglose .dg-pasos .dg-f { font-weight: 600; }
+  .desglose .dg-pasos .dg-f { font-family: 'IBM Plex Math', serif; font-size: 10pt; }
   .desglose .dg-pasos .dg-s { font-family: var(--mono); font-size: 8pt; color: #333; }
   .desglose .dg-nota { font-size: 7.5pt; color: #7a5600; font-style: italic; margin-top: .5mm; }
   .desglose .dg-celda { font-size: 7pt; color: #777; font-family: var(--mono); }
@@ -795,3 +797,12 @@ text[data-par].ultimo { font-size: 15px; }
   .desglose .dg-dibujos img { width: 100%; height: auto; border: .5px solid #ccc; }
   .desglose .dg-dibujos figcaption { font-size: 8pt; color: #555; }
 }
+
+/* ------------------------------------------------------------------ tarjetas de mensaje (5.2) */
+dialog.tarjeta[open] { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 14px; width: min(440px, 92vw); padding: 18px 20px 16px; border-radius: 12px; }
+dialog.tarjeta .insignia { margin-top: 1px; }
+dialog.tarjeta .insignia.pregunta, dialog.tarjeta .insignia.info { background: var(--accent); }
+dialog.tarjeta h2 { font-size: 15px; font-weight: 700; margin: 2px 0 4px; }
+dialog.tarjeta p { margin: 0; color: var(--ink); }
+dialog.tarjeta input { width: 100%; margin-top: 12px; }
+.tarjeta-botones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }

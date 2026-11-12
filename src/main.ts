@@ -1,3 +1,4 @@
+import { pedirTexto, confirmar } from './ui/tarjeta';
 import './estilo.css';
 import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
@@ -162,6 +163,8 @@ function dialogo(html: string, botones: [string, () => void | Promise<void>, boo
     fila.append(b);
   });
   d.append(fila);
+  // Enter da la acción principal; Escape cierra (sistema de diseño, 5.1)
+  d.onkeydown = ev => { if (ev.key === 'Enter' && !(ev.target instanceof HTMLButtonElement) && !(ev.target instanceof HTMLTextAreaElement)) { const pr = fila.querySelector<HTMLButtonElement>('button.primario'); if (pr) { ev.preventDefault(); pr.click(); } } };
   d.showModal();
 }
 
@@ -321,8 +324,9 @@ $('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas()
 function armarMis() {
   const m = $('m-mis'); m.replaceChildren();
   const guardar = h('button', { type: 'button', role: 'menuitem' }, 'Guardar una versión ahora', h('span', { class: 'pista' }, 'Con nombre, en este navegador'));
-  guardar.addEventListener('click', () => {
-    const n = window.prompt('Nombre de la versión:', `${estado.proyecto.nombre || 'Proyecto'} · ${fechaCorta(Date.now())}`);
+  guardar.addEventListener('click', async () => {
+    cerrarMenus();
+    const n = await pedirTexto('Guardar una versión', 'Nombre de la versión. Se guarda en este navegador.', `${estado.proyecto.nombre || 'Proyecto'} · ${fechaCorta(Date.now())}`, 'Guardar');
     if (n === null) return;
     mensaje(guardarVersion(estado.proyecto, n) ? `Versión guardada: ${n}.` : 'El navegador no tiene más lugar: borrá versiones viejas o guardá el proyecto como .json.');
     cerrarMenus();
@@ -344,7 +348,7 @@ function armarMis() {
       } catch (e) { fallo('No se pudo comparar', e); }
     });
     const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');
-    borrar.addEventListener('click', ev => { ev.stopPropagation(); if (window.confirm(`¿Borrar la versión «${v.nombre}»?`)) { borrarVersion(v.id); armarMis(); } });
+    borrar.addEventListener('click', async ev => { ev.stopPropagation(); cerrarMenus(); if (await confirmar('Borrar la versión', `Se borra «${v.nombre}» de este navegador. No se puede deshacer.`, 'Borrar')) { borrarVersion(v.id); armarMis(); } });
     fila.append(abrir, cmp, borrar); m.append(fila);
   });
 }

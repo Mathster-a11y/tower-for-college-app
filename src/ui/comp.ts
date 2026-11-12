@@ -32,15 +32,56 @@ export function kpi(cap: string, valor: string, nota: string, color = 'var(--acc
 export const colorEstado = (ok: boolean | null) => (ok === null ? 'var(--accent)' : ok ? 'var(--ok)' : 'var(--mal)');
 
 // ------------------------------------------------------------------ notación matemática
-/** variable en itálica con subíndice opcional */
-export const v = (x: string, sub?: string) => `<i>${esc(x)}</i>${sub ? `<sub>${esc(sub)}</sub>` : ''}`;
+/**
+ * Letras en cursiva matemática de IBM Plex Math (U+1D434…): así se ven las variables de la guía y del CIRSOC,
+ * sin depender de una cursiva sintética. Σ y las mayúsculas griegas de operador quedan derechas.
+ */
+export function mi(t: string): string {
+  let o = '';
+  for (const ch of t) {
+    const c = ch.codePointAt(0)!;
+    if (c >= 65 && c <= 90) o += String.fromCodePoint(0x1d434 + c - 65);
+    else if (c === 104) o += '\u210e';
+    else if (c >= 97 && c <= 122) o += String.fromCodePoint(0x1d44e + c - 97);
+    else if (c >= 0x3b1 && c <= 0x3c9) o += String.fromCodePoint(0x1d6fc + c - 0x3b1);
+    else if (c >= 0x391 && c <= 0x3a9 && c !== 0x3a3) o += String.fromCodePoint(0x1d6e2 + c - 0x391);
+    else o += ch;
+  }
+  return o;
+}
+/** variable en cursiva matemática con subíndice opcional (una letra: cursiva; una palabra: derecha) */
+export const v = (x: string, sub?: string) => `<span class="mv">${esc(mi(x))}</span>${sub ? `<sub>${esc(sub.length === 1 ? mi(sub) : sub)}</sub>` : ''}`;
+
+const CON_SUB: Record<string, [string, string]> = {
+  Mtras: ['M', 'tras'], Mrot: ['M', 'rot'], Qrot: ['Q', 'rot'], Qtras: ['Q', 'tras'], Mv: ['M', 'v'], Me: ['M', 'e'], Mt: ['M', 't'],
+  Kzt: ['K', 'zt'], Kz: ['K', 'z'], Kd: ['K', 'd'], Cp: ['C', 'p'], qz: ['q', 'z'], qh: ['q', 'h'], hW: ['h', 'W'], Xr: ['X', 'r'],
+  Pi: ['P', 'i'], Wi: ['W', 'i'], Ji: ['J', 'i'], xi: ['x', 'i'], yG: ['y', 'G'], zg: ['z', 'g'], 'σG': ['σ', 'G'], 'σV': ['σ', 'V'], 'σP': ['σ', 'P'],
+  'σmáx': ['σ', 'máx'], 'σmín': ['σ', 'mín'], 'Jmín': ['J', 'mín'],
+};
+const UNIDADES = new Set(['m', 't', 'tm', 'kg', 'cm', 'N', 'kN', 's', 'Hz', 'MPa']);
+/** Fórmula escrita como texto («Mv = Σ Q · h») a HTML con las variables en cursiva matemática y los subíndices. */
+export function mat(s: string): string {
+  const partes = s.split(/([A-Za-zÁÉÍÓÚáéíóúñα-ωΑ-Ω]+)/);
+  let o = '';
+  for (let i = 0; i < partes.length; i++) {
+    const t = partes[i];
+    if (i % 2 === 0) { o += esc(t); continue; }
+    const antes = partes[i - 1] ?? '', despues = partes[i + 1] ?? '';
+    const esUnidad = UNIDADES.has(t) && (/\d\s*$/.test(antes) || /^\s*\/$/.test(antes) && i > 1 && UNIDADES.has(partes[i - 2]) || /^[²³⁴]/.test(despues) && /\d\s*$/.test(antes));
+    if (esUnidad) o += `<span class="u">${esc(t)}</span>`;
+    else if (CON_SUB[t]) o += v(...CON_SUB[t]);
+    else if (t.length === 1 && t !== 'Σ') o += v(t);
+    else o += esc(t);
+  }
+  return o;
+}
 /** número reemplazado (mono, color de número) */
 export const n = (x: number, d = 2) => `<span class="num">${fmt(x, d)}</span>`;
 /** resultado con unidad */
 export const r = (x: number, d = 2, u = '') => `<span class="res">${fmt(x, d)}</span>${u ? ` <span class="u">${esc(u)}</span>` : ''}`;
 export const u = (t: string) => `<span class="u">${esc(t)}</span>`;
 /** operadores con espacios finos */
-export const op = (o: string) => ` ${o} `;
+export const op = (o: string) => `\u2009${o}\u2009`;
 
 /** Tarjeta de fórmula: qué calcula, la ecuación con los números y la celda de la planilla. */
 export function formula(que: string, ecuacion: string, ref?: string, estado?: 'verifica' | 'no verifica' | 'revisar'): H {

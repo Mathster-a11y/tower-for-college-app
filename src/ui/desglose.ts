@@ -5,7 +5,7 @@
  */
 import { estado } from './estado';
 import { AUTOR, AVISO } from '../autoria';
-import { h } from './comp';
+import { h, mat } from './comp';
 import { dibujosPorHoja, type Dibujo } from './dibujosDesglose';
 import { desglosar, num, resumenHoja, textoDiferencia, type EntradaDesglose, type HojaDesglose } from '../engine/desglose';
 
@@ -86,7 +86,7 @@ function seccionHoja(hj: HojaDesglose, n: number): HTMLElement {
     const df = textoDiferencia(p.analitico, p.excel, p.unidad, p.dec);
     t.append(h('tr', { class: df.nivel && df.nivel !== 'verde' ? `dg-dif dg-${df.nivel}` : '' },
       h('td', { class: 'n' }, String(i + 1)), h('td', {}, p.titulo),
-      h('td', {}, h('div', { class: 'dg-f' }, p.formula), h('div', { class: 'dg-s' }, p.sustitucion), ...(p.nota ? [h('div', { class: 'dg-nota' }, p.nota)] : [])),
+      h('td', {}, (() => { const f = h('div', { class: 'dg-f' }); f.innerHTML = mat(p.formula); return f; })(), h('div', { class: 'dg-s' }, p.sustitucion), ...(p.nota ? [h('div', { class: 'dg-nota' }, p.nota)] : [])),
       h('td', { class: 'n' }, `${num(p.analitico, p.dec)}${u}`),
       h('td', { class: 'n' }, p.excel === null ? '—' : `${num(p.excel, p.dec)}${u}`, h('div', { class: 'dg-celda' }, p.celda)),
       h('td', { class: df.nivel ? `sem-${df.nivel}` : '' }, df.texto)));

@@ -1,4 +1,5 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
+import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, imanar, imanarNodo, muroDesdeTramo, nodosMuro, type Punto } from '../engine/dibujo';
@@ -196,11 +197,11 @@ export function montarPlanta(cont: HTMLElement) {
     inp.addEventListener('change', async () => {
       const f = inp.files?.[0]; inp.value = ''; if (!f) return;
       const cs = leerDXF(await f.text());
-      if (!cs.length) { window.alert('El DXF no tiene polilíneas cerradas (LWPOLYLINE). En AutoCAD: PEDIT → Juntar → Cerrar.'); return; }
+      if (!cs.length) { await avisar('error', 'El DXF no tiene contornos', 'No hay polilíneas cerradas (LWPOLYLINE). En AutoCAD: PEDIT → Juntar → Cerrar.'); return; }
       const mayor = cs.map(c => ({ c, a: areaSilueta(c) })).sort((x, y) => y.a - x.a)[0].c;   // el contorno más grande
       const ext = cajaSilueta(mayor);
       const guess = Math.max(ext.B, ext.L) > 2000 ? 'mm' : Math.max(ext.B, ext.L) > 200 ? 'cm' : 'm';
-      const u = (window.prompt(`Unidad del dibujo (m, cm o mm). El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF:`, guess) ?? '').trim().toLowerCase();
+      const u = ((await pedirTexto('Unidad del dibujo', `Escribí m, cm o mm. El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF.`, guess, 'Importar')) ?? '').trim().toLowerCase();
       const factor = u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : u === 'm' ? 1 : NaN;
       if (!isFinite(factor)) return;
       estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) nv.carpinteria = c; else nv.silueta = c; });
@@ -892,15 +893,16 @@ export function montarPlanta(cont: HTMLElement) {
       dibujar();
       if (calib.length === 2) {
         const medida = Math.hypot(calib[1].x - calib[0].x, calib[1].y - calib[0].y);
-        const txt = window.prompt(`Distancia real entre los dos puntos, en metros (en el dibujo mide ${medida.toFixed(2).replace('.', ',')} m):`);
-        const real = Number(String(txt ?? '').replace(',', '.'));
-        if (real > 0 && medida > 1e-6) {
-          const f = real / medida, c = estado.calco;
-          // escala alrededor del primer punto: ese punto queda en su lugar
-          c.x = +(calib[0].x + (c.x - calib[0].x) * f).toFixed(3); c.y = +(calib[0].y + (c.y - calib[0].y) * f).toFixed(3); c.ancho = +(c.ancho * f).toFixed(3);
-          armarPanelCalco();
-        }
+        const p0 = calib[0], c = estado.calco;
         ponerModo('mover');
+        pedirTexto('Distancia real', `Distancia real entre los dos puntos, en metros. En el dibujo mide ${medida.toFixed(2).replace('.', ',')} m.`, '', 'Escalar').then(txt => {
+          const real = Number(String(txt ?? '').replace(',', '.'));
+          if (!(real > 0 && medida > 1e-6) || estado.calco !== c) return;
+          const f = real / medida;
+          // escala alrededor del primer punto: ese punto queda en su lugar
+          c.x = +(p0.x + (c.x - p0.x) * f).toFixed(3); c.y = +(p0.y + (c.y - p0.y) * f).toFixed(3); c.ancho = +(c.ancho * f).toFixed(3);
+          armarPanelCalco(); dibujar();
+        });
       }
       return;
     }

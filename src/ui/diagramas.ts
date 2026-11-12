@@ -159,6 +159,15 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
     b.append(el('title', {}, `${g.categorias ? n : `${n} (cota ${fmt(z, 2)} m)`}\n${valores.join('\n')}`));
     svg.append(b);
   });
+  // los rótulos van encima de barras y líneas (sistema de diseño, 7: los rótulos nunca quedan tapados)
+  const primeraBanda = svg.querySelector('.d-banda');
+  svg.querySelectorAll('text.d-valor, text.d-ref-txt').forEach(t => {
+    // fondo redondeado del color del lienzo (ancho estimado: la letra mono mide ~0,6 de su cuerpo)
+    const x = +(t.getAttribute('x') ?? 0), y = +(t.getAttribute('y') ?? 0), w = (t.textContent ?? '').length * 6.9 + 6;
+    const anc = t.getAttribute('text-anchor'), x0 = anc === 'end' ? x - w + 3 : anc === 'middle' ? x - w / 2 : x - 3;
+    svg.insertBefore(el('rect', { x: x0, y: y - 12, width: w, height: 16, rx: 3, class: 'd-fondo' }), primeraBanda);
+    svg.insertBefore(t, primeraBanda);
+  });
   fig.append(svg);
   return fig;
 }
