@@ -88,6 +88,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Lámina de entrega A3 apaisada para imprimir (Exportar ▾): una hoja por viento con ficha, vuelco, lámina M-N-Q, verificaciones y rótulo
 - [x] Prueba de punta a punta: torre con una C de la biblioteca y la pieza de la cátedra (alas intermedias, más de dos almas), escrita y recalculada en LibreOffice: 91 de 91 celdas iguales (tools/escribir_prueba.ts y tools/comparar_libreoffice.py)
 - [ ] Elegir la carta principal (A, B, C, D o una combinación)
+- [x] Viento en PB: criterio C (mixto) elegido — la franja expuesta de PB (0 a medio entrepiso, Kz de 5 m) entra en la carga total, el vuelco y el suelo, pero no en el corte de los tabiques
 - [x] Desglose por hoja en PDF y PowerPoint: temas de cada hoja y cálculo analítico paso por paso al lado del Excel, con los controles verificados con los dos (Exportar ▾). Falta: revisar la matemática de «Flex comp PB paralelos»
 
 ### Para armar la torre más rápido

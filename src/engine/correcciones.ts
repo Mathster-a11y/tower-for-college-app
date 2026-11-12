@@ -7,7 +7,7 @@ import { entraEnCalculo, rectangulos, tipoDe, dInterior, type Proyecto } from '.
 import type { PiezaEquivalente } from './mapping';
 
 export interface ResultadoCorregido {
-  /** viento con Kz mínimo 5 m (CIRSOC), sin viento en PB ni subsuelos (guía) y J completo en todas las filas */
+  /** viento con Kz mínimo 5 m (CIRSOC), J completo en todas las filas y viento en PB con el criterio C: fuera del corte de los tabiques, dentro del vuelco y del suelo */
   guia: PlanillaRes;
   /** fuerza y momento de cada pieza con unidades correctas (M rot = Q rot · Mi/Qi) */
   rotA: PiezaRot[];
@@ -102,9 +102,44 @@ export function jMinimoConAlturaTotal(j: JMinimo, h: number): JMinimo {
   return { W: j.W, h, tabla: DIVISORES.map(([hormigon, a, b, c]) => ({ hormigon, h400: (j.W * h * h) / a, h500: (j.W * h * h) / b, h600: (j.W * h * h) / c })) };
 }
 
+/** fuerza del viento sobre la parte expuesta de PB (criterio C, mixto) y su altura sobre la fundación */
+export function fuerzaPB(d: PlanillaDatos, filaPB: number): { W: number; brazo: number; altura: number; p: number } {
+  const v = d.viento, Z = d.viento.Z;
+  if (filaPB < 1 || filaPB > 50) return { W: 0, brazo: 0, altura: 0, p: 0 };
+  const zPB = Z[filaPB] ?? 0, zArriba = Z[filaPB - 1] ?? zPB;
+  const altura = Math.max(0, (zArriba - zPB) / 2);                          // de PB a la mitad del entrepiso
+  const Kz = (z: number) => 2.01 * Math.pow(Math.max(z, 5) / v.zg, 2 / v.alfa);
+  const qz = (z: number) => 0.613 * v.Kzt * v.Kd * v.V ** 2 * v.I * Kz(z);
+  const zs = Z.slice(0, 51).filter(z => z > 0);
+  const qh = zs.length ? qz(Math.max(...zs)) : 0;
+  const p = (qz(zPB) * v.G * v.Cpb - qh * v.G * v.Cps) / 10000;             // t/m², con Kz de z = 5 m
+  let B = 0; for (let k = 0; k <= filaPB; k++) if (d.mnyq.E[k] != null) B = d.mnyq.E[k]!;
+  const zFund = Math.min(...Z.slice(filaPB, 54));
+  return { W: altura * B * p, brazo: zPB - zFund, altura, p };
+}
+/**
+ * Criterio C (mixto) para el viento en PB: la franja expuesta de PB (de 0 a medio entrepiso) recibe viento con Kz de
+ * z = 5 m, pero lo lleva la losa de PB al terreno y a los muros del subsuelo: no entra en el corte de los tabiques
+ * (rototraslación y flexocompresión siguen como la guía). Sí entra en la carga total, el vuelco y las tensiones en el
+ * suelo, con su brazo hasta la fundación. Se ajustan solo los totales de M,NyQ (filas 61 a 99).
+ */
+export function vientoEnPB(m: PlanillaRes['mnyq'], d: PlanillaDatos, filaPB: number) {
+  const f = fuerzaPB(d, filaPB);
+  if (!(f.W > 0)) return;
+  m.H61 += f.W; m.G65 = m.H61;
+  m.J61 += f.W * f.brazo; m.H99 = m.J61;
+  m.G66 = m.G65 ? m.J61 / m.G65 : NaN;
+  m.L99 = m.H99 ? m.K99 / m.H99 : NaN;
+  m.M99 = m.G67 ? (m.G65 * m.G66) / m.G67 : NaN;
+  const a1 = d.mnyq.a1 ?? 0, b1 = d.mnyq.b1 ?? 0;
+  m.N87 = a1 && b1 ? (-6 * m.J61) / a1 / b1 ** 2 / 10 : NaN;
+  m.N89 = m.N86 + m.N87; m.N90 = m.N85 - m.N87;
+}
+
 export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[] }): ResultadoCorregido {
   const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true });
   guia.jminA = jMinimoConAlturaTotal(guia.jminA, guia.mnyq.G69);
+  vientoEnPB(guia.mnyq, d, filaPB);
   if (!extra) return { guia, rotA: repartoCorregido(guia.rotA), rotB: repartoCorregido(guia.rotB) };
   const rotoA = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotA.H, 'A');
   const rotoB = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotB.H, 'B');

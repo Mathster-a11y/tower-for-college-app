@@ -180,7 +180,16 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
   const pesoPiso = ks.map((_, j) => Bv[j] * Lv[j] * 0.7);
   const Pacum: number[] = []; ks.forEach((_, j) => { Pacum[j] = (j ? Pacum[j - 1] : 0) + pesoPiso[j]; });
   const last = ks.length - 1;
-  const W = sum(WA), Mv = MA[last], P = Pacum[last], hw = W ? Mv / W : NaN;
+  // criterio C (mixto): la parte expuesta de PB (de 0 a medio entrepiso) recibe viento con Kz de z = 5 m; lo lleva la
+  // losa de PB al terreno: no entra en el corte de los tabiques, sí en la carga total, el vuelco y el suelo
+  const v = d.viento;
+  const KzA = (z: number) => 2.01 * Math.pow(Math.max(z, 5) / v.zg, 2 / v.alfa);
+  const qzA = (z: number) => 0.613 * v.Kzt * v.Kd * v.V ** 2 * v.I * KzA(z);
+  const qhA = qzA(zs[0]);
+  const hPB = iPB > 0 ? (zs[iPB - 1] - zs[iPB]) / 2 : 0;
+  const pPB = (qzA(iPB >= 0 ? zs[iPB] : 0) * v.G * v.Cpb - qhA * v.G * v.Cps) / 10000;
+  const WPB = iPB > 0 ? hPB * Bv[iPB] * pPB : 0, brazoPB = iPB >= 0 ? zs[iPB] - zs[last] : 0;
+  const W = sum(WA) + WPB, Mv = MA[last] + WPB * brazoPB, P = Pacum[last], hw = W ? Mv / W : NaN;
   const b1 = n0(d.mnyq.b1), a1 = n0(d.mnyq.a1);
   const Me = P * b1 / 2, coef = Mv ? Me / Mv : NaN, e = P ? Mv / P : NaN;
   const S = a1 * b1, G = P * 9 / 7;
@@ -192,14 +201,16 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
   const pasos: Paso[] = [
     { titulo: `Fuerza de viento en un nivel · ${x.nombresNivel[jm]}`, formula: 'W = h influencia · B · p neta', sustitucion: `W = ${num(hInf[jm])} · ${num(Bv[jm])} · ${num(p[jm], 4)}`,
       analitico: WA[jm], excel: m.H[ks[jm]], celda: `M,NyQ!H${ks[jm] + 4}`, unidad: 't', dec: 3 },
-    { titulo: 'Fuerza total del viento A', formula: 'W = Σ Wi', sustitucion: `W = ${WA.filter(w => w).map(w => num(w, 2)).slice(0, 6).join(' + ')}${WA.filter(w => w).length > 6 ? ' + …' : ''}`,
-      analitico: W, excel: m.G65, celda: 'M,NyQ!G65', unidad: 't', dec: 2,
-      nota: 'La guía no carga viento en PB ni en los subsuelos (lo toma el terreno); la planilla sí suma la fila de PB.' },
+    { titulo: 'Fuerza en la parte expuesta de PB', formula: 'W PB = (h entrepiso / 2) · B · p neta(z = 5 m)', sustitucion: `W PB = ${num(hPB)} · ${num(Bv[iPB] ?? 0)} · ${num(pPB, 4)}`,
+      analitico: WPB, excel: iPB >= 0 ? m.H[ks[iPB]] : null, celda: iPB >= 0 ? `M,NyQ!H${ks[iPB] + 4}` : '', unidad: 't', dec: 3,
+      nota: 'Criterio C: solo la fachada expuesta de PB, con empuje y succión (Kz de 5 m). La lleva la losa de PB al terreno: no entra en el corte de los tabiques, sí en el vuelco y el suelo. La planilla usa una franja de 4 m que incluye la parte enterrada y solo la succión.' },
+    { titulo: 'Fuerza total del viento A', formula: 'W = Σ Wi + W PB', sustitucion: `W = ${num(sum(WA), 2)} + ${num(WPB, 2)}`,
+      analitico: W, excel: m.G65, celda: 'M,NyQ!G65', unidad: 't', dec: 2 },
     { titulo: `Corte en PB (${x.nombresNivel[jPB] ?? 'PB'})`, formula: 'Q = Σ W de los niveles de arriba', sustitucion: `Q = Σ W(azotea … ${x.nombresNivel[jPB - 1] ?? ''})`,
       analitico: QA[jPB], excel: m.I[kPB], celda: `M,NyQ!I${kPB + 4}`, unidad: 't', dec: 2 },
     { titulo: `Momento flector en PB`, formula: 'M = M de arriba + Q · h entrepiso', sustitucion: `M = ${num(MA[jPB - 1] ?? 0, 1)} + ${num(QA[jPB], 2)} · ${num((zs[jPB - 1] ?? 0) - zs[jPB])}`,
       analitico: MA[jPB], excel: m.J[kPB], celda: `M,NyQ!J${kPB + 4}`, unidad: 'tm', dec: 1 },
-    { titulo: 'Momento de vuelco en la fundación', formula: 'Mv = Σ Q · h (hasta la fundación)', sustitucion: `Mv = ${num(MA[last - 1] ?? 0, 1)} + ${num(QA[last], 2)} · ${num((zs[last - 1] ?? 0) - zs[last])}`,
+    { titulo: 'Momento de vuelco en la fundación', formula: 'Mv = Σ Q · h (hasta la fundación) + W PB · profundidad', sustitucion: `Mv = ${num(MA[last], 1)} + ${num(WPB, 2)} · ${num(brazoPB)}`,
       analitico: Mv, excel: m.J61, celda: 'M,NyQ!J61', unidad: 'tm', dec: 1 },
     { titulo: 'Altura de la resultante del viento', formula: 'hW = Mv / W', sustitucion: `hW = ${num(Mv, 1)} / ${num(W, 2)}`, analitico: hw, excel: m.G66, celda: 'M,NyQ!G66', unidad: 'm', dec: 2 },
     { titulo: 'Peso de un piso', formula: 'Pi = B · L · 0,7 t/m²', sustitucion: `Pi = ${num(Bv[jm])} · ${num(Lv[jm])} · 0,7`, analitico: pesoPiso[jm], excel: m.L[ks[jm]], celda: `M,NyQ!L${ks[jm] + 4}`, unidad: 't', dec: 1 },
@@ -215,7 +226,7 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
   const vis = ks.map((k, j) => ({ k, j })).filter(o => o.j <= (iPB >= 0 ? iPB : last));
   const dif: string[] = [];
   if (ks[0] === 0) dif.push('Más de 49 niveles sobre PB: el nivel más alto cae en la fila 4 de M,NyQ, que la planilla deja siempre en 0 (B4 = 0). El primer entrepiso sale con altura negativa y el corte, el momento y el vuelco de la planilla no sirven. Error de la planilla (límite de 49 niveles).');
-  if (comparar(W, m.G65) === 'difiere') dif.push('Viento en PB: la planilla suma la fuerza de la fila de PB (altura de influencia hacia abajo); la guía no, porque esa franja descarga directo en el terreno. Por eso W, Q, M y el vuelco dan algo distintos.');
+  if (comparar(W, m.G65) === 'difiere') dif.push(`Viento en PB (criterio C, elegido): la fachada expuesta de PB (${num(hPB)} m) recibe ${num(WPB, 2)} t con Kz de z = 5 m; lo lleva la losa de PB al terreno, así que entra en el vuelco y el suelo pero no en el corte de los tabiques. La planilla toma una franja de 4 m que incluye la parte enterrada, solo con la succión, y la suma al corte que reparte entre los tabiques (rototraslación).`);
   return {
     hoja: 'M,NyQ',
     temas: [
@@ -232,7 +243,7 @@ function hojaMNyQ(x: EntradaDesglose): HojaDesglose {
     pasos,
     tablas: [{
       titulo: 'Fuerza, corte y momento por nivel (viento A)', columnas: [{ nombre: 'W', unidad: 't', dec: 2 }, { nombre: 'Q', unidad: 't', dec: 2 }, { nombre: 'M', unidad: 'tm', dec: 1 }, { nombre: 'P acum.', unidad: 't', dec: 1 }],
-      filas: vis.map(({ k, j }) => ({ etiqueta: x.nombresNivel[j], valores: [[WA[j], m.H[k]], [QA[j], m.I[k]], [MA[j], m.J[k]], [Pacum[j], m.M[k]]] })),
+      filas: vis.map(({ k, j }) => ({ etiqueta: x.nombresNivel[j], valores: [[j === iPB ? WPB : WA[j], m.H[k]], [QA[j], m.I[k]], [MA[j], m.J[k]], [Pacum[j], m.M[k]]] })),
     }, {
       titulo: 'Corte y momento por nivel (viento B, con el largo L)', columnas: [{ nombre: 'Q', unidad: 't', dec: 2 }, { nombre: 'M', unidad: 'tm', dec: 1 }],
       filas: vis.map(({ k, j }) => ({ etiqueta: x.nombresNivel[j], valores: [[QB[j], m.N[k]], [MB[j], m.O[k]]] })),
