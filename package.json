@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:unico": "tsc --noEmit && vite build --mode unico"
+    "build:unico": "tsc --noEmit && vite build --mode unico && node scripts/clasico.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.5",

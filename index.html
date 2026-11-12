@@ -13,8 +13,24 @@
   <meta name="author" content="Augusto Andrés Marsella" />
   <meta name="copyright" content="© 2026 Augusto Andrés Marsella · Licencia de uso no comercial hasta el 11/11/2027" />
   <meta name="description" content="App web que acompaña la planilla «Edificios en torre» (FAUD-UNMDP): planta, 3D y cálculo en vivo, etapa por etapa." />
+  <script>
+    // Si el navegador o el lector de HTML no puede arrancar la app, se muestra por qué en vez de una página en blanco.
+    window.__fallaTorre = function (m) {
+      var a = document.getElementById('arranque'); if (!a) return;
+      a.style.display = 'block';
+      a.innerHTML = '<b>Torre 3D no pudo arrancar en este visor.</b><br>' + String(m).replace(/</g, '&lt;') +
+        '<br><br>Probá abrirla con <b>Chrome</b> (o Samsung Internet): en Chrome, menú ⋮ → Descargas → tocar torre3d.html, ' +
+        'o entrá a <b>mathster-a11y.github.io/tower-for-college-app</b> y usá «Instalar app». Los lectores de HTML simples no corren programas.';
+    };
+    window.addEventListener('error', function (e) { if (!window.__torreLista) window.__fallaTorre(e.message || 'error al cargar'); });
+    setTimeout(function () { if (!window.__torreLista) window.__fallaTorre('El programa no arrancó (puede que este visor tenga JavaScript desactivado o no lo soporte).'); }, 12000);
+  </script>
 </head>
 <body>
+  <div id="arranque" style="position:fixed;inset:0;z-index:9999;display:block;background:#f5f5f3;color:#1f2328;font:16px/1.5 sans-serif;padding:24px">
+    Cargando Torre 3D…
+    <noscript><br><br><b>Este visor tiene JavaScript desactivado.</b> Abrí torre3d.html con Chrome (menú ⋮ → Descargas) o entrá a mathster-a11y.github.io/tower-for-college-app.</noscript>
+  </div>
   <header class="barra" role="toolbar" aria-label="Herramientas">
     <span class="marca">TORRE</span>
     <span class="proyecto" id="nombre-proyecto"></span>

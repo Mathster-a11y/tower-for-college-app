@@ -119,7 +119,15 @@ export interface Opciones3D {
 }
 
 export function montar3D(cont: HTMLElement, op: Opciones3D) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  // sin WebGL (algunos visores de HTML de Android, tablets viejas): el 3D no se dibuja, pero el resto de la app anda
+  let renderer: THREE.WebGLRenderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); }
+  catch {
+    const aviso = document.createElement('div'); aviso.className = 'sin-3d';
+    aviso.textContent = 'Este navegador no puede dibujar en 3D (no tiene WebGL). El cálculo, la planta y los diagramas funcionan igual; para ver el 3D abrí la app en Chrome.';
+    cont.appendChild(aviso);
+    return;
+  }
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
   cont.appendChild(renderer.domElement);
   const info = document.createElement('div');

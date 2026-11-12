@@ -473,3 +473,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !impo
 
 // solo en desarrollo: acceso para las pruebas automáticas (no va en la app publicada)
 if (import.meta.env.DEV) import('./ui/etapas').then(m => { (window as unknown as Record<string, unknown>).__torre = { estado, datosRoto3D: m.datosRoto3D }; });
+
+// la app arrancó: se saca el cartel de «Cargando…»
+(window as unknown as { __torreLista?: boolean }).__torreLista = true;
+document.getElementById('arranque')?.remove();

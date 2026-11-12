@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
   assetsInclude: ['**/*.xlsx'],
   plugins: mode === 'unico' ? [respaldoColorMix(), viteSingleFile()] : [respaldoColorMix()],
   build: mode === 'unico'
-    ? { outDir: 'dist-unico', assetsInlineLimit: 100_000_000, chunkSizeWarningLimit: 4000, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] }
+    ? { outDir: 'dist-unico', assetsInlineLimit: 100_000_000, chunkSizeWarningLimit: 4000, rollupOptions: { output: { format: 'iife' as const } }, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] }
     : { chunkSizeWarningLimit: 1000, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] },
   test: { environment: 'node' },
 }) as never);
