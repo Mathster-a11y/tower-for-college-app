@@ -32,7 +32,7 @@ export function montarPlanta(cont: HTMLElement) {
   // leyenda de colores (los de la planilla)
   const ley = document.createElement('div');
   ley.className = 'leyenda leyenda-planta';
-  ([['alma', 'alma (izq.)'], ['alma der.', 'alma der.'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna circ.'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
+  ([['alma', 'alma (izq.)'], ['alma der.', 'alma der.'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna (circular o de pórtico)'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
     const sp = document.createElement('span'); const i = document.createElement('i'); i.className = 'caja'; i.style.background = COLORES[k]; sp.append(i, t); ley.append(sp);
   });
   cont.appendChild(ley);
@@ -257,9 +257,9 @@ export function montarPlanta(cont: HTMLElement) {
     TIPOS.forEach(t => {
       const b = document.createElement('button'); b.type = 'button'; b.title = `${t.nombre}: ${t.ayuda}`;
       b.setAttribute('aria-pressed', String(t.tipo === insTipo));
-      b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : 2, e: t.tipo === 'columna' ? 2 : 0.3 }, 30));
+      b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : t.tipo === 'pórtico' ? 0.7 : 2, e: t.tipo === 'columna' ? 2 : t.tipo === 'pórtico' ? 0.7 : 0.3 }, 30));
       const sp = document.createElement('span'); sp.textContent = t.nombre; b.append(sp);
-      b.addEventListener('click', () => { insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (insMed.h < 1) { insMed.h = 4; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
+      b.addEventListener('click', () => { const antes = insTipo; insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
       formas.append(b);
     });
     const info = TIPOS.find(t => t.tipo === insTipo)!;
@@ -285,9 +285,9 @@ export function montarPlanta(cont: HTMLElement) {
       datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>área <b>${f(ms.reduce((q, m) => q + (tipoDe(m) === 'tubo-circ' ? Math.PI / 4 * (m.largo ** 2 - Math.max(0, m.largo - 2 * m.espesor) ** 2) : rectangulos(m).reduce((z, r) => z + r.ax * r.ay, 0)), 0))}</b> m²</span>`;
     };
     const filaMed = document.createElement('div'); filaMed.className = 'medidas';
-    filaMed.append(campo(insTipo === 'columna' ? 'D' : 'h', 'h', insTipo === 'columna' ? 'diámetro exterior (m)' : 'largo del alma, medida total (m)'));
-    if (info.usaB) filaMed.append(campo('b', 'b', 'ancho de las alas (m)'));
-    filaMed.append(campo('e', 'e', insTipo === 'columna' ? 'espesor de pared (la mitad de D: maciza)' : 'espesor (m)'), giro);
+    filaMed.append(campo(insTipo === 'columna' ? 'D' : 'h', 'h', insTipo === 'columna' ? 'diámetro exterior (m)' : insTipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)'));
+    if (info.usaB) filaMed.append(campo('b', 'b', insTipo === 'pórtico' ? 'lado de cada columna en el plano del pórtico (m)' : 'ancho de las alas (m)'));
+    filaMed.append(campo('e', 'e', insTipo === 'columna' ? 'espesor de pared (la mitad de D: maciza)' : insTipo === 'pórtico' ? 'el otro lado de la columna (m)' : 'espesor (m)'), giro);
     actualizar();
     panelIns.append(tit, formas, filaMed, vista, datos, ayuda);
   }
@@ -631,6 +631,10 @@ export function montarPlanta(cont: HTMLElement) {
     defs.appendChild(mk);
     svg.appendChild(defs);
     svg.appendChild(fl);
+    // vigas de los pórticos: una línea entre las dos columnas de cada grupo (va debajo de los muros)
+    const porGrupo = new Map<string, typeof p.muros>();
+    p.muros.filter(m => m.portico).forEach(m => { const k = m.grupo || m.piezaA || m.id; porGrupo.set(k, [...(porGrupo.get(k) ?? []), m]); });
+    porGrupo.forEach(cs => { if (cs.length === 2) svg.appendChild(el('line', { x1: X(cs[0].x), y1: Y(cs[0].y), x2: X(cs[1].x), y2: Y(cs[1].y), class: 'viga-portico' })); });
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const yaRotuladas = new Set<string>();

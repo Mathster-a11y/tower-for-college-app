@@ -296,7 +296,7 @@ export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
 /**
  * Tensiones de una pieza a lo largo del sentido del viento (desde el baricentro de la pieza): cada alma como un
  * segmento (σ lineal entre sus dos fibras extremas), cada ala como un punto (axial). Descargado y cargado;
- * referencias en 0 y en la compresión admisible.
+ * referencias en 0 y en la compresión límite (σbk, como la guía).
  */
 export function graficoTensiones(v: import('../engine/flexocompresion').VerifPieza, adm: number, tam: Tam = {}): HTMLElement {
   const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(220, tam.alto ?? 240), mi = 50, md = 16, ms = 16, mb = 36;
@@ -322,7 +322,7 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   const Y = (s: number) => ms + ((s1 - s) / (s1 - s0 || 1)) * (alto - ms - mb);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico', role: 'img', 'aria-label': `Tensiones de ${v.nombre}: tracción máxima ${fmt(v.traccion, 1)} kg/cm², compresión máxima ${fmt(v.compresion, 1)} kg/cm²` });
   ts.forEach(t => { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(t), y2: Y(t), class: t === 0 ? 'd-cero' : 'd-grilla' })); svg.append(el('text', { x: mi - 6, y: Y(t) + 4, class: 'd-eje', 'text-anchor': 'end' }, fmt(t, 0))); });
-  if (-adm >= s0) { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(-adm), y2: Y(-adm), class: 'd-ref fuerte' })); svg.append(el('text', { x: ancho - md - 2, y: Y(-adm) - 4, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, `admisible −${adm}`)); }
+  if (-adm >= s0) { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(-adm), y2: Y(-adm), class: 'd-ref fuerte' })); svg.append(el('text', { x: ancho - md - 2, y: Y(-adm) - 4, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, `límite σbk −${adm}`)); }
   if (s1 > 0) svg.append(el('rect', { x: mi, y: Y(s1), width: ancho - mi - md, height: Y(0) - Y(s1), class: 'd-traccion' }));
   svg.append(el('text', { x: mi, y: ms - 2, class: 'd-eje' }, 'σ (kg/cm²) · arriba de 0: tracción'));
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición en el sentido del viento, desde el baricentro de la pieza (m)'));

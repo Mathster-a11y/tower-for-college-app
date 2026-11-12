@@ -212,6 +212,7 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
   svg.append(el('text', { x: px, y: Oy + 44, class: 'f-txt f-nota' }, 'rayo Oc ∥ lado c (misma letra y color)'));
   svg.append(el('text', { x: px, y: Oy + 68, class: 'f-txt f-fuerza' }, `R: W = ${fmt(c.W, 1)} t`));
   svg.append(el('text', { x: px, y: Oy + 84, class: 'f-txt' }, `a hw = ${fmt(c.zR - zBase)} m de la base`));
+  svg.append(el('text', { x: px, y: Oy + 100, class: 'f-txt f-nota' }, 'fuerzas de los pisos: sin la franja de PB, que va al terreno'));
   activarResaltado(svg);
   return svg;
 }

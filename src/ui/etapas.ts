@@ -480,7 +480,7 @@ const flexion: Etapa = {
     const vs = verifs();
     if (!vs.length) { c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.')); return; }
     const elegida = vs.find(x => x.nombre === estado.piezaFlex) ?? vs[0];
-    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), en PB y muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en PB). Admisible: ${adm} kg/cm² (${d.p.hormigon}).`));
+    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), en PB y muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en PB). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
     const t = h('table', { class: 'tabla' });
     t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'tracción', 'compresión', ''].map(x => h('th', {}, x)))));
     const tb = h('tbody');

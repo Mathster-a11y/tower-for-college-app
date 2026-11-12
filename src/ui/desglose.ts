@@ -39,7 +39,7 @@ export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): 
     h('div', { class: 'inf-marca' }, `TORRE 3D · Edificios en torre (FAUD-UNMDP) · ${AVISO}`),
     h('h1', {}, 'Desglose analítico de la planilla'),
     h('p', {}, `${p.nombre || 'Proyecto'} · ${fecha()} · hormigón ${p.hormigon || 'H30'} · ${AUTOR}`)));
-  const intro = h('section', { class: 'inf-hoja dg-resumen' }, h('h2', {}, 'Cómo leer este desglose'));
+  const intro = h('section', { class: 'inf-hoja dg-resumen' }, h('h2', { class: 'banda' }, h('span', { class: 'chip' }, '00'), 'Cómo leer este desglose'));
   intro.append(h('p', {}, 'Cada hoja del Excel se vuelve a calcular a mano, paso por paso, con las fórmulas del CIRSOC 102 y de la guía de la cátedra. Al lado va el resultado de la planilla (el que da Excel con estos mismos datos) y la celda donde está. Al lado va la diferencia: Δ = Excel − analítico y su porcentaje sobre el analítico, con un semáforo: verde menos de 0,5 % (coincide), amarillo de 0,5 % a 5 % (revisar), rojo más de 5 % (preocupa). Cada hoja explica por qué difiere.'));
   intro.append(h('p', {}, 'Cada hoja usa como datos los mismos valores que recibe en la planilla, así cada diferencia aparece en la hoja donde nace. Los controles se verifican con los dos resultados.'));
   const t = h('table', { class: 'dg-tabla' });
@@ -63,7 +63,8 @@ export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): 
     }
     doc.append(sec);
   });
-  const s7 = h('section', { class: 'inf-hoja' }, h('h2', {}, '7 · Flex comp PB paralelos — pendiente de revisión'));
+  const s7 = h('section', { class: 'inf-hoja' }, h('h2', { class: 'banda' }, h('span', { class: 'chip' }, '07'), 'Hoja «Flex comp PB paralelos»: pendiente de revisión'));
+  s7.style.setProperty('--c', '#AD1457');
   s7.append(h('p', {}, 'Esta hoja no entra en el desglose: la matemática no está terminada. Lo que se sabe hasta ahora:'));
   s7.append(h('ul', {}, ...PENDIENTE_FLEX.map(x => h('li', {}, x))));
   s7.append(h('p', { class: 'inf-pie' }, `Desglose generado con Torre 3D (${AVISO}). Valores de la planilla: los de Excel con estos datos (la app usa sus mismas fórmulas, comprobadas celda por celda contra LibreOffice).`));
@@ -72,7 +73,8 @@ export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): 
 }
 
 function seccionHoja(hj: HojaDesglose, n: number): HTMLElement {
-  const s = h('section', { class: 'inf-hoja dg-hoja' }, h('h2', {}, `${n} · Hoja «${hj.hoja}»`));
+  const s = h('section', { class: 'inf-hoja dg-hoja' }, h('h2', { class: 'banda' }, h('span', { class: 'chip' }, String(n).padStart(2, '0')), `Hoja «${hj.hoja}»`));
+  s.style.setProperty('--c', `#${META[n - 1]?.color ?? '1A6BBD'}`);
   const r = resumenHoja(hj);
   s.append(h('p', { class: 'dg-veredicto' }, `${r.coinciden} de ${r.total} valores en verde · ${r.amarillos} en amarillo · ${r.rojos} en rojo · analítico: ${cumple(r.verificaAnalitico)} · Excel: ${cumple(r.verificaExcel)}`));
   s.append(h('h3', {}, 'Temas de la hoja'));

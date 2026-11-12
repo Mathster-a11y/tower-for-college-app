@@ -62,6 +62,11 @@ export interface Muro {
    */
   rolA?: RolMolde | '';
   rolB?: RolMolde | '';
+  /**
+   * columna de un pórtico: dos columnas de la misma pieza, alineadas en la dirección del viento, trabajan juntas
+   * (acción de pórtico de la hoja J, columnas AO a AX). En la otra dirección quedan fuera del cálculo.
+   */
+  portico?: boolean;
   /** grupo al que pertenece (pieza armada como un elemento: se mueve, gira y espeja entera) */
   grupo?: string;
   /** si el grupo es una pieza tipo: su forma y sus medidas (para cambiarlas después sin salir de la categoría) */
@@ -138,7 +143,7 @@ export interface Proyecto {
   niveles: Nivel[];
   /** b1: lado de la fundación paralelo al viento A · a1: perpendicular (M,NyQ N80 y N81) */
   fundacion: { b1: number; a1: number };
-  /** hormigón de los tabiques: su número es la tensión admisible en MPa (H30 → 300 kg/cm²) */
+  /** hormigón de los tabiques: su número es la resistencia característica σbk en MPa (H30 → 300 kg/cm²) */
   hormigon: string;
   muros: Muro[];
 }

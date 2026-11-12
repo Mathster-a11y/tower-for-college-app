@@ -20,7 +20,7 @@ import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, ty
 
 export type Direccion = 'A' | 'B';
 export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'fuera del cálculo' | 'sin pieza';
-export type Molde = 'simétrico' | 'asimétrico' | 'tubo';
+export type Molde = 'simétrico' | 'asimétrico' | 'tubo' | 'pórtico';
 
 export interface PiezaEquivalente {
   nombre: string;
@@ -69,6 +69,21 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const base = { nombre, dir, muros: muros.map(m => m.id), posicion, area, areaInf, filaHoja: null, avisos };
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
 
+  // pórtico: dos columnas unidas por una viga, alineadas con el viento (columnas AO a AU de la hoja J)
+  const cols = muros.filter(m => m.portico);
+  if (cols.length && cols.length === muros.length) {
+    const enV = (m: Muro) => (m.dir === dirAlma ? m.largo : m.espesor), tr = (m: Muro) => (m.dir === dirAlma ? m.espesor : m.largo);
+    const [c1, c2] = [...cols].sort((a, b) => s(a) - s(b));
+    if (cols.length === 2 && Math.abs(t(c1) - t(c2)) <= Math.max(tr(c1), tr(c2)) / 2 + 0.05) {
+      set(c1, 'columna'); set(c2, 'columna');
+      const AQ = r4(s(c2) + enV(c2) / 2 - (s(c1) - enV(c1) / 2));
+      if (Math.abs(tr(c1) - tr(c2)) > 1e-6 || Math.abs(enV(c1) - enV(c2)) > 1e-6) avisos.push('Pórtico con columnas distintas: la hoja J las lleva al medio del pórtico (AQ/2), no al baricentro real; mirá la diferencia de J.');
+      return { ...base, molde: 'pórtico', fila: { AO: tr(c1), AP: enV(c1), AQ, AT: tr(c2), AU: enV(c2) } };
+    }
+    cols.forEach(m => set(m, 'fuera del cálculo'));
+    avisos.push(cols.length === 2 ? `El pórtico ${muros.map(m => m.id).join('–')} trabaja en su plano: con este viento sus columnas quedan fuera del cálculo.` : 'Un pórtico tiene dos columnas; esta pieza queda fuera del cálculo.');
+    return { ...base, molde: 'pórtico', fila: {} };
+  }
   const circ = muros.filter(m => tipoDe(m) === 'tubo-circ');
   if (circ.length) {
     if (muros.length > 1) avisos.push('Un tubo circular tiene que ser una pieza sola; se usa solo el primero.');

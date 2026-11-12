@@ -1,12 +1,12 @@
 /**
- * Biblioteca de piezas tipo: tabique, L, T, C, U, doble T, núcleo (tubo rectangular) y columna circular.
+ * Biblioteca de piezas tipo: tabique, L, T, C, U, doble T, núcleo (tubo rectangular), columna circular y pórtico.
  * Cada pieza se arma en su marco local con el alma vertical (paralela al viento A cuando el giro es 0°):
  * h = largo del alma (medida total, hasta la cara de afuera de las alas), b = ancho de las alas, e = espesor.
  * Después se gira (0, 90, 180 o 270°) y se lleva al punto de inserción (centro de la caja de la pieza).
  */
 import { huella, type Muro } from './modelo';
 
-export type TipoPieza = 'tabique' | 'L' | 'T' | 'C' | 'U' | 'doble T' | 'núcleo' | 'columna';
+export type TipoPieza = 'tabique' | 'L' | 'T' | 'C' | 'U' | 'doble T' | 'núcleo' | 'columna' | 'pórtico';
 export interface MedidasPieza {
   h: number; b: number; e: number; giro: 0 | 90 | 180 | 270;
   /** espejada (antes de girar): la L o la C miran al otro lado */
@@ -17,7 +17,7 @@ export interface MedidasPieza {
 /** qué medidas por parte tiene cada tipo */
 export const PARTES: Record<TipoPieza, ('eA' | 'bS' | 'eS' | 'bI' | 'eI')[]> = {
   tabique: [], L: ['eA', 'bS', 'eS'], T: ['eA', 'bS', 'eS'], C: ['eA', 'bS', 'eS', 'bI', 'eI'], U: ['eA', 'bI', 'eI'],
-  'doble T': ['eA', 'bS', 'eS', 'bI', 'eI'], núcleo: [], columna: [],
+  'doble T': ['eA', 'bS', 'eS', 'bI', 'eI'], núcleo: [], columna: [], pórtico: [],
 };
 /** medidas efectivas de cada parte */
 export function partes(m: MedidasPieza) {
@@ -32,6 +32,7 @@ export const TIPOS: { tipo: TipoPieza; nombre: string; ayuda: string; usaB: bool
   { tipo: 'doble T', nombre: 'Doble T', ayuda: 'Alma de largo h y dos alas de ancho b centradas (pieza simétrica).', usaB: true },
   { tipo: 'núcleo', nombre: 'Núcleo', ayuda: 'Tubo rectangular (caja): h × b exteriores, e = espesor de pared.', usaB: true },
   { tipo: 'columna', nombre: 'Columna circular', ayuda: 'h = diámetro; e = espesor de pared (la mitad de h: maciza).', usaB: false },
+  { tipo: 'pórtico', nombre: 'Pórtico', ayuda: 'Dos columnas unidas por una viga: h = largo total del pórtico (de cara exterior a cara exterior), b = lado de cada columna en el plano del pórtico, e = el otro lado. Trabaja solo en su plano (acción de pórtico de la hoja J, columnas AO a AX).', usaB: true },
 ];
 
 const r2 = (v: number) => Math.round(v * 1000) / 1000;
@@ -48,6 +49,7 @@ function local(tipo: TipoPieza, m: MedidasPieza): Rect[] {
     case 'T': return [{ cx: 0, cy: -eS / 2, dir: 'Y', largo: h - eS, e: eA }, { cx: 0, cy: arriba, dir: 'X', largo: bS, e: eS }];
     case 'C': return [{ cx: 0, cy: (eI - eS) / 2, dir: 'Y', largo: h - eS - eI, e: eA }, { cx: bS / 2 - eA / 2, cy: arriba, dir: 'X', largo: bS, e: eS }, { cx: bI / 2 - eA / 2, cy: abajo, dir: 'X', largo: bI, e: eI }];
     case 'U': return [{ cx: 0, cy: 0, dir: 'Y', largo: h, e: eA }, { cx: bI - eA, cy: 0, dir: 'Y', largo: h, e: eA }, { cx: (bI - eA) / 2, cy: abajo, dir: 'X', largo: bI - 2 * eA, e: eI }];
+    case 'pórtico': return [{ cx: 0, cy: h / 2 - m.b / 2, dir: 'Y', largo: m.b, e: m.e }, { cx: 0, cy: -h / 2 + m.b / 2, dir: 'Y', largo: m.b, e: m.e }];
     case 'doble T': return [{ cx: 0, cy: (eI - eS) / 2, dir: 'Y', largo: h - eS - eI, e: eA }, { cx: 0, cy: arriba, dir: 'X', largo: bS, e: eS }, { cx: 0, cy: abajo, dir: 'X', largo: bI, e: eI }];
     default: return [];
   }
@@ -75,7 +77,7 @@ export function piezaTipo(tipo: TipoPieza, m: MedidasPieza, x: number, y: number
     const u = (m.espejo ? -1 : 1) * (r.cx - ox), v = r.cy - oy;
     const gx = c * u - s * v, gy = s * u + c * v;
     const dir: 'X' | 'Y' = m.giro === 90 || m.giro === 270 ? (r.dir === 'X' ? 'Y' : 'X') : r.dir;
-    return { ...base(nuevoId()), dir, x: r2(x + gx), y: r2(y + gy), largo: r2(r.largo), espesor: r2(r.e) };
+    return { ...base(nuevoId()), dir, x: r2(x + gx), y: r2(y + gy), largo: r2(r.largo), espesor: r2(r.e), ...(tipo === 'pórtico' ? { portico: true } : {}) };
   });
 }
 
@@ -120,6 +122,7 @@ export function problemaMedidas(tipo: TipoPieza, m: MedidasPieza): string | null
   if (tipo === 'columna') return m.e > m.h / 2 + 1e-9 ? 'el espesor de pared no puede pasar la mitad del diámetro' : null;
   if (tipo === 'núcleo') return 2 * m.e >= Math.min(m.h, m.b) ? 'el espesor de pared es demasiado grande para el tubo' : null;
   if (tipo === 'tabique') return m.e >= m.h ? 'el espesor tiene que ser menor que el largo' : null;
+  if (tipo === 'pórtico') return 2 * m.b >= m.h ? 'las dos columnas no entran en el largo del pórtico: h tiene que ser mayor que 2·b' : null;
   const usa = PARTES[tipo];
   const eAlas = (usa.includes('eS') ? eS : 0) + (usa.includes('eI') ? eI : 0);
   if (eAlas >= m.h) return 'los espesores de las alas no entran en el largo del alma';

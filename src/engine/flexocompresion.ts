@@ -12,7 +12,7 @@
  *    simétrica es lo mismo que M_alas / z de la guía).
  *  - Tracción (edificio descargado): T = σ⁺·b·x / 2 (triángulo de tracción, x por semejanza de triángulos),
  *    As = T / σe (σe = 2400 kg/cm²); se compara con la cuantía mínima de 0,8 % de la sección.
- *  - Compresión (edificio cargado): |σ| ≤ tensión admisible del hormigón (H30 → 300 kg/cm²).
+ *  - Compresión (edificio cargado): |σ| ≤ σbk del hormigón (H30 → 300 kg/cm²), el límite que usa la guía.
  */
 import type { PiezaEquivalente } from './mapping';
 import type { ResultadoCorregido } from './correcciones';
@@ -104,7 +104,7 @@ const presenteEnOLlega = (m: Muro, z: number, alt: DatosAltura) => presenteEn(m,
 /**
  * Verificación de una pieza.
  * @param M momento que toma la pieza en PB (tm), con su signo indistinto (el viento se invierte)
- * @param adm tensión admisible del hormigón (kg/cm²)
+ * @param adm límite de compresión: σbk del hormigón (kg/cm²), como la guía
  */
 export function verificarPieza(nombre: string, dir: 'A' | 'B', muros: Muro[], M: number, alt: DatosAltura, adm: number): VerifPieza {
   const { partes, J } = partesDePieza(muros, dir);

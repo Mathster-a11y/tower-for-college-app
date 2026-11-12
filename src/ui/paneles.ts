@@ -63,7 +63,7 @@ export function seccionViento(): H {
 export function seccionMateriales(): H {
   const p = estado.proyecto;
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Hormigón', 's-horm', p.hormigon, v => set(() => (p.hormigon = v)), { lista: ['H20', 'H25', 'H30', 'H35', 'H40', 'H45', 'H50'], ayuda: `tensión admisible ${TENSION_ADM(p.hormigon)} kg/cm² (H30 → 30 MPa)` });
+  campo(fo, 'Hormigón', 's-horm', p.hormigon, v => set(() => (p.hormigon = v)), { lista: ['H20', 'H25', 'H30', 'H35', 'H40', 'H45', 'H50'], ayuda: `resistencia característica σbk = ${TENSION_ADM(p.hormigon)} kg/cm² (H30 → 30 MPa); es el límite de compresión que usa la guía` });
   campo(fo, 'b1', 's-b1', p.fundacion.b1, v => set(() => (p.fundacion.b1 = num(v) ?? p.fundacion.b1)), { tipo: 'number', unidad: 'm', ayuda: 'lado de la fundación paralelo al viento A · M,NyQ!N80' });
   campo(fo, 'a1', 's-a1', p.fundacion.a1, v => set(() => (p.fundacion.a1 = num(v) ?? p.fundacion.a1)), { tipo: 'number', unidad: 'm', ayuda: 'lado perpendicular al viento A · M,NyQ!N81' });
   return seccion('Materiales y fundación', fo).el;
@@ -443,7 +443,7 @@ export function panelAvisos(c: H) {
 // ------------------------------------------------------------------ Ayuda
 export function panelAyuda(c: H) {
   const pasos: [string, string][] = [
-    ['Sitio', 'Nombre, alumno y datos del viento (CIRSOC 102). La exposición completa zg y α. El hormigón fija la tensión admisible: H30 → 30 MPa = 300 kg/cm².'],
+    ['Sitio', 'Nombre, alumno y datos del viento (CIRSOC 102). La exposición completa zg y α. El hormigón fija la resistencia característica σbk (H30 → 30 MPa = 300 kg/cm²), que la app usa como límite de compresión, igual que la guía.'],
     ['Niveles', 'Con «Generar» armás la torre: pisos, altura del piso tipo, altura de PB y subsuelos. La tabla funciona como Excel: escribí encima, arrastrá el cuadradito de la esquina para copiar o seguir una serie, Ctrl+C / Ctrl+V desde Excel. B y L van en la azotea y donde la planta cambia.'],
     ['Muros', 'El origen (0, 0) es el centro de la planta de PB. Dirección Y: paralelo al viento A; X: paralelo al viento B. Arrastrá los muros en la planta o movelos con las flechas (Mayús: de a 1 m).'],
     ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
