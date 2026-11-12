@@ -33,7 +33,7 @@ export function datosAltura(p: Proyecto, v: VientoRes, m: MNyQRes, filaNivel: nu
 /** E (t/m²) que usa la planilla: J mín = W·h² / divisor y el divisor de h/500 vale 8·E/500 (ménsula con carga uniforme). */
 export const E_DE_DIVISOR = (divisorH500: number) => (divisorH500 * 500) / 8;
 
-export interface Deformada { puntos: { nivel: string; z: number; d: number }[]; dTop: number; h: number; limite: number; E: number; J: number; dUniforme: number; }
+export interface Deformada { puntos: { nivel: string; z: number; d: number; /** curvatura M / (E·J) */ k: number }[]; dTop: number; h: number; limite: number; E: number; J: number; dUniforme: number; }
 
 /**
  * Deformada de la torre como ménsula empotrada en PB: θ = ∫ M / (E·J) dz, δ = ∫ θ dz (trapecios),
@@ -52,7 +52,7 @@ export function deformada(alt: PuntoAltura[], W: number, E: number, J: number, J
       d += ((th + th1) / 2) * dz;
       th = th1;
     }
-    out.push({ nivel: x.nivel, z: x.z, d });
+    out.push({ nivel: x.nivel, z: x.z, d, k: x.M / Jen(x.z) / E });
   });
   const h = sobre.length ? sobre[sobre.length - 1].z - sobre[0].z : 0;
   return { puntos: out, dTop: d, h, limite: h / 500, E, J, dUniforme: (W * h ** 3) / (8 * E * J) };
@@ -155,36 +155,83 @@ export function repartoGuia(paralelos: ElementoRot[], perpendiculares: ElementoR
  */
 export interface Rototraslacion3D {
   dir: 'A' | 'B';
-  niveles: { nivel: string; z: number; d: number; th: number }[];
+  /** cada nivel: traslación δ, giro θ y el CR de ese nivel (cambia si hay muros que no llegan arriba) */
+  niveles: { nivel: string; z: number; d: number; th: number; cr: { x: number; y: number } }[];
   /** CR en planta (coordenadas x, y del proyecto) */
   cr: { x: number; y: number };
   /** sentido del viento en planta (vector unitario) */
   viento: { x: number; y: number };
   e: number; dTop: number; thTop: number;
 }
-export function rototraslacion3D(def: Deformada, dir: 'A' | 'B', Xr: number, Yr: number, SJ: number, SJa2: number): Rototraslacion3D {
-  const k = SJa2 > 1e-12 ? (Xr * SJ) / SJa2 : 0;
-  const niveles = def.puntos.map(p => ({ nivel: p.nivel, z: p.z, d: p.d, th: -p.d * k }));
-  const top = niveles[niveles.length - 1];
+/** Torsión de un nivel: CR en planta y k = e·ΣJ/ΣJt·a² en el marco del viento (si no cambia en altura, θ = −δ·k). */
+export interface TorsionNivel { z: number; cr: { x: number; y: number }; k: number }
+
+export function rototraslacion3D(def: Deformada, dir: 'A' | 'B', Xr: number, Yr: number, SJ: number, SJa2: number, porNivel?: TorsionNivel[]): Rototraslacion3D {
+  const k0 = SJa2 > 1e-12 ? (Xr * SJ) / SJa2 : 0;
   // marco del viento → planta: A: t = x, s = y · B: t = −y, s = x (las dos conservan el sentido de giro)
   const cr = dir === 'A' ? { x: Xr, y: Yr } : { x: Yr, y: -Xr };
+  const deNivel = (z: number) => porNivel?.find(q => Math.abs(q.z - z) < 1e-6);
+  const varia = !!porNivel?.length && porNivel.some(q => Math.abs(q.k - k0) > 1e-12 * Math.max(1, Math.abs(k0)) || Math.hypot(q.cr.x - cr.x, q.cr.y - cr.y) > 1e-9);
+  // El giro se integra como la deformada, con la curvatura de torsión κθ = κδ·k(z). Con k constante da θ = −δ·k
+  // (el reparto de la guía); si un muro deja de existir arriba, cada nivel gira con su propio k y su propio CR.
+  let gp = 0, g = 0;
+  const niveles = def.puntos.map((p, i, a) => {
+    const kz = varia ? deNivel(p.z)?.k ?? k0 : k0;
+    if (i > 0) {
+      const q = a[i - 1], kq = varia ? deNivel(q.z)?.k ?? k0 : k0, dz = p.z - q.z;
+      const gp1 = gp + ((q.k * kq + p.k * kz) / 2) * dz;
+      g += ((gp + gp1) / 2) * dz; gp = gp1;
+    }
+    return { nivel: p.nivel, z: p.z, d: p.d, th: varia ? -g : -p.d * k0, cr: (varia ? deNivel(p.z)?.cr : undefined) ?? cr };
+  });
+  const top = niveles[niveles.length - 1];
   return { dir, niveles, cr, viento: dir === 'A' ? { x: 0, y: 1 } : { x: 1, y: 0 }, e: Xr, dTop: top?.d ?? 0, thTop: top?.th ?? 0 };
 }
-/** δ y θ en una cota cualquiera (interpolados; debajo de PB no se mueve). */
-export function movimientoEn(r: Rototraslacion3D, z: number): { d: number; th: number } {
+
+/**
+ * CR y k de cada nivel con los muros que existen a esa cota (los que no llegan arriba dejan de contar).
+ * La geometría da la variación en altura; en PB vale lo de la fuente elegida (planilla o Guía/CIRSOC).
+ */
+export function torsionPorNivel(p: Proyecto, piezas: PiezaEquivalente[], dir: 'A' | 'B', base: { cr: { x: number; y: number }; k: number }): TorsionNivel[] {
+  const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
+  const porId = new Map(p.muros.map(m => [m.id, m]));
+  const geo = (z: number) => {
+    const conJ = (d: 'A' | 'B') => piezas.filter(pz => pz.dir === d && pz.filaHoja !== null).map(pz => {
+      const ms = pz.muros.map(id => porId.get(id)!).filter(m => m && presenteEn(m, z, zFund, zTop));
+      return { J: ms.length ? partesDePieza(ms, d).J : 0, pos: pz.posicion };
+    }).filter(x => x.J > 0);
+    const a = conJ('A'), b = conJ('B');
+    const SA = a.reduce((s, x) => s + x.J, 0), SB = b.reduce((s, x) => s + x.J, 0);
+    if (!(SA > 0) || !(SB > 0)) return null;
+    const cx = a.reduce((s, x) => s + x.J * x.pos, 0) / SA, cy = b.reduce((s, x) => s + x.J * x.pos, 0) / SB;
+    const Sa2 = a.reduce((s, x) => s + x.J * (x.pos - cx) ** 2, 0) + b.reduce((s, x) => s + x.J * (x.pos - cy) ** 2, 0);
+    return { cx, cy, k: Sa2 > 1e-12 ? (dir === 'A' ? cx * SA : -cy * SB) / Sa2 : 0 };
+  };
+  const zPB = p.niveles[p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1)]?.cota ?? 0;
+  const g0 = geo(zPB);
+  if (!g0) return [];
+  let ant = { cr: base.cr, k: base.k };
+  return p.niveles.filter(n => n.cota >= zPB).reverse().map(n => {
+    const g = geo(n.cota);
+    if (g) ant = { cr: { x: base.cr.x + g.cx - g0.cx, y: base.cr.y + g.cy - g0.cy }, k: Math.abs(g0.k) > 1e-12 ? (base.k * g.k) / g0.k : base.k + g.k - g0.k };
+    return { z: n.cota, ...ant };
+  }).reverse();
+}
+/** δ, θ y CR en una cota cualquiera (interpolados; debajo de PB no se mueve). */
+export function movimientoEn(r: Rototraslacion3D, z: number): { d: number; th: number; cr: { x: number; y: number } } {
   const n = r.niveles;
-  if (!n.length || z <= n[0].z) return { d: 0, th: 0 };
+  if (!n.length || z <= n[0].z) return { d: 0, th: 0, cr: n[0]?.cr ?? r.cr };
   for (let i = 1; i < n.length; i++) if (z <= n[i].z) {
-    const u = (z - n[i - 1].z) / (n[i].z - n[i - 1].z || 1);
-    return { d: n[i - 1].d + u * (n[i].d - n[i - 1].d), th: n[i - 1].th + u * (n[i].th - n[i - 1].th) };
+    const u = (z - n[i - 1].z) / (n[i].z - n[i - 1].z || 1), a = n[i - 1], b = n[i];
+    return { d: a.d + u * (b.d - a.d), th: a.th + u * (b.th - a.th), cr: { x: a.cr.x + u * (b.cr.x - a.cr.x), y: a.cr.y + u * (b.cr.y - a.cr.y) } };
   }
   const u = n[n.length - 1];
-  return { d: u.d, th: u.th };
+  return { d: u.d, th: u.th, cr: u.cr };
 }
 /** Posición en planta del punto (x, y) a la cota z, con la traslación multiplicada por f y el giro por fGiro (exageraciones). */
 export function desplazar(r: Rototraslacion3D, x: number, y: number, z: number, f = 1, fGiro = f): { x: number; y: number } {
-  const { d, th } = movimientoEn(r, z);
+  const { d, th, cr } = movimientoEn(r, z);
   const a = th * fGiro, c = Math.cos(a), s = Math.sin(a);
-  const dx = x - r.cr.x, dy = y - r.cr.y;
-  return { x: r.cr.x + c * dx - s * dy + f * d * r.viento.x, y: r.cr.y + s * dx + c * dy + f * d * r.viento.y };
+  const dx = x - cr.x, dy = y - cr.y;
+  return { x: cr.x + c * dx - s * dy + f * d * r.viento.x, y: cr.y + s * dx + c * dy + f * d * r.viento.y };
 }

@@ -15,10 +15,14 @@ import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
+/** Corrimiento real máximo de un punto de la planta (traslación + giro alrededor del CR de cada nivel). */
+export function movMaximo(r: Rototraslacion3D, B: number, L: number): number {
+  return Math.max(0, ...r.niveles.map(n => Math.abs(n.d) + Math.abs(n.th) * Math.hypot(B / 2 + Math.abs(n.cr.x), L / 2 + Math.abs(n.cr.y))));
+}
+
 /** Exageración «redonda» (1, 2, 5 × 10ⁿ) para que la azotea se corra cerca de un sexto del ancho de la planta. */
 export function exageracionAuto(r: Rototraslacion3D, B: number, L: number): number {
-  const rmax = Math.hypot(B / 2 + Math.abs(r.cr.x), L / 2 + Math.abs(r.cr.y));
-  const mov = Math.max(...r.niveles.map(n => Math.abs(n.d) + Math.abs(n.th) * rmax), 1e-12);
+  const mov = Math.max(movMaximo(r, B, L), 1e-12);
   const f = (0.16 * Math.max(B, L)) / mov;
   const p = 10 ** Math.floor(Math.log10(f));
   return [5, 2, 1].map(k => k * p).find(v => v <= f) ?? p;
@@ -200,8 +204,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     });
     if (espectro && roto) {
       // el mayor corrimiento real de la torre: el de la esquina más alejada del CR en la azotea
-      const rmax = Math.hypot(B / 2 + Math.abs(roto.cr.x), L / 2 + Math.abs(roto.cr.y));
-      const maximo = Math.max(...roto.niveles.map(nv => Math.abs(nv.d) + Math.abs(nv.th) * rmax), 1e-12);
+      const maximo = Math.max(movMaximo(roto, B, L), 1e-12);
       const blanco = new THREE.Color(0xffffff), verde = new THREE.Color(css('--deformada', '#1d9e75'));
       prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
     }
@@ -233,16 +236,18 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     }
     // eje vertical por el CR: sin deformar (trazos) y deformado (se traslada, no gira)
     const cEle = new THREE.Color(css('--elegido', '#e8a317'));
-    const eje0 = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(r.cr.x, z0, -r.cr.y), new THREE.Vector3(r.cr.x, top + 2, -r.cr.y)]), new THREE.LineDashedMaterial({ color: cEle, dashSize: 0.6, gapSize: 0.5 }));
+    // si un muro no llega arriba, el CR cambia de lugar en altura: el eje sigue al CR de cada nivel
+    const crEn = (z: number) => movimientoEn(r, Math.min(z, top)).cr;
+    const zsE = [...cotas.filter(z => z >= z0), top + 2];
+    const eje0 = new THREE.Line(new THREE.BufferGeometry().setFromPoints(zsE.map(z => { const c = crEn(Math.max(z, z0 + 1e-6)); return new THREE.Vector3(c.x, z, -c.y); })), new THREE.LineDashedMaterial({ color: cEle, dashSize: 0.6, gapSize: 0.5 }));
     eje0.computeLineDistances();
     grupo.add(eje0);
-    const zsE = [...cotas.filter(z => z >= z0), top + 2];
     const gE = new THREE.BufferGeometry().setFromPoints(zsE.map(z => new THREE.Vector3(r.cr.x, z, -r.cr.y)));
     const ejeD = new THREE.Line(gE, new THREE.LineBasicMaterial({ color: cEle }));
     grupo.add(ejeD);
     extras.push({ mover: f => {
       const a = gE.getAttribute('position') as THREE.BufferAttribute;
-      zsE.forEach((z, i) => { const q = desplazar(r, r.cr.x, r.cr.y, Math.min(z, top), f, f * kGiro); a.setXYZ(i, q.x, z, -q.y); });
+      zsE.forEach((z, i) => { const zz = Math.min(z, top), c = crEn(Math.max(zz, z0 + 1e-6)), q = desplazar(r, c.x, c.y, zz, f, f * kGiro); a.setXYZ(i, q.x, z, -q.y); });
       a.needsUpdate = true; gE.computeBoundingSphere();
     } });
     // flecha curva del giro sobre la azotea (sentido de θ), como en las láminas de la clase
@@ -260,7 +265,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       arco.add(cono);
       grupo.add(arco);
       extras.push({ mover: f => {
-        const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro);
+        const c = movimientoEn(r, top).cr, q = desplazar(r, c.x, c.y, top, f, f * kGiro);
         arco.position.set(q.x, top + 1.2, -q.y);
         arco.rotation.y = movimientoEn(r, top).th * f * kGiro;
         arco.visible = f > 0;
@@ -323,7 +328,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     etiqueta('punto de giro (vuelco)', 'giro', 'Borde de la base a sotavento: el viento hace volcar la torre alrededor de esta arista (M,NyQ: Mv contra Me = P · b\'/2)').position.copy(g1.clone().add(new THREE.Vector3(A ? 1 : 0.5, 0.8, A ? 0 : 0.5)));
     crAbajo.position.set(r.cr.x, z0 + 0.4, -r.cr.y);
     const crArriba = etiqueta('CR · centro de rotación de la planta', 'cr arriba');
-    extras.push({ mover: f => { const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro); crArriba.position.set(q.x, top + 6, -q.y); } });
+    extras.push({ mover: f => { const c = movimientoEn(r, top).cr, q = desplazar(r, c.x, c.y, top, f, f * kGiro); crArriba.position.set(q.x, top + 6, -q.y); } });
     // ejes en el suelo, en el sentido del viento: simetría (donde actúa W) e inercia (por el CR)
     const largoEje = (A ? L : B) / 2 + 3;
     const eje = (t: number, color: THREE.Color, texto: string, trazos: boolean, alFinal = false) => {
@@ -365,9 +370,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     grupo.add(new THREE.Line(gD, new THREE.LineBasicMaterial({ color: new THREE.Color(css('--deformada', '#2a9d5c')) })));
     const etD = etiqueta(`δ = ${fmt(r.dTop * 1000, 1)} mm`, 'delta', 'Corrimiento real de la azotea (el dibujo está exagerado)');
     extras.push({ mover: f => {
-      const q = desplazar(r, r.cr.x, r.cr.y, top, f, f * kGiro);
+      const c = movimientoEn(r, top).cr, q = desplazar(r, c.x, c.y, top, f, f * kGiro);
       const a = gD.getAttribute('position') as THREE.BufferAttribute;
-      a.setXYZ(0, r.cr.x, top + 2, -r.cr.y); a.setXYZ(1, q.x, top + 2, -q.y); a.needsUpdate = true; gD.computeBoundingSphere();
+      a.setXYZ(0, c.x, top + 2, -c.y); a.setXYZ(1, q.x, top + 2, -q.y); a.needsUpdate = true; gD.computeBoundingSphere();
       etD.position.set(q.x, top + 2, -q.y);
     } });
   }
@@ -384,8 +389,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     info.innerHTML = `<b>Traslación × ${fmt(fMax, 0)}${giro > 1e-12 ? ` · giro × ${fmt(fMax * kGiro, 0)}` : ''}</b><br>azotea: δ = ${fmt(roto.dTop * 1000, 1)} mm` +
       (giro > 1e-12 ? ` · θ = ${fmt(giro * 1e3, 3)} ‰ rad = ${fmt((giro * 180) / Math.PI * 60, 2)}′ (${roto.thTop < 0 ? 'horario' : 'antihorario'})` : ' · sin giro (solo traslación)') +
       (estado.capas.espectro ? (() => {
-        const { B, L } = medidas, rmax = Math.hypot(B / 2 + Math.abs(roto.cr.x), L / 2 + Math.abs(roto.cr.y));
-        const max = Math.max(...roto.niveles.map(nv => Math.abs(nv.d) + Math.abs(nv.th) * rmax));
+        const { B, L } = medidas, max = movMaximo(roto, B, L);
         return `<div class="espectro"><span>0</span><i></i><span>${fmt(max * 1000, 1)} mm</span></div><small>corrimiento real de cada punto (traslación + giro)</small>`;
       })() : '');
   }

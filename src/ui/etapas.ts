@@ -10,7 +10,7 @@ import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelPr
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
-import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
+import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
@@ -372,7 +372,10 @@ export function datosRoto3D(): Rototraslacion3D | null {
     const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
     const Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
-    const r = rototraslacion3D(def, d.dir, dp.Xr, dp.Yr, dp.SJ, dp.SJa2);
+    // CR y giro de cada nivel: si un muro no llega arriba, los pisos de arriba giran sin él
+    const k0 = dp.SJa2 > 1e-12 ? (dp.Xr * dp.SJ) / dp.SJa2 : 0;
+    const cr0 = d.dir === 'A' ? { x: dp.Xr, y: dp.Yr } : { x: dp.Yr, y: -dp.Xr };
+    const r = rototraslacion3D(def, d.dir, dp.Xr, dp.Yr, dp.SJ, dp.SJa2, torsionPorNivel(d.p, d.asig.piezas, d.dir, { cr: cr0, k: k0 }));
     return r.niveles.length && isFinite(r.dTop) ? r : null;
   } catch { return null; }
 }
@@ -400,6 +403,7 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
     : `Versión exagerada de cómo se mueve la torre con el viento ${dp.dir}. Cada piso se traslada δ(z) en el sentido del viento (la deformada de la etapa Rigidez) ` +
       (gira ? `y gira alrededor del CR (eje naranja) un ángulo θ(z) = δ(z) · e · ΣJ / ΣJt·a², en sentido ${r.thTop < 0 ? 'horario' : 'antihorario'} visto desde arriba. Así cada tabique se corre δ·(1 ± e·ΣJ·a/ΣJt·a²): los del lado del viento más (+) y los del otro lado menos (−), como en el reparto de la rototraslación.`
         : 'y no gira: el eje de inercia coincide con el eje de simetría, la planta solo se traslada.') +
+      (r.niveles.some(n => Math.hypot(n.cr.x - r.cr.x, n.cr.y - r.cr.y) > 1e-3) ? ' Hay tabiques que no llegan a la azotea: arriba de donde terminan, el CR se corre (el eje naranja se quiebra) y el giro deja de crecer como abajo, porque esos pisos giran con los tabiques que tienen.' : '') +
       ' En trazos, la torre sin deformar. El giro se exagera aparte (× extra) para que se vea el revirado; el recuadro da los valores reales.';
   // controles: exageración de la traslación y extra del giro (escala logarítmica alrededor del valor automático)
   const deslizador = (nombre: string, actual: number, auto2: number, poner: (x: number | null) => void, globo: string) => {

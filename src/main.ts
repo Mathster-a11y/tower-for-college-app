@@ -470,3 +470,6 @@ try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).cat
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !import.meta.env.DEV) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* sin copia: la app igual funciona en línea */ }); });
 }
+
+// solo en desarrollo: acceso para las pruebas automáticas (no va en la app publicada)
+if (import.meta.env.DEV) import('./ui/etapas').then(m => { (window as unknown as Record<string, unknown>).__torre = { estado, datosRoto3D: m.datosRoto3D }; });
