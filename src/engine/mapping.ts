@@ -228,19 +228,44 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
  */
 function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
   const pz = perfilEquivalente(nombre, dir, muros, papeles);
-  if (!pz.alasMedio?.length || !Object.keys(pz.fila).length) return pz;
+  if (!Object.keys(pz.fila).length || pz.molde === 'tubo' || pz.molde === 'pórtico') return pz;
   const clave = dir === 'A' ? 'rolA' : 'rolB';
-  const fuera = new Set(pz.alasMedio);
-  const alt = muros.map(m => (fuera.has(m.id) ? { ...m, [clave]: 'fuera' } : m));
+  // si el alumno eligió papeles a mano en este viento, se respetan tal cual
+  if (muros.some(m => (m[clave] ?? '') !== '' || tipoDe(m) !== 'tabique')) return pz;
+  const dirAlma = dir === 'A' ? 'Y' : 'X';
+  const almas = muros.filter(m => m.dir === dirAlma);
   const Jr = Jreal(muros, dir);
   const Jh = (x: PiezaEquivalente) => (Object.keys(x.fila).length ? calcFilaJ({ S: 0.01, W: 0.01, X: 0.01, ...x.fila }, dir === 'B', false).AY : 0);
-  const pz2 = perfilEquivalente(nombre, dir, alt, papeles);
-  if (Math.abs(Jh(pz2) - Jr) < Math.abs(Jh(pz) - Jr)) {
-    pz2.avisos = pz2.avisos.filter(a => !a.startsWith('Fuera del molde (elegido a mano)'));
-    pz2.avisos.push(`${[...fuera].join(', ')} ${fuera.size > 1 ? 'están' : 'está'} en el medio del alma: la app ${fuera.size > 1 ? 'los dejó' : 'lo dejó'} fuera del molde porque así el J de la hoja queda más cerca del real (se puede cambiar en el grupo).`);
-    return pz2;
+  // variantes: qué almas usa el molde (y en qué orden) y si las alas del medio quedan fuera
+  const variantes: Record<string, string>[] = [{}];
+  if (almas.length > 2 && almas.length <= 6) {
+    almas.forEach((a, i) => almas.forEach((b, j) => {
+      if (i === j) return;
+      const v: Record<string, string> = {};
+      almas.forEach(m => { v[m.id] = m === a ? 'alma' : m === b ? 'alma der.' : 'fuera'; });
+      variantes.push(v);
+    }));
+    almas.forEach(a => { const v: Record<string, string> = {}; almas.forEach(m => { v[m.id] = m === a ? 'alma' : 'fuera'; }); variantes.push(v); });
   }
-  return perfilEquivalente(nombre, dir, muros, papeles);   // vuelve a dejar los papeles de la opción elegida
+  const conRoles = (v: Record<string, string>) => muros.map(m => (v[m.id] ? { ...m, [clave]: v[m.id] } : m));
+  let mejor = { v: {} as Record<string, string>, d: Math.abs(Jh(pz) - Jr) };
+  for (const v0 of variantes) {
+    const p1 = perfilEquivalente(nombre, dir, conRoles(v0), papeles);
+    const prueba = [v0, ...(p1.alasMedio?.length ? [{ ...v0, ...Object.fromEntries(p1.alasMedio.map(id => [id, 'fuera'])) }] : [])];
+    for (const v of prueba) {
+      const px = v === v0 ? p1 : perfilEquivalente(nombre, dir, conRoles(v), papeles);
+      const d = Math.abs(Jh(px) - Jr);
+      if (d < mejor.d - 1e-9) mejor = { v, d };
+    }
+  }
+  if (!Object.keys(mejor.v).length) return perfilEquivalente(nombre, dir, muros, papeles);   // vuelve a dejar los papeles de la opción elegida
+  const elegido = perfilEquivalente(nombre, dir, conRoles(mejor.v), papeles);
+  // los avisos de «elegido a mano» no corresponden: lo eligió la app
+  elegido.avisos = elegido.avisos.filter(x => !x.startsWith('Fuera del molde (elegido a mano)') && !x.startsWith('Más de dos almas'));
+  const fuera = Object.entries(mejor.v).filter(([, r]) => r === 'fuera').map(([id]) => id);
+  const almasUsadas = Object.entries(mejor.v).filter(([, r]) => r.startsWith('alma')).map(([id]) => id);
+  elegido.avisos.push(`La app armó el molde con ${almasUsadas.length ? `${almasUsadas.join(' y ')} como ${almasUsadas.length > 1 ? 'almas' : 'alma'}` : 'el alma más larga'}${fuera.length ? ` y dejó fuera ${fuera.join(', ')}` : ''}: es la combinación que deja el J de la hoja más cerca del real (se puede cambiar en el grupo).`);
+  return elegido;
 }
 
 /** J de la sección real respecto de su baricentro, para el viento dado: cada rectángulo con su Steiner (m⁴) */
@@ -353,7 +378,28 @@ export function aPlanilla(p: Proyecto): Asignacion {
   const grupos = (dir: Direccion) => {
     const g = new Map<string, Muro[]>();
     activos.forEach(m => { const k = dir === 'A' ? m.piezaA : m.piezaB; if (k) g.set(k, [...(g.get(k) ?? []), m]); });
-    return [...g.entries()].map(([nombre, ms]) => elegirPerfil(nombre, dir, ms, papeles));
+    return [...g.entries()].map(([nombre, ms0]) => {
+      // tramos unidos por un dintel (puertas): para la hoja J van como un solo muro entero, como en la guía (el dintel
+      // transmite el corte entre los dos tramos; la guía verifica el dintel aparte)
+      const unidos: [Muro, Muro][] = [];
+      let ms = [...ms0];
+      ms0.forEach(a => {
+        const b = a.vano?.tipo === 'dintel' ? ms.find(x => x.id === a.vano!.con) : undefined;
+        if (!b || !ms.includes(a) || a.dir !== b.dir) return;
+        const ini = Math.min(a.dir === 'X' ? a.x - a.largo / 2 : a.y - a.largo / 2, b.dir === 'X' ? b.x - b.largo / 2 : b.y - b.largo / 2);
+        const fin = Math.max(a.dir === 'X' ? a.x + a.largo / 2 : a.y + a.largo / 2, b.dir === 'X' ? b.x + b.largo / 2 : b.y + b.largo / 2);
+        const entero: Muro = { ...a, largo: r4(fin - ini), x: a.dir === 'X' ? r4((ini + fin) / 2) : a.x, y: a.dir === 'Y' ? r4((ini + fin) / 2) : a.y, areaInf: a.areaInf + b.areaInf };
+        ms = ms.filter(x => x !== a && x !== b).concat(entero);
+        unidos.push([a, b]);
+      });
+      const pz = elegirPerfil(nombre, dir, ms, papeles);
+      unidos.forEach(([a, b]) => {
+        if (!pz.muros.includes(b.id)) pz.muros.push(b.id);
+        if (papeles[a.id]) papeles[b.id] = { ...papeles[a.id] };
+        pz.avisos.push(`${a.id}–${b.id}: puerta con dintel de ${String(a.vano!.ancho).replace('.', ',')} m. La hoja J lleva el muro entero, como la guía (el dintel une los dos tramos); sin dintel, cada tramo trabajaría solo.`);
+      });
+      return pz;
+    });
   };
   const piezasA = grupos('A'), piezasB = grupos('B');
   // J de la hoja (molde) contra J de la sección real: la simplificación puede cambiarlo mucho
@@ -390,6 +436,10 @@ export function aPlanilla(p: Proyecto): Asignacion {
     rotB: { H: Hpos(piezasB, piezasA) },
     flex,
   };
-  [...piezasA, ...piezasB].forEach(pz => pz.avisos.forEach(a => avisos.push(`${pz.nombre}: ${a}`)));
+  // las piezas que quedan enteras fuera del molde (columnas que no toman viento) van en un solo aviso
+  const enteras = (pz: PiezaEquivalente) => pz.avisos.length === 1 && pz.avisos[0].startsWith('Fuera del molde (elegido a mano)') && pz.muros.every(id => (pz.dir === 'A' ? porId.get(id)?.rolA : porId.get(id)?.rolB) === 'fuera');
+  const fueraA = piezasA.filter(enteras).map(pz => pz.nombre), fueraB = piezasB.filter(enteras).map(pz => pz.nombre);
+  [...piezasA, ...piezasB].filter(pz => !enteras(pz)).forEach(pz => pz.avisos.forEach(a => avisos.push(`${pz.nombre}: ${a}`)));
+  for (const [d, xs] of [['A', fueraA], ['B', fueraB]] as const) if (xs.length) avisos.push(`Viento ${d}: ${xs.length} ${xs.length > 1 ? 'piezas quedan' : 'pieza queda'} fuera del molde (elegido a mano: ${xs.length > 6 ? `${xs.slice(0, 6).join(', ')}…` : xs.join(', ')}). No toman viento; sí la carga de su área de influencia.`);
   return { datos, piezas: [...piezasA, ...piezasB], papeles, avisos, filaNivel };
 }

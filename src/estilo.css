@@ -893,3 +893,12 @@ svg.zoomable.acercado:active { cursor: grabbing; }
 @media (pointer: coarse) { .zoom-dibujo button { min-width: 38px; min-height: 34px; } }
 /* al acercar, las líneas no engordan: se separan los vectores chicos que estaban amontonados */
 svg.zoomable.acercado line, svg.zoomable.acercado path, svg.zoomable.acercado polyline, svg.zoomable.acercado polygon, svg.zoomable.acercado rect, svg.zoomable.acercado circle { vector-effect: non-scaling-stroke; }
+
+/* calar: vista previa del vano y dinteles */
+.planta .previa-vano { fill: var(--field); stroke: var(--mal, #c62828); stroke-width: 1.5; stroke-dasharray: 3 2; pointer-events: none; }
+.planta .previa-vano.no-entra { fill: color-mix(in srgb, #c62828 25%, transparent); }
+.planta .dintel { stroke: var(--ink2); stroke-width: 1.2; stroke-dasharray: 4 3; pointer-events: none; }
+.planta .hueco-vano { stroke: none; }
+svg.planta.calando g.muro { cursor: crosshair; }
+.calar-panel span { color: var(--ink2); font-size: 11.5px; }
+.calar-panel .seg { display: flex; } .calar-panel .seg button { flex: 1; font-size: 11.5px; }

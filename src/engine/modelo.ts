@@ -71,6 +71,12 @@ export interface Muro {
   grupo?: string;
   /** si el grupo es una pieza tipo: su forma y sus medidas (para cambiarlas después sin salir de la categoría) */
   pieza?: { tipo: import('./piezasTipo').TipoPieza; med: import('./piezasTipo').MedidasPieza };
+  /**
+   * vano calado (herramienta «Calar»): este tramo y el tramo «con» son el mismo muro partido por un vano de «ancho» m.
+   * «dintel»: puertas en cada piso, unidas por dinteles: los dos tramos siguen en la misma pieza (trabajan juntos, como en
+   * la guía, que verifica el corte en el dintel). «hueco»: abertura de toda la altura, sin dintel.
+   */
+  vano?: { con: string; ancho: number; tipo: 'dintel' | 'hueco' };
   /** (versiones anteriores) columna circular: se convierte en «tubo-circ» al abrir el proyecto */
   circular?: { D: number; d: number } | null;
 }

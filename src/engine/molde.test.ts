@@ -22,15 +22,18 @@ describe('molde de la hoja J: J del molde contra J de la sección real', () => {
     expect(a.papeles.M5.A).toBe('alma der.');
     // la del medio: sumarla al ala superior inflaba el J; la app la deja fuera del molde (J más cerca del real) y avisa
     expect(a.papeles.M3.A).toBe('fuera del cálculo');
-    expect(pz.avisos.some(x => x.includes('en el medio del alma') && x.includes('más cerca del real'))).toBe(true);
+    expect(pz.avisos.some(x => x.includes('más cerca del real'))).toBe(true);
     expect(Math.abs(pz.Jhoja! - pz.Jreal!) / pz.Jreal!).toBeLessThan(0.06);
   });
-  it('más de dos almas (la pieza vista desde el viento B): se toman las dos de más área y el resto queda fuera', () => {
+  it('más de dos almas (la pieza vista desde el viento B): la app elige las dos que dan el J más cercano al real', () => {
     const a = aPlanilla(piezaCatedra());
     const pz = a.piezas.find(x => x.dir === 'B')!;
     expect(pz.molde).toBe('asimétrico');
-    expect(pz.avisos.some(x => x.includes('Más de dos almas'))).toBe(true);
-    expect(Object.values(a.papeles).filter(x => x.B === 'fuera del cálculo')).toHaveLength(2);
+    // la app prueba qué dos almas usar y se queda con el J más cercano al real (y lo avisa)
+    expect(pz.avisos.some(x => x.startsWith('La app armó el molde') && x.includes('más cerca del real'))).toBe(true);
+    expect(Object.values(a.papeles).filter(x => x.B === 'fuera del cálculo').length).toBeGreaterThanOrEqual(2);
+    const conDosDeMasArea = Math.abs(pz.Jhoja! - pz.Jreal!);
+    expect(conDosDeMasArea).toBeLessThanOrEqual(Math.abs(pz.Jreal!) * 0.6);
   });
   it('marcar las alas del medio como «fuera» deja el molde cerca del J real (que las cuenta: se pierde su aporte)', () => {
     const p = piezaCatedra();

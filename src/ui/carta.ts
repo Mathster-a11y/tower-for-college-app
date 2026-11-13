@@ -278,7 +278,7 @@ function laminaA(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
 function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: number, hh: number) {
   const pl = d.plano;
   const tExt = Math.max(pl.T / 2, ...pl.paralelos.map(p => Math.abs(p.pos))) + 1.5;
-  const k = Math.min(w / (2 * tExt), (hh - 60) / (pl.S + 3));
+  const k = Math.min(w / (2 * tExt), (hh - 100) / (pl.S + 3));   // deja lugar abajo para W y la cota e
   const cx = x0 + w / 2, cy = y0 + 22 + ((pl.S + 3) / 2) * k;
   const X = (t: number) => cx + t * k, Yp = (s: number) => cy - s * k;
   const ts = (m: { x: number; y: number }) => (pl.dir === 'A' ? { t: m.x, s: m.y } : { t: -m.y, s: m.x });

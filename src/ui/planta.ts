@@ -2,7 +2,7 @@
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, type Punto } from '../engine/dibujo';
+import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto, type TipoVano } from '../engine/dibujo';
 import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
@@ -37,7 +37,7 @@ export function montarPlanta(cont: HTMLElement) {
   });
   cont.appendChild(ley);
   // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
-  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' = 'mover';
+  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' | 'calar' = 'mover';
   // pieza tipo a insertar (biblioteca)
   let insTipo: TipoPieza = 'C';
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
@@ -59,7 +59,7 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); dibujar(); };
+  const ponerModo = (m: typeof modo) => { modo = m; inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo('dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
@@ -264,6 +264,36 @@ export function montarPlanta(cont: HTMLElement) {
   panelIns.className = 'calco-panel piezas-panel';
   panelIns.hidden = true;
   cont.appendChild(panelIns);
+  // calar: vanos en tabiques y núcleos (puertas con dintel o huecos de toda la altura)
+  const bCalar = document.createElement('button');
+  bCalar.type = 'button'; bCalar.textContent = 'Calar';
+  bCalar.title = 'Abrir un vano en un tabique o en una cara de un núcleo: tocá el muro donde va el vano. Puerta con dintel (los dos tramos siguen trabajando juntos) o hueco de toda la altura.';
+  bCalar.addEventListener('click', () => ponerModo(modo === 'calar' ? 'mover' : 'calar'));
+  const panelCal = document.createElement('div');
+  panelCal.className = 'calco-panel piezas-panel calar-panel';
+  panelCal.hidden = true;
+  cont.appendChild(panelCal);
+  let calAncho = 0.9, calTipo: TipoVano = 'dintel';
+  let previaCalar: { id: string; q: Punto } | null = null;
+  function armarPanelCal() {
+    panelCal.replaceChildren();
+    const tit = document.createElement('b'); tit.textContent = 'Calar un vano';
+    const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group');
+    ([['dintel', 'Puerta con dintel'], ['hueco', 'Hueco a toda altura']] as const).forEach(([k, t]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', String(calTipo === k));
+      b.addEventListener('click', () => { calTipo = k; armarPanelCal(); dibujar(); }); seg.append(b);
+    });
+    const fila = document.createElement('label'); fila.className = 'fila-vertices';
+    const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.05'; inp.min = '0.1'; inp.value = String(calAncho); inp.className = 'campo-vertice';
+    inp.addEventListener('change', () => { const v = parseFloat(inp.value.replace(',', '.')); if (v > 0) { calAncho = +v.toFixed(2); dibujar(); } });
+    fila.append('ancho del vano ', inp, ' m');
+    const ayuda = document.createElement('span');
+    ayuda.textContent = calTipo === 'dintel'
+      ? 'Puertas en cada piso: el dintel une los dos tramos y la hoja J lleva el muro entero, como la guía (que verifica el corte en el dintel).'
+      : 'Abertura de toda la altura: en un tabique suelto, cada tramo pasa a ser una pieza que trabaja sola. En un núcleo, la sección queda abierta (C).';
+    const como = document.createElement('span'); como.textContent = 'Tocá el muro donde va el vano. Un núcleo se pasa a sus cuatro tabiques y se cala la cara tocada. Deshacer: Ctrl+Z.';
+    panelCal.append(tit, seg, fila, ayuda, como);
+  }
   const NS2 = 'http://www.w3.org/2000/svg';
   /** dibujito de la pieza (en su marco: el viento A sube) */
   const miniatura = (t: TipoPieza, med: MedidasPieza, tam: number) => {
@@ -426,7 +456,7 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('keydown', ev => { if ((ev.key === 'g' || ev.key === 'G') && !ev.ctrlKey && !ev.metaKey && !(ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) ponerGrilla(!estado.grillaFina); });
   try { estado.grillaFina = localStorage.getItem('torre3d.grilla') === '1'; } catch { /* sin almacenamiento */ }
   fijarPasoGrilla(estado.grillaFina ? 0.05 : 0.01); bGrilla.setAttribute('aria-pressed', String(estado.grillaFina));
-  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns, bAreas, bGrilla);
+  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns, bCalar, bAreas, bGrilla);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -821,6 +851,32 @@ export function montarPlanta(cont: HTMLElement) {
     });
     armarPanelPrec();
     if (medGrupo) { panelPrec.hidden = true; if (!panelMed.contains(document.activeElement)) armarPanelMed(); }
+    // vanos calados: el dintel (puertas) en trazos entre los dos tramos
+    p.muros.forEach(m => {
+      if (!m.vano || !presenteEn(m, zN, zFund, zTop)) return;
+      const o = p.muros.find(x => x.id === m.vano!.con);
+      if (!o) return;
+      const fin = (w: Muro, lado: 1 | -1) => (w.dir === 'X' ? { x: w.x + lado * w.largo / 2, y: w.y } : { x: w.x, y: w.y + lado * w.largo / 2 });
+      const a = fin(m, 1), b = fin(o, -1);
+      const cl = m.vano.tipo === 'dintel' ? 'dintel' : 'hueco-vano';
+      svg.appendChild(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b.x), y2: Y(b.y), class: cl }));
+    });
+    if (modo === 'calar' && previaCalar) {
+      const w = p.muros.find(x => x.id === previaCalar!.id);
+      if (w && tipoDe(w) !== 'tubo-circ') {
+        // dónde quedaría el vano (en un núcleo, sobre la cara más cercana)
+        const caras = tipoDe(w) === 'tubo-rect' ? tuboEnTabiques(w, (() => { let k = 0; return () => `__${k++}`; })()) : [w];
+        const q = previaCalar.q;
+        const dist = (c: Muro) => (c.dir === 'X' ? Math.abs(q.y - c.y) + Math.max(0, Math.abs(q.x - c.x) - c.largo / 2) : Math.abs(q.x - c.x) + Math.max(0, Math.abs(q.y - c.y) - c.largo / 2));
+        const c = [...caras].sort((a2, b2) => dist(a2) - dist(b2))[0];
+        const s0 = (c.dir === 'X' ? c.x : c.y) - c.largo / 2, sq = c.dir === 'X' ? q.x : q.y;
+        const ok = calAncho <= c.largo - 0.2;
+        const cen = Math.min(s0 + c.largo - 0.1 - calAncho / 2, Math.max(s0 + 0.1 + calAncho / 2, sq));
+        const ax = c.dir === 'X' ? calAncho : c.espesor + 0.1, ay = c.dir === 'X' ? c.espesor + 0.1 : calAncho;
+        const cx = c.dir === 'X' ? cen : c.x, cy = c.dir === 'Y' ? cen : c.y;
+        svg.appendChild(el('rect', { x: X(cx - ax / 2), y: Y(cy + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala), class: `previa-vano${ok ? '' : ' no-entra'}` }));
+      }
+    }
     // pieza tipo: vista previa donde se va a insertar
     if (modo === 'insertar' && cursor) {
       const pr = el('g', { class: 'previa' });
@@ -986,6 +1042,17 @@ export function montarPlanta(cont: HTMLElement) {
       ponerModo('mover');
       return;
     }
+    if (modo === 'calar' && ev.button === 0) {
+      ev.preventDefault();
+      const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id;
+      if (!idM) { mensaje('Calar: tocá un tabique o un núcleo, en el lugar del vano.'); return; }
+      const r = calarMuro(estado.proyecto.muros, idM, aMundo(ev), calAncho, calTipo);
+      if ('error' in r) { mensaje(`No se puede calar ${idM}: ${r.error}.`); return; }
+      estado.cambiar(() => { estado.proyecto.muros = r.muros; });
+      previaCalar = null;
+      mensaje(`Vano de ${String(calAncho).replace('.', ',')} m en ${idM} (${calTipo === 'dintel' ? 'puerta con dintel' : 'hueco a toda altura'}).`);
+      return;
+    }
     if (modo === 'calibrar' && ev.button === 0 && estado.calco) {
       ev.preventDefault();
       calib.push(aMundo(ev));
@@ -1028,7 +1095,7 @@ export function montarPlanta(cont: HTMLElement) {
   let toqueDibujo: { t: number; x: number; y: number } | null = null;
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
   svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
-  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar') && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
+  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar') && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
@@ -1041,6 +1108,7 @@ export function montarPlanta(cont: HTMLElement) {
       if (id !== hoverId && ev.pointerType !== 'touch') { hoverId = id; pedirDibujo(); }
     }
     if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: aj(q.x), y: aj(q.y) }; pedirDibujo(); return; }
+    if (modo === 'calar') { const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id; previaCalar = idM ? { id: idM, q: aMundo(ev) } : null; pedirDibujo(); return; }
     if (modo === 'calibrar') return;
     if (arrastreNodo) {
       if (!pasoUmbral(ev)) return;

@@ -199,3 +199,72 @@ export function imanarNodo(p: Punto, muros: Muro[], tol: number): { p: Punto; a:
   }
   return { p: { x: grilla(p.x), y: grilla(p.y) }, a: 'grilla' };
 }
+
+// ------------------------------------------------------------------ calar (vanos en tabiques y tubos)
+export type TipoVano = 'dintel' | 'hueco';
+/**
+ * Los cuatro tabiques de un tubo rectangular (núcleo), en la misma pieza y el mismo grupo: así se puede calar una cara.
+ * Las caras de arriba y de abajo van enteras (de esquina a esquina); las de los costados, entre ellas.
+ */
+export function tuboEnTabiques(m: Muro, nuevoId: () => string): Muro[] {
+  const Lx = m.largo, Ly = m.ladoY ?? m.largo, e = Math.min(m.espesor, Lx / 2, Ly / 2);
+  const per = 2 * Lx + 2 * (Ly - 2 * e);
+  const base = { ...m, tipo: undefined, ladoY: undefined, grupo: m.grupo ?? m.piezaA ?? undefined } as Muro;
+  delete base.tipo; delete base.ladoY; delete base.pieza;
+  const t = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number): Muro => ({ ...base, id, dir, x: r2(x), y: r2(y), largo: r2(largo), espesor: e, areaInf: r2((m.areaInf * largo) / per) });
+  return [
+    t(m.id, 'X', m.x, m.y + Ly / 2 - e / 2, Lx),
+    t(nuevoId(), 'X', m.x, m.y - Ly / 2 + e / 2, Lx),
+    t(nuevoId(), 'Y', m.x - Lx / 2 + e / 2, m.y, Ly - 2 * e),
+    t(nuevoId(), 'Y', m.x + Lx / 2 - e / 2, m.y, Ly - 2 * e),
+  ];
+}
+
+/**
+ * Cala un vano de «ancho» m en el muro «id», centrado en el punto (proyectado sobre el eje del muro). El muro queda en
+ * dos tramos; el área de influencia se reparte por largo. Un tubo rectangular primero se pasa a sus cuatro tabiques y se
+ * cala la cara más cercana al punto. Con «hueco», un tabique suelto queda en dos piezas (trabajan por separado); con
+ * «dintel», o si la pieza tiene otros muros, los dos tramos siguen en la misma pieza.
+ * Devuelve los muros nuevos o un error si el vano no entra (cada tramo tiene que quedar de 0,10 m o más).
+ */
+export function calarMuro(muros: Muro[], id: string, punto: Punto, ancho: number, tipo: TipoVano): { muros: Muro[] } | { error: string } {
+  const usados = new Set(muros.map(m => m.id));
+  const nuevoId = () => { let k = 1; while (usados.has(`M${k}`)) k++; usados.add(`M${k}`); return `M${k}`; };
+  let lista = [...muros];
+  let m = lista.find(x => x.id === id);
+  if (!m) return { error: 'no se encontró el muro' };
+  if (tipoDe(m) === 'tubo-circ') return { error: 'las columnas y tubos circulares no se calan en esta versión' };
+  if (tipoDe(m) === 'tubo-rect') {
+    const caras = tuboEnTabiques(m, nuevoId);
+    lista = lista.flatMap(x => (x.id === id ? caras : [x]));
+    const dist = (c: Muro) => (c.dir === 'X' ? Math.abs(punto.y - c.y) + Math.max(0, Math.abs(punto.x - c.x) - c.largo / 2) : Math.abs(punto.x - c.x) + Math.max(0, Math.abs(punto.y - c.y) - c.largo / 2));
+    m = [...caras].sort((a, b) => dist(a) - dist(b))[0];
+  }
+  if (!(ancho > 0)) return { error: 'el ancho del vano tiene que ser mayor que cero' };
+  const L = m.largo, s0 = m.dir === 'X' ? m.x - L / 2 : m.y - L / 2;
+  const s = m.dir === 'X' ? punto.x : punto.y;
+  const minimo = 0.1;
+  if (ancho > L - 2 * minimo) return { error: `el vano de ${ancho} m no entra: el muro mide ${r2(L)} m (cada tramo tiene que quedar de ${minimo} m o más)` };
+  const centro = Math.min(s0 + L - minimo - ancho / 2, Math.max(s0 + minimo + ancho / 2, s));
+  const a1 = r2(centro - ancho / 2 - s0), a2 = r2(s0 + L - (centro + ancho / 2));
+  const enPieza = lista.filter(x => x.piezaA === m!.piezaA && m!.piezaA).length;
+  const solo = enPieza <= 1 && !m.grupo;
+  const id2 = nuevoId();
+  const tramo = (nid: string, ini: number, largo: number): Muro => {
+    const c = ini + largo / 2;
+    return { ...m!, id: nid, x: m!.dir === 'X' ? r2(c) : m!.x, y: m!.dir === 'Y' ? r2(c) : m!.y, largo: largo, areaInf: r2((m!.areaInf * largo) / (L - ancho)) };
+  };
+  const t1 = { ...tramo(m.id, s0, a1), vano: { con: id2, ancho: r2(ancho), tipo } };
+  const t2 = tramo(id2, s0 + a1 + ancho, a2);
+  if (tipo === 'hueco' && solo) {
+    // tabique suelto con un hueco de toda la altura: dos piezas
+    const nombres = new Set(lista.map(x => x.piezaA));
+    let k = 1; while (nombres.has(`T${k}`)) k++;
+    t2.piezaA = `T${k}`; t2.piezaB = `T${k}B`; t2.pegadoA = ''; t2.pegadoB = '';
+  }
+  lista = lista.flatMap(x => (x.id === m!.id ? [t1, t2] : [x]));
+  // si es parte de un grupo, se rehacen los «pegado a» (un ala puede quedar tocando el tramo nuevo)
+  const g = t1.grupo;
+  if (g) lista = agrupar(lista, lista.filter(x => x.grupo === g).map(x => x.id), g).muros;
+  return { muros: lista };
+}

@@ -354,8 +354,10 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       c.append(el('title', {}, `${m.id}: con el viento al revés, esta fibra queda a ${fmt(m.cargReves / 10, 1)} kg/cm² (compresión máxima)`));
       svg.append(c);
       // a la derecha del punto; si no entra, a la izquierda
-      const derecha = X(lejos) + 7 + 90 < ancho;
-      svg.append(el('text', { x: derecha ? X(lejos) + 7 : X(lejos) - 7, y: Y(m.cargReves / 10) + 4, class: 'd-eje', 'text-anchor': derecha ? 'start' : 'end' }, 'viento al revés'));
+      const anchoT = 'viento al revés'.length * 6.7, xp = X(lejos);
+      const lado = xp + 7 + anchoT < ancho - 2 ? 'start' : xp - 7 - anchoT > 2 ? 'end' : 'middle';
+      const tx = lado === 'start' ? xp + 7 : lado === 'end' ? xp - 7 : Math.min(ancho - 2 - anchoT / 2, Math.max(2 + anchoT / 2, xp));
+      svg.append(el('text', { x: tx, y: Y(m.cargReves / 10) + (lado === 'middle' ? -9 : 4), class: 'd-eje', 'text-anchor': lado }, 'viento al revés'));
     }
     svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
   });
