@@ -7,7 +7,7 @@ import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type M
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
-import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
+import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias } from './guias';
@@ -669,8 +669,10 @@ export function montarPlanta(cont: HTMLElement) {
     return areasCache.a;
   };
   /** color de cada área: el del grupo de más arriba, o el de la pieza agrupada, o el del muro solo */
-  const PALETA_AREAS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#8cd17d', '#a0cbe8', '#d4a6c8'];
-  const RAYADOS = ['d45', 'd135', 'h', 'v'] as const;
+  /** cuatro colores (teorema de los cuatro colores: dos áreas vecinas nunca comparten color) y un rayado por color,
+   *  para que también se distingan impresos en blanco y negro; el quinto es de reserva */
+  const PALETA_AREAS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1'];
+  const RAYADOS = ['d45', 'h', 'd135', 'v', 'd45'] as const;
   const claveArea = (m: Muro | undefined): { k: string; nombre: string } => {
     if (!m) return { k: '?', nombre: '?' };
     const cad = ancestros(estado.proyecto, m.gd);
@@ -678,13 +680,16 @@ export function montarPlanta(cont: HTMLElement) {
     if (m.grupo) return { k: `p:${m.grupo}`, nombre: `pieza ${m.grupo}` };
     return { k: `m:${m.id}`, nombre: m.id };
   };
-  const estiloArea = (_k: string, orden: number) => ({ color: PALETA_AREAS[orden % PALETA_AREAS.length], rayado: RAYADOS[Math.floor(orden / PALETA_AREAS.length) % RAYADOS.length] });
-  /** las claves de color en el orden en que aparecen (de arriba a la izquierda): así dos vecinos casi nunca comparten color */
+  const estiloArea = (_k: string, c: number) => ({ color: PALETA_AREAS[c % PALETA_AREAS.length], rayado: RAYADOS[c % RAYADOS.length] });
+  /** color de cada región (grupo, pieza o muro): mapa coloreado con cuatro colores, sin dos vecinas iguales */
+  let coloresCache: { a: AreasInfluencia; firma: string; col: Map<string, number> } | null = null;
   const ordenClaves = (a: AreasInfluencia) => {
-    const p = estado.proyecto, vistos = new Map<string, number>();
-    const porId = new Map(p.muros.map(m => [m.id, m]));
-    for (let j = a.ny - 1; j >= 0; j--) for (let k = 0; k < a.nx; k++) { const o = a.duenio[j * a.nx + k]; if (o < 0) continue; const c = claveArea(porId.get(a.ids[o])).k; if (!vistos.has(c)) vistos.set(c, vistos.size); }
-    return vistos;
+    const porId = new Map(estado.proyecto.muros.map(m => [m.id, m]));
+    const claves = a.ids.map(id => claveArea(porId.get(id)).k), firma = claves.join('|');
+    if (coloresCache && coloresCache.a === a && coloresCache.firma === firma) return coloresCache.col;
+    const col = cuatroColores(vecindades(a, o => claves[o]));
+    coloresCache = { a, firma, col };
+    return col;
   };
   function armarPanelAreas(i: number, a: AreasInfluencia) {
     panelAreas.hidden = !verAreas;

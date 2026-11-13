@@ -67,3 +67,51 @@ export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInflu
   ms.forEach((m, n) => { const c = area[m.id] / (paso * paso); centro[m.id] = c ? { x: sx[n] / c, y: sy[n] / c } : { x: m.x, y: m.y }; area[m.id] = Math.round(area[m.id] * 100) / 100; });
   return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids: ms.map(m => m.id), centro };
 }
+
+// ------------------------------------------------------------------ colores del mapa de áreas (cuatro colores)
+/**
+ * Vecindades entre regiones: dos claves son vecinas si alguna celda de una toca (por un lado) a una celda de la otra.
+ * «clave» da la región de cada dueño (por ejemplo, el grupo del muro).
+ */
+export function vecindades(a: AreasInfluencia, clave: (indiceDuenio: number) => string): Map<string, Set<string>> {
+  const adj = new Map<string, Set<string>>();
+  const k = (o: number) => (o < 0 ? null : clave(o));
+  const unir = (x: string, y: string) => { if (x === y) return; adj.get(x)!.add(y); adj.get(y)!.add(x); };
+  for (let j = 0; j < a.ny; j++) for (let i = 0; i < a.nx; i++) {
+    const c = k(a.duenio[j * a.nx + i]);
+    if (c === null) continue;
+    if (!adj.has(c)) adj.set(c, new Set());
+    if (i + 1 < a.nx) { const d = k(a.duenio[j * a.nx + i + 1]); if (d !== null) { if (!adj.has(d)) adj.set(d, new Set()); unir(c, d); } }
+    if (j + 1 < a.ny) { const d = k(a.duenio[(j + 1) * a.nx + i]); if (d !== null) { if (!adj.has(d)) adj.set(d, new Set()); unir(c, d); } }
+  }
+  return adj;
+}
+
+/**
+ * Colorea un mapa para que dos regiones vecinas nunca tengan el mismo color. Por el teorema de los cuatro colores,
+ * a un mapa plano le alcanzan 4: se busca con vuelta atrás (eligiendo primero la región más restringida, DSATUR).
+ * Si la búsqueda no termina a tiempo (no debería pasar en una planta), se usa un color más.
+ */
+export function cuatroColores(adj: Map<string, Set<string>>, colores = 4): Map<string, number> {
+  const nodos = [...adj.keys()].sort();
+  const col = new Map<string, number>();
+  let pasos = 0;
+  const saturacion = (n: string) => new Set([...adj.get(n)!].map(v => col.get(v)).filter(c => c !== undefined)).size;
+  const resolver = (): boolean => {
+    if (col.size === nodos.length) return true;
+    if (++pasos > 200000) return false;
+    // la región sin color con más colores distintos alrededor (y, si empatan, con más vecinas)
+    let mejor = '', ms = -1, mg = -1;
+    for (const n of nodos) { if (col.has(n)) continue; const s = saturacion(n), g = adj.get(n)!.size; if (s > ms || (s === ms && g > mg)) { mejor = n; ms = s; mg = g; } }
+    const usados = new Set([...adj.get(mejor)!].map(v => col.get(v)));
+    for (let c = 0; c < colores; c++) {
+      if (usados.has(c)) continue;
+      col.set(mejor, c);
+      if (resolver()) return true;
+      col.delete(mejor);
+    }
+    return false;
+  };
+  if (resolver()) return col;
+  return cuatroColores(adj, colores + 1);
+}

@@ -41,3 +41,29 @@ describe('huecos de losa', () => {
     expect(areasInfluencia(p, iPB).total).toBeCloseTo(a0.total, 6);
   });
 });
+
+describe('cuatro colores', () => {
+  it('ninguna región toca a otra del mismo color, con 4 colores', async () => {
+    const { ejemploGuia } = await import('./modelo');
+    const { areasInfluencia, vecindades, cuatroColores } = await import('./areas');
+    const { ejemploPlanta34 } = await import('./ejemplo34');
+    for (const p of [ejemploGuia(), ejemploPlanta34()]) {
+      const iPB = p.niveles.findIndex(n => n.cota === 0);
+      const a = areasInfluencia(p, iPB);
+      const adj = vecindades(a, o => a.ids[o]);
+      const col = cuatroColores(adj);
+      expect(Math.max(...col.values())).toBeLessThanOrEqual(3);
+      adj.forEach((vs, n) => vs.forEach(v => expect(col.get(v)).not.toBe(col.get(n))));
+    }
+  });
+  it('una rueda impar (que necesita 4) se resuelve con 4', async () => {
+    const { cuatroColores } = await import('./areas');
+    const adj = new Map<string, Set<string>>();
+    const lado = (a: string, b: string) => { if (!adj.has(a)) adj.set(a, new Set()); if (!adj.has(b)) adj.set(b, new Set()); adj.get(a)!.add(b); adj.get(b)!.add(a); };
+    const aro = ['a', 'b', 'c', 'd', 'e'];
+    aro.forEach((x, i) => { lado(x, aro[(i + 1) % 5]); lado(x, 'centro'); });
+    const col = cuatroColores(adj);
+    expect(new Set(col.values()).size).toBe(4);
+    adj.forEach((vs, n) => vs.forEach(v => expect(col.get(v)).not.toBe(col.get(n))));
+  });
+});
