@@ -14,6 +14,7 @@ import {
   matrizRect, puntosCamino, resolver, unirCaminos, vacia, type Alineacion, type EjeSimetria, type Operacion, type Seleccion,
 } from '../engine/colocar';
 import { cotaDesdeCursor, geometria, idCota, puntoCota } from '../engine/cotas';
+import { alargar, desfasar, esquina, partir, unir } from '../engine/editar';
 
 export interface Vista { X: (x: number) => number; Y: (y: number) => number; escala: number }
 export interface ApiPlanta {
@@ -31,7 +32,7 @@ export interface ApiPlanta {
   activar: (on: boolean) => void;
 }
 
-type Herr = null | 'cota' | 'mover' | 'copiar' | 'girar' | 'espejar' | 'escalar' | 'centro-polar' | 'camino' | 'cad';
+type Herr = null | 'cota' | 'mover' | 'copiar' | 'girar' | 'espejar' | 'escalar' | 'centro-polar' | 'camino' | 'cad' | 'desfase' | 'alargar' | 'partir' | 'unir' | 'esquina';
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
@@ -45,10 +46,17 @@ export function montarColocar(api: ApiPlanta) {
   // opciones
   const op = { vinculada: true, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
     matriz: 'rect' as 'rect' | 'polar' | 'camino', filas: 2, cols: 3, dx: 3.6, dy: 3.6, n: 6, total: 360, girarCopias: true, cx: 0, cy: 0,
-    camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false };
+    dDesf: 0.6, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false };
   let caminoNuevo: { v: Camino['v']; paso?: Punto } | null = null;
   const caminosSel = new Set<string>();
   let cotaSel: string | null = null;
+  /** muros tocados en la edición en curso (desfase, alargar, unir, esquina) */
+  let tocados: { id: string; q: Punto }[] = [];
+  /** distancia tipeada (mover y copiar después del punto base) */
+  let tipeo = '';
+  const muroBajo = (ev: PointerEvent) => ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id;
+  /** dirección del punto base al cursor, redondeada a 45° (como el rastreo polar de CAD) */
+  const dir45 = (a: Punto, b: Punto) => { const ang = Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 4)) * (Math.PI / 4); return { x: Math.cos(ang), y: Math.sin(ang) }; };
 
   // ---------------------------------------------------------------- botones de la barra
   const bColocar = document.createElement('button'); bColocar.type = 'button'; bColocar.textContent = 'Colocar';
@@ -71,7 +79,7 @@ export function montarColocar(api: ApiPlanta) {
   api.dock.appendChild(panel);
 
   const poner = (h: Herr) => {
-    herr = h; pts = []; cursor = null; caminoNuevo = h === 'camino' ? { v: [] } : null;
+    herr = h; pts = []; tocados = []; tipeo = ''; cursor = null; caminoNuevo = h === 'camino' ? { v: [] } : null;
     api.activar(!!h);
     svg.classList.toggle('colocando', !!h);
     api.dibujar();
@@ -82,7 +90,12 @@ export function montarColocar(api: ApiPlanta) {
   const instruccion = (): string => {
     switch (herr) {
       case 'cota': return pts.length === 0 ? 'Cota: tocá el primer punto (se pega a esquinas, medios y centros).' : pts.length === 1 ? 'Tocá el segundo punto.' : 'Tocá dónde va la línea de cota.';
-      case 'mover': case 'copiar': return pts.length === 0 ? `${herr === 'mover' ? 'Mover' : 'Copiar'}: tocá el punto base.` : 'Tocá el destino (con imán a los nodos).';
+      case 'mover': case 'copiar': return pts.length === 0 ? `${herr === 'mover' ? 'Mover' : 'Copiar'}: tocá el punto base.` : tipeo ? `Distancia: ${tipeo} m · Enter aplica en la dirección del cursor (de a 45°).` : 'Tocá el destino (con imán) o escribí la distancia y Enter.';
+      case 'desfase': return tocados.length ? `Tocá de qué lado va la copia (a ${fmt(op.dDesf)} m).` : `Desfase: tocá el muro (copia paralela a ${fmt(op.dDesf)} m).`;
+      case 'alargar': return tocados.length ? 'Tocá hasta dónde llega (una guía, otro muro o un punto).' : 'Alargar o recortar: tocá el muro cerca de la punta que cambia.';
+      case 'partir': return 'Partir: tocá el muro donde se corta.';
+      case 'unir': return tocados.length ? 'Tocá el segundo tramo (alineado y del mismo espesor).' : 'Unir: tocá el primer tramo.';
+      case 'esquina': return tocados.length ? 'Tocá el segundo muro (perpendicular).' : 'Esquina: tocá el muro que pasa de largo.';
       case 'girar': return 'Girar: tocá el centro del giro.';
       case 'espejar': return pts.length === 0 ? 'Simetría: tocá el primer punto del eje.' : 'Tocá el segundo punto del eje (queda horizontal, vertical o a 45°).';
       case 'escalar': return 'Escalar: tocá el punto base.';
@@ -169,6 +182,30 @@ export function montarColocar(api: ApiPlanta) {
         cn.v.push({ x: r3(q.x), y: r3(q.y) });
         api.mensaje(instruccion()); api.dibujar(); return;
       }
+      case 'desfase': case 'alargar': case 'unir': case 'esquina': case 'partir': {
+        const id = muroBajo(ev);
+        const w = api.aMundo(ev);
+        if (herr === 'partir') {
+          if (!id) { api.mensaje('Tocá sobre un muro.'); return; }
+          hacer(() => { const r = partir(estado.proyecto, id, q); return 'error' in r ? r.error : null; }, `${id} partido en dos.`);
+          return;
+        }
+        if (!tocados.length || (herr === 'unir' || herr === 'esquina') && tocados.length === 1 && id && id !== tocados[0].id) {
+          if (herr === 'alargar' && tocados.length) { /* segundo toque: el borde */ }
+          else {
+            if (!id) { api.mensaje('Tocá sobre un muro.'); return; }
+            tocados.push({ id, q: w });
+            if (herr === 'unir' && tocados.length === 2) { const [a, c] = tocados; tocados = []; hacer(() => unir(estado.proyecto, a.id, c.id), `${c.id} unido a ${a.id}.`); return; }
+            if (herr === 'esquina' && tocados.length === 2) { const [a, c] = tocados; tocados = []; hacer(() => esquina(estado.proyecto, a.id, c.id), `Esquina entre ${a.id} y ${c.id}.`); return; }
+            api.mensaje(instruccion()); armar(); api.dibujar(); return;
+          }
+        }
+        const t0 = tocados[0];
+        tocados = [];
+        if (herr === 'desfase') hacer(() => { const r = desfasar(estado.proyecto, t0.id, op.dDesf, w); return 'error' in r ? r.error : null; }, `Copia de ${t0.id} a ${fmt(op.dDesf)} m. Tocá otro muro para seguir.`);
+        else if (herr === 'alargar') hacer(() => alargar(estado.proyecto, t0.id, t0.q, q), `${t0.id} llega hasta el punto elegido.`);
+        return;
+      }
       case 'cad': {
         const cad = estado.cad;
         if (!cad) { api.mensaje('No hay un dibujo de CAD importado («Importar…»).'); return; }
@@ -219,6 +256,16 @@ export function montarColocar(api: ApiPlanta) {
       if (pts.length) { pts = []; api.mensaje(instruccion()); api.dibujar(); return; }
       if (herr === 'cota') { salir(); return; }
       poner(null); return;
+    }
+    if ((herr === 'mover' || herr === 'copiar') && pts.length === 1) {
+      if (/^[0-9.,]$/.test(ev.key)) { ev.preventDefault(); ev.stopImmediatePropagation(); tipeo += ev.key === '.' ? ',' : ev.key; api.mensaje(instruccion()); armar(); api.pedirDibujo(); return; }
+      if (ev.key === 'Backspace' && tipeo) { ev.preventDefault(); ev.stopImmediatePropagation(); tipeo = tipeo.slice(0, -1); api.mensaje(instruccion()); armar(); return; }
+      if (ev.key === 'Enter' && tipeo && cursor) {
+        ev.preventDefault();
+        const L = num(tipeo), d = dir45(pts[0].p, cursor);
+        if (isFinite(L) && L > 0) { const h = herr; operar({ t: 'mover', dx: r3(d.x * L), dy: r3(d.y * L) }, h === 'copiar'); poner(null); }
+        return;
+      }
     }
     if (ev.key === 'Enter' && herr === 'camino') { ev.preventDefault(); terminarCamino(); poner(null); return; }
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && cotaSel && herr === 'cota') {
@@ -277,6 +324,16 @@ export function montarColocar(api: ApiPlanta) {
       campoN('factor', op.factor, v => { op.factor = v; }, 44),
       tilde('espesores', op.espesor, v => { op.espesor = v; }, 'Si no se marca, el espesor de los muros no cambia')));
     panel.append(fila(tilde('copias vinculadas', op.vinculada, v => { op.vinculada = v; }, 'Las copias son del mismo componente: si se edita una, cambian todas')));
+    // edición de muros
+    panel.append(sub('Editar muros'));
+    panel.append(fila(
+      boton('Desfase', 'Copia paralela del muro a la distancia indicada', () => poner(herr === 'desfase' ? null : 'desfase'), herr === 'desfase'),
+      campoN('a', op.dDesf, v => { op.dDesf = v; }, 44, 'm'),
+      boton('Partir', 'Corta el muro en dos donde lo toques', () => poner(herr === 'partir' ? null : 'partir'), herr === 'partir')));
+    panel.append(fila(
+      boton('Alargar / recortar', 'Lleva la punta del muro hasta una guía, otro muro o un punto', () => poner(herr === 'alargar' ? null : 'alargar'), herr === 'alargar'),
+      boton('Unir', 'Junta dos tramos alineados del mismo espesor', () => poner(herr === 'unir' ? null : 'unir'), herr === 'unir'),
+      boton('Esquina', 'Arma la esquina entre dos muros perpendiculares', () => poner(herr === 'esquina' ? null : 'esquina'), herr === 'esquina')));
     // matrices
     panel.append(sub('Matriz'));
     const seg = mk('div', '', 'seg chico col-seg');
@@ -396,7 +453,7 @@ export function montarColocar(api: ApiPlanta) {
       const dx = cursor.x - pts[0].p.x, dy = cursor.y - pts[0].p.y, s = sel(), ids = resolver(p, s).ids;
       g.append(el('line', { x1: X(pts[0].p.x), y1: Y(pts[0].p.y), x2: X(cursor.x), y2: Y(cursor.y), class: 'cota-previa' }));
       p.muros.filter(m => ids.has(m.id)).forEach(m => { const kk = caja([m]); g.append(el('rect', { x: X(kk.x0 + dx), y: Y(kk.y1 + dy), width: Math.max(2, (kk.x1 - kk.x0) * v.escala), height: Math.max(2, (kk.y1 - kk.y0) * v.escala), class: 'fantasma' })); });
-      g.append(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'cota-txt' }, `${fmt(Math.hypot(dx, dy))} m`));
+      g.append(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'cota-txt' }, tipeo ? `${tipeo}▌ m` : `${fmt(Math.hypot(dx, dy))} m`));
     }
     if (herr === 'espejar' && pts.length && cursor) {
       const e = ejeDesdePuntos(pts[0].p, cursor), L = 200 / v.escala, d = e.eje === 'x' ? [0, 1] : e.eje === 'y' ? [1, 0] : e.eje === 'd1' ? [Math.SQRT1_2, Math.SQRT1_2] : [Math.SQRT1_2, -Math.SQRT1_2];
@@ -414,6 +471,7 @@ export function montarColocar(api: ApiPlanta) {
       caminoNuevo.v.forEach(q => g.append(el('circle', { cx: X(q.x), cy: Y(q.y), r: 3, class: 'camino-vert' })));
       if (caminoNuevo.paso) g.append(el('circle', { cx: X(caminoNuevo.paso.x), cy: Y(caminoNuevo.paso.y), r: 3, class: 'camino-paso' }));
     }
+    tocados.forEach(t => { const m = p.muros.find(x => x.id === t.id); if (m) { const k = caja([m]); g.append(el('rect', { x: X(k.x0) - 3, y: Y(k.y1) - 3, width: (k.x1 - k.x0) * v.escala + 6, height: (k.y1 - k.y0) * v.escala + 6, class: 'tocado' })); } });
     if (herr && cursor && herr !== 'cad') g.append(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: 4, class: 'cursor-colocar' }));
     if (panelAbierto === 'colocar' && op.matriz === 'polar') g.append(el('path', { d: `M${X(op.cx) - 6},${Y(op.cy)} h12 M${X(op.cx)},${Y(op.cy) - 6} v12`, class: 'centro-polar' }));
     svg.append(g);

@@ -179,6 +179,8 @@ export interface Proyecto {
   caminos?: Camino[];
   /** cotas de medición de la planta */
   cotas?: Cota[];
+  /** líneas guía y ejes de la grilla (geometría de construcción, no se calcula) */
+  guias?: import('./guias').Guia[];
 }
 /** camino abierto o cerrado: vértices con bulge (el tramo que sale de cada vértice es un arco si b ≠ 0) */
 export interface Camino { id: string; nombre: string; v: { x: number; y: number; b?: number }[]; cerrado: boolean }

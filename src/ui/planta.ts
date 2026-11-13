@@ -8,7 +8,8 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
-import { montarColocar } from './colocar';
+import { montarColocar, type ApiPlanta } from './colocar';
+import { imanDeGuias, montarGuias } from './guias';
 import { agruparNodos, ancestros, borrarMuros, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
@@ -52,10 +53,44 @@ export function montarPlanta(cont: HTMLElement) {
     bSel('Agrupar', 'Junta lo elegido en un grupo (Ctrl+G)', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', ctrlKey: true }))),
     bSel('Soltar', 'Vacía la selección (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }));
   cont.appendChild(barraSel);
+  // opciones del lazo
+  const opLazo = { forma: 'libre' as 'libre' | 'rect', criterio: 'auto' as 'auto' | 'centro' | 'entero' | 'tocando' };
+  const barraLazo = document.createElement('div'); barraLazo.className = 'barra-lazo'; barraLazo.hidden = true;
+  const segL = (etq: string, ops: [string, string, string][], get: () => string, set: (v: string) => void) => {
+    const w = document.createElement('span'); w.className = 'seg chico'; w.setAttribute('role', 'group'); w.setAttribute('aria-label', etq);
+    const pintar = () => w.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === get())));
+    ops.forEach(([v, t, tit]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = tit; b.dataset.v = v; b.addEventListener('click', () => { set(v); pintar(); }); w.append(b); });
+    pintar(); return w;
+  };
+  barraLazo.append(
+    segL('Forma', [['libre', 'Libre', 'Dibujá la forma a mano'], ['rect', 'Rectángulo', 'Arrastrá en diagonal']], () => opLazo.forma, v => { opLazo.forma = v as 'libre' | 'rect'; }),
+    segL('Elige', [['auto', 'Auto', 'Libre: centro adentro · Rectángulo: de izquierda a derecha, entero adentro; de derecha a izquierda, tocando'], ['centro', 'Centro', 'Entra el muro con el centro adentro'], ['entero', 'Entero', 'Entra solo el muro entero adentro'], ['tocando', 'Tocando', 'Entra todo lo que toca el lazo']], () => opLazo.criterio, v => { opLazo.criterio = v as typeof opLazo.criterio; }));
+  cont.appendChild(barraLazo);
+  /** elige los muros iguales al elegido (mismo tipo, largo y espesor), sueltos en el grupo que se edita */
+  const elegirIguales = () => {
+    const p = estado.proyecto;
+    const ref = p.muros.find(x => x.id === (estado.multi.m[0] ?? estado.seleccion));
+    if (!ref) { mensaje('Elegí un muro y apretá «Iguales»: se eligen todos los que tienen el mismo tipo, largo y espesor.'); return; }
+    const igual = (m: Muro) => tipoDe(m) === tipoDe(ref) && Math.abs(m.largo - ref.largo) < 0.005 && Math.abs(m.espesor - ref.espesor) < 0.005 && Math.abs((m.ladoY ?? 0) - (ref.ladoY ?? 0)) < 0.005;
+    const ms = p.muros.filter(m => igual(m) && !muroOculto(p, m) && !muroBloqueado(p, m) && nodoAlTocar(p, m, estado.contexto)?.t === 'm').map(m => m.id);
+    estado.multi = { m: ms, g: [] }; estado.grupoSel = null;
+    mensaje(`${ms.length} muros iguales a ${ref.id} (${tipoDe(ref)} ${fmtN(ref.largo)} × ${fmtN(ref.espesor)} m).`);
+    estado.avisarPanel();
+  };
+  const fmtN = (v: number) => v.toFixed(2).replace('.', ',');
+  document.addEventListener('torre:elegir-iguales', elegirIguales);
+  barraSel.insertBefore(bSel('Iguales', 'Elige todos los muros con el mismo tipo, largo y espesor', elegirIguales), barraSel.lastChild);
   const salirDeGrupo = () => { const g = grupoPorId(estado.proyecto, estado.contexto); estado.grupoSel = g?.id ?? null; estado.contexto = g?.padre ?? null; mensaje(estado.contexto ? `Editando «${grupoPorId(estado.proyecto, estado.contexto)?.nombre}».` : 'De vuelta en la planta.'); estado.avisarPanel(); };
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], .grilla-caja')) return;
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); borrarElegidos(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
+      ev.preventDefault();
+      const p = estado.proyecto, zN = nivelActualZ(), ms = new Set<string>(), gs = new Set<string>();
+      p.muros.forEach(m => { if (muroOculto(p, m) || muroBloqueado(p, m) || !zN(m)) return; const n = nodoAlTocar(p, m, estado.contexto); if (n) (n.t === 'm' ? ms : gs).add(n.id); });
+      estado.multi = { m: [...ms], g: [...gs] }; estado.grupoSel = null;
+      mensaje(`Todo elegido: ${ms.size + gs.size} elementos.`); estado.avisarPanel(); return;
+    }
     if (ev.key === 'Escape') {
       if (lazo) { lazo = null; dibujar(); return; }
       if (estado.multi.m.length || estado.multi.g.length) { estado.multi = { m: [], g: [] }; estado.avisarPanel(); return; }
@@ -99,9 +134,9 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.type = bDibujar.type = bArmar.type = 'button';
   bMover.textContent = 'Mover'; bDibujar.textContent = 'Dibujar'; bArmar.textContent = 'Armar';
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
-  bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
+  bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina. Después del primer punto se puede escribir el largo y Enter.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') col.cerrar(); modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
+  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo('dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
@@ -158,21 +193,48 @@ export function montarPlanta(cont: HTMLElement) {
   }
   const mensaje = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
   /** muros que se mueven junto con «m»: el grupo de dibujo elegido, o si no, su pieza agrupada */
+  const enMultiM = (m: Muro) => estado.multi.m.includes(m.id) || estado.multi.g.some(g => dentroDe(estado.proyecto, m, g));
   const compas = (m: Muro): string[] => {
     const p = estado.proyecto;
-    if (estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel)) return murosDe(p, estado.grupoSel).map(o => o.id);
-    return m.grupo ? p.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
+    let ids: string[];
+    // lo elegido (lazo, Mayúsculas + clic) se mueve todo junto
+    if (enMultiM(m)) ids = [...new Set([...estado.multi.m, ...estado.multi.g.flatMap(g => murosDe(p, g).map(o => o.id))])];
+    else if (estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel)) ids = murosDe(p, estado.grupoSel).map(o => o.id);
+    else ids = m.grupo ? p.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
+    // los tramos de un muro calado van juntos (los dos lados del vano)
+    const set = new Set(ids);
+    for (let cambio = true; cambio;) {
+      cambio = false;
+      p.muros.forEach(o => {
+        const par = o.vano?.con;
+        if (!par) return;
+        if (set.has(o.id) && !set.has(par)) { set.add(par); cambio = true; }
+        if (set.has(par) && !set.has(o.id)) { set.add(o.id); cambio = true; }
+      });
+    }
+    return [...set].filter(id => { const o = p.muros.find(x => x.id === id); return o && !muroBloqueado(p, o); });
+  };
+  /** forma y criterio del lazo: libre o rectángulo; centro adentro, entero adentro o tocando (automático: rectángulo de izquierda a derecha = entero, de derecha a izquierda = tocando) */
+  const esquinasMuro = (m: Muro): Punto[] => { const { ax, ay } = huella(m); return [{ x: m.x - ax / 2, y: m.y - ay / 2 }, { x: m.x + ax / 2, y: m.y - ay / 2 }, { x: m.x + ax / 2, y: m.y + ay / 2 }, { x: m.x - ax / 2, y: m.y + ay / 2 }]; };
+  const cruzan = (a: Punto, b: Punto, c: Punto, d: Punto) => { const o = (p: Punto, q: Punto, r: Punto) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); };
+  const tocaPol = (m: Muro, pol: Punto[]) => {
+    const e = esquinasMuro(m);
+    if (e.some(q => dentroPol(q, pol)) || pol.some(q => dentroPol(q, e))) return true;
+    for (let i = 0; i < pol.length; i++) for (let j = 0; j < 4; j++) if (cruzan(pol[i], pol[(i + 1) % pol.length], e[j], e[(j + 1) % 4])) return true;
+    return false;
   };
   /** el muro está en la planta del nivel a la vista */
   const nivelActualZ = () => { const p = estado.proyecto; const z = p.niveles[iNivel]?.cota ?? 0, zF = p.niveles.at(-1)?.cota ?? 0, zT = p.niveles[0]?.cota ?? 0; return (m: Muro) => presenteEn(m, z, zF, zT); };
   /** lazo en curso (puntos en metros) y si suma, saca o reemplaza la selección */
   let lazo: { pts: Punto[]; op: 'nuevo' | 'suma' | 'saca' } | null = null;
+  const rectPol = (a: Punto, b: Punto): Punto[] => [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }];
   const dentroPol = (q: Punto, pol: Punto[]) => { let c = false; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) { const a = pol[i], b = pol[j]; if ((a.y > q.y) !== (b.y > q.y) && q.x < ((b.x - a.x) * (q.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
   /** lo que queda adentro del lazo: muros con el centro adentro; un grupo, si todos sus muros visibles quedan adentro */
-  const elegirConLazo = (pol: Punto[], op: 'nuevo' | 'suma' | 'saca') => {
+  const elegirConLazo = (pol: Punto[], op: 'nuevo' | 'suma' | 'saca', criterio: 'centro' | 'entero' | 'tocando' = 'centro') => {
     const p = estado.proyecto, zN = nivelActualZ();
     const visible = (m: Muro) => !muroOculto(p, m) && dentroDe(p, m, estado.contexto) && zN(m);
-    const adentro = new Set(p.muros.filter(m => visible(m) && dentroPol(m, pol)).map(m => m.id));
+    const cumple = (m: Muro) => criterio === 'centro' ? dentroPol(m, pol) : criterio === 'entero' ? esquinasMuro(m).every(q => dentroPol(q, pol)) : tocaPol(m, pol);
+    const adentro = new Set(p.muros.filter(m => visible(m) && cumple(m)).map(m => m.id));
     const ms = new Set<string>(), gs = new Set<string>();
     let bloqueados = 0;
     p.muros.forEach(m => {
@@ -181,14 +243,14 @@ export function montarPlanta(cont: HTMLElement) {
       if (!n) return;
       if (muroBloqueado(p, m)) { bloqueados++; return; }
       if (n.t === 'm') ms.add(n.id);
-      else if (murosDe(p, n.id).filter(visible).every(o => adentro.has(o.id))) gs.add(n.id);
+      else if (criterio === 'tocando' || murosDe(p, n.id).filter(visible).every(o => adentro.has(o.id))) gs.add(n.id);
     });
     if (op === 'nuevo') estado.multi = { m: [...ms], g: [...gs] };
     else if (op === 'suma') estado.multi = { m: [...new Set([...estado.multi.m, ...ms])], g: [...new Set([...estado.multi.g, ...gs])] };
     else estado.multi = { m: estado.multi.m.filter(id => !ms.has(id)), g: estado.multi.g.filter(id => !gs.has(id)) };
     estado.grupoSel = null;
     const n = estado.multi.m.length + estado.multi.g.length;
-    mensaje(n ? `${n} elegidos${bloqueados ? ` (${bloqueados} bloqueados quedaron afuera)` : ''}: Supr para borrar · Ctrl+G para agrupar · Esc para soltar.` : bloqueados ? `Los ${bloqueados} muros del lazo están bloqueados.` : 'El lazo no encerró ningún muro: tiene que quedar adentro el centro de cada uno.');
+    mensaje(n ? `${n} elegidos${bloqueados ? ` (${bloqueados} bloqueados quedaron afuera)` : ''}: Supr para borrar · Ctrl+G para agrupar · Esc para soltar.` : bloqueados ? `Los ${bloqueados} muros del lazo están bloqueados.` : criterio === 'centro' ? 'El lazo no encerró ningún muro: tiene que quedar adentro el centro de cada uno.' : criterio === 'entero' ? 'Ningún muro quedó entero adentro del rectángulo.' : 'El rectángulo no tocó ningún muro.');
     estado.avisarPanel();
   };
   /** borra lo elegido: la selección múltiple, o si no, el grupo o el muro elegido */
@@ -580,7 +642,7 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('keydown', ev => { if ((ev.key === 'g' || ev.key === 'G') && !ev.ctrlKey && !ev.metaKey && !(ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) ponerGrilla(!estado.grillaFina); });
   try { estado.grillaFina = localStorage.getItem('torre3d.grilla') === '1'; } catch { /* sin almacenamiento */ }
   fijarPasoGrilla(estado.grillaFina ? 0.05 : 0.01); bGrilla.setAttribute('aria-pressed', String(estado.grillaFina));
-  const col = montarColocar({
+  const apiPlanta: ApiPlanta = {
     svg, dock, el,
     aMundo: ev => aMundo(ev),
     pegar: ev => { ultimoIdIman = undefined; const q = pegarNodo(ev, new Set()); return { p: q, id: ultimoIdIman }; },
@@ -595,10 +657,22 @@ export function montarPlanta(cont: HTMLElement) {
       return !nodo ? { m: [], g: [] } : nodo.t === 'g' ? { m: [], g: [nodo.id] } : { m: compas(m).filter(id => { const o = p.muros.find(x => x.id === id); return o && (o.gd ?? null) === (estado.contexto ?? null); }), g: [] };
     },
     activar: on => { if (on) { if (modo !== 'colocar') ponerModo('colocar'); } else if (modo === 'colocar') ponerModo('mover'); },
-  });
-  estado.suscribir(() => col.refrescar());
+  };
+  const col = montarColocar(apiPlanta);
+  const gui = montarGuias(apiPlanta);
+  estado.suscribir(() => { col.refrescar(); gui.refrescar(); });
   estado.suscribirSeleccion(() => col.refrescar());
-  barra.append(bMover, bLazo, bDibujar, bArmar, bCalco, bSil, bIns, bCalar, bAreas, bGrilla, ...col.botones);
+  // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
+  const mas = document.createElement('div'); mas.className = 'menu-mas';
+  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
+  const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
+  listaMas.append(bCalco, bSil, bAreas);
+  bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
+  listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
+  document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node)) listaMas.hidden = true; });
+  mas.append(bMas);
+  cont.appendChild(listaMas);
+  barra.append(bMover, bLazo, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -926,6 +1000,7 @@ export function montarPlanta(cont: HTMLElement) {
         const nodo = nodoAlTocar(estado.proyecto, m, estado.contexto);
         if (!nodo) { mensaje('Ese muro está fuera del grupo que estás editando: Esc o «Salir» para volver a la planta.'); return; }
         if (ev.shiftKey || ev.ctrlKey || ev.metaKey || estado.eligeVarios) { ev.stopPropagation(); alternarMulti(m); return; }
+        if (!enMultiM(m) && (estado.multi.m.length || estado.multi.g.length)) estado.multi = { m: [], g: [] };   // tocar otra cosa suelta la selección (como en CAD)
         if (muroBloqueado(estado.proyecto, m)) { const g = ancestros(estado.proyecto, m.gd).find(x => x.bloq); mensaje(`${m.id} está en «${g?.nombre ?? 'un grupo'}», que está bloqueado 🔒: desbloquealo en el Esquema para moverlo o editarlo.`); estado.grupoSel = g?.id ?? null; estado.avisarPanel(); return; }
         ultimoEspesor = m.espesor;
         const ahoraG = performance.now();
@@ -976,8 +1051,14 @@ export function montarPlanta(cont: HTMLElement) {
       if (g) caja(murosDe(p, g.id).filter(w => !muroOculto(p, w)), 'caja-grupo' + (g.comp ? ' comp' : '') + (g.bloq ? ' bloq' : ''), `${g.bloq ? '🔒 ' : ''}${g.nombre}${g.comp ? ' · componente' : ''}`);
     }
     estado.multi.g.forEach(id => caja(murosDe(p, id), 'caja-multi', ''));
+    gui.capa({ X, Y, escala });
     col.capa({ X, Y, escala });
-    if (lazo && lazo.pts.length > 1) svg.appendChild(el('polygon', { points: lazo.pts.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `lazo-traza ${lazo.op}` }));
+    if (lazo && lazo.pts.length > 1) {
+      const pol = opLazo.forma === 'rect' ? rectPol(lazo.pts[0], lazo.pts[1]) : lazo.pts;
+      const crit = opLazo.forma === 'rect' && opLazo.criterio === 'auto' ? (lazo.pts[1].x >= lazo.pts[0].x ? 'entero' : 'tocando') : opLazo.criterio;
+      svg.appendChild(el('polygon', { points: pol.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `lazo-traza ${lazo.op} crit-${crit}` }));
+    }
+    barraLazo.hidden = modo !== 'lazo';
     const nSel = estado.multi.m.length + estado.multi.g.length;
     barraSel.hidden = !nSel;
     if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; }
@@ -1089,7 +1170,7 @@ export function montarPlanta(cont: HTMLElement) {
         if (t) {
           const ax = t.dir === 'X' ? t.largo : t.espesor, ay = t.dir === 'X' ? t.espesor : t.largo;
           pr.appendChild(el('rect', { x: X(t.x - ax / 2), y: Y(t.y + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala) }));
-          pr.appendChild(el('text', { x: X(t.x) + (t.dir === 'Y' ? 8 : 0), y: Y(t.y) + (t.dir === 'X' ? -8 : 4), class: 'etiqueta', 'text-anchor': t.dir === 'X' ? 'middle' : 'start' }, `${t.largo.toFixed(2).replace('.', ',')} m`));
+          pr.appendChild(el('text', { x: X(t.x) + (t.dir === 'Y' ? 8 : 0), y: Y(t.y) + (t.dir === 'X' ? -8 : 4), class: 'etiqueta', 'text-anchor': t.dir === 'X' ? 'middle' : 'start' }, largoTipeado ? `${largoTipeado}▌ m` : `${t.largo.toFixed(2).replace('.', ',')} m`));
         }
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
       }
@@ -1126,7 +1207,10 @@ export function montarPlanta(cont: HTMLElement) {
     const q = aMundo(ev), tol = tolPx() / escala + 0.05;
     const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
     if (nc) { iman = nc.t === 'intersección' || nc.t === 'centro' ? 'extremo' : 'eje'; ultimoIman = nc.t; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
-    const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol); iman = r.a; ultimoIman = r.a; return r.p;
+    const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol);
+    const gm = imanDeGuias(q, tol);
+    if (gm && (r.a === 'grilla' || (gm.punto && (r.a === 'eje' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { iman = gm.punto ? 'extremo' : 'eje'; ultimoIman = gm.t; return gm.p; }
+    iman = r.a; ultimoIman = r.a; return r.p;
   };
   let ultimoIman = '';
   /** imán al arrastrar desde un nodo: nodos del plano CAD, nodos y caras de los otros elementos, grilla */
@@ -1136,6 +1220,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (nc) { ultimoIman = nc.t; destinoIman = { x: nc.p.x, y: nc.p.y }; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
     const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
     const r = imanarNodo(q, estado.proyecto.muros.filter(m => !excluir.has(m.id) && presenteEn(m, zN, zF, zT)), tol);
+    const gm = imanDeGuias(q, tol);
+    if (gm && (r.a === 'grilla' || (gm.punto && (r.a === 'cara' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { ultimoIman = gm.t; ultimoIdIman = undefined; destinoIman = gm.p; return gm.p; }
     ultimoIman = r.a === 'grilla' ? 'grilla' : `${r.a}${r.id ? ` de ${r.id}` : ''}`;
     ultimoIdIman = r.a === 'grilla' ? undefined : r.id;
     destinoIman = r.a === 'grilla' ? null : r.p;
@@ -1190,18 +1276,24 @@ export function montarPlanta(cont: HTMLElement) {
     if (!lazo) return;
     ev.stopImmediatePropagation();
     const q = aMundo(ev), u = lazo.pts[lazo.pts.length - 1];
+    if (opLazo.forma === 'rect') { lazo.pts = [lazo.pts[0], q]; pedirDibujo(); return; }
     if (Math.hypot(q.x - u.x, q.y - u.y) * escala >= 3) { lazo.pts.push(q); pedirDibujo(); }
   }, true);
   const finLazo = (ev: PointerEvent) => {
     if (!lazo) return;
     ev.stopImmediatePropagation();
     const l = lazo; lazo = null;
-    if (l.pts.length < 3 || ev.type === 'pointercancel') {
+    if (opLazo.forma === 'rect' && l.pts.length === 2 && Math.abs(l.pts[1].x - l.pts[0].x) * escala > 4 && Math.abs(l.pts[1].y - l.pts[0].y) * escala > 4) {
+      const [a, b] = l.pts, crit = opLazo.criterio === 'auto' ? (b.x >= a.x ? 'entero' : 'tocando') : opLazo.criterio;
+      elegirConLazo(rectPol(a, b), l.op, crit);
+      return;
+    }
+    if (l.pts.length < 3 || opLazo.forma === 'rect' || ev.type === 'pointercancel') {
       // toque sin arrastrar: en el modo lazo, un toque en el vacío suelta la selección
       if (l.op === 'nuevo' && ev.type !== 'pointercancel') { estado.multi = { m: [], g: [] }; estado.avisarPanel(); } else dibujar();
       return;
     }
-    elegirConLazo(l.pts, l.op);
+    elegirConLazo(l.pts, l.op, opLazo.criterio === 'auto' ? 'centro' : opLazo.criterio);
   };
   svg.addEventListener('pointerup', finLazo, true);
   svg.addEventListener('pointercancel', finLazo, true);
@@ -1306,7 +1398,14 @@ export function montarPlanta(cont: HTMLElement) {
     }
     toqueDibujo = { t: ahora, x: ev.clientX, y: ev.clientY };
     const q = pegar(ev);
-    if (!inicio) { inicio = q; cursor = q; dibujar(); return; }
+    if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; dibujar(); return; }
+    muroHasta(q);
+  });
+  /** largo tipeado mientras se dibuja un muro (Enter lo aplica en la dirección del cursor) */
+  let largoTipeado = '';
+  /** crea el muro desde «inicio» hasta q (horizontal o vertical) y encadena el próximo */
+  const muroHasta = (q: Punto) => {
+    if (!inicio) return;
     const t = muroDesdeTramo(inicio, q, ultimoEspesor);
     if (!t) return;
     const fin = t.dir === 'X' ? { x: t.x + (q.x >= inicio.x ? 1 : -1) * t.largo / 2, y: t.y } : { x: t.x, y: t.y + (q.y >= inicio.y ? 1 : -1) * t.largo / 2 };
@@ -1316,7 +1415,21 @@ export function montarPlanta(cont: HTMLElement) {
       estado.proyecto.muros = armarPiezas([...estado.proyecto.muros, m]);
       estado.seleccion = id;
     });
-    inicio = { x: +fin.x.toFixed(2), y: +fin.y.toFixed(2) };      // encadenado: el próximo arranca donde terminó este
+    inicio = { x: +fin.x.toFixed(3), y: +fin.y.toFixed(3) };      // encadenado: el próximo arranca donde terminó este
+    largoTipeado = '';
+  };
+  document.addEventListener('keydown', ev => {
+    if (modo !== 'dibujar' || !inicio || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return;
+    if (/^[0-9.,]$/.test(ev.key)) { ev.preventDefault(); largoTipeado += ev.key === '.' ? ',' : ev.key; mensaje(`Largo: ${largoTipeado} m · Enter lo dibuja hacia donde apunta el cursor.`); pedirDibujo(); return; }
+    if (ev.key === 'Backspace' && largoTipeado) { ev.preventDefault(); largoTipeado = largoTipeado.slice(0, -1); pedirDibujo(); return; }
+    if (ev.key === 'Enter' && largoTipeado && cursor) {
+      ev.preventDefault();
+      const L = Number(largoTipeado.replace(',', '.'));
+      if (!(L > 0)) { largoTipeado = ''; return; }
+      const dx = cursor.x - inicio.x, dy = cursor.y - inicio.y;
+      const q = Math.abs(dx) >= Math.abs(dy) ? { x: inicio.x + Math.sign(dx || 1) * L, y: inicio.y } : { x: inicio.x, y: inicio.y + Math.sign(dy || 1) * L };
+      muroHasta(q); mensaje(`Muro de ${largoTipeado || String(L).replace('.', ',')} m. Seguí tipeando el próximo largo o tocá.`); dibujar();
+    }
   });
   let toqueDibujo: { t: number; x: number; y: number } | null = null;
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
