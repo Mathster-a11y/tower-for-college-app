@@ -29,6 +29,8 @@ class Estado {
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
   capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true };
+  /** grilla de discretización de 0,05 m en la planta: se ve y los puntos se ajustan a ella (apagada: ajuste a 0,01 m) */
+  grillaFina = false;
   /** rototraslación en 3D: exageración de la traslación y extra del giro (null = automáticas), torre sin deformar, animación y rótulos */
   roto3d: { exag: number | null; giro: number | null; original: boolean; animar: boolean; rotulos: boolean } = { exag: null, giro: null, original: true, animar: false, rotulos: true };
   /** plano para calcar en la planta (no se guarda en el proyecto): imagen, ancho real (m), centro (m) y opacidad */

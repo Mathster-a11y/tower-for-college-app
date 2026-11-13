@@ -2,7 +2,7 @@
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, imanar, imanarNodo, muroDesdeTramo, nodosMuro, type Punto } from '../engine/dibujo';
+import { agrupar, armarPiezas, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, type Punto } from '../engine/dibujo';
 import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
@@ -413,7 +413,20 @@ export function montarPlanta(cont: HTMLElement) {
     copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.length} muros.`); });
     panelAreas.append(copiar, mk('span', 'Criterio: cada punto de la losa va al elemento más cercano (el borde queda a mitad de camino). Elegí la planta tipo arriba antes de copiar.', 'nota-chica'));
   }
-  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns, bAreas);
+  // grilla de discretización de 0,05 m: se ve y los puntos se ajustan a ella; apagada, el ajuste es de 0,01 m
+  const bGrilla = document.createElement('button');
+  bGrilla.type = 'button'; bGrilla.textContent = 'Grilla 5 cm'; bGrilla.className = 'b-grilla';
+  bGrilla.title = 'Grilla de discretización de 0,05 × 0,05 m: los muros, vértices y piezas se ajustan a ella (tecla G). Apagada, el ajuste es de 1 cm.';
+  const ponerGrilla = (on: boolean) => {
+    estado.grillaFina = on; fijarPasoGrilla(on ? 0.05 : 0.01); bGrilla.setAttribute('aria-pressed', String(on));
+    try { localStorage.setItem('torre3d.grilla', on ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    dibujar();
+  };
+  bGrilla.addEventListener('click', () => ponerGrilla(!estado.grillaFina));
+  document.addEventListener('keydown', ev => { if ((ev.key === 'g' || ev.key === 'G') && !ev.ctrlKey && !ev.metaKey && !(ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) ponerGrilla(!estado.grillaFina); });
+  try { estado.grillaFina = localStorage.getItem('torre3d.grilla') === '1'; } catch { /* sin almacenamiento */ }
+  fijarPasoGrilla(estado.grillaFina ? 0.05 : 0.01); bGrilla.setAttribute('aria-pressed', String(estado.grillaFina));
+  barra.append(bMover, bDibujar, bArmar, bCalco, bSil, bIns, bAreas, bGrilla);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -511,9 +524,25 @@ export function montarPlanta(cont: HTMLElement) {
     return { x: (ev.clientX - r.left - ox) / escala, y: -(ev.clientY - r.top - oy) / escala };
   };
 
+  /** ajuste: con la grilla de discretización encendida, a 0,05 m; apagada, a 0,01 m */
+  const aj = (v: number) => { const pa = estado.grillaFina === false ? 0.01 : 0.05; return +(Math.round(v / pa) * pa).toFixed(2); };
+  /** un solo dibujo por cuadro de pantalla: el lápiz y el mouse mandan muchos movimientos por cuadro */
+  let cuadroPedido = 0;
+  const pedirDibujo = () => { if (!cuadroPedido) cuadroPedido = requestAnimationFrame(() => { cuadroPedido = 0; dibujar(); }); };
+  /** tipo de puntero del último toque (mouse, pen o touch): agranda imanes y zonas de agarre para el dedo y el lápiz */
+  let tipoPuntero = 'mouse';
+  const tolPx = () => (tipoPuntero === 'touch' ? 18 : tipoPuntero === 'pen' ? 12 : 8);
+  /** el arrastre recién empieza cuando el puntero se movió unos píxeles: tocar para elegir no corre la pieza */
+  let umbral: { x: number; y: number } | null = null;
+  const pasoUmbral = (ev: PointerEvent) => {
+    if (!umbral) return true;
+    if (Math.hypot(ev.clientX - umbral.x, ev.clientY - umbral.y) < (ev.pointerType === 'mouse' ? 3 : 7)) return false;
+    umbral = null; return true;
+  };
   /** manijas de los vértices del contorno: se agregan al final para quedar arriba de los muros */
   let manijasSil: SVGElement[] = [];
   function dibujar() {
+    if (cuadroPedido) { cancelAnimationFrame(cuadroPedido); cuadroPedido = 0; }
     manijasSil = [];
     const p = estado.proyecto;
     const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
@@ -545,6 +574,18 @@ export function montarPlanta(cont: HTMLElement) {
     for (let i = gx0; i <= gx1; i++) g.appendChild(el('line', { x1: X(i), y1: Y(gy0), x2: X(i), y2: Y(gy1), class: i % 5 ? 'g1' : 'g5' }));
     for (let i = gy0; i <= gy1; i++) g.appendChild(el('line', { x1: X(gx0), y1: Y(i), x2: X(gx1), y2: Y(i), class: i % 5 ? 'g1' : 'g5' }));
     svg.appendChild(g);
+    // grilla de discretización de 0,05 m (se prende con el botón «Grilla 5 cm»): un solo trazo para que sea liviana;
+    // si las líneas de 5 cm quedan a menos de 4 px, se dibujan las de 10 cm o 25 cm (el ajuste sigue a 5 cm)
+    if (estado.grillaFina) {
+      const paso = [0.05, 0.1, 0.25].find(q => q * escala >= 4);
+      if (paso) {
+        let d = '';
+        const k0 = Math.floor(gx0 / paso), k1 = Math.ceil(gx1 / paso), j0 = Math.floor(gy0 / paso), j1 = Math.ceil(gy1 / paso);
+        for (let k = k0; k <= k1; k++) { if (Math.abs(k * paso - Math.round(k * paso)) < 1e-9) continue; const x = X(k * paso).toFixed(1); d += `M${x} ${Y(gy0).toFixed(1)}V${Y(gy1).toFixed(1)}`; }
+        for (let j = j0; j <= j1; j++) { if (Math.abs(j * paso - Math.round(j * paso)) < 1e-9) continue; const y = Y(j * paso).toFixed(1); d += `M${X(gx0).toFixed(1)} ${y}H${X(gx1).toFixed(1)}`; }
+        svg.insertBefore(el('path', { d, class: 'grilla-fina' }), g);
+      }
+    }
     const c = estado.calco;
     if (c) {
       const alto = c.ancho * c.aspecto;
@@ -587,7 +628,7 @@ export function montarPlanta(cont: HTMLElement) {
         const v = vEd;
         let mejor = 0, dMin = Infinity;
         v.forEach((a, i) => { const b2 = v[(i + 1) % v.length]; const dx = b2.x - a.x, dy = b2.y - a.y; const t = Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy || 1))); const d = Math.hypot(a.x + t * dx - q.x, a.y + t * dy - q.y); if (d < dMin) { dMin = d; mejor = i; } });
-        estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }); });
+        estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: aj(q.x), y: aj(q.y) }); });
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
       vEd.forEach((v, i) => {
@@ -596,7 +637,7 @@ export function montarPlanta(cont: HTMLElement) {
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 6 : 4, class: 'vertice' + (editaCarp ? ' vertice-carp' : '') }));
         hnd.appendChild(el('title', {}, `vértice ${i + 1}: x ${v.x.toFixed(2)} · y ${v.y.toFixed(2)}${v.b ? ` · arco (bulge ${v.b.toFixed(3)})` : ''} · arrastrar para mover, clic derecho para borrar`));
-        hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; vSel = i; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
+        hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; vSel = i; umbral = { x: ev.clientX, y: ev.clientY }; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
         hnd.addEventListener('contextmenu', ev => { ev.preventDefault(); if (vEd.length > 3) estado.cambiar(() => { siluetaPropia().splice(i, 1); }); });
         manijasSil.push(hnd);
       });
@@ -712,12 +753,14 @@ export function montarPlanta(cont: HTMLElement) {
         const nd = nodosDe(m).map(n => ({ n, d: Math.hypot(n.x - q.x, n.y - q.y) * escala })).sort((a, b) => a.d - b.d || (a.n.t === 'esquina' ? -1 : 1))[0];
         if (nd && nd.d <= 10 && nd.n.t !== 'centro') {
           const ids = m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
+          umbral = { x: ev.clientX, y: ev.clientY };
           arrastreNodo = { p: { x: nd.n.x, y: nd.n.y }, orig: estado.proyecto.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
           refNodo = nodosDe(m).findIndex(o => o.x === nd.n.x && o.y === nd.n.y); clavePrec = '';
           try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
           estado.cambiar();
           return;
         }
+        umbral = { x: ev.clientX, y: ev.clientY };
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y, otros: m.grupo ? estado.proyecto.muros.filter(o => o.grupo === m.grupo && o.id !== m.id).map(o => ({ id: o.id, x: o.x, y: o.y })) : [] };
         try { svg.setPointerCapture(ev.pointerId); } catch { /* puntero sintético: se arrastra igual */ }
         estado.cambiar();
@@ -749,7 +792,7 @@ export function montarPlanta(cont: HTMLElement) {
         const esRef = !k && (refNodo >= 0 ? nd === lista[refNodo] : nd.t === 'centro');
         // marca chica (no tapa el muro) y un círculo invisible más grande para agarrarla fácil
         const forma = el('g', { class: `nodo nodo-${nd.t}` });
-        forma.appendChild(el('circle', { cx: x, cy: y, r: 8, class: 'hit' }));
+        forma.appendChild(el('circle', { cx: x, cy: y, r: tolPx() + 2, class: 'hit' }));
         forma.appendChild(nd.t === 'esquina' ? el('rect', { x: x - 1.8, y: y - 1.8, width: 3.6, height: 3.6 })
           : nd.t === 'medio' ? el('polygon', { points: `${x},${y - 2.5} ${x - 2.2},${y + 1.8} ${x + 2.2},${y + 1.8}` })
             : el('polygon', { points: `${x},${y - 3} ${x + 3},${y} ${x},${y + 3} ${x - 3},${y}`, class: 'centro' }));
@@ -767,6 +810,7 @@ export function montarPlanta(cont: HTMLElement) {
           if (k) { estado.seleccion = elegido.id; hoverId = null; }
           refNodo = nodosDe(elegido).findIndex(o => o.x === nd.x && o.y === nd.y); clavePrec = '';
           const ids = elegido.grupo ? p.muros.filter(o => o.grupo === elegido.grupo).map(o => o.id) : [elegido.id];
+          umbral = { x: ev.clientX, y: ev.clientY };
           arrastreNodo = { p: { x: nd.x, y: nd.y }, orig: p.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
           try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
         });
@@ -804,6 +848,10 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (verAreas) acomodarAreas();
     manijasSil.forEach(m => svg.appendChild(m));
+    if (arrastreNodo && destinoIman && cursor) {
+      svg.appendChild(el('circle', { cx: ox + destinoIman.x * escala, cy: oy - destinoIman.y * escala, r: 6, class: 'iman-destino' }));
+      svg.appendChild(el('text', { x: ox + cursor.x * escala + 10, y: oy - cursor.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+    }
   }
   /** rótulos de las áreas: el primer lugar libre (sin pisar textos ni muros) entre los candidatos */
   function acomodarAreas() {
@@ -824,7 +872,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   let ultimoEspesor = 0.2;
   const pegar = (ev: PointerEvent, excluir?: Set<string>) => {
-    const q = aMundo(ev), tol = 8 / escala + 0.05;
+    const q = aMundo(ev), tol = tolPx() / escala + 0.05;
     const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
     if (nc) { iman = nc.t === 'intersección' || nc.t === 'centro' ? 'extremo' : 'eje'; ultimoIman = nc.t; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
     const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol); iman = r.a; ultimoIman = r.a; return r.p;
@@ -832,7 +880,7 @@ export function montarPlanta(cont: HTMLElement) {
   let ultimoIman = '';
   /** imán al arrastrar desde un nodo: nodos del plano CAD, nodos y caras de los otros elementos, grilla */
   const pegarNodo = (ev: PointerEvent, excluir: Set<string>) => {
-    const q = aMundo(ev), tol = 10 / escala;
+    const q = aMundo(ev), tol = (tolPx() + 2) / escala;
     const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
     if (nc) { ultimoIman = nc.t; destinoIman = { x: nc.p.x, y: nc.p.y }; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
     const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
@@ -863,6 +911,18 @@ export function montarPlanta(cont: HTMLElement) {
   let pellizco: { d: number; z: number; mx: number; my: number; c: { x: number; y: number } } | null = null;
   const local = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
   const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .manija-vertice, .editando, .areas-inf text');
+  // Lápiz: mientras el lápiz está apoyado o cerca de la pantalla (hasta 0,8 s después), los toques de la mano se ignoran
+  let lapizAbajo = false, lapizVisto = 0;
+  const ignorados = new Set<number>();
+  const esPalma = (ev: PointerEvent) => ev.pointerType === 'touch' && (lapizAbajo || performance.now() - lapizVisto < 800);
+  for (const tipo of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'] as const) {
+    svg.addEventListener(tipo, ev => {
+      if (ev.pointerType === 'pen') { lapizVisto = performance.now(); if (tipo === 'pointerdown') lapizAbajo = true; if (tipo === 'pointerup' || tipo === 'pointercancel') lapizAbajo = false; }
+      if (tipo === 'pointerdown' && esPalma(ev)) ignorados.add(ev.pointerId);
+      if (ignorados.has(ev.pointerId)) { ev.stopImmediatePropagation(); ev.preventDefault(); if (tipo === 'pointerup' || tipo === 'pointercancel') ignorados.delete(ev.pointerId); return; }
+      if (tipo === 'pointerdown') tipoPuntero = ev.pointerType || 'mouse';
+    }, true);
+  }
   svg.addEventListener('pointerdown', ev => {
     punteros.set(ev.pointerId, local(ev));
     if (punteros.size === 2) {
@@ -893,13 +953,13 @@ export function montarPlanta(cont: HTMLElement) {
       const q = { x: pellizco.c.x + (pellizco.mx - w / 2) / s0, y: pellizco.c.y - (pellizco.my - h / 2) / s0 };   // punto bajo el centro del pellizco
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       zoom = z2; centroVista = { x: q.x - (mx - w / 2) / s2, y: q.y + (my - h / 2) / s2 };
-      dibujar();
+      pedirDibujo();
       return;
     }
     if (pan) {
       ev.stopImmediatePropagation();
       centroVista = { x: pan.c.x - (ev.clientX - pan.sx) / escala, y: pan.c.y + (ev.clientY - pan.sy) / escala };
-      dibujar();
+      pedirDibujo();
     }
   }, true);
   const finPuntero = (ev: PointerEvent) => { punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null; };
@@ -914,7 +974,7 @@ export function montarPlanta(cont: HTMLElement) {
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
-      const q = aMundo(ev), g5 = (v: number) => +(Math.round(v / 0.05) * 0.05).toFixed(2);
+      const q = aMundo(ev), g5 = aj;
       const mal = problemaMedidas(insTipo, insMed);
       if (mal) { mensaje(`No se puede insertar: ${mal}.`); return; }
       estado.cambiar(() => {
@@ -947,6 +1007,11 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (modo !== 'dibujar' || ev.button !== 0) return;
     ev.preventDefault();
+    const ahora = performance.now();
+    if (ev.pointerType !== 'mouse' && toqueDibujo && ahora - toqueDibujo.t < 380 && Math.hypot(ev.clientX - toqueDibujo.x, ev.clientY - toqueDibujo.y) < 24) {
+      toqueDibujo = null; inicio = null; dibujar(); return;                // doble toque: termina el muro encadenado
+    }
+    toqueDibujo = { t: ahora, x: ev.clientX, y: ev.clientY };
     const q = pegar(ev);
     if (!inicio) { inicio = q; cursor = q; dibujar(); return; }
     const t = muroDesdeTramo(inicio, q, ultimoEspesor);
@@ -960,43 +1025,41 @@ export function montarPlanta(cont: HTMLElement) {
     });
     inicio = { x: +fin.x.toFixed(2), y: +fin.y.toFixed(2) };      // encadenado: el próximo arranca donde terminó este
   });
+  let toqueDibujo: { t: number; x: number; y: number } | null = null;
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
   svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
   document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar') && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
-    if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m`; }
-    if (modo === 'dibujar') { cursor = pegar(ev); dibujar(); return; }
+    if (co) { const q = aMundo(ev); co.textContent = `x ${q.x.toFixed(2).replace('.', ',').replace('-', '−')} · y ${q.y.toFixed(2).replace('.', ',').replace('-', '−')} m · ajuste ${estado.grillaFina ? '5' : '1'} cm`; }
+    if (modo === 'dibujar') { cursor = pegar(ev); pedirDibujo(); return; }
     if (modo === 'mover' && !arrastre && !arrastreNodo && !pan) {
       const t = ev.target as Element;
       const enNodo = t.closest?.('.nodos-hover');
       const id = enNodo ? hoverId : ((t.closest?.('g.muro') as SVGGElement | null)?.dataset.id ?? null);
-      if (id !== hoverId) { hoverId = id; dibujar(); }
+      if (id !== hoverId && ev.pointerType !== 'touch') { hoverId = id; pedirDibujo(); }
     }
-    if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }; dibujar(); return; }
+    if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: aj(q.x), y: aj(q.y) }; pedirDibujo(); return; }
     if (modo === 'calibrar') return;
     if (arrastreNodo) {
+      if (!pasoUmbral(ev)) return;
       const excl = new Set(arrastreNodo.orig.map(o => o.id));
       const q = pegarNodo(ev, excl);
       const dx = q.x - arrastreNodo.p.x, dy = q.y - arrastreNodo.p.y;
       arrastreNodo.orig.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(3); w.y = +(o.y + dy).toFixed(3); } });
-      cursor = q; dibujar();
-      if (destinoIman) {
-        svg.appendChild(el('circle', { cx: ox + destinoIman.x * escala, cy: oy - destinoIman.y * escala, r: 6, class: 'iman-destino' }));
-        svg.appendChild(el('text', { x: ox + q.x * escala + 10, y: oy - q.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
-      }
+      cursor = q; pedirDibujo();
       return;
     }
     if (modo === 'silueta') {
-      if (arrastreV === null) return;
+      if (arrastreV === null || !pasoUmbral(ev)) return;
       const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? nv.carpinteria : nv.silueta;
-      if (v && v[arrastreV]) { v[arrastreV].x = +(Math.round(q.x / 0.05) * 0.05).toFixed(2); v[arrastreV].y = +(Math.round(q.y / 0.05) * 0.05).toFixed(2); dibujar(); }
+      if (v && v[arrastreV]) { v[arrastreV].x = aj(q.x); v[arrastreV].y = aj(q.y); pedirDibujo(); }
       return;
     }
-    if (!arrastre) return;
+    if (!arrastre || !pasoUmbral(ev)) return;
     const q = aMundo(ev);
-    const snap = (v: number) => Math.round(v / 0.05) * 0.05;
+    const snap = (v: number) => aj(v);
     const m = estado.proyecto.muros.find(x => x.id === arrastre!.id);
     if (!m) return;
     m.x = +snap(arrastre.x0 + q.x - arrastre.mx).toFixed(2);
@@ -1004,9 +1067,9 @@ export function montarPlanta(cont: HTMLElement) {
     // el grupo se mueve entero
     const dx = m.x - arrastre.x0, dy = m.y - arrastre.y0;
     arrastre.otros.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(2); w.y = +(o.y + dy).toFixed(2); } });
-    dibujar();
+    pedirDibujo();
   });
-  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; destinoIman = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); if (modo === 'silueta') armarPanelSil(); } };
+  const soltar = () => { umbral = null; if (arrastreNodo) { arrastreNodo = null; cursor = null; destinoIman = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); if (modo === 'silueta') armarPanelSil(); } };
   svg.addEventListener('pointerup', soltar);
   svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('keydown', ev => {

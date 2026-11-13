@@ -107,7 +107,7 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .menu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 2px; }
 
 /* ------------------------------------------------------------------ disposición */
-.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px minmax(330px, 400px) minmax(0, 1fr) 300px; }
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px var(--w-lat, 360px) 12px minmax(0, 1fr) 12px var(--w-der, 300px); }
 .riel { background: var(--rail); border-right: 1px solid var(--edge); display: flex; flex-direction: column; gap: 2px; padding: 6px 5px; overflow-y: auto; }
 .riel button { position: relative; border: 0; border-radius: 9px; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; font-size: 11px; color: var(--ink2); white-space: normal; line-height: 1.15; }
 .riel button:hover { background: var(--tint); }
@@ -120,7 +120,7 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .riel .punto.revisar { background: var(--revisar); }
 .riel .riel-fin { margin-top: auto; }
 
-.lateral { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 5px solid var(--edge); }
+.lateral { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
 .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rolb); color: #fff; }
 .banda .chip { background: #fff; color: var(--rolb); font-weight: 700; font-family: var(--mono); font-size: 13px; border-radius: 6px; padding: 1px 6px; }
 .banda h2 { margin: 0; font-size: 17px; color: #fff; }
@@ -139,7 +139,7 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .fila-dibujos { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; align-items: start; }
 .centro-planta { position: absolute; inset: 0; }
 
-.derecha { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 5px solid var(--edge); overflow: auto; }
+.derecha { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); overflow: auto; }
 .derecha .tira { min-height: 34px; }
 .derecha .vista3d { position: relative; height: 44vh; min-height: 240px; background: var(--lienzo); border-bottom: 1px solid var(--edge); flex-shrink: 0; }
 .derecha .vista3d canvas { display: block; width: 100%; height: 100%; }
@@ -347,8 +347,9 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 /* ------------------------------------------------------------------ pantallas más chicas */
 @media (max-width: 1280px) {
   /* tablets: la fila de trabajo (riel, panel, planta) nunca queda más baja que 560 px; el 3D y el avance van debajo y se llega desplazando */
-  .app { grid-template-columns: 70px minmax(300px, 360px) minmax(0, 1fr); grid-template-rows: minmax(560px, 1fr) auto; overflow: auto; -webkit-overflow-scrolling: touch; }
-  .derecha { grid-column: 2 / 4; border-left: 0; border-top: 5px solid var(--edge); flex-direction: row; flex-wrap: wrap; overflow: visible; }
+  .app { grid-template-columns: 70px var(--w-lat, 340px) 12px minmax(0, 1fr); grid-template-rows: minmax(560px, 1fr) auto; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .divisor-der { display: none; }
+  .derecha { grid-column: 2 / 5; border-left: 0; border-top: 5px solid var(--edge); flex-direction: row; flex-wrap: wrap; overflow: visible; }
   .derecha .bloque3d { flex: 1 1 380px; }
   .derecha .vista3d { height: 300px; }
   .derecha .avance { flex: 1 1 260px; }
@@ -844,3 +845,32 @@ dialog.tarjeta input { width: 100%; margin-top: 12px; }
 .campo-vertice { width: 74px; }
 .menu .menu-titulo { display: block; padding: 4px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--dim); }
 #torres-prueba { max-height: 46vh; overflow-y: auto; }
+.planta .grilla-fina { fill: none; stroke: var(--grilla); stroke-width: .5; opacity: .55; pointer-events: none; }
+.herr-planta .b-grilla[aria-pressed="true"], .b-grilla[aria-pressed="true"] { background: var(--tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+/* lápiz y dedo: sin selección de texto ni menú de «copiar» al mantener apretado sobre los dibujos */
+svg.planta, .vista3d, .grafico, .funicular, .rototrasl { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* ------------------------------------------------------------------ divisores de los paneles */
+.divisor { position: relative; background: var(--edge); cursor: col-resize; touch-action: none; display: flex; align-items: center; justify-content: center; outline: none; z-index: 3; }
+.divisor > i { width: 4px; height: 44px; border-radius: 2px; background: color-mix(in srgb, var(--ink2) 45%, transparent); background: var(--dim); opacity: .6; }
+.divisor:hover > i, .divisor.arrastrando > i, .divisor:focus-visible > i { background: var(--accent); opacity: 1; }
+.divisor:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.divisor-flecha { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 22px; height: 34px; padding: 0; border-radius: 7px; font-size: 15px; line-height: 1; background: var(--field); border: 1px solid var(--edge); color: var(--ink2); }
+.divisor-flecha:hover { color: var(--accent); border-color: var(--accent); }
+.app.sin-lat > .lateral, .app.sin-der > .derecha { visibility: hidden; overflow: hidden; }
+body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+@media (pointer: coarse) { .divisor-flecha { width: 30px; height: 44px; font-size: 18px; } .divisor > i { height: 64px; } }
+@media (max-width: 760px) { .divisor { display: none; } .app.sin-lat > .lateral, .app.sin-der > .derecha { visibility: visible; } }
+
+/* ------------------------------------------------------------------ paneles plegables */
+.plegable > .cab, .plegable > .cab-avance, .bloque3d.plegable > .tira { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.plegar { margin-left: auto; color: var(--dim); font-size: 12px; transition: transform .15s; display: inline-block; padding: 0 2px; }
+.plegada .plegar { transform: rotate(-90deg); }
+.seccion.plegada > .cuerpo { display: none; }
+.seccion.plegada > .cab { border-bottom: 0; }
+.avance.plegada > .lista-avance { display: none; }
+.cab-avance { display: flex; align-items: center; gap: 6px; }
+.bloque3d.plegada > .vista3d, .bloque3d.plegada > .capas { display: none; }
+.bloque3d > .tira .plegar { margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) { .plegar { transition: none; } }
+@media (max-width: 1280px) { .divisor-der { display: none; } .app.sin-der > .derecha { visibility: visible; } }

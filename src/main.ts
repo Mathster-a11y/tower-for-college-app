@@ -1,5 +1,6 @@
 import './compat';
 import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
+import { montarDivisores } from './ui/divisores';
 import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
 import { estado } from './ui/estado';
@@ -15,7 +16,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, h } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
@@ -110,7 +111,11 @@ function dibujarCentro() {
 }
 function dibujarAvance() {
   const a = $('avance');
-  a.replaceChildren(h('h4', {}, 'Avance de la planilla'), ...ETAPAS.map(e => {
+  const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
+  const lista = h('div', { class: 'lista-avance' });
+  a.replaceChildren(cab, lista);
+  hacerPlegable(a, cab, 'Avance de la planilla');
+  lista.replaceChildren(...ETAPAS.map(e => {
     const est = e.estado();
     const b = h('button', { type: 'button', 'aria-current': String(e.id === estado.etapa) }, h('span', { class: 'nro' }, e.nro), h('span', { class: 'nom' }, e.nombre), chip(est === 'pendiente' ? 'pendiente' : est, est === 'revisar' && e.id === 'flexion' ? 'armadura' : est));
     b.addEventListener('click', () => irA(e.id));
@@ -487,3 +492,10 @@ if (import.meta.env.DEV) import('./ui/etapas').then(m => { (window as unknown as
 // la app arrancó: se saca el cartel de «Cargando…»
 (window as unknown as { __torreLista?: boolean }).__torreLista = true;
 document.getElementById('arranque')?.remove();
+
+// paneles de los costados: divisores que se deslizan y paneles que se pliegan
+montarDivisores();
+{
+  const b3 = document.querySelector<HTMLElement>('.bloque3d'), cab3 = b3?.querySelector<HTMLElement>('.tira');
+  if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría'); }
+}

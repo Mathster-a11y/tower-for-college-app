@@ -13,10 +13,35 @@ export const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<s
 };
 export const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Sección redondeada con franja de título (color del rol de la etapa). */
+/** títulos de las secciones plegadas (se recuerdan entre sesiones: los paneles se rearman con cada cambio) */
+const CLAVE_PLEGADAS = 'torre3d.plegadas';
+let plegadas: Set<string> | null = null;
+export function seccionesPlegadas(): Set<string> {
+  if (!plegadas) { try { plegadas = new Set(JSON.parse(localStorage.getItem(CLAVE_PLEGADAS) ?? '[]') as string[]); } catch { plegadas = new Set(); } }
+  return plegadas;
+}
+export function plegarSeccion(clave: string, plegar: boolean) {
+  const s = seccionesPlegadas();
+  if (plegar) s.add(clave); else s.delete(clave);
+  try { localStorage.setItem(CLAVE_PLEGADAS, JSON.stringify([...s])); } catch { /* sin almacenamiento */ }
+}
+/** convierte una cabecera en plegable: tocarla muestra u oculta el cuerpo (con teclado: Enter o espacio) */
+export function hacerPlegable(caja: HTMLElement, cab: HTMLElement, clave: string) {
+  caja.classList.add('plegable');
+  cab.setAttribute('role', 'button'); cab.tabIndex = 0;
+  const poner = (p: boolean) => { caja.classList.toggle('plegada', p); cab.setAttribute('aria-expanded', String(!p)); };
+  poner(seccionesPlegadas().has(clave));
+  const cambiar = () => { const p = !caja.classList.contains('plegada'); poner(p); plegarSeccion(clave, p); };
+  cab.addEventListener('click', ev => { if ((ev.target as HTMLElement).closest('button, a, input, select') && ev.target !== cab) return; cambiar(); });
+  cab.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cambiar(); } });
+}
+
+/** Sección redondeada con franja de título (color del rol de la etapa). Se pliega tocando el título. */
 export function seccion(titulo: string, ...hijos: (Node | string)[]): { el: H; cuerpo: H } {
   const cuerpo = h('div', { class: 'cuerpo' }, ...hijos);
-  const el = h('section', { class: 'seccion' }, h('div', { class: 'cab' }, h('h3', {}, titulo)), cuerpo);
+  const cab = h('div', { class: 'cab' }, h('h3', {}, titulo), h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
+  const el = h('section', { class: 'seccion' }, cab, cuerpo);
+  hacerPlegable(el, cab, titulo);
   return { el, cuerpo };
 }
 

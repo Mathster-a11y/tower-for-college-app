@@ -10,7 +10,10 @@ import { marcoTrasEspejo, marcoTrasGiro } from './piezasTipo';
 
 export type Punto = { x: number; y: number };
 const r2 = (v: number) => Math.round(v * 100) / 100;
-const grilla = (v: number, paso = 0.05) => r2(Math.round(v / paso) * paso);
+/** paso del imán a la grilla (m): 0,05 con la grilla de discretización encendida; 0,01 apagada */
+let pasoGrilla = 0.05;
+export function fijarPasoGrilla(paso: number) { pasoGrilla = paso > 0 ? paso : 0.05; }
+const grilla = (v: number, paso = pasoGrilla) => r2(Math.round(v / paso) * paso);
 
 /** extremos del eje de un tabique */
 export function extremos(m: Muro): [Punto, Punto] {
