@@ -38,6 +38,8 @@ export interface PiezaEquivalente {
   /** J de la sección real (cada muro con su Steiner, respecto del baricentro) y J del molde de la hoja (m⁴) */
   Jreal?: number;
   Jhoja?: number;
+  /** alas en el medio del alma que la app sumó al ala superior (sin papel elegido a mano) */
+  alasMedio?: string[];
 }
 
 export interface Asignacion {
@@ -160,6 +162,7 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     return x.pos === abajo ? 'ala inf.' : 'ala sup.';
   };
   const medio = info.filter(x => x.pos === 'medio' && !rol(x.a));
+  const alasMedio = medio.map(x => x.a.id);
   if (medio.length) avisos.push(`Nota: ${medio.map(x => x.a.id).join(', ')} ${medio.length > 1 ? 'están' : 'está'} en el medio del alma; ${medio.length > 1 ? 'se suman' : 'se suma'} al ala superior del molde (se puede cambiar a «fuera» o «ala inf.»). Mirá la diferencia de J.`);
   const sup = info.filter(x => papelAla(x) === 'ala sup.'), inf = info.filter(x => papelAla(x) === 'ala inf.');
   // solo las alas de los extremos recortan el alma (las del medio no)
@@ -198,13 +201,13 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     const iguales = (a: number, b: number) => Math.abs(a - b) <= 0.02 * Math.max(a, b);
     const sinMedio = sup.every(x => x.pos !== 'medio') && inf.every(x => x.pos !== 'medio');
     if (A && B && sinMedio && iguales(A.area, B.area) && iguales(A.t, B.t) && centrada(sup.map(x => x.a), A.b) && centrada(inf.map(x => x.a), B.b)) {
-      return { ...base, molde: 'simétrico', fila: { B: izq.espesor, C: libre(izq, extSup, extInf), F: A.b, G: A.t, J: B.b, K: B.t } };
+      return { ...base, alasMedio, molde: 'simétrico', fila: { B: izq.espesor, C: libre(izq, extSup, extInf), F: A.b, G: A.t, J: B.b, K: B.t } };
     }
     const top = A ?? B!, bot = A ? B : null;
     if (!A) inf.forEach(x => set(x.a, 'ala sup.'));
     const fila: FilaJ = { W: top.b, X: top.t, Z: izq.espesor, AB: libre(izq, extSup, extInf) };
     if (bot) { fila.AH = bot.b; fila.AI = bot.t; }
-    return { ...base, molde: 'asimétrico', fila };
+    return { ...base, alasMedio, molde: 'asimétrico', fila };
   }
   // dos almas: el ala superior une las dos; la inferior va solo bajo el alma izquierda
   if (inf.some(x => x.w === der)) avisos.push(`Nota: el molde solo admite el ala inferior bajo el alma izquierda; ${inf.filter(x => x.w === der).map(x => x.a.id).join(', ')} se juntó ahí.`);
@@ -215,7 +218,29 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   if (Math.abs(derArriba - supArriba) > 0.3) avisos.push(`El alma derecha ${der.id} no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.`);
   const fila: FilaJ = { W: A ? A.b : 0.01, X: A ? A.t : 0.01, Z: izq.espesor, AB: libre(izq, extSup, extInf), AE: der.espesor, AF: libre(der, extSup) };
   if (B) { fila.AH = B.b; fila.AI = B.t; }
-  return { ...base, molde: 'asimétrico', fila };
+  return { ...base, alasMedio, molde: 'asimétrico', fila };
+}
+
+/**
+ * Igual que perfilEquivalente, pero si hay alas en el medio del alma (una «H», una doble T girada) prueba también
+ * dejarlas fuera del molde y se queda con lo que da el J de la hoja más parecido al de la sección real. Un muro en el
+ * medio casi no suma J (está sobre el baricentro); subirlo al ala superior del molde lo puede multiplicar.
+ */
+function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
+  const pz = perfilEquivalente(nombre, dir, muros, papeles);
+  if (!pz.alasMedio?.length || !Object.keys(pz.fila).length) return pz;
+  const clave = dir === 'A' ? 'rolA' : 'rolB';
+  const fuera = new Set(pz.alasMedio);
+  const alt = muros.map(m => (fuera.has(m.id) ? { ...m, [clave]: 'fuera' } : m));
+  const Jr = Jreal(muros, dir);
+  const Jh = (x: PiezaEquivalente) => (Object.keys(x.fila).length ? calcFilaJ({ S: 0.01, W: 0.01, X: 0.01, ...x.fila }, dir === 'B', false).AY : 0);
+  const pz2 = perfilEquivalente(nombre, dir, alt, papeles);
+  if (Math.abs(Jh(pz2) - Jr) < Math.abs(Jh(pz) - Jr)) {
+    pz2.avisos = pz2.avisos.filter(a => !a.startsWith('Fuera del molde (elegido a mano)'));
+    pz2.avisos.push(`${[...fuera].join(', ')} ${fuera.size > 1 ? 'están' : 'está'} en el medio del alma: la app ${fuera.size > 1 ? 'los dejó' : 'lo dejó'} fuera del molde porque así el J de la hoja queda más cerca del real (se puede cambiar en el grupo).`);
+    return pz2;
+  }
+  return perfilEquivalente(nombre, dir, muros, papeles);   // vuelve a dejar los papeles de la opción elegida
 }
 
 /** J de la sección real respecto de su baricentro, para el viento dado: cada rectángulo con su Steiner (m⁴) */
@@ -328,7 +353,7 @@ export function aPlanilla(p: Proyecto): Asignacion {
   const grupos = (dir: Direccion) => {
     const g = new Map<string, Muro[]>();
     activos.forEach(m => { const k = dir === 'A' ? m.piezaA : m.piezaB; if (k) g.set(k, [...(g.get(k) ?? []), m]); });
-    return [...g.entries()].map(([nombre, ms]) => perfilEquivalente(nombre, dir, ms, papeles));
+    return [...g.entries()].map(([nombre, ms]) => elegirPerfil(nombre, dir, ms, papeles));
   };
   const piezasA = grupos('A'), piezasB = grupos('B');
   // J de la hoja (molde) contra J de la sección real: la simplificación puede cambiarlo mucho

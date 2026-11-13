@@ -43,6 +43,8 @@ export function montarPlanta(cont: HTMLElement) {
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
   let iNivel = 0;
   let arrastreV: number | null = null;
+  /** vértice del contorno elegido (para escribir sus coordenadas o borrarlo desde el panel) */
+  let vSel: number | null = null;
   /** en el modo «Silueta»: se edita el contorno de la losa (false) o el de la carpintería (true) */
   let editaCarp = false;
   let calib: Punto[] = [];
@@ -207,7 +209,32 @@ export function montarPlanta(cont: HTMLElement) {
       estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) nv.carpinteria = c; else nv.silueta = c; });
     });
     const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
-    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
+    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
+    // vértices: agregar, borrar y escribir coordenadas (en una tablet, el doble clic y el clic derecho no andan bien)
+    const vs = verticesEd();
+    if (vSel !== null && vSel >= vs.length) vSel = null;
+    const filaV = document.createElement('div'); filaV.className = 'fila-vertices';
+    const agregar = boton('+ vértice', () => estado.cambiar(() => {
+      const s2 = siluetaPropia();
+      let k = 0, lmax = -1;
+      s2.forEach((a, j) => { const c = s2[(j + 1) % s2.length], l = Math.hypot(c.x - a.x, c.y - a.y); if (l > lmax) { lmax = l; k = j; } });
+      const a2 = s2[k], c2 = s2[(k + 1) % s2.length];
+      s2[k] = { ...a2, b: 0 };
+      s2.splice(k + 1, 0, { x: +((a2.x + c2.x) / 2).toFixed(2), y: +((a2.y + c2.y) / 2).toFixed(2) });
+      vSel = k + 1;
+    }), 'Agrega un vértice en el medio del tramo más largo; después se arrastra adonde va.');
+    const borrar = boton('− vértice', () => { if (vSel === null || vs.length <= 3) return; const k = vSel; vSel = null; estado.cambiar(() => { siluetaPropia().splice(k, 1); }); }, 'Borra el vértice elegido (tocalo primero). Quedan al menos 3.');
+    borrar.disabled = vSel === null || vs.length <= 3;
+    filaV.append(agregar, borrar);
+    if (vSel !== null) {
+      const k = vSel, v0 = vs[k];
+      const campo = (eje: 'x' | 'y') => {
+        const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.05'; inp.value = String(v0[eje]); inp.className = 'campo-vertice'; inp.setAttribute('aria-label', `${eje} del vértice ${k + 1} (m)`);
+        inp.addEventListener('change', () => { const val = parseFloat(inp.value.replace(',', '.')); if (!isFinite(val)) return; estado.cambiar(() => { const s2 = siluetaPropia(); if (s2[k]) s2[k] = { ...s2[k], [eje]: +val.toFixed(2) }; }); });
+        const l = document.createElement('label'); l.append(`${eje} `, inp, ' m'); return l;
+      };
+      filaV.append(b(`vértice ${k + 1}:`), campo('x'), campo('y'));
+    }
     if (editaCarp) {
       const car = carpinteriaDeNivel(p, iNivel);
       const f2 = (x: number) => x.toFixed(2).replace('.', ',');
@@ -215,7 +242,7 @@ export function montarPlanta(cont: HTMLElement) {
         linea(!car ? 'sin carpintería: arrastrá un vértice y se copia la silueta de la losa' : car.propia ? 'propia de este nivel' : 'heredada del nivel de arriba (se copia al editarla)'),
         ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
         linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m${car && (Math.abs(car.a - pl.B) > 0.01 || Math.abs(car.b - pl.L) > 0.01) ? ' (distinto de la caja)' : ''}`),
-        dxf,
+        filaV, dxf,
         boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
         ...(car ? [boton('Usar a máx y b máx como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +car.a.toFixed(2); nv.L = +car.b.toFixed(2); }), 'Escribe en este nivel B = a máx y L = b máx (es lo que lee la planilla para el viento). No se hace solo: queda a tu criterio.')] : []),
         boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'));
@@ -224,7 +251,7 @@ export function montarPlanta(cont: HTMLElement) {
     panelSil.append(que, b(`Silueta de ${n.nombre}`), linea(pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
-      dxf,
+      filaV, dxf,
       boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
       boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'));
   }
@@ -484,7 +511,10 @@ export function montarPlanta(cont: HTMLElement) {
     return { x: (ev.clientX - r.left - ox) / escala, y: -(ev.clientY - r.top - oy) / escala };
   };
 
+  /** manijas de los vértices del contorno: se agregan al final para quedar arriba de los muros */
+  let manijasSil: SVGElement[] = [];
   function dibujar() {
+    manijasSil = [];
     const p = estado.proyecto;
     const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
     // nivel elegido (por defecto PB)
@@ -559,12 +589,16 @@ export function montarPlanta(cont: HTMLElement) {
         v.forEach((a, i) => { const b2 = v[(i + 1) % v.length]; const dx = b2.x - a.x, dy = b2.y - a.y; const t = Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy || 1))); const d = Math.hypot(a.x + t * dx - q.x, a.y + t * dy - q.y); if (d < dMin) { dMin = d; mejor = i; } });
         estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: +(Math.round(q.x / 0.05) * 0.05).toFixed(2), y: +(Math.round(q.y / 0.05) * 0.05).toFixed(2) }); });
       });
+      const tactil = matchMedia('(pointer: coarse)').matches;
       vEd.forEach((v, i) => {
-        const hnd = el('circle', { cx: X(v.x), cy: Y(v.y), r: 2.6, class: 'vertice' + (editaCarp ? ' vertice-carp' : ''), tabindex: 0 });
+        // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
+        const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
+        hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));
+        hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 6 : 4, class: 'vertice' + (editaCarp ? ' vertice-carp' : '') }));
         hnd.appendChild(el('title', {}, `vértice ${i + 1}: x ${v.x.toFixed(2)} · y ${v.y.toFixed(2)}${v.b ? ` · arco (bulge ${v.b.toFixed(3)})` : ''} · arrastrar para mover, clic derecho para borrar`));
-        hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
+        hnd.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); siluetaPropia(); arrastreV = i; vSel = i; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } });
         hnd.addEventListener('contextmenu', ev => { ev.preventDefault(); if (vEd.length > 3) estado.cambiar(() => { siluetaPropia().splice(i, 1); }); });
-        svg.appendChild(hnd);
+        manijasSil.push(hnd);
       });
     }
     if (verAreas) {
@@ -769,6 +803,7 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(pr);
     }
     if (verAreas) acomodarAreas();
+    manijasSil.forEach(m => svg.appendChild(m));
   }
   /** rótulos de las áreas: el primer lugar libre (sin pisar textos ni muros) entre los candidatos */
   function acomodarAreas() {
@@ -827,7 +862,7 @@ export function montarPlanta(cont: HTMLElement) {
   let pan: { sx: number; sy: number; c: { x: number; y: number } } | null = null;
   let pellizco: { d: number; z: number; mx: number; my: number; c: { x: number; y: number } } | null = null;
   const local = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
-  const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .editando, .areas-inf text');
+  const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .manija-vertice, .editando, .areas-inf text');
   svg.addEventListener('pointerdown', ev => {
     punteros.set(ev.pointerId, local(ev));
     if (punteros.size === 2) {
@@ -971,7 +1006,7 @@ export function montarPlanta(cont: HTMLElement) {
     arrastre.otros.forEach(o => { const w = estado.proyecto.muros.find(x => x.id === o.id); if (w) { w.x = +(o.x + dx).toFixed(2); w.y = +(o.y + dy).toFixed(2); } });
     dibujar();
   });
-  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; destinoIman = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); } };
+  const soltar = () => { if (arrastreNodo) { arrastreNodo = null; cursor = null; destinoIman = null; estado.cambiar(); return; } if (arrastre) { arrastre = null; estado.cambiar(); } if (arrastreV !== null) { arrastreV = null; estado.cambiar(); if (modo === 'silueta') armarPanelSil(); } };
   svg.addEventListener('pointerup', soltar);
   svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('keydown', ev => {

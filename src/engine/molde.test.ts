@@ -14,15 +14,16 @@ describe('molde de la hoja J: J del molde contra J de la sección real', () => {
   it('en los ejemplos de la guía el molde da exactamente el J real', () => {
     for (const p of [ejemploGuia(), ejemploAsimetrico()]) aPlanilla(p).piezas.forEach(pz => expect(pz.Jhoja!).toBeCloseTo(pz.Jreal!, 6));
   });
-  it('pieza con alas en el medio: el alma va entera, las alas se pegan al alma que tocan y se avisa la diferencia de J', () => {
+  it('pieza con alas en el medio: el alma va entera y las alas del medio quedan fuera si así el J se acerca al real', () => {
     const a = aPlanilla(piezaCatedra());
     const pz = a.piezas.find(x => x.dir === 'A')!;
     expect(pz.molde).toBe('asimétrico');
     expect(pz.fila.AB).toBeCloseTo(12.75, 6);                        // 13 m menos medio espesor de cada ala de los extremos
     expect(a.papeles.M5.A).toBe('alma der.');
-    expect(a.papeles.M3.A).toBe('ala sup.');                           // la del medio se suma al ala superior
-    expect(pz.avisos.some(x => x.includes('cambia el J'))).toBe(true);
-    expect(pz.avisos.some(x => x.includes('no llega al ala superior'))).toBe(true);
+    // la del medio: sumarla al ala superior inflaba el J; la app la deja fuera del molde (J más cerca del real) y avisa
+    expect(a.papeles.M3.A).toBe('fuera del cálculo');
+    expect(pz.avisos.some(x => x.includes('en el medio del alma') && x.includes('más cerca del real'))).toBe(true);
+    expect(Math.abs(pz.Jhoja! - pz.Jreal!) / pz.Jreal!).toBeLessThan(0.06);
   });
   it('más de dos almas (la pieza vista desde el viento B): se toman las dos de más área y el resto queda fuera', () => {
     const a = aPlanilla(piezaCatedra());

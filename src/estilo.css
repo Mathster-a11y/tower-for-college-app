@@ -834,3 +834,13 @@ dialog.tarjeta input { width: 100%; margin-top: 12px; }
 .espectro i { flex: 1; height: 8px; border-radius: 4px; border: 1px solid var(--edge); background: linear-gradient(90deg, #ffffff, var(--deformada)); }
 
 .sin-3d { padding: 16px; color: var(--ink2); font-size: 13px; line-height: 1.5; }
+
+/* contornos: zona invisible para agarrar el vértice; mientras se editan, los muros no tapan las manijas */
+.planta .vertice-zona { fill: transparent; stroke: none; cursor: move; }
+.planta .manija-vertice:hover .vertice { stroke-width: 6; stroke-opacity: .35; paint-order: stroke; fill: var(--accent); }
+.planta.editando-silueta .muro, svg.editando-silueta .muro { pointer-events: none; }
+.fila-vertices { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.fila-vertices label { display: inline-flex; align-items: center; gap: 3px; }
+.campo-vertice { width: 74px; }
+.menu .menu-titulo { display: block; padding: 4px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--dim); }
+#torres-prueba { max-height: 46vh; overflow-y: auto; }
