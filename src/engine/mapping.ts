@@ -438,7 +438,9 @@ export function aPlanilla(p: Proyecto): Asignacion {
   // J de la hoja (molde) contra J de la sección real: la simplificación puede cambiarlo mucho
   const porId = new Map(p.muros.map(m => [m.id, m]));
   [...piezasA, ...piezasB].forEach(pz => {
-    if (!Object.keys(pz.fila).length || pz.molde === 'tubo') return;
+    if (!Object.keys(pz.fila).length) return;
+    // tubo circular: la hoja lleva el J exacto de la corona (π/64 · (D⁴ − d⁴))
+    if (pz.molde === 'tubo') { const D = pz.fila.S ?? 0, d = pz.fila.T ?? 0; pz.Jhoja = pz.Jreal = (Math.PI / 64) * (D ** 4 - d ** 4); return; }
     // el J real es el de todos los muros de la pieza (también los que se dejan fuera del molde)
     const ms = pz.muros.map(id => porId.get(id)!).filter(Boolean);
     pz.Jhoja = calcFilaJ({ S: 0.01, W: 0.01, X: 0.01, ...pz.fila }, pz.dir === 'B', false).AY;

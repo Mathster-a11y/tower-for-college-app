@@ -104,11 +104,12 @@ export function seccionEsquema(): H {
   acc.append(varios,
     b(`Agrupar${nMulti ? ` (${nMulti})` : ''}`, 'Junta lo elegido en un grupo (Ctrl+G)', () => {
       const ms = [...estado.multi.m], g2 = [...estado.multi.g];
-      if (!ms.length && !g2.length && selMuro) { const n = nodoAlTocar(p, selMuro, estado.contexto); if (n) (n.t === 'g' ? g2 : ms).push(n.id); }
+      if (!ms.length && !g2.length && estado.grupoSel && estado.grupoSel !== estado.contexto) g2.push(estado.grupoSel);
+      else if (!ms.length && !g2.length && selMuro) { const n = nodoAlTocar(p, selMuro, estado.contexto); if (n) (n.t === 'g' ? g2 : ms).push(n.id); }
       const r: { v: { id: string } | { error: string } } = { v: { error: 'Elegí muros o grupos para agrupar.' } };
       hacer(() => { if (ms.length || g2.length) r.v = agruparNodos(estado.proyecto, ms, g2, estado.contexto); return 'error' in r.v ? r.v.error : null; });
       if (!('error' in r.v)) { estado.grupoSel = r.v.id; estado.multi = { m: [], g: [] }; estado.eligeVarios = false; aviso(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.v.id)?.nombre}».`); estado.avisarPanel(); }
-    }, nMulti > 0 || !!selMuro),
+    }, nMulti > 0 || !!selMuro || !!estado.grupoSel),
     b('Limpiar', 'Vacía la selección múltiple (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }, nMulti > 0),
     b(`Borrar${nMulti ? ` (${nMulti})` : ''}`, 'Borra lo elegido (Supr en la planta). Ctrl+Z deshace.', () => document.dispatchEvent(new CustomEvent('torre:borrar-elegidos')), nMulti > 0, 'mini peligro'),
     b('Elegir fuera del cálculo', 'Elige todos los muros que no entran al cálculo (no llegan a la fundación o quedan fuera del molde en los dos vientos), para borrarlos o agruparlos', () => document.dispatchEvent(new CustomEvent('torre:elegir-fuera'))));

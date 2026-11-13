@@ -1069,3 +1069,7 @@ button.peligro { color: var(--mal); }
 .planta .areas-relleno { pointer-events: none; }
 .colocar-panel > * { flex-shrink: 0; }   /* el panel es una columna con scroll: sin esto, las filas con overflow se aplastan */
 .barra-grupo button { font-size: 12px; }
+.prec-panel .prec-medidas { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding-bottom: 6px; border-bottom: 1px solid var(--hair); }
+.prec-panel .prec-medidas .prec-campo input { width: 52px; }
+.prec-panel .prec-medidas button { padding: 3px 8px; }
+.prec-panel .prec-sub { font-size: 11px; font-weight: 600; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }

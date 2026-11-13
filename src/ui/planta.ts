@@ -3,7 +3,7 @@ import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto, type TipoVano } from '../engine/dibujo';
-import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
+import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
@@ -582,9 +582,9 @@ export function montarPlanta(cont: HTMLElement) {
     TIPOS.forEach(t => {
       const b = document.createElement('button'); b.type = 'button'; b.title = `${t.nombre}: ${t.ayuda}`;
       b.setAttribute('aria-pressed', String(t.tipo === insTipo));
-      b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : t.tipo === 'pórtico' ? 0.7 : 2, e: t.tipo === 'columna' ? 2 : t.tipo === 'pórtico' ? 0.7 : 0.3 }, 30));
+      b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : t.tipo === 'pórtico' ? 0.7 : 2, e: t.tipo === 'columna' ? 2 : t.tipo === 'tubo circ.' ? 0.6 : t.tipo === 'pórtico' ? 0.7 : 0.3 }, 30));
       const sp = document.createElement('span'); sp.textContent = t.nombre; b.append(sp);
-      b.addEventListener('click', () => { const antes = insTipo; insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
+      b.addEventListener('click', () => { const antes = insTipo; insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'tubo circ.') { insMed.h = 3; insMed.e = 0.25; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
       formas.append(b);
     });
     const info = TIPOS.find(t => t.tipo === insTipo)!;
@@ -610,9 +610,9 @@ export function montarPlanta(cont: HTMLElement) {
       datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>área <b>${f(ms.reduce((q, m) => q + (tipoDe(m) === 'tubo-circ' ? Math.PI / 4 * (m.largo ** 2 - Math.max(0, m.largo - 2 * m.espesor) ** 2) : rectangulos(m).reduce((z, r) => z + r.ax * r.ay, 0)), 0))}</b> m²</span>`;
     };
     const filaMed = document.createElement('div'); filaMed.className = 'medidas';
-    filaMed.append(campo(insTipo === 'columna' ? 'D' : 'h', 'h', insTipo === 'columna' ? 'diámetro exterior (m)' : insTipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)'));
+    filaMed.append(campo(esCirc(insTipo) ? 'D' : 'h', 'h', esCirc(insTipo) ? 'diámetro exterior (m)' : insTipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)'));
     if (info.usaB) filaMed.append(campo('b', 'b', insTipo === 'pórtico' ? 'lado de cada columna en el plano del pórtico (m)' : 'ancho de las alas (m)'));
-    filaMed.append(campo('e', 'e', insTipo === 'columna' ? 'espesor de pared (la mitad de D: maciza)' : insTipo === 'pórtico' ? 'el otro lado de la columna (m)' : 'espesor (m)'), giro);
+    filaMed.append(campo('e', 'e', esCirc(insTipo) ? 'espesor de pared (la mitad de D: maciza)' : insTipo === 'pórtico' ? 'el otro lado de la columna (m)' : 'espesor (m)'), giro);
     actualizar();
     panelIns.append(tit, formas, filaMed, vista, datos, ayuda);
   }
@@ -663,7 +663,7 @@ export function montarPlanta(cont: HTMLElement) {
       l.append('luz entre columnas', i);
       gen.append(l);
     }
-    gen.append(campo('h', tipo === 'columna' ? 'D' : 'h', tipo === 'columna' ? 'diámetro exterior (m)' : tipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)', false, med.h));
+    gen.append(campo('h', esCirc(tipo) ? 'D' : 'h', esCirc(tipo) ? 'diámetro exterior (m)' : tipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)', false, med.h));
     if (t.usaB) gen.append(campo('b', 'b', tipo === 'pórtico' ? 'lado de cada columna en el plano del pórtico (m)' : 'ancho de las alas (m), si no se da uno por ala', false, med.b));
     gen.append(campo('e', 'e', 'espesor general (m), si no se da uno por parte', false, med.e));
     const porParte = document.createElement('div'); porParte.className = 'medidas por-parte';
@@ -917,7 +917,44 @@ export function montarPlanta(cont: HTMLElement) {
       const l = mk('label', '', 'prec-campo'); l.append(mk('span', etq), i); return { l, i };
     };
     panelPrec.replaceChildren();
-    panelPrec.append(mk('b', `Mover con precisión · ${m.id}${m.grupo ? ` (grupo ${m.grupo}: ${ids.length} muros)` : ''}`));
+    panelPrec.append(mk('b', `${m.id}${grupoCerrado(p, m, estado.contexto) ? ` · grupo «${grupoCerrado(p, m, estado.contexto)!.nombre}»` : m.grupo ? ` · pieza ${m.grupo}` : ''}`));
+    // medidas del elemento (como en las piezas insertables): largo, espesor y dirección, sin ir a la tabla
+    {
+      const t = tipoDe(m), mot = motivoNoEditable(p, m, estado.contexto);
+      const med = mk('div', '', 'prec-medidas');
+      if (mot) med.append(mk('span', grupoCerrado(p, m, estado.contexto) ? 'Está en un grupo cerrado: doble clic para entrar y cambiar sus medidas.' : mot, 'prec-nota'));
+      else if (t === 'perfil') { const be = mk('button', 'Editar el contorno'); be.type = 'button'; be.title = 'También: doble clic en el perfil'; be.addEventListener('click', () => edc.abrir(m)); med.append(mk('span', 'Perfil irregular: su forma se edita con el contorno.', 'prec-nota'), be); }
+      else {
+        const campoM = (etq: string, v: number, ayuda: string, poner: (w: import('../engine/modelo').Muro, x: number) => string | null) => {
+          const l = mk('label', '', 'prec-campo'); l.title = ayuda; l.append(etq);
+          const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.value = f2(v);
+          i.addEventListener('change', () => {
+            const x = Number(i.value.replace(',', '.'));
+            if (!(x > 0)) { i.value = f2(v); mensaje('La medida tiene que ser mayor que cero.'); return; }
+            let err: string | null = null;
+            estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (w) err = poner(w, +x.toFixed(3)); });
+            mensaje(err ?? `${m.id}: ${etq} = ${f2(x)} m.`);
+          });
+          l.append(i, 'm'); return l;
+        };
+        if (t === 'tabique') {
+          med.append(campoM('largo', m.largo, 'Largo del tabique (crece desde su centro)', (w, x) => { w.largo = x; return null; }),
+            campoM('espesor', m.espesor, 'Espesor del tabique', (w, x) => { if (x > w.largo) return 'El espesor no puede pasar el largo (girá el tabique si es eso lo que querés).'; w.espesor = x; return null; }));
+          const gir = mk('button', m.dir === 'Y' ? '↻ a X' : '↻ a Y'); gir.type = 'button'; gir.title = `Girar el tabique 90° sobre su centro (pasa a dirección ${m.dir === 'Y' ? 'X' : 'Y'})`;
+          gir.addEventListener('click', () => { estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (w) { w.dir = w.dir === 'Y' ? 'X' : 'Y'; w.rolA = ''; w.rolB = ''; } }); });
+          med.append(gir);
+        } else if (t === 'tubo-rect') {
+          med.append(campoM('lado x', m.largo, 'Lado en x (exterior)', (w, x) => { if (2 * w.espesor >= x) return 'La pared ocupa todo el lado.'; w.largo = x; return null; }),
+            campoM('lado y', m.ladoY ?? m.largo, 'Lado en y (exterior)', (w, x) => { if (2 * w.espesor >= x) return 'La pared ocupa todo el lado.'; w.ladoY = x; return null; }),
+            campoM('pared', m.espesor, 'Espesor de la pared', (w, x) => { w.espesor = Math.min(x, Math.min(w.largo, w.ladoY ?? w.largo) / 2); return null; }));
+        } else if (t === 'tubo-circ') {
+          med.append(campoM('D', m.largo, 'Diámetro exterior', (w, x) => { w.largo = x; w.espesor = Math.min(w.espesor, x / 2); return null; }),
+            campoM('pared', m.espesor, 'Espesor de pared (la mitad de D: maciza)', (w, x) => { w.espesor = Math.min(x, w.largo / 2); return null; }));
+        }
+        if (t !== 'tubo-circ') { const be = mk('button', 'Contorno…'); be.type = 'button'; be.title = 'Editar la polilínea del contorno (también: doble clic)'; be.addEventListener('click', () => edc.abrir(m)); med.append(be); }
+      }
+      panelPrec.append(med, mk('span', 'Mover con precisión', 'prec-sub'));
+    }
     if (m.pieza) {
       const bm = mk('button', m.pieza.tipo === 'pórtico' ? 'Medidas del pórtico (luz entre columnas)…' : 'Medidas de la pieza…', 'b-medidas');
       (bm as HTMLButtonElement).type = 'button';

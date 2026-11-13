@@ -6,7 +6,9 @@
  */
 import { huella, type Muro } from './modelo';
 
-export type TipoPieza = 'tabique' | 'L' | 'T' | 'C' | 'U' | 'doble T' | 'núcleo' | 'columna' | 'pórtico';
+export type TipoPieza = 'tabique' | 'L' | 'T' | 'C' | 'U' | 'doble T' | 'núcleo' | 'tubo circ.' | 'columna' | 'pórtico';
+/** pieza circular (tubo o columna maciza): h = diámetro exterior, e = espesor de pared */
+export const esCirc = (t: TipoPieza) => t === 'columna' || t === 'tubo circ.';
 export interface MedidasPieza {
   h: number; b: number; e: number; giro: 0 | 90 | 180 | 270;
   /** espejada (antes de girar): la L o la C miran al otro lado */
@@ -17,7 +19,7 @@ export interface MedidasPieza {
 /** qué medidas por parte tiene cada tipo */
 export const PARTES: Record<TipoPieza, ('eA' | 'bS' | 'eS' | 'bI' | 'eI')[]> = {
   tabique: [], L: ['eA', 'bS', 'eS'], T: ['eA', 'bS', 'eS'], C: ['eA', 'bS', 'eS', 'bI', 'eI'], U: ['eA', 'bI', 'eI'],
-  'doble T': ['eA', 'bS', 'eS', 'bI', 'eI'], núcleo: [], columna: [], pórtico: [],
+  'doble T': ['eA', 'bS', 'eS', 'bI', 'eI'], núcleo: [], 'tubo circ.': [], columna: [], pórtico: [],
 };
 /** medidas efectivas de cada parte */
 export function partes(m: MedidasPieza) {
@@ -31,6 +33,7 @@ export const TIPOS: { tipo: TipoPieza; nombre: string; ayuda: string; usaB: bool
   { tipo: 'U', nombre: 'U', ayuda: 'Dos almas de largo h unidas abajo por un ala de ancho b.', usaB: true },
   { tipo: 'doble T', nombre: 'Doble T', ayuda: 'Alma de largo h y dos alas de ancho b centradas (pieza simétrica).', usaB: true },
   { tipo: 'núcleo', nombre: 'Núcleo', ayuda: 'Tubo rectangular (caja): h × b exteriores, e = espesor de pared.', usaB: true },
+  { tipo: 'tubo circ.', nombre: 'Tubo circular', ayuda: 'Núcleo redondo de hormigón: D = diámetro exterior, e = espesor de pared. En la hoja J va al molde del tubo (columnas S y T), con el J exacto de la corona.', usaB: false },
   { tipo: 'columna', nombre: 'Columna circular', ayuda: 'h = diámetro; e = espesor de pared (la mitad de h: maciza).', usaB: false },
   { tipo: 'pórtico', nombre: 'Pórtico', ayuda: 'Dos columnas unidas por una viga: h = largo total del pórtico (de cara exterior a cara exterior), b = lado de cada columna en el plano del pórtico, e = el otro lado. Trabaja solo en su plano (acción de pórtico de la hoja J, columnas AO a AX).', usaB: true },
 ];
@@ -66,7 +69,7 @@ export function piezaTipo(tipo: TipoPieza, m: MedidasPieza, x: number, y: number
     const giro90 = m.giro === 90 || m.giro === 270;
     return [{ ...base(nuevoId()), tipo: 'tubo-rect', largo: r2(giro90 ? m.h : m.b), ladoY: r2(giro90 ? m.b : m.h), espesor: m.e }];
   }
-  if (tipo === 'columna') return [{ ...base(nuevoId()), tipo: 'tubo-circ', largo: m.h, espesor: Math.min(m.e, m.h / 2) }];
+  if (esCirc(tipo)) return [{ ...base(nuevoId()), tipo: 'tubo-circ', largo: m.h, espesor: Math.min(m.e, m.h / 2) }];
   const rs = local(tipo, m);
   // caja de la pieza (con los espesores) para centrarla en el punto de inserción
   const xs = rs.flatMap(r => (r.dir === 'X' ? [r.cx - r.largo / 2, r.cx + r.largo / 2] : [r.cx - r.e / 2, r.cx + r.e / 2]));
@@ -119,7 +122,7 @@ export function problemaMedidas(tipo: TipoPieza, m: MedidasPieza): string | null
   const { eA, bS, eS, bI, eI } = partes(m);
   const usaB = TIPOS.find(t => t.tipo === tipo)?.usaB ?? false;
   if ([m.h, m.e, ...(usaB ? [m.b] : []), ...PARTES[tipo].map(k => partes(m)[k])].some(v => !(v > 0))) return 'todas las medidas tienen que ser mayores que cero';
-  if (tipo === 'columna') return m.e > m.h / 2 + 1e-9 ? 'el espesor de pared no puede pasar la mitad del diámetro' : null;
+  if (esCirc(tipo)) return m.e > m.h / 2 + 1e-9 ? 'el espesor de pared no puede pasar la mitad del diámetro' : null;
   if (tipo === 'núcleo') return 2 * m.e >= Math.min(m.h, m.b) ? 'el espesor de pared es demasiado grande para el tubo' : null;
   if (tipo === 'tabique') return m.e >= m.h ? 'el espesor tiene que ser menor que el largo' : null;
   if (tipo === 'pórtico') return 2 * m.b >= m.h ? 'las dos columnas no entran en el largo del pórtico: h tiene que ser mayor que 2·b' : null;
