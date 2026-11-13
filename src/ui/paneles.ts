@@ -5,6 +5,7 @@ import { estado, fmt, COLORES } from './estado';
 import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
 import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { datosAlturaDe, pesoMuro } from '../engine/flexocompresion';
 import { cotasDesdeCorte, factorUnidad, leerDXFCompleto, nombrarNiveles } from '../engine/cad';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
@@ -294,6 +295,7 @@ export function panelMuros(c: H) {
     escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; if (tipoDe(m) === 'perfil' && (clave === 'largo' || clave === 'espesor')) { avisoPanel(`${m.id} es un perfil irregular: su forma se edita con doble clic en la planta.`); return false; } m[clave] = x; },
   });
   const txt = (titulo: string, clave: 'piezaA' | 'pegadoA' | 'piezaB' | 'pegadoB'): Columna<Muro> => ({ titulo, clave, leer: m => m[clave], escribir: (m, v) => { m[clave] = v.trim(); } });
+  const alt = datosAlturaDe(p);
   const iSel = p.muros.findIndex(m => m.id === estado.seleccion);
   if (iSel >= 0) elegirFila('muros', iSel);
   c.append(grilla<Muro>([
@@ -309,6 +311,9 @@ export function panelMuros(c: H) {
     { titulo: 'Llega', clave: 'llega', tipo: 'lista', opciones: ['sí', 'no'], ayuda: '¿Llega a la fundación?', leer: m => (m.llega ? 'sí' : 'no'),
       escribir: (m, v) => { const t = v.trim().toLowerCase(); if (['sí', 'si', 's', '1', 'true', 'x', ''].includes(t)) m.llega = true; else if (['no', 'n', '0', 'false'].includes(t)) m.llega = false; else return false; } },
     numM('Área inf. (m²)', 'areaInf', 0),
+    { titulo: 'Peso (t)', clave: 'peso', tipo: 'numero', ayuda: 'Peso que baja por el muro en PB (t): peso propio de su altura (2,4 t/m³) + las losas que carga (0,9 t/m² × área inf. × losas sobre PB). Se calcula, no se escribe.',
+      leer: m => { const w = pesoMuro(estado.proyecto, m, alt); return +w.N.toFixed(1); },
+      escribir: m => { avisoPanel(`El peso de ${m.id} se calcula: cambiá su área de influencia o su altura.`); return false; } },
     txt('Pieza A', 'piezaA'), txt('Pegado a (A)', 'pegadoA'), txt('Pieza B', 'piezaB'), txt('Pegado a (B)', 'pegadoB'),
     { titulo: 'Tipo', clave: 'tipo', tipo: 'lista', opciones: ['tabique', 'tubo rect.', 'tubo circ.'], ayuda: 'tabique (o columna rectangular) · tubo rectangular · tubo circular · perfil (forma libre: se edita con doble clic en la planta)',
       leer: m => ({ tabique: 'tabique', 'tubo-rect': 'tubo rect.', 'tubo-circ': 'tubo circ.', perfil: 'perfil' } as Record<TipoElemento, string>)[tipoDe(m)],
@@ -467,6 +472,8 @@ export function panelAyuda(c: H) {
    ['Esc o clic derecho', 'cancelar, terminar o salir del grupo'], ['Enter', 'terminar (contorno, camino, largo tipeado)'], ['Números + Enter', 'largo del muro al dibujar · distancia al mover o copiar'], ['G', 'grilla de 5 cm'], ['Rueda · botón del medio', 'acercar · desplazar']]
     .forEach(([k, t]) => at.append(h('li', {}, h('b', {}, k), ` — ${t}`)));
   c.append(at);
+  c.append(h('h3', {}, 'Comandos (como en CAD)'));
+  c.append(h('p', { class: 'nota' }, 'En la planta, escribí el alias y apretá Enter o Espacio: L dibujar muros · LA lazo · M mover · CO copiar · RO girar 90° · RL girar libre · MI simetría · SC escalar · O desfase · AL (o TR) alargar o recortar · PA partir · UN unir · F esquina · AR matrices · CAM camino · D cota · ME medir · CA calar · IN insertar · EJ guías · CON contornos.'));
   c.append(h('h3', {}, 'Dónde quedan los datos'));
   c.append(h('p', { class: 'nota' }, 'El proyecto se guarda solo en este navegador. Para llevarlo a otra computadora usá «Guardar proyecto» (.json) o la planilla escrita (.xlsx). La app no manda datos a ningún servidor.'));
   c.append(h('h3', {}, 'Autoría y licencia'));

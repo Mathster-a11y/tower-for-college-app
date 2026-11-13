@@ -10,8 +10,8 @@
 import type { Camino, Muro, Proyecto, Ubicacion } from './modelo';
 import { cajaMuro, tipoDe } from './modelo';
 import { agruparNodos, copiarNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
-import { puntosSilueta, type Punto } from './silueta';
-import { desdeEje, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
+import type { Punto } from './silueta';
+import { polilinea, desdeEje, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export type Seleccion = { m: string[]; g: string[] };
@@ -162,11 +162,9 @@ export function matrizPolar(p: Proyecto, sel: Seleccion, contexto: string | null
 /** puntos del camino (los arcos partidos en tramos cortos) */
 export function puntosCamino(c: Camino, grados = 3): Punto[] {
   if (c.v.length < 2) return c.v.map(q => ({ x: q.x, y: q.y }));
-  if (c.cerrado) { const pts = puntosSilueta(c.v, grados); return [...pts, pts[0]]; }
-  // abierto: el último vértice no tiene tramo de salida
-  const pts = puntosSilueta(c.v.map((q, i) => (i === c.v.length - 1 ? { x: q.x, y: q.y } : q)), grados);
-  // puntosSilueta trata el contorno como cerrado: el tramo de vuelta es recto y no agrega puntos, así que basta
-  return pts;
+  if (c.cerrado) { const pts = polilinea(c.v, grados); return [...pts, pts[0]]; }
+  // abierto: el último vértice no tiene tramo de salida (el tramo de vuelta es recto y no agrega puntos)
+  return polilinea(c.v.map((q, i) => (i === c.v.length - 1 ? { x: q.x, y: q.y } : q)), grados);
 }
 export function largoCamino(c: Camino): number {
   const pts = puntosCamino(c, 1);
@@ -190,12 +188,11 @@ export function puntoEn(c: Camino, s: number): { p: Punto; ang: number } {
 /** el mismo camino recorrido al revés (los arcos cambian de signo y pasan al vértice anterior) */
 export function invertirCamino(c: Camino): Camino {
   const n = c.v.length;
-  if (c.cerrado) {
-    const v = [...c.v].reverse().map((q, i, arr) => ({ x: q.x, y: q.y, b: -(arr[(i + 1) % n].b ?? 0) }));
-    return { ...c, v: v.map(q => (q.b ? q : { x: q.x, y: q.y })) };
-  }
-  const v = c.v.map((_q, i) => ({ x: c.v[n - 1 - i].x, y: c.v[n - 1 - i].y, b: i < n - 1 ? -(c.v[n - 2 - i].b ?? 0) : 0 }));
-  return { ...c, v: v.map(q => (q.b ? q : { x: q.x, y: q.y })) };
+  // el tramo que sale del vértice nuevo i es el viejo que llegaba a él, recorrido al revés (arco con el signo
+  // cambiado, Bézier con los puntos de control intercambiados)
+  const tramo = (j: number) => { const o = c.v[((j % n) + n) % n]; return { ...(o.b ? { b: -o.b } : {}), ...(o.c1 && o.c2 ? { c1: { ...o.c2 }, c2: { ...o.c1 } } : {}) }; };
+  if (c.cerrado) return { ...c, v: c.v.map((_q, i) => { const q = c.v[(n - i) % n]; return { x: q.x, y: q.y, ...tramo(n - i - 1) }; }) };
+  return { ...c, v: c.v.map((_q, i) => { const q = c.v[n - 1 - i]; return { x: q.x, y: q.y, ...(i < n - 1 ? tramo(n - 2 - i) : {}) }; }) };
 }
 
 /**
@@ -217,15 +214,15 @@ export function unirCaminos(cs: Camino[], tol = 0.01): { v: Camino['v']; cerrado
       return { error: `Quedan ${resto.length} tramo${resto.length > 1 ? 's' : ''} sin tocar al resto (la separación más chica es de ${(d * 100).toFixed(1).replace('.', ',')} cm; se unen a menos de ${(tol * 100).toFixed(0)} cm).` };
     }
     let c = resto.splice(i, 1)[0];
-    if (cerca(c.v[0], fin)) { v[v.length - 1] = { ...v[v.length - 1], b: c.v[0].b }; v = [...v, ...c.v.slice(1).map(q => ({ ...q }))]; }
-    else if (cerca(c.v[c.v.length - 1], fin)) { c = invertirCamino(c); v[v.length - 1] = { ...v[v.length - 1], b: c.v[0].b }; v = [...v, ...c.v.slice(1).map(q => ({ ...q }))]; }
+    if (cerca(c.v[0], fin)) { v[v.length - 1] = { x: v[v.length - 1].x, y: v[v.length - 1].y, ...(c.v[0].b ? { b: c.v[0].b } : {}), ...(c.v[0].c1 ? { c1: c.v[0].c1, c2: c.v[0].c2 } : {}) }; v = [...v, ...c.v.slice(1).map(q => ({ ...q }))]; }
+    else if (cerca(c.v[c.v.length - 1], fin)) { c = invertirCamino(c); v[v.length - 1] = { x: v[v.length - 1].x, y: v[v.length - 1].y, ...(c.v[0].b ? { b: c.v[0].b } : {}), ...(c.v[0].c1 ? { c1: c.v[0].c1, c2: c.v[0].c2 } : {}) }; v = [...v, ...c.v.slice(1).map(q => ({ ...q }))]; }
     else if (cerca(c.v[c.v.length - 1], ini)) v = [...c.v.slice(0, -1).map(q => ({ ...q })), ...v];
     else { c = invertirCamino(c); v = [...c.v.slice(0, -1).map(q => ({ ...q })), ...v]; }
   }
   // limpia los «b» vacíos; si cierra, el último vértice se funde con el primero
   let cerrado = false;
   if (v.length > 2 && cerca(v[0], v[v.length - 1])) { v.pop(); cerrado = true; }
-  return { v: v.map(q => (q.b ? { x: r4(q.x), y: r4(q.y), b: q.b } : { x: r4(q.x), y: r4(q.y) })), cerrado };
+  return { v: v.map(q => ({ x: r4(q.x), y: r4(q.y), ...(q.b ? { b: q.b } : {}), ...(q.c1 ? { c1: q.c1, c2: q.c2 } : {}) })), cerrado };
 }
 
 /** bulge del arco que va de a a b pasando por m (b = tan(θ/4), θ con signo) */

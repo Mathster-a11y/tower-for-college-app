@@ -1051,3 +1051,20 @@ button.peligro { color: var(--mal); }
 .colocar-panel.compacto { width: auto; max-width: 320px; }
 .con-contorno .prec-panel { display: none !important; }
 .herr-planta .menu-mas > button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.barra-dib { right: auto; left: 50%; transform: translateX(-50%); }
+
+/* ---------- huecos de losa ---------- */
+.planta .hueco-losa polygon { fill: color-mix(in srgb, var(--lienzo, #fff) 70%, var(--ink2) 12%); stroke: var(--ink2); stroke-width: 1.2; }
+.planta .hueco-losa line { stroke: var(--ink2); stroke-width: .8; }
+.planta .hueco-losa.sel polygon { stroke: var(--accent); stroke-width: 2.2; }
+.planta .hueco-txt { font-size: 10px; fill: var(--ink2); }
+.planta .hueco-previa { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: 4 3; stroke-width: 1.2; }
+.areas-leyenda { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; max-height: 160px; overflow: auto; }
+.areas-ley-fila { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: center; font-size: 11.5px; }
+.areas-ley-fila .n { font-family: var(--mono, monospace); font-size: 11px; color: var(--ink2); }
+.areas-leyenda .muestra { width: 14px; height: 12px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
+.areas-leyenda .muestra.r-d135 { background-image: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
+.areas-leyenda .muestra.r-h { background-image: repeating-linear-gradient(0deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
+.areas-leyenda .muestra.r-v { background-image: repeating-linear-gradient(90deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
+.planta .areas-relleno { pointer-events: none; }
+.colocar-panel > * { flex-shrink: 0; }   /* el panel es una columna con scroll: sin esto, las filas con overflow se aplastan */

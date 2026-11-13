@@ -353,6 +353,15 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     b.addEventListener('click', () => caja.scrollBy({ top: sg * caja.clientHeight * 0.85, behavior: 'smooth' }));
     pasos.append(b);
   });
+  // se desactivan cuando no hay más para recorrer (y se ocultan si la tabla entra entera)
+  const [bSub, bBaj] = [...pasos.children] as HTMLButtonElement[];
+  // (solo se desactivan: ocultarlos cambiaría el tamaño de la tabla y el observador se dispararía en bucle)
+  const estadoPasos = () => { const max = caja.scrollHeight - caja.clientHeight; bSub.disabled = caja.scrollTop <= 1; bBaj.disabled = caja.scrollTop >= max - 1; };
+  let pedidoPasos = 0;
+  const pedirPasos = () => { if (!pedidoPasos) pedidoPasos = requestAnimationFrame(() => { pedidoPasos = 0; estadoPasos(); }); };
+  caja.addEventListener('scroll', pedirPasos, { passive: true });
+  pedirPasos();
+  new ResizeObserver(pedirPasos).observe(caja);
   const fila = document.createElement('div'); fila.className = 'grilla-con-pasos';
   fila.append(caja, pasos);
   envoltura.append(fila, aviso);

@@ -49,8 +49,8 @@ export function montarColocar(api: ApiPlanta) {
   // opciones
   const op = { vinculada: true, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
     matriz: 'rect' as 'rect' | 'polar' | 'camino', filas: 2, cols: 3, dx: 3.6, dy: 3.6, n: 6, total: 360, girarCopias: true, cx: 0, cy: 0,
-    dDesf: 0.6, angLibre: 30, espCam: 0.25, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false };
-  let caminoNuevo: { v: Camino['v']; paso?: Punto } | null = null;
+    curva: false, dDesf: 0.6, angLibre: 30, espCam: 0.25, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false };
+  let caminoNuevo: { v: Camino['v']; paso?: Punto; ctrl?: Punto[] } | null = null;
   const caminosSel = new Set<string>();
   let cotaSel: string | null = null;
   /** muros tocados en la edición en curso (desfase, alargar, unir, esquina) */
@@ -107,7 +107,7 @@ export function montarColocar(api: ApiPlanta) {
       case 'espejar': return pts.length === 0 ? 'Simetría: tocá el primer punto del eje.' : 'Tocá el segundo punto del eje (queda horizontal, vertical o a 45°).';
       case 'escalar': return 'Escalar: tocá el punto base.';
       case 'centro-polar': return 'Tocá el centro de la matriz polar.';
-      case 'camino': return op.arco ? (caminoNuevo?.paso ? 'Arco: tocá el final del arco.' : caminoNuevo?.v.length ? 'Arco: tocá un punto por donde pasa.' : 'Tocá el inicio del camino.') : caminoNuevo?.v.length ? 'Tocá el próximo punto · Enter o doble toque termina · Esc cancela.' : 'Tocá el inicio del camino.';
+      case 'camino': return op.curva && caminoNuevo?.v.length ? `Bézier: tocá el ${['primer punto de control', 'segundo punto de control', 'final de la curva'][caminoNuevo.ctrl?.length ?? 0]}.` : op.arco ? (caminoNuevo?.paso ? 'Arco: tocá el final del arco.' : caminoNuevo?.v.length ? 'Arco: tocá un punto por donde pasa.' : 'Tocá el inicio del camino.') : caminoNuevo?.v.length ? 'Tocá el próximo punto · Enter o doble toque termina · Esc cancela.' : 'Tocá el inicio del camino.';
       case 'cad': return 'Tocá una línea, arco o polilínea del dibujo de CAD para pasarla a camino.';
       default: return '';
     }
@@ -195,6 +195,16 @@ export function montarColocar(api: ApiPlanta) {
       case 'centro-polar': op.cx = r3(q.x); op.cy = r3(q.y); poner(null); api.mensaje(`Centro de la matriz polar en (${fmt(op.cx)}; ${fmt(op.cy)}).`); return;
       case 'camino': {
         const cn = caminoNuevo!;
+        if (op.curva && cn.v.length) {
+          // Bézier: dos puntos de control y el final
+          cn.ctrl = [...(cn.ctrl ?? []), q];
+          if (cn.ctrl.length < 3) { api.mensaje(instruccion()); api.dibujar(); return; }
+          const u = cn.v[cn.v.length - 1], [c1, c2, fin] = cn.ctrl;
+          u.c1 = { x: r3(c1.x), y: r3(c1.y) }; u.c2 = { x: r3(c2.x), y: r3(c2.y) }; delete u.b;
+          cn.ctrl = undefined;
+          cn.v.push({ x: r3(fin.x), y: r3(fin.y) });
+          api.mensaje(instruccion()); api.dibujar(); return;
+        }
         if (op.arco && cn.v.length) {
           if (!cn.paso) { cn.paso = q; api.mensaje(instruccion()); api.dibujar(); return; }
           const u = cn.v[cn.v.length - 1];
@@ -329,7 +339,7 @@ export function montarColocar(api: ApiPlanta) {
     if (herr) {
       panel.classList.add('compacto');
       const extra: HTMLElement[] = [];
-      if (herr === 'camino') extra.push(tilde('arco', op.arco, v => { op.arco = v; if (caminoNuevo) caminoNuevo.paso = undefined; }), boton('Terminar', 'Enter', () => { terminarCamino(); poner(null); }), boton('Cerrar', 'Cierra el camino', () => { terminarCamino(true); poner(null); }));
+      if (herr === 'camino') extra.push(tilde('arco', op.arco, v => { op.arco = v; if (v) op.curva = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), tilde('Bézier', op.curva, v => { op.curva = v; if (v) op.arco = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), boton('Terminar', 'Enter', () => { terminarCamino(); poner(null); }), boton('Cerrar', 'Cierra el camino', () => { terminarCamino(true); poner(null); }));
       if (herr === 'desfase') extra.push(campoN('a', op.dDesf, v => { op.dDesf = v; }, 44, 'm'));
       if (herr === 'girar-libre') extra.push(campoN('ángulo', op.angLibre, v => { op.angLibre = v; }, 44, '°'));
       if (herr === 'escalar') extra.push(campoN('factor', op.factor, v => { op.factor = v; }, 44));
@@ -410,7 +420,7 @@ export function montarColocar(api: ApiPlanta) {
     panel.append(sub('Caminos'));
     panel.append(fila(
       boton(herr === 'camino' ? 'Terminar' : 'Dibujar camino', 'Tocá los puntos; con «arco», cada tramo pide un punto de paso y el final', () => { if (herr === 'camino') { terminarCamino(); poner(null); } else poner('camino'); }, herr === 'camino'),
-      tilde('arco', op.arco, v => { op.arco = v; if (caminoNuevo) caminoNuevo.paso = undefined; }),
+      tilde('arco', op.arco, v => { op.arco = v; if (v) op.curva = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), tilde('Bézier', op.curva, v => { op.curva = v; if (v) op.arco = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }),
       ...(herr === 'camino' ? [boton('Cerrar', 'Cierra el camino volviendo al primer punto', () => { terminarCamino(true); poner(null); })] : [])));
     panel.append(fila(boton('Tomar del CAD', 'Tocá líneas, arcos o polilíneas del dibujo de CAD importado', () => poner(herr === 'cad' ? null : 'cad'), herr === 'cad'),
       boton(`Unir elegidos${caminosSel.size ? ` (${caminosSel.size})` : ''}`, 'Junta en un solo camino los tramos elegidos que se tocan (a menos de 1 cm)', () => {
@@ -508,7 +518,12 @@ export function montarColocar(api: ApiPlanta) {
       const ps = puntosCamino(c, 3);
       const fin = caminoNuevo.v[caminoNuevo.v.length - 1];
       if (cursor) {
-        if (op.arco && caminoNuevo.paso) { const b = bulgeTresPuntos(fin, caminoNuevo.paso, cursor); ps.push(...puntosCamino({ id: '', nombre: '', v: [{ ...fin, b }, { ...cursor }], cerrado: false }, 3).slice(1)); }
+        if (op.curva && caminoNuevo.ctrl?.length) {
+          const cs = caminoNuevo.ctrl, c1 = cs[0], c2 = cs[1] ?? cursor, fin2 = cs.length >= 2 ? cursor : cursor;
+          ps.push(...puntosCamino({ id: '', nombre: '', v: [{ ...fin, c1, c2 }, { ...fin2 }], cerrado: false }, 3).slice(1));
+          cs.forEach(q => g.append(el('circle', { cx: X(q.x), cy: Y(q.y), r: 3, class: 'camino-paso' })));
+          g.append(el('line', { x1: X(fin.x), y1: Y(fin.y), x2: X(c1.x), y2: Y(c1.y), class: 'cota-previa' }));
+        } else if (op.arco && caminoNuevo.paso) { const b = bulgeTresPuntos(fin, caminoNuevo.paso, cursor); ps.push(...puntosCamino({ id: '', nombre: '', v: [{ ...fin, b }, { ...cursor }], cerrado: false }, 3).slice(1)); }
         else ps.push(cursor);
       }
       g.append(el('polyline', { points: ps.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'camino previa' }));
@@ -522,6 +537,12 @@ export function montarColocar(api: ApiPlanta) {
   }
 
   return {
+    /** abre el panel y empieza una herramienta (para los comandos de teclado) */
+    iniciar: (h: 'mover' | 'copiar' | 'girar' | 'girar-libre' | 'espejar' | 'escalar' | 'desfase' | 'alargar' | 'partir' | 'unir' | 'esquina' | 'cota' | 'medir' | 'camino' | null) => {
+      panelAbierto = h === 'cota' || h === 'medir' ? 'cotas' : 'colocar';
+      document.dispatchEvent(new CustomEvent('torre:panel-planta', { detail: 'colocar' }));
+      panel.classList.remove('plegado'); poner(h);
+    },
     botones: [bColocar, bCotas],
     capa,
     /** la planta cambió de herramienta: se cierra lo de acá */

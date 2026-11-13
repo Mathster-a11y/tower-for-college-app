@@ -3,7 +3,7 @@
  * «mitad de la luz»: el borde entre dos áreas queda a igual distancia de los dos elementos). Se cuadricula la losa
  * del nivel y cada cuadradito se suma al muro o columna más cercano.
  */
-import { presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { plantaDeNivel, puntosSilueta } from './silueta';
 
 type Punto = { x: number; y: number };
@@ -30,6 +30,8 @@ export interface AreasInfluencia {
   total: number;
   /** cuadrícula: lado (m), origen y dueño de cada celda (índice en «ids», −1 = fuera de la losa) */
   paso: number; x0: number; y0: number; nx: number; ny: number; duenio: Int16Array; ids: string[];
+  /** área de los huecos de la losa (m²) */
+  huecos?: number;
   /** centro de cada área (para el rótulo) */
   centro: Record<string, Punto>;
 }
@@ -40,16 +42,19 @@ export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInflu
   const z = p.niveles[i]?.cota ?? 0;
   const ms = p.muros.filter(m => presenteEn(m, z, zFund, zTop));
   const pol = puntosSilueta(plantaDeNivel(p, i).silueta, 6);
+  // huecos de la losa de este nivel (ascensores, escaleras): ahí no hay losa que cargar
+  const huecos = (p.huecosLosa ?? []).filter(h => huecoEn(h, z) && h.v.length >= 3).map(h => h.v);
   const xs = pol.map(q => q.x), ys = pol.map(q => q.y);
   const x0 = Math.min(...xs), y0 = Math.min(...ys);
   const nx = Math.max(1, Math.ceil((Math.max(...xs) - x0) / paso)), ny = Math.max(1, Math.ceil((Math.max(...ys) - y0) / paso));
   const duenio = new Int16Array(nx * ny).fill(-1);
   const area: Record<string, number> = Object.fromEntries(ms.map(m => [m.id, 0]));
   const sx: number[] = ms.map(() => 0), sy: number[] = ms.map(() => 0);
-  let total = 0;
+  let total = 0, enHuecos = 0;
   for (let j = 0; j < ny; j++) for (let k = 0; k < nx; k++) {
     const q = { x: x0 + (k + 0.5) * paso, y: y0 + (j + 0.5) * paso };
     if (!dentro(q, pol)) continue;
+    if (huecos.some(h => dentro(q, h))) { enHuecos += paso * paso; continue; }
     total += paso * paso;
     if (!ms.length) continue;
     let mejor = 0, dMin = Infinity;
@@ -60,5 +65,5 @@ export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInflu
   }
   const centro: Record<string, Punto> = {};
   ms.forEach((m, n) => { const c = area[m.id] / (paso * paso); centro[m.id] = c ? { x: sx[n] / c, y: sy[n] / c } : { x: m.x, y: m.y }; area[m.id] = Math.round(area[m.id] * 100) / 100; });
-  return { area, total: Math.round(total * 100) / 100, paso, x0, y0, nx, ny, duenio, ids: ms.map(m => m.id), centro };
+  return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids: ms.map(m => m.id), centro };
 }

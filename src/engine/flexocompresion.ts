@@ -191,3 +191,13 @@ export function verificarDireccion(p: Proyecto, piezas: PiezaEquivalente[], corr
   });
 }
 const datosAltura = (p: Proyecto) => datosAlturaDe(p);
+
+/**
+ * Peso que baja por cada muro en PB (t): peso propio de su altura más las losas que carga (área de influencia por la
+ * carga de servicio por cada losa sobre PB donde está), como en la flexocompresión.
+ */
+export function pesoMuro(p: Proyecto, m: Muro, alt = datosAlturaDe(p)): { Pp: number; losa: number; N: number; losas: number } {
+  const { altura, losas } = alturaYLosas(m, alt);
+  const Pp = areaMuro(m) * altura * PE_HORMIGON, losa = Q_CARGADO * m.areaInf * losas;
+  return { Pp, losa, N: Pp + losa, losas };
+}

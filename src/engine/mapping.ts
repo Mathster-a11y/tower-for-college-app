@@ -83,6 +83,23 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
       if (Math.abs(tr(c1) - tr(c2)) > 1e-6 || Math.abs(enV(c1) - enV(c2)) > 1e-6) avisos.push('Pórtico con columnas distintas: la hoja J las lleva al medio del pórtico (AQ/2), no al baricentro real; mirá la diferencia de J.');
       return { ...base, molde: 'pórtico', fila: { AO: tr(c1), AP: enV(c1), AQ, AT: tr(c2), AU: enV(c2) } };
     }
+    // pórtico en diagonal: su rigidez en el plano del pórtico se reparte J·sen²θ (viento A) y J·cos²θ (viento B);
+    // en la hoja J va el rectángulo equivalente con ese J y el área de las columnas
+    if (cols.length === 2) {
+      const dx = c2.x - c1.x, dy = c2.y - c1.y, L = Math.hypot(dx, dy), th = Math.atan2(dy, dx);
+      const sn = Math.sin(th), cs = Math.cos(th);
+      const diagonal = L > 0 && Math.abs(sn) > 0.05 && Math.abs(cs) > 0.05;
+      if (diagonal) {
+        const ux = dx / L, uy = dy / L, cx = (c1.x + c2.x) / 2, cy = (c1.y + c2.y) / 2;
+        const Jplano = cols.reduce((q, m) => { const d = (m.x - cx) * ux + (m.y - cy) * uy; return q + Jreal([m], 'A') * sn * sn + Jreal([m], 'B') * cs * cs + areaMuro(m) * d * d; }, 0);
+        const Jv = Jplano * (dir === 'A' ? sn * sn : cs * cs);
+        cols.forEach(m => set(m, 'columna'));
+        const grados = ((th * 180) / Math.PI + 180) % 180;
+        const { b, h } = rectanguloEquivalente(Jv, area);
+        avisos.push(`Pórtico en diagonal (${grados.toFixed(0)}°): toma ${dir === 'A' ? 'sen²θ' : 'cos²θ'} = ${((dir === 'A' ? sn * sn : cs * cs) * 100).toFixed(0)} % de su J en el plano. En la hoja J va el rectángulo equivalente de ${b.toFixed(3).replace('.', ',')} × ${h.toFixed(3).replace('.', ',')} m.`);
+        return { ...base, molde: 'simétrico', fila: { B: b, C: h }, Jreal: Jv };
+      }
+    }
     cols.forEach(m => set(m, 'fuera del cálculo'));
     avisos.push(cols.length === 2 ? `El pórtico ${muros.map(m => m.id).join('–')} trabaja en su plano: con este viento sus columnas quedan fuera del cálculo.` : 'Un pórtico tiene dos columnas; esta pieza queda fuera del cálculo.');
     return { ...base, molde: 'pórtico', fila: {} };

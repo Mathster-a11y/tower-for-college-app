@@ -22,3 +22,22 @@ describe('áreas de influencia de la losa', () => {
     Object.values(a.area).forEach(v => expect(v).toBeCloseTo(36, 6));
   });
 });
+
+describe('huecos de losa', () => {
+  it('un hueco de ascensor saca área de la losa y de los muros que lo rodean', async () => {
+    const { ejemploGuia } = await import('./modelo');
+    const { areasInfluencia } = await import('./areas');
+    const p = ejemploGuia();
+    const iPB = p.niveles.findIndex(n => n.cota === 0);
+    const a0 = areasInfluencia(p, iPB);
+    p.huecosLosa = [{ id: 'H1', nombre: 'Ascensor', v: [{ x: -2, y: -1.5 }, { x: 2, y: -1.5 }, { x: 2, y: 1.5 }, { x: -2, y: 1.5 }] }];
+    const a1 = areasInfluencia(p, iPB);
+    expect(a1.huecos).toBeCloseTo(12, 1);
+    expect(a0.total - a1.total).toBeCloseTo(12, 1);
+    const suma = (a: typeof a0) => Object.values(a.area).reduce((x, y) => x + y, 0);
+    expect(suma(a0) - suma(a1)).toBeCloseTo(12, 0);
+    // fuera de su rango de niveles no saca nada
+    p.huecosLosa[0].zDesde = 10;
+    expect(areasInfluencia(p, iPB).total).toBeCloseTo(a0.total, 6);
+  });
+});

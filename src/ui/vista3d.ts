@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
-import { entraEnCalculo, rectangulos, tipoDe } from '../engine/modelo';
+import { entraEnCalculo, huecoEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
@@ -187,7 +187,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas) return;
       const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 12);
-      prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota));
+      const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
+      prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs));
     });
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};

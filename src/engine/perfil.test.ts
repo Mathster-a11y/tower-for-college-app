@@ -64,3 +64,18 @@ describe('perfil irregular', () => {
     expect(r1.rotA.J7).toBeCloseTo(r0.rotA.J7, 6);
   });
 });
+
+describe('pórtico en diagonal', () => {
+  it('reparte su J con sen²θ y cos²θ; a 90° da lo mismo que el pórtico de siempre', () => {
+    const p = ejemploGuia();
+    const col = (id: string, x: number, y: number): Muro => ({ id, dir: 'Y', x, y, largo: 0.5, espesor: 0.5, llega: true, areaInf: 5, piezaA: 'PX', pegadoA: '', piezaB: 'PXB', pegadoB: '', portico: true });
+    p.muros = [...p.muros, col('C1', 0, 0), col('C2', 3, 3)];
+    const a = aPlanilla(p);
+    const pA = a.piezas.find(x => x.dir === 'A' && x.muros.includes('C1'))!, pB = a.piezas.find(x => x.dir === 'B' && x.muros.includes('C1'))!;
+    expect(pA.avisos[0]).toMatch(/diagonal \(45°\)/);
+    expect(pA.Jhoja!).toBeCloseTo(pB.Jhoja!, 3);
+    // J en el plano: 2·(b⁴/12) + 2·A·d², d = la mitad de la distancia entre columnas
+    const Jplano = 2 * (0.5 ** 4 / 12) + 2 * 0.25 * (Math.hypot(3, 3) / 2) ** 2;
+    expect(pA.Jhoja!).toBeCloseTo(Jplano / 2, 3);
+  });
+});

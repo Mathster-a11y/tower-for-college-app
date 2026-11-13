@@ -4,6 +4,7 @@ import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
 import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
 import { controles, type Control } from '../engine/verificaciones';
 import { protegerBloqueados, sincronizarComponentes } from '../engine/grupos';
+import { areasInfluencia } from '../engine/areas';
 
 export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
 
@@ -91,6 +92,12 @@ class Estado {
       const hechos = sincronizarComponentes(previo, this.proyecto);
       this.avisoGrupos = n ? `${n === 1 ? 'Un muro está bloqueado' : `${n} muros están bloqueados`}: no se modificó. Desbloquealo en el Esquema.` : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
       if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
+    }
+    // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
+    const pa = this.proyecto;
+    if (pa.areasAuto !== undefined && pa.areasAuto !== null) {
+      const i = pa.niveles.findIndex(n => Math.abs(n.cota - pa.areasAuto!) < 1e-6);
+      if (i >= 0) { const a = areasInfluencia(pa, i); pa.muros.forEach(m => { if (m.id in a.area && Math.abs(m.areaInf - a.area[m.id]) > 1e-9) m.areaInf = a.area[m.id]; }); }
     }
     const nuevo = JSON.stringify(this.proyecto);
     if (nuevo !== this.ultimo) {

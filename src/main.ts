@@ -331,7 +331,7 @@ document.addEventListener('keydown', ev => {
     estado.seleccion = null; estado.cambiar();
   }
 });
-window.addEventListener('error', e => fallo('Error inesperado', e.error ?? e.message));
+window.addEventListener('error', e => { if (String(e.message ?? '').includes('ResizeObserver loop')) return; fallo('Error inesperado', e.error ?? e.message); });   // el aviso de ResizeObserver es del navegador y no rompe nada
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
@@ -400,6 +400,7 @@ function cerrarMenus() { document.querySelectorAll('.menu.abierto').forEach(m =>
   $(b).addEventListener('click', ev => { ev.stopPropagation(); if (m === 'm-mis') armarMis(); const abierto = $(m).classList.contains('abierto'); cerrarMenus(); if (!abierto) { $(m).classList.add('abierto'); $(b).setAttribute('aria-expanded', 'true'); } });
 });
 document.addEventListener('click', ev => { if (!(ev.target as Element).closest('.menu')) cerrarMenus(); });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && document.querySelector('.menu.abierto')) { cerrarMenus(); ev.stopImmediatePropagation(); } }, true);
 // aspecto: sistema, clásico o tablero oscuro
 function aplicarTema(t: string) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;

@@ -162,3 +162,16 @@ describe('cotas', () => {
     expect(geometria(ejemploGuia(), { id: 'x', a: { x: 0, y: 0 }, b: { x: 4, y: 3 }, ...c }).valor).toBeCloseTo(5, 9);
   });
 });
+
+describe('caminos con Bézier', () => {
+  it('invertir conserva la curva y el largo; unir junta una Bézier con una recta', () => {
+    const c: Camino = { id: 'z', nombre: 'z', v: [{ x: 0, y: 0, c1: { x: 1, y: 2 }, c2: { x: 3, y: 2 } }, { x: 4, y: 0 }, { x: 4, y: -3 }], cerrado: false };
+    const L = largoCamino(c), inv = invertirCamino(c);
+    expect(largoCamino(inv)).toBeCloseTo(L, 6);
+    expect(inv.v[1]).toMatchObject({ x: 4, y: 0, c1: { x: 3, y: 2 }, c2: { x: 1, y: 2 } });
+    expect(invertirCamino(inv).v).toEqual(c.v);
+    const r = unirCaminos([{ id: 'b', nombre: 'b', v: [{ x: 4, y: -3 }, { x: 8, y: -3 }], cerrado: false }, inv]);
+    if ('error' in r) throw new Error(r.error);
+    expect(largoCamino({ id: 'u', nombre: 'u', ...r })).toBeCloseTo(L + 4, 6);
+  });
+});

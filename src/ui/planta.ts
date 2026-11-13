@@ -1,7 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
-import { cajaMuro, dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
+import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto, type TipoVano } from '../engine/dibujo';
 import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
@@ -9,7 +9,7 @@ import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
-import { enPlanta, polilinea } from '../engine/perfil';
+import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias } from './guias';
 import { montarEditorContorno } from './editorContorno';
 import { agruparNodos, ancestros, borrarMuros, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
@@ -57,6 +57,8 @@ export function montarPlanta(cont: HTMLElement) {
   cont.appendChild(barraSel);
   // opciones del lazo
   let bMasRef: HTMLButtonElement | null = null;
+  /** dibujo de muros: ortogonal (lo normal) o en cualquier ángulo (F8 o el botón «Orto»); los diagonales son perfiles */
+  let orto = true;
   const opLazo = { forma: 'libre' as 'libre' | 'rect', criterio: 'auto' as 'auto' | 'centro' | 'entero' | 'tocando' };
   const barraLazo = document.createElement('div'); barraLazo.className = 'barra-lazo'; barraLazo.hidden = true;
   const segL = (etq: string, ops: [string, string, string][], get: () => string, set: (v: string) => void) => {
@@ -69,6 +71,20 @@ export function montarPlanta(cont: HTMLElement) {
     segL('Forma', [['libre', 'Libre', 'Dibujá la forma a mano'], ['rect', 'Rectángulo', 'Arrastrá en diagonal']], () => opLazo.forma, v => { opLazo.forma = v as 'libre' | 'rect'; }),
     segL('Elige', [['auto', 'Auto', 'Libre: centro adentro · Rectángulo: de izquierda a derecha, entero adentro; de derecha a izquierda, tocando'], ['centro', 'Centro', 'Entra el muro con el centro adentro'], ['entero', 'Entero', 'Entra solo el muro entero adentro'], ['tocando', 'Tocando', 'Entra todo lo que toca el lazo']], () => opLazo.criterio, v => { opLazo.criterio = v as typeof opLazo.criterio; }));
   cont.appendChild(barraLazo);
+  // opciones de «Dibujar»: espesor y ortogonal
+  const barraDib = document.createElement('div'); barraDib.className = 'barra-lazo barra-dib'; barraDib.hidden = true;
+  const bOrto = document.createElement('button'); bOrto.type = 'button'; bOrto.title = 'Ortogonal (F8): los muros salen en x o en y. Apagado, en cualquier ángulo (de a 15° con la grilla): quedan como perfiles en diagonal.';
+  const pintarOrto = () => { bOrto.textContent = orto ? '⟂ Orto' : '∠ Libre'; bOrto.setAttribute('aria-pressed', String(orto)); };
+  bOrto.addEventListener('click', () => { orto = !orto; pintarOrto(); pedirDibujo(); });
+  pintarOrto();
+  const lEsp = document.createElement('label'); lEsp.className = 'col-campo'; lEsp.append('espesor ');
+  const iEsp = document.createElement('input'); iEsp.type = 'text'; iEsp.inputMode = 'decimal'; iEsp.style.width = '48px';
+  iEsp.addEventListener('change', () => { const v = Number(iEsp.value.replace(',', '.')); if (v > 0 && v < 5) ultimoEspesor = v; iEsp.value = String(ultimoEspesor).replace('.', ','); });
+  lEsp.append(iEsp, ' m');
+  const sOrto = document.createElement('span'); sOrto.className = 'seg chico'; sOrto.append(bOrto);
+  barraDib.append(sOrto, lEsp);
+  cont.appendChild(barraDib);
+  document.addEventListener('keydown', ev => { if (ev.key === 'F8' && modo === 'dibujar') { ev.preventDefault(); orto = !orto; pintarOrto(); mensaje(orto ? 'Ortogonal: los muros salen en x o en y.' : 'Libre: los muros pueden ir en diagonal (de a 15° con la grilla); quedan como perfiles.'); pedirDibujo(); } });
   /** elige los muros iguales al elegido (mismo tipo, largo y espesor), sueltos en el grupo que se edita */
   const elegirIguales = () => {
     const p = estado.proyecto;
@@ -454,9 +470,18 @@ export function montarPlanta(cont: HTMLElement) {
   panelCal.hidden = true;
   cont.appendChild(panelCal);
   let calAncho = 0.9, calTipo: TipoVano = 'dintel';
+  /** calar un muro o la losa (huecos de ascensor, escalera); hueco de losa en dibujo y elegido */
+  let calQue: 'muro' | 'losa' = 'muro', losaIni: Punto | null = null, cursorLosa: Punto | null = null, huecoSel: string | null = null;
+  const rectHueco = (a: Punto, b: Punto) => [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }].map(q => ({ x: +q.x.toFixed(3), y: +q.y.toFixed(3) }));
   let previaCalar: { id: string; q: Punto } | null = null;
   function armarPanelCal() {
     panelCal.replaceChildren();
+    const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group');
+    ([['muro', 'Muro (vano)'], ['losa', 'Losa (hueco)']] as const).forEach(([k, t]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', String(calQue === k));
+      b.addEventListener('click', () => { calQue = k; losaIni = null; huecoSel = null; armarPanelCal(); dibujar(); }); que.append(b);
+    });
+    if (calQue === 'losa') { armarPanelHueco(que); return; }
     const tit = document.createElement('b'); tit.textContent = 'Calar un vano';
     const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group');
     ([['dintel', 'Puerta con dintel'], ['hueco', 'Hueco a toda altura']] as const).forEach(([k, t]) => {
@@ -472,7 +497,37 @@ export function montarPlanta(cont: HTMLElement) {
       ? 'Puertas en cada piso: el dintel une los dos tramos y la hoja J lleva el muro entero, como la guía (que verifica el corte en el dintel).'
       : 'Abertura de toda la altura: en un tabique suelto, cada tramo pasa a ser una pieza que trabaja sola. En un núcleo, la sección queda abierta (C).';
     const como = document.createElement('span'); como.textContent = 'Tocá el muro donde va el vano. Un núcleo se pasa a sus cuatro tabiques y se cala la cara tocada. Deshacer: Ctrl+Z.';
-    panelCal.append(tit, seg, fila, ayuda, como);
+    panelCal.append(tit, que, seg, fila, ayuda, como);
+  }
+  /** panel de los huecos de la losa: cómo se dibujan y las medidas del elegido */
+  function armarPanelHueco(que: HTMLElement) {
+    const p = estado.proyecto;
+    const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+    const tit = mk('b', 'Calar la losa');
+    panelCal.append(tit, que, mk('span', losaIni ? 'Tocá la esquina opuesta del hueco.' : 'Tocá dos esquinas del hueco (ascensor, escalera, pleno). Ahí no hay losa: no carga a los muros vecinos. Tocá un hueco para cambiar sus medidas.'));
+    const h = (p.huecosLosa ?? []).find(x => x.id === huecoSel);
+    if (h) {
+      const xs = h.v.map(q => q.x), ys = h.v.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const cambiar = (f: (x: HuecoLosa) => void) => { estado.cambiar(pp => { const x = (pp.huecosLosa ?? []).find(y => y.id === h.id); if (x) f(x); }); armarPanelCal(); };
+      const campo = (etq: string, v: number, f: (x: number) => void) => { const l = mk('label', '', 'fila-vertices'); const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = v.toFixed(2).replace('.', ','); i.addEventListener('change', () => { const x = Number(i.value.replace(',', '.')); if (isFinite(x)) f(x); }); l.append(etq, ' ', i, ' m'); return l; };
+      const nom = mk('input'); nom.type = 'text'; nom.value = h.nombre; nom.addEventListener('change', () => cambiar(x => { x.nombre = nom.value.trim() || x.nombre; }));
+      const ln = mk('label', '', 'fila-vertices'); ln.append('nombre ', nom);
+      const ponerCaja = (a: number, b: number, c: number, d: number) => cambiar(x => { x.v = rectHueco({ x: a, y: c }, { x: b, y: d }); });
+      const niv = (etq: string, val: number | null | undefined, vacio: string, f: (z: number | null) => void) => {
+        const l = mk('label', '', 'fila-vertices'), sl = mk('select'); sl.append(new Option(vacio, ''), ...p.niveles.map(n => new Option(n.nombre, String(n.cota))));
+        sl.value = val === null || val === undefined ? '' : String(val); sl.addEventListener('change', () => f(sl.value === '' ? null : Number(sl.value))); l.append(etq, ' ', sl); return l;
+      };
+      const borrar = mk('button', 'Borrar el hueco'); borrar.type = 'button'; borrar.title = 'También: Supr';
+      borrar.addEventListener('click', () => { estado.cambiar(pp => { pp.huecosLosa = (pp.huecosLosa ?? []).filter(x => x.id !== h.id); }); huecoSel = null; armarPanelCal(); mensaje('Hueco de losa borrado.'); });
+      panelCal.append(mk('b', `Hueco «${h.nombre}»`), ln,
+        campo('ancho (x)', x1 - x0, v => { if (v > 0.05) ponerCaja((x0 + x1) / 2 - v / 2, (x0 + x1) / 2 + v / 2, y0, y1); }),
+        campo('alto (y)', y1 - y0, v => { if (v > 0.05) ponerCaja(x0, x1, (y0 + y1) / 2 - v / 2, (y0 + y1) / 2 + v / 2); }),
+        campo('centro x', (x0 + x1) / 2, v => ponerCaja(v - (x1 - x0) / 2, v + (x1 - x0) / 2, y0, y1)),
+        campo('centro y', (y0 + y1) / 2, v => ponerCaja(x0, x1, v - (y1 - y0) / 2, v + (y1 - y0) / 2)),
+        niv('desde', h.zDesde, 'el primer piso', z => cambiar(x => { x.zDesde = z; })), niv('hasta', h.zHasta, 'la azotea', z => cambiar(x => { x.zHasta = z; })), borrar);
+    }
+    const n = p.huecosLosa?.length ?? 0;
+    if (n) panelCal.append(mk('span', `${n} hueco${n > 1 ? 's' : ''} en la losa. Para que las áreas de los muros sigan los huecos: «Áreas» → «al día».`, 'nota-chica'));
   }
   const NS2 = 'http://www.w3.org/2000/svg';
   /** dibujito de la pieza (en su marco: el viento A sube) */
@@ -613,6 +668,24 @@ export function montarPlanta(cont: HTMLElement) {
     if (!areasCache || areasCache.clave !== clave) areasCache = { clave, a: areasInfluencia(p, i) };
     return areasCache.a;
   };
+  /** color de cada área: el del grupo de más arriba, o el de la pieza agrupada, o el del muro solo */
+  const PALETA_AREAS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#8cd17d', '#a0cbe8', '#d4a6c8'];
+  const RAYADOS = ['d45', 'd135', 'h', 'v'] as const;
+  const claveArea = (m: Muro | undefined): { k: string; nombre: string } => {
+    if (!m) return { k: '?', nombre: '?' };
+    const cad = ancestros(estado.proyecto, m.gd);
+    if (cad.length) { const g = cad[cad.length - 1]; return { k: `g:${g.id}`, nombre: g.nombre }; }
+    if (m.grupo) return { k: `p:${m.grupo}`, nombre: `pieza ${m.grupo}` };
+    return { k: `m:${m.id}`, nombre: m.id };
+  };
+  const estiloArea = (_k: string, orden: number) => ({ color: PALETA_AREAS[orden % PALETA_AREAS.length], rayado: RAYADOS[Math.floor(orden / PALETA_AREAS.length) % RAYADOS.length] });
+  /** las claves de color en el orden en que aparecen (de arriba a la izquierda): así dos vecinos casi nunca comparten color */
+  const ordenClaves = (a: AreasInfluencia) => {
+    const p = estado.proyecto, vistos = new Map<string, number>();
+    const porId = new Map(p.muros.map(m => [m.id, m]));
+    for (let j = a.ny - 1; j >= 0; j--) for (let k = 0; k < a.nx; k++) { const o = a.duenio[j * a.nx + k]; if (o < 0) continue; const c = claveArea(porId.get(a.ids[o])).k; if (!vistos.has(c)) vistos.set(c, vistos.size); }
+    return vistos;
+  };
   function armarPanelAreas(i: number, a: AreasInfluencia) {
     panelAreas.hidden = !verAreas;
     if (!verAreas) return;
@@ -620,7 +693,23 @@ export function montarPlanta(cont: HTMLElement) {
     const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
     panelAreas.replaceChildren(mk('b', `Áreas de influencia · ${p.niveles[i]?.nombre ?? ''}`));
     const suma = a.ids.reduce((q, id) => q + a.area[id], 0);
-    panelAreas.append(mk('span', `losa ${f1(a.total)} m² · ${a.ids.length} elementos`, 'nota-chica'));
+    panelAreas.append(mk('span', `losa ${f1(a.total)} m²${a.huecos ? ` (sin ${f1(a.huecos)} m² de huecos)` : ''} · ${a.ids.length} elementos`, 'nota-chica'));
+    // leyenda por grupo: color, área y peso de losa por piso
+    const orden = ordenClaves(a), porClave = new Map<string, { nombre: string; area: number; n: number }>();
+    a.ids.forEach(id => { const c = claveArea(p.muros.find(o => o.id === id)); const e = porClave.get(c.k) ?? { nombre: c.nombre, area: 0, n: 0 }; e.area += a.area[id]; e.n++; porClave.set(c.k, e); });
+    const ley = mk('div', '', 'areas-leyenda');
+    [...porClave.entries()].sort((x, y) => (orden.get(x[0]) ?? 0) - (orden.get(y[0]) ?? 0)).forEach(([k, e]) => {
+      const st = estiloArea(k, orden.get(k) ?? 0), sw = mk('i', '', `muestra r-${st.rayado}`); sw.style.setProperty('--c', st.color);
+      const fila2 = mk('div', '', 'areas-ley-fila'); fila2.append(sw, mk('span', `${e.nombre}${e.n > 1 ? ` (${e.n})` : ''}`), mk('span', `${f1(e.area)} m² · ${(e.area * 0.9).toFixed(1).replace('.', ',')} t/piso`, 'n'));
+      ley.append(fila2);
+    });
+    panelAreas.append(ley);
+    const zN = p.niveles[i]?.cota ?? 0;
+    const lAuto = mk('label', '', 'col-campo'), cAuto = mk('input'); cAuto.type = 'checkbox'; cAuto.checked = p.areasAuto !== undefined && p.areasAuto !== null && Math.abs(p.areasAuto - zN) < 1e-6;
+    cAuto.addEventListener('change', () => { estado.cambiar(pp => { pp.areasAuto = cAuto.checked ? zN : null; }); mensaje(cAuto.checked ? `Áreas al día: cada cambio en la planta (muros, huecos) copia las áreas de ${p.niveles[i]?.nombre} a «Área inf.».` : 'Áreas a mano: se copian con el botón.'); });
+    lAuto.append(cAuto, `al día: copiar solas las áreas de ${p.niveles[i]?.nombre ?? 'este nivel'} al cambiar la planta`);
+    lAuto.title = 'Cada vez que movés un muro o un hueco, las áreas de influencia de este nivel se copian a la columna «Área inf.» (la carga de las losas en la flexocompresión). Cambia los valores que tenías cargados a mano.';
+    panelAreas.append(lAuto);
     const tabla = mk('table', '', 'areas-tabla');
     const fila = (c: string[], th = false) => { const tr = mk('tr'); c.forEach(t => tr.append(mk(th ? 'th' : 'td', t))); return tr; };
     tabla.append(fila(['Muro', 'Calculada', 'Cargada'], true));
@@ -671,6 +760,44 @@ export function montarPlanta(cont: HTMLElement) {
   const gui = montarGuias(apiPlanta);
   const edc = montarEditorContorno(apiPlanta);
   estado.suscribir(() => { col.refrescar(); gui.refrescar(); });
+  // comandos de teclado como en CAD: se escribe el alias (L, M, CO, RO, MI, ES, O, AL, PA, UN, F…) y Enter o Espacio
+  const COMANDOS: Record<string, [string, () => void]> = {};
+  const cmd = (alias: string[], nombre: string, f: () => void) => alias.forEach(a => { COMANDOS[a] = [nombre, f]; });
+  cmd(['L', 'MU'], 'dibujar muros', () => ponerModo('dibujar'));
+  cmd(['LA', 'SE'], 'lazo', () => ponerModo('lazo'));
+  cmd(['M', 'MO'], 'mover', () => col.iniciar('mover'));
+  cmd(['CO', 'CP'], 'copiar', () => col.iniciar('copiar'));
+  cmd(['RO'], 'girar', () => col.iniciar('girar'));
+  cmd(['RL'], 'girar libre', () => col.iniciar('girar-libre'));
+  cmd(['MI', 'SI'], 'simetría', () => col.iniciar('espejar'));
+  cmd(['SC', 'ESC'], 'escalar', () => col.iniciar('escalar'));
+  cmd(['O', 'DE'], 'desfase', () => col.iniciar('desfase'));
+  cmd(['AL', 'EX', 'TR'], 'alargar o recortar', () => col.iniciar('alargar'));
+  cmd(['PA', 'BR'], 'partir', () => col.iniciar('partir'));
+  cmd(['UN', 'J'], 'unir', () => col.iniciar('unir'));
+  cmd(['F', 'ESQ'], 'esquina', () => col.iniciar('esquina'));
+  cmd(['AR', 'MA'], 'matrices', () => col.iniciar(null));
+  cmd(['CAM'], 'dibujar camino', () => col.iniciar('camino'));
+  cmd(['D', 'DIM', 'COT'], 'cotas', () => col.iniciar('cota'));
+  cmd(['ME', 'DI'], 'medir', () => col.iniciar('medir'));
+  cmd(['CA'], 'calar', () => ponerModo('calar'));
+  cmd(['IN', 'I'], 'insertar pieza', () => ponerModo('insertar'));
+  cmd(['EJ'], 'guías', () => gui.boton.click());
+  cmd(['CON'], 'contornos', () => ponerModo('silueta'));
+  let comando = '';
+  document.addEventListener('keydown', ev => {
+    if ((modo !== 'mover' && modo !== 'lazo') || ev.ctrlKey || ev.metaKey || ev.altKey || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return;
+    if (!svg.isConnected || !svg.getClientRects().length) return;
+    if (/^[a-zA-ZñÑ]$/.test(ev.key) && !(ev.key.toLowerCase() === 'g' && !comando)) {
+      comando += ev.key.toUpperCase(); ev.preventDefault(); ev.stopPropagation();
+      const posibles = Object.keys(COMANDOS).filter(k => k.startsWith(comando));
+      mensaje(`Comando: ${comando}▌${posibles.length ? ` → ${[...new Set(posibles.map(k => COMANDOS[k][0]))].slice(0, 4).join(', ')} · Enter o Espacio` : ' (no existe; Esc borra)'}`);
+      return;
+    }
+    if (comando && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); const c = COMANDOS[comando]; const t = comando; comando = ''; if (c) { mensaje(`${t}: ${c[0]}.`); c[1](); } else mensaje(`No hay un comando «${t}». La lista está en Ayuda → Atajos.`); return; }
+    if (comando && ev.key === 'Backspace') { ev.preventDefault(); ev.stopImmediatePropagation(); comando = comando.slice(0, -1); mensaje(comando ? `Comando: ${comando}▌` : ''); return; }
+    if (comando && ev.key === 'Escape') { ev.stopImmediatePropagation(); comando = ''; mensaje(''); }
+  }, true);
   estado.suscribirSeleccion(() => col.refrescar());
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
@@ -924,6 +1051,37 @@ export function montarPlanta(cont: HTMLElement) {
         else if (ms2.length > 2) ms2.forEach(([x, y]) => { d += `M${x.toFixed(1)},${y.toFixed(1)}L${xm.toFixed(1)},${ym.toFixed(1)}`; });
       }
       const ga = el('g', { class: 'areas-inf' });
+      // relleno por grupo (color y rayado); una tira por fila y por grupo, para que sea liviano
+      const orden = ordenClaves(a), porId = new Map(p.muros.map(m => [m.id, m]));
+      const claveDe = a.ids.map(id => claveArea(porId.get(id)).k);
+      const defsA = el('defs');
+      const usados = new Set<string>();
+      const patron = (k: string) => {
+        const st = estiloArea(k, orden.get(k) ?? 0), id = `ar-${st.rayado}-${st.color.slice(1)}`;
+        if (!usados.has(id)) {
+          usados.add(id);
+          const pt = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: 8, height: 8, patternTransform: st.rayado === 'd45' ? 'rotate(45)' : st.rayado === 'd135' ? 'rotate(-45)' : st.rayado === 'v' ? 'rotate(90)' : '' });
+          pt.appendChild(el('rect', { width: 8, height: 8, fill: st.color, 'fill-opacity': 0.22 }));
+          pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 8, stroke: st.color, 'stroke-width': 1.4, 'stroke-opacity': 0.55 }));
+          defsA.appendChild(pt);
+        }
+        return `url(#${id})`;
+      };
+      const relleno = el('g', { class: 'areas-relleno' });
+      for (let j = 0; j < a.ny; j++) {
+        let k = 0;
+        while (k < a.nx) {
+          const o = a.duenio[j * a.nx + k];
+          if (o < 0) { k++; continue; }
+          const c = claveDe[o]; let k2 = k + 1;
+          while (k2 < a.nx && a.duenio[j * a.nx + k2] >= 0 && claveDe[a.duenio[j * a.nx + k2]] === c) k2++;
+          const x0 = X(a.x0 + k * a.paso), x1 = X(a.x0 + k2 * a.paso), y0 = Y(a.y0 + (j + 1) * a.paso), y1 = Y(a.y0 + j * a.paso);
+          relleno.appendChild(el('rect', { x: x0.toFixed(1), y: y0.toFixed(1), width: (x1 - x0 + 0.4).toFixed(1), height: (y1 - y0 + 0.4).toFixed(1), fill: patron(c) }));
+          k = k2;
+        }
+      }
+      ga.appendChild(defsA);
+      ga.appendChild(relleno);
       ga.appendChild(el('path', { d, class: 'areas-borde' }));
       a.ids.forEach(id => {
         const v = a.area[id];
@@ -972,6 +1130,19 @@ export function montarPlanta(cont: HTMLElement) {
     const porGrupo = new Map<string, typeof p.muros>();
     p.muros.filter(m => m.portico).forEach(m => { const k = m.grupo || m.piezaA || m.id; porGrupo.set(k, [...(porGrupo.get(k) ?? []), m]); });
     porGrupo.forEach(cs => { if (cs.length === 2) svg.appendChild(el('line', { x1: X(cs[0].x), y1: Y(cs[0].y), x2: X(cs[1].x), y2: Y(cs[1].y), class: 'viga-portico' })); });
+    // huecos de la losa de este nivel (ascensores, escaleras): rayados con la cruz de un pleno
+    (p.huecosLosa ?? []).forEach(hh => {
+      if (!huecoEn(hh, zN) || hh.v.length < 3) return;
+      const pts = hh.v.map(q => `${X(q.x)},${Y(q.y)}`).join(' ');
+      const g = el('g', { class: 'hueco-losa' + (hh.id === huecoSel ? ' sel' : '') });
+      g.appendChild(el('polygon', { points: pts }));
+      if (hh.v.length === 4) { g.appendChild(el('line', { x1: X(hh.v[0].x), y1: Y(hh.v[0].y), x2: X(hh.v[2].x), y2: Y(hh.v[2].y) })); g.appendChild(el('line', { x1: X(hh.v[1].x), y1: Y(hh.v[1].y), x2: X(hh.v[3].x), y2: Y(hh.v[3].y) })); }
+      const cx = hh.v.reduce((a, q) => a + q.x, 0) / hh.v.length, cy = hh.v.reduce((a, q) => a + q.y, 0) / hh.v.length;
+      g.appendChild(el('text', { x: X(cx), y: Y(cy) - 6, class: 'etiqueta hueco-txt', 'text-anchor': 'middle' }, hh.nombre));
+      g.appendChild(el('title', {}, `${hh.nombre}: hueco de la losa (no carga a los muros)`));
+      svg.appendChild(g);
+    });
+    if (modo === 'calar' && calQue === 'losa' && losaIni && cursorLosa) svg.appendChild(el('polygon', { points: rectHueco(losaIni, cursorLosa).map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'hueco-previa' }));
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const yaRotuladas = new Set<string>();
@@ -1073,6 +1244,8 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(el('polygon', { points: pol.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `lazo-traza ${lazo.op} crit-${crit}` }));
     }
     barraLazo.hidden = modo !== 'lazo';
+    barraDib.hidden = modo !== 'dibujar';
+    if (modo === 'dibujar' && document.activeElement !== iEsp) iEsp.value = String(ultimoEspesor).replace('.', ',');
     const nSel = estado.multi.m.length + estado.multi.g.length;
     barraSel.hidden = !nSel;
     if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; }
@@ -1179,7 +1352,13 @@ export function montarPlanta(cont: HTMLElement) {
     // muro en dibujo: vista previa con su largo y el imán
     if (modo === 'dibujar' && cursor) {
       const pr = el('g', { class: 'previa' });
-      if (inicio) {
+      if (inicio && !orto && esDiagonal(inicio, finLibre(inicio, cursor))) {
+        const fb = finLibre(inicio, cursor), pol = rectLibre(inicio, fb, ultimoEspesor);
+        pr.appendChild(el('polygon', { points: pol.map(q => `${X(q.x)},${Y(q.y)}`).join(' ') }));
+        const L = Math.hypot(fb.x - inicio.x, fb.y - inicio.y), ang = ((Math.atan2(fb.y - inicio.y, fb.x - inicio.x) * 180) / Math.PI + 360) % 360;
+        pr.appendChild(el('text', { x: X((inicio.x + fb.x) / 2) + 10, y: Y((inicio.y + fb.y) / 2) - 8, class: 'etiqueta' }, largoTipeado ? `${largoTipeado}▌ m` : `${L.toFixed(2).replace('.', ',')} m · ${ang.toFixed(0)}°`));
+        pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
+      } else if (inicio) {
         const t = muroDesdeTramo(inicio, cursor, ultimoEspesor);
         if (t) {
           const ax = t.dir === 'X' ? t.largo : t.espesor, ay = t.dir === 'X' ? t.espesor : t.largo;
@@ -1374,6 +1553,22 @@ export function montarPlanta(cont: HTMLElement) {
       ponerModo('mover');
       return;
     }
+    if (modo === 'calar' && ev.button === 0 && calQue === 'losa') {
+      ev.preventDefault();
+      const q = pegarNodo(ev, new Set()), p = estado.proyecto, w = aMundo(ev);
+      const zN = p.niveles[iNivel]?.cota ?? 0;
+      const tocado = !losaIni && (p.huecosLosa ?? []).find(h => huecoEn(h, zN) && dentroPol(w, h.v));
+      if (tocado) { huecoSel = tocado.id; armarPanelCal(); dibujar(); return; }
+      if (!losaIni) { losaIni = q; huecoSel = null; armarPanelCal(); dibujar(); return; }
+      if (Math.abs(q.x - losaIni.x) < 0.1 || Math.abs(q.y - losaIni.y) < 0.1) { mensaje('El hueco es muy chico: tocá la esquina opuesta más lejos.'); return; }
+      const a = losaIni; losaIni = null;
+      let id = '';
+      estado.cambiar(pp => { const hs = (pp.huecosLosa ??= []); let k = 1; while (hs.some(h => h.id === `H${k}`)) k++; id = `H${k}`; hs.push({ id, nombre: `Hueco ${k}`, v: rectHueco(a, q) }); });
+      huecoSel = id; armarPanelCal();
+      const ax = Math.abs(q.x - a.x), ay = Math.abs(q.y - a.y);
+      mensaje(`Hueco de losa de ${ax.toFixed(2).replace('.', ',')} × ${ay.toFixed(2).replace('.', ',')} m (${(ax * ay).toFixed(2).replace('.', ',')} m²) en todos los pisos: se puede cambiar en el panel.`);
+      return;
+    }
     if (modo === 'calar' && ev.button === 0) {
       ev.preventDefault();
       const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id;
@@ -1418,8 +1613,31 @@ export function montarPlanta(cont: HTMLElement) {
   /** largo tipeado mientras se dibuja un muro (Enter lo aplica en la dirección del cursor) */
   let largoTipeado = '';
   /** crea el muro desde «inicio» hasta q (horizontal o vertical) y encadena el próximo */
-  const muroHasta = (q: Punto) => {
+  /** punto final en dibujo libre: la dirección va de a 15° cuando el cursor no está pegado a un punto */
+  const finLibre = (a: Punto, q: Punto): Punto => {
+    if (ultimoIman !== 'grilla' && ultimoIman !== '') return q;
+    const L = Math.hypot(q.x - a.x, q.y - a.y), ang = Math.round(Math.atan2(q.y - a.y, q.x - a.x) / (Math.PI / 12)) * (Math.PI / 12);
+    return { x: +(a.x + L * Math.cos(ang)).toFixed(3), y: +(a.y + L * Math.sin(ang)).toFixed(3) };
+  };
+  /** contorno de un muro diagonal de a a b con espesor e */
+  const rectLibre = (a: Punto, b: Punto, e: number) => { const L = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / L * e / 2, ny = (b.x - a.x) / L * e / 2; return [{ x: a.x + nx, y: a.y + ny }, { x: a.x - nx, y: a.y - ny }, { x: b.x - nx, y: b.y - ny }, { x: b.x + nx, y: b.y + ny }].map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4) })); };
+  const esDiagonal = (a: Punto, b: Punto) => Math.abs(b.x - a.x) > 1e-3 && Math.abs(b.y - a.y) > 1e-3;
+  const muroHasta = (q0: Punto) => {
     if (!inicio) return;
+    const q = orto ? q0 : finLibre(inicio, q0);
+    if (!orto && esDiagonal(inicio, q)) {
+      if (Math.hypot(q.x - inicio.x, q.y - inicio.y) < 0.05) return;
+      const a0 = inicio;
+      estado.cambiar(() => {
+        const id = nuevoId(), t = `T${id.slice(1)}`;
+        const base: Muro = { id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: ultimoEspesor, llega: true, areaInf: 10, piezaA: t, pegadoA: '', piezaB: `${t}B`, pegadoB: '' };
+        estado.proyecto.muros = [...estado.proyecto.muros, ponerPerfil(base, { v: rectLibre(a0, q, ultimoEspesor) })];
+        estado.seleccion = id;
+      });
+      inicio = { x: +q.x.toFixed(3), y: +q.y.toFixed(3) };
+      largoTipeado = '';
+      return;
+    }
     const t = muroDesdeTramo(inicio, q, ultimoEspesor);
     if (!t) return;
     const fin = t.dir === 'X' ? { x: t.x + (q.x >= inicio.x ? 1 : -1) * t.largo / 2, y: t.y } : { x: t.x, y: t.y + (q.y >= inicio.y ? 1 : -1) * t.largo / 2 };
@@ -1441,6 +1659,7 @@ export function montarPlanta(cont: HTMLElement) {
       const L = Number(largoTipeado.replace(',', '.'));
       if (!(L > 0)) { largoTipeado = ''; return; }
       const dx = cursor.x - inicio.x, dy = cursor.y - inicio.y;
+      if (!orto) { const d = finLibre(inicio, cursor), Ld = Math.hypot(d.x - inicio.x, d.y - inicio.y) || 1; muroHasta({ x: inicio.x + ((d.x - inicio.x) / Ld) * L, y: inicio.y + ((d.y - inicio.y) / Ld) * L }); mensaje(`Muro de ${largoTipeado || String(L).replace('.', ',')} m.`); dibujar(); return; }
       const q = Math.abs(dx) >= Math.abs(dy) ? { x: inicio.x + Math.sign(dx || 1) * L, y: inicio.y } : { x: inicio.x, y: inicio.y + Math.sign(dy || 1) * L };
       muroHasta(q); mensaje(`Muro de ${largoTipeado || String(L).replace('.', ',')} m. Seguí tipeando el próximo largo o tocá.`); dibujar();
     }
@@ -1453,7 +1672,7 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo !== 'mover') { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
     if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
   });
-  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar' || (modo === 'silueta' && !(ev.target as HTMLElement).closest?.('input, select, textarea'))) && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
+  document.addEventListener('keydown', ev => { if (modo === 'calar' && calQue === 'losa' && huecoSel && (ev.key === 'Delete' || ev.key === 'Backspace') && !(ev.target as HTMLElement).closest?.('input, select, textarea')) { ev.preventDefault(); const id = huecoSel; huecoSel = null; estado.cambiar(pp => { pp.huecosLosa = (pp.huecosLosa ?? []).filter(x => x.id !== id); }); armarPanelCal(); mensaje('Hueco de losa borrado.'); return; } if (modo === 'calar' && calQue === 'losa' && losaIni && ev.key === 'Escape') { losaIni = null; armarPanelCal(); dibujar(); return; } if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar' || (modo === 'silueta' && !(ev.target as HTMLElement).closest?.('input, select, textarea'))) && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');
@@ -1466,6 +1685,7 @@ export function montarPlanta(cont: HTMLElement) {
       if (id !== hoverId && ev.pointerType !== 'touch') { hoverId = id; pedirDibujo(); }
     }
     if (modo === 'insertar') { const q = aMundo(ev); cursor = { x: aj(q.x), y: aj(q.y) }; pedirDibujo(); return; }
+    if (modo === 'calar' && calQue === 'losa') { cursorLosa = pegarNodo(ev, new Set()); if (losaIni) pedirDibujo(); return; }
     if (modo === 'calar') { const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id; previaCalar = idM ? { id: idM, q: aMundo(ev) } : null; pedirDibujo(); return; }
     if (modo === 'calibrar') return;
     if (arrastreNodo) {

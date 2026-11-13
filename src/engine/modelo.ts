@@ -198,9 +198,17 @@ export interface Proyecto {
   cotas?: Cota[];
   /** líneas guía y ejes de la grilla (geometría de construcción, no se calcula) */
   guias?: import('./guias').Guia[];
+  /** huecos de la losa (ascensores, escaleras, plenos): no tienen losa, no cargan los muros */
+  huecosLosa?: HuecoLosa[];
+  /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
+  areasAuto?: number | null;
 }
+/** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
+export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }
+/** el hueco está en la losa del nivel de cota z */
+export const huecoEn = (h: HuecoLosa, z: number) => (h.zDesde ?? -Infinity) <= z + 1e-6 && z <= (h.zHasta ?? Infinity) + 1e-6;
 /** camino abierto o cerrado: vértices con bulge (el tramo que sale de cada vértice es un arco si b ≠ 0) */
-export interface Camino { id: string; nombre: string; v: { x: number; y: number; b?: number }[]; cerrado: boolean }
+export interface Camino { id: string; nombre: string; v: import('./perfil').VerticePerfil[]; cerrado: boolean }
 /** punto de una cota: fijo, o pegado a un nodo de un muro (la cota sigue al muro si se mueve) */
 export interface PuntoCota { x: number; y: number; ref?: { id: string; k: number } }
 /** cota: horizontal, vertical o alineada entre dos puntos, con su línea corrida «d» m (con signo) */
