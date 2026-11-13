@@ -882,3 +882,14 @@ body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !impor
 /* menús largos (Ejemplos con las torres de prueba): se desplazan dentro de la pantalla */
 .menu { max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; }
 #torres-prueba { max-height: none; overflow: visible; }
+
+/* zoom en los funiculares y la rototraslación */
+svg.zoomable { touch-action: pan-x pan-y; }
+svg.zoomable.acercado { touch-action: none; cursor: grab; }
+svg.zoomable.acercado:active { cursor: grabbing; }
+.zoom-dibujo { display: inline-flex; align-items: center; gap: 2px; margin-right: 8px; }
+.zoom-dibujo button { min-width: 28px; padding: 1px 6px; }
+.zoom-nivel { font: 11px var(--mono); color: var(--ink2); min-width: 44px; text-align: center; }
+@media (pointer: coarse) { .zoom-dibujo button { min-width: 38px; min-height: 34px; } }
+/* al acercar, las líneas no engordan: se separan los vectores chicos que estaban amontonados */
+svg.zoomable.acercado line, svg.zoomable.acercado path, svg.zoomable.acercado polyline, svg.zoomable.acercado polygon, svg.zoomable.acercado rect, svg.zoomable.acercado circle { vector-effect: non-scaling-stroke; }

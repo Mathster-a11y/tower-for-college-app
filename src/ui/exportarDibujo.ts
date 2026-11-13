@@ -1,3 +1,4 @@
+import { hacerZoomable } from './zoomDibujo';
 /**
  * Exportar dibujos: cada dibujo del centro se puede guardar como SVG (vectorial, para editar o imprimir) o
  * como PNG (imagen). Para que se vea igual fuera de la app, se copian a cada elemento los estilos que le da la
@@ -15,7 +16,10 @@ export function svgAutonomo(svg: SVGSVGElement): { texto: string; ancho: number;
     d.setAttribute('style', PROPS.map(p => `${p}:${cs.getPropertyValue(p)}`).join(';'));
     d.removeAttribute('class');
   });
-  const vb = svg.viewBox.baseVal;
+  // si el dibujo está acercado, se guarda entero (el viewBox original)
+  const v0 = svg.dataset.vb0?.split(' ').map(Number);
+  if (v0?.length === 4) copia.setAttribute('viewBox', v0.join(' '));
+  const vb = v0?.length === 4 ? { x: v0[0], y: v0[1], width: v0[2], height: v0[3] } : svg.viewBox.baseVal;
   const ancho = vb && vb.width ? vb.width : svg.clientWidth || 800, alto = vb && vb.height ? vb.height : svg.clientHeight || 600;
   copia.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   copia.setAttribute('width', String(ancho)); copia.setAttribute('height', String(alto));
@@ -62,5 +66,7 @@ export function botonesExportar(cont: HTMLElement, base: string) {
     barra.append(b('⤓ SVG', 'Guardar este dibujo como SVG (vectorial: se puede editar o imprimir sin perder calidad)', () => guardarSVG(s, nombre)),
       b('⤓ PNG', 'Guardar este dibujo como imagen PNG (al doble de resolución)', () => guardarPNG(s, nombre)));
     s.before(barra);
+    // los funiculares y la rototraslación se pueden acercar (muchos vectores chicos juntos)
+    if (s.matches('svg.funicular, svg.rototrasl')) hacerZoomable(s, barra, nombre);
   });
 }
