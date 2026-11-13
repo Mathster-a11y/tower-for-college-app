@@ -258,8 +258,8 @@ svg.planta { display: block; width: 100%; height: 100%; background: var(--lienzo
 .planta .viento line { stroke: var(--carga); stroke-width: 2.5; }
 .planta .viento text { fill: var(--carga); font-size: 12px; font-weight: 600; font-family: var(--mono); }
 .planta .punta { fill: var(--carga); }
-.planta .muro rect, .planta .muro circle { stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: miter; cursor: grab; }   /* contorno fuerte: se lee de lejos */
-.planta .muro.sel rect, .planta .muro.sel circle { stroke: var(--elegido); stroke-width: 3; }
+.planta .muro rect, .planta .muro circle, .planta .muro path.perfil { stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: miter; cursor: grab; }   /* contorno fuerte: se lee de lejos */
+.planta .muro.sel rect, .planta .muro.sel circle, .planta .muro.sel path { stroke: var(--elegido); stroke-width: 3; }
 .planta .muro.fuera rect { fill-opacity: .35; stroke-dasharray: 3 2; }
 .planta .muro.ausente { opacity: .18; pointer-events: none; }
 .planta .hueco { fill: var(--lienzo); stroke: #222; stroke-width: 1; }
@@ -595,7 +595,7 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .carta .ct-suelo-t { fill: color-mix(in srgb, var(--compresion) 22%, transparent); stroke: var(--compresion); stroke-width: 1.4; }
 .carta .ct-suelo-t.traccion { fill: color-mix(in srgb, var(--traccion) 22%, transparent); stroke: var(--traccion); }
 .et3d.giro { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }
-.planta .muro.sel-grupo rect, .planta .muro.sel-grupo circle { stroke: var(--elegido); stroke-width: 1.6; stroke-dasharray: 3 2; }
+.planta .muro.sel-grupo rect, .planta .muro.sel-grupo circle, .planta .muro.sel-grupo path { stroke: var(--elegido); stroke-width: 1.6; stroke-dasharray: 3 2; }
 /* grupos de muros */
 .grupo-muros { border: 1px solid var(--edge); border-radius: 8px; padding: 4px 8px; margin: 4px 0; background: var(--panel); }
 .grupo-muros.sel { border-color: var(--elegido); }
@@ -725,7 +725,7 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
 .silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }
 .planta .nodos .ref rect, .planta .nodos .ref polygon { fill: var(--elegido); stroke: var(--elegido); }
-.prec-panel { width: 262px; left: auto; right: 10px; }
+.prec-panel { width: 262px; left: auto; right: 10px; top: 84px; }
 @media (max-width: 760px) { .prec-panel { position: static; width: auto; margin: 6px 10px; } }
 .prec-panel .prec-fila { display: grid; grid-template-columns: 62px 1fr 1fr auto; align-items: center; gap: 5px; }
 .prec-panel .prec-fila:first-of-type { grid-template-columns: 62px 1fr; }
@@ -883,7 +883,7 @@ body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !impor
 @media (max-width: 1280px) { .divisor-der { display: none; } .app.sin-der > .derecha { visibility: visible; } }
 /* paneles flotantes de la planta: nunca más altos que la planta (se desplazan por dentro) y sin tapar los botones de zoom */
 .calco-panel { max-height: calc(100% - 60px); overflow-y: auto; overscroll-behavior: contain; z-index: 3; }
-.piezas-panel { right: 58px !important; left: auto !important; max-height: calc(100% - 120px) !important; }
+.piezas-panel { right: 58px !important; left: auto !important; top: 84px !important; max-height: calc(100% - 140px) !important; }
 /* menús largos (Ejemplos con las torres de prueba): se desplazan dentro de la pantalla */
 .menu { max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; }
 #torres-prueba { max-height: none; overflow: visible; }
@@ -931,14 +931,14 @@ svg.planta.calando g.muro { cursor: crosshair; }
 .planta .muro.fuera-ctx { opacity: .22; pointer-events: none; }
 .planta .muro.bloqueado { cursor: not-allowed; }
 .planta .muro.bloqueado rect, .planta .muro.bloqueado circle { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 1 2; }
-.planta .muro.multi rect, .planta .muro.multi circle { stroke: var(--accent); stroke-width: 2.4; }
+.planta .muro.multi rect, .planta .muro.multi circle, .planta .muro.multi path { stroke: var(--accent); stroke-width: 2.4; }
 .planta .caja-grupo { fill: none; stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 6 3; pointer-events: none; }
 .planta .caja-grupo.comp { stroke: var(--serie-5, #6a3d9a); }
 .planta .caja-grupo.bloq { stroke: var(--dim); }
 .planta .caja-grupo-rot, .planta .caja-grupo.comp-rot { font: 600 11px var(--fuente, sans-serif); fill: var(--ink); paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; pointer-events: none; }
 .planta .caja-ctx { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
 .planta .caja-multi { fill: none; stroke: var(--accent); stroke-width: 1.6; pointer-events: none; }
-.barra-ctx { position: absolute; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-ctx { position: absolute; left: 50%; transform: translateX(-50%); bottom: 128px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .barra-ctx button { font-size: 12px; padding: 3px 8px; }
 .ruta-ctx { font-size: 12.5px; margin: 0 0 6px; }
 .esquema-caja { max-height: 260px; overflow: auto; border: 1px solid var(--hair); border-radius: 6px; background: var(--field, #fff); }
@@ -1011,7 +1011,7 @@ button.peligro { color: var(--mal); }
 .planta .eje-simetria { stroke: var(--mal); stroke-width: 1.2; stroke-dasharray: 8 3 2 3; }
 .planta .cursor-colocar { fill: none; stroke: var(--accent); stroke-width: 1.4; }
 .planta .centro-polar { stroke: var(--mal); stroke-width: 1.6; }
-.herr-planta.seg.chico button { padding: 2px 8px; }
+.herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { padding: 4px 8px; min-height: 26px; }
 .colocar-panel { position: relative; }
 .colocar-panel > b { cursor: pointer; padding-right: 24px; }
 .colocar-panel > .col-cerrar { position: absolute; top: 4px; right: 4px; }
@@ -1030,8 +1030,24 @@ button.peligro { color: var(--mal); }
 .planta .guia.previa { stroke: var(--accent); stroke-dasharray: 3 3; }
 .planta .globo-eje { fill: var(--window, #fff); stroke: #b0412e; stroke-width: 1.1; }
 .planta .globo-txt { font: 600 10px var(--fuente, sans-serif); fill: #b0412e; }
-.barra-lazo { position: absolute; left: 50%; transform: translateX(-50%); top: 46px; z-index: 6; display: flex; gap: 8px; align-items: center; background: var(--window); border: 1px solid var(--edge); border-radius: 8px; padding: 3px 6px; box-shadow: 0 2px 8px rgba(0,0,0,.1); white-space: nowrap; }
+.barra-lazo { position: absolute; left: auto; right: 64px; transform: none; bottom: 84px; z-index: 6; display: flex; gap: 8px; align-items: center; background: var(--window); border: 1px solid var(--edge); border-radius: 8px; padding: 3px 6px; box-shadow: 0 2px 8px rgba(0,0,0,.1); white-space: nowrap; }
 .barra-lazo .seg button { font-size: 11.5px; padding: 2px 8px; }
 .planta .lazo-traza.crit-tocando { stroke-dasharray: 2 3; fill: color-mix(in srgb, var(--ok, #168a64) 10%, transparent); stroke: var(--ok, #168a64); }
 .planta .lazo-traza.crit-entero { stroke-dasharray: none; }
 .planta .tocado { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 2; }
+
+/* ---------- editor de contorno ---------- */
+.planta.editando-contorno .muro { opacity: .35; }
+.planta .capa-contorno .contorno-edit { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.6; }
+.planta .capa-contorno .h-vert { fill: var(--window, #fff); stroke: var(--accent); stroke-width: 1.6; cursor: move; }
+.planta .capa-contorno .h-vert.sel { fill: var(--accent); }
+.planta .capa-contorno .h-lado { fill: var(--window, #fff); stroke: var(--accent); stroke-width: 1.3; cursor: pointer; }
+.planta .capa-contorno .h-lado.sel { fill: var(--accent); }
+.planta .capa-contorno .h-ctrl { fill: var(--carga, #d85a30); stroke: var(--window, #fff); stroke-width: 1.2; cursor: move; }
+.planta .capa-contorno .ctrl-lin { stroke: var(--carga, #d85a30); stroke-width: 1; stroke-dasharray: 3 2; }
+.contorno-panel .contorno-datos { font-family: var(--mono, monospace); font-size: 11px; }
+.contorno-panel { position: absolute !important; top: 84px; right: 10px; left: auto; z-index: 7; width: 260px; pointer-events: auto; }
+.controles-def { width: 100%; margin-top: 4px; gap: 4px 12px; } .controles-def .desliz-def { font-size: 12px; display: inline-flex; gap: 6px; align-items: center; } .controles-def input[type=range] { width: 110px; }
+.colocar-panel.compacto { width: auto; max-width: 320px; }
+.con-contorno .prec-panel { display: none !important; }
+.herr-planta .menu-mas > button[aria-pressed="true"] { background: var(--accent); color: #fff; }

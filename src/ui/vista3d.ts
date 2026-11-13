@@ -9,6 +9,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
 import { entraEnCalculo, rectangulos, tipoDe } from '../engine/modelo';
+import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
@@ -21,6 +22,8 @@ export function movMaximo(r: Rototraslacion3D, B: number, L: number): number {
 }
 
 /** Exageración «redonda» (1, 2, 5 × 10ⁿ) para que la azotea se corra cerca de un sexto del ancho de la planta. */
+/** últimas exageraciones usadas (para los deslizadores de la axonometría) */
+export const ultimaDeformada = { auto: 0, giroAuto: 1, f: 0, k: 1 };
 export function exageracionAuto(r: Rototraslacion3D, B: number, L: number): number {
   const mov = Math.max(movMaximo(r, B, L), 1e-12);
   const f = (0.16 * Math.max(B, L)) / mov;
@@ -48,24 +51,25 @@ export function giroExtraAuto(r: Rototraslacion3D, f: number): number {
 class Prisma {
   malla: THREE.Mesh; bordes: THREE.LineSegments; conBordes = true;
   private base: number[] = []; private baseB: number[] = [];
-  constructor(pol: P2[], zs: number[], mat: THREE.Material, matB: THREE.LineBasicMaterial, private zMover?: number) {
+  constructor(pol: P2[], zs: number[], mat: THREE.Material, matB: THREE.LineBasicMaterial, private zMover?: number, huecos: P2[][] = []) {
     const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => this.base.push(...a, ...b, ...c);
     const n = pol.length;
-    for (let k = 0; k + 1 < zs.length; k++) for (let i = 0; i < n; i++) {
-      const p = pol[i], q = pol[(i + 1) % n], z0 = zs[k], z1 = zs[k + 1];
+    for (const anillo of [pol, ...huecos]) for (let k = 0; k + 1 < zs.length; k++) for (let i = 0; i < anillo.length; i++) {
+      const p = anillo[i], q = anillo[(i + 1) % anillo.length], z0 = zs[k], z1 = zs[k + 1];
       tri([p.x, p.y, z0], [q.x, q.y, z0], [q.x, q.y, z1]);
       tri([p.x, p.y, z0], [q.x, q.y, z1], [p.x, p.y, z1]);
     }
-    // tapas: triangulación que sirve también para contornos cóncavos (siluetas en L, con arcos, etc.)
-    const tris = n <= 4 ? Array.from({ length: n - 2 }, (_, i) => [0, i + 1, i + 2]) : THREE.ShapeUtils.triangulateShape(pol.map(p => new THREE.Vector2(p.x, p.y)), []);
+    // tapas: triangulación que sirve también para contornos cóncavos (siluetas en L, con arcos, etc.) y con huecos
+    const todos = [...pol, ...huecos.flat()];
+    const tris = n <= 4 && !huecos.length ? Array.from({ length: n - 2 }, (_, i) => [0, i + 1, i + 2]) : THREE.ShapeUtils.triangulateShape(pol.map(p => new THREE.Vector2(p.x, p.y)), huecos.map(h => h.map(p => new THREE.Vector2(p.x, p.y))));
     const horario = THREE.ShapeUtils.isClockWise(pol.map(p => new THREE.Vector2(p.x, p.y)));
     for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) tris.forEach(([i0, i1, i2]) => {
-      const a: [number, number, number] = [pol[i0].x, pol[i0].y, z], b: [number, number, number] = [pol[i1].x, pol[i1].y, z], c: [number, number, number] = [pol[i2].x, pol[i2].y, z];
+      const a: [number, number, number] = [todos[i0].x, todos[i0].y, z], b: [number, number, number] = [todos[i1].x, todos[i1].y, z], c: [number, number, number] = [todos[i2].x, todos[i2].y, z];
       if (arriba !== horario) tri(a, c, b); else tri(a, b, c);
     });
     // bordes: contorno arriba y abajo y, si es un rectángulo, las aristas verticales piso por piso
     const seg = (a: number[], b: number[]) => this.baseB.push(...a, ...b);
-    for (const z of [zs[0], zs[zs.length - 1]]) for (let i = 0; i < n; i++) seg([pol[i].x, pol[i].y, z], [pol[(i + 1) % n].x, pol[(i + 1) % n].y, z]);
+    for (const anillo of [pol, ...huecos]) for (const z of [zs[0], zs[zs.length - 1]]) for (let i = 0; i < anillo.length; i++) seg([anillo[i].x, anillo[i].y, z], [anillo[(i + 1) % anillo.length].x, anillo[(i + 1) % anillo.length].y, z]);
     if (n <= 8) for (let k = 0; k + 1 < zs.length; k++) for (const p of pol) seg([p.x, p.y, zs[k]], [p.x, p.y, zs[k + 1]]);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.base.length), 3));
@@ -171,6 +175,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; });
     fMax = roto ? (estado.roto3d.exag ?? exageracionAuto(roto, B, L)) : 0;
     kGiro = roto ? (estado.roto3d.giro ?? giroExtraAuto(roto, fMax)) : 1;
+    if (roto) { ultimaDeformada.auto = exageracionAuto(roto, B, L); ultimaDeformada.giroAuto = giroExtraAuto(roto, fMax); ultimaDeformada.f = fMax; ultimaDeformada.k = kGiro; }
     const cotas = p.niveles.map(n => n.cota).sort((a, b) => a - b);
     const tinta = new THREE.LineBasicMaterial({ color: new THREE.Color(css('--ink2', '#556')), transparent: true, opacity: 0.55 });
     // losas (con el espectro, también se pintan según su corrimiento)
@@ -205,6 +210,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
       if (z1 - z0 <= 0) return;
       const zs = [z0, ...cotas.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6), z1];
+      if (tipoDe(m) === 'perfil') {
+        const pp = enPlanta(m), ext = polilinea(pp.v, 6, 16), hs = (pp.huecos ?? []).map(hh => polilinea(hh, 6, 16));
+        const pr = new Prisma(ext, zs, mat, tinta, undefined, hs); pr.conBordes = def; prismas.push(pr);
+        return;
+      }
       const pols: P2[][] = tipoDe(m) === 'tubo-circ'
         ? [Array.from({ length: 28 }, (_, i) => ({ x: m.x + (m.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: m.y + (m.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
         : rectangulos(m).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);

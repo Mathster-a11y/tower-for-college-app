@@ -5,7 +5,7 @@ import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/s
 import './estilo.css';
 import { estado } from './ui/estado';
 import { montarPlanta } from './ui/planta';
-import { montar3D } from './ui/vista3d';
+import { montar3D, ultimaDeformada } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
 import { imprimirDesglose, descargarPPTX } from './ui/desglose';
 import { imprimirLaminas } from './ui/lamina';
@@ -132,6 +132,23 @@ function dibujarCapas() {
     b.addEventListener('click', () => { estado.capas[k] = !estado.capas[k]; dibujarCapas(); estado.avisarSeleccion(); });
     return b;
   }));
+  // exageración de la deformada (flexión = traslación de cada piso, y giro de la rototraslación), en escala logarítmica
+  if (estado.capas.deformada) {
+    let pedido = 0;
+    const redibujar = () => { if (!pedido) pedido = requestAnimationFrame(() => { pedido = 0; estado.avisarSeleccion(); }); };
+    const desliz = (nombre: string, globo: string, leer: () => number, poner: (m: number | null) => void) => {
+      const inp = h('input', { type: 'range', min: '-1', max: '1', step: '0.01', 'aria-label': nombre }) as HTMLInputElement;
+      inp.value = String(Math.log10(leer()));
+      const val = h('span', { class: 'mono' }, `× ${leer().toFixed(1).replace('.', ',')}`);
+      inp.addEventListener('input', () => { const m = 10 ** Number(inp.value); val.textContent = `× ${m.toFixed(1).replace('.', ',')}`; poner(Math.abs(Number(inp.value)) < 0.02 ? null : m); redibujar(); });
+      inp.addEventListener('dblclick', () => { inp.value = '0'; val.textContent = '× 1,0'; poner(null); redibujar(); });
+      return h('label', { class: 'campo-linea desliz-def', 'data-globo': globo }, `${nombre} `, inp, val);
+    };
+    const rel = (v: number | null, auto: number) => (v === null || !(auto > 0) ? 1 : v / auto);
+    c.append(h('div', { class: 'fila-acciones controles-def' },
+      desliz('Flexión', 'Exageración de la flexión|Multiplica el corrimiento de cada piso (la traslación). 1 = la automática; doble clic vuelve a 1. Los números son los reales.', () => rel(estado.roto3d.exag, ultimaDeformada.auto), m => { estado.roto3d.exag = m === null ? null : Math.max(1, ultimaDeformada.auto * m); }),
+      desliz('Giro', 'Exageración del giro|Multiplica aparte el giro de la rototraslación para que el revirado se vea. 1 = la automática; doble clic vuelve a 1.', () => rel(estado.roto3d.giro, ultimaDeformada.giroAuto), m => { estado.roto3d.giro = m === null ? null : Math.max(1, ultimaDeformada.giroAuto * m); })));
+  }
 }
 function dibujarEstadoCalculo() {
   const cs = estado.calculo.controles ?? [];

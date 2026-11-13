@@ -4,6 +4,7 @@
  */
 import { calcularPlanilla, DIVISORES, type JMinimo, type PlanillaDatos, type PlanillaRes, type RotoRes } from './planilla';
 import { entraEnCalculo, rectangulos, tipoDe, dInterior, type Proyecto } from './modelo';
+import { propiedades } from './perfil';
 import type { PiezaEquivalente } from './mapping';
 
 export interface ResultadoCorregido {
@@ -68,6 +69,12 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
   const perp: { nombre: string; pos: number; posT: number; J: number; muros: string[] }[] = [];
   p.muros.filter(m => entraEnCalculo(m, zFund, zTop)).forEach(m => {
     if (tipoDe(m) === 'tubo-circ') { perp.push({ nombre: m.id, pos: A ? m.y : m.x, posT: A ? m.x : m.y, J: (Math.PI * (m.largo ** 4 - dInterior(m) ** 4)) / 64, muros: [m.id] }); return; }
+    if (tipoDe(m) === 'perfil') {
+      // perfil: entra como perpendicular si es más rígido en la otra dirección (como un tabique más largo en la transversal)
+      const k = propiedades(m.perfil!), Jesta = A ? k.JA : k.JB, Jotra = A ? k.JB : k.JA;
+      if (Jotra > Jesta) perp.push({ nombre: m.id, pos: A ? m.y : m.x, posT: A ? m.x : m.y, J: Jotra, muros: [m.id] });
+      return;
+    }
     rectangulos(m).forEach((r, k, todos) => {
       const largoT = A ? r.ax : r.ay, largoS = A ? r.ay : r.ax;              // transversal y en el sentido del viento
       if (largoT <= largoS) return;                                            // no es perpendicular al viento

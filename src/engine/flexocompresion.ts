@@ -17,6 +17,7 @@
 import type { PiezaEquivalente } from './mapping';
 import type { ResultadoCorregido } from './correcciones';
 import { areaMuro, dInterior, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { propiedades } from './perfil';
 
 export const PE_HORMIGON = 2.4;       // t/m³
 export const Q_DESCARGADO = 0.7;      // t/m²
@@ -70,13 +71,19 @@ export interface DatosAltura { zPB: number; zTop: number; zFund: number; cotasSo
 
 /** Partes de una pieza en el sentido del viento (s = y para el viento A, x para el B), con su baricentro y J. */
 export function partesDePieza(muros: Muro[], dir: 'A' | 'B'): { partes: ParteMuro[]; J: number; circular: { D: number; d: number } | null } {
-  const lista: { id: string; papel: ParteMuro['papel']; A: number; b: number; h: number; s: number }[] = [];
+  const lista: { id: string; papel: ParteMuro['papel']; A: number; b: number; h: number; s: number; Jp?: number }[] = [];
   let circular: { D: number; d: number } | null = null;
   for (const m of muros) {
     const t = tipoDe(m);
     if (t === 'tubo-circ') {
       circular = { D: m.largo, d: dInterior(m) };
       lista.push({ id: m.id, papel: 'tubo', A: areaMuro(m), b: m.largo, h: m.largo, s: dir === 'A' ? m.y : m.x });
+      continue;
+    }
+    if (t === 'perfil') {
+      // perfil: una parte con su J exacto; h = 2·c (la fibra real más alejada) para las tensiones de borde
+      const k = propiedades(m.perfil!), c = dir === 'A' ? k.cA : k.cB;
+      lista.push({ id: m.id, papel: 'alma', A: k.A, b: k.A / (2 * c), h: 2 * c, s: dir === 'A' ? m.y : m.x, Jp: dir === 'A' ? k.JA : k.JB });
       continue;
     }
     for (const r of rectangulos(m)) {
@@ -88,7 +95,7 @@ export function partesDePieza(muros: Muro[], dir: 'A' | 'B'): { partes: ParteMur
   const sc = At > 0 ? lista.reduce((a, p) => a + p.A * p.s, 0) / At : 0;
   let J = 0;
   if (circular && lista.length === 1) J = (Math.PI * (circular.D ** 4 - circular.d ** 4)) / 64;
-  else lista.forEach(p => { J += (p.b * p.h ** 3) / 12 + p.A * (p.s - sc) ** 2; });
+  else lista.forEach(p => { J += (p.Jp ?? (p.b * p.h ** 3) / 12) + p.A * (p.s - sc) ** 2; });
   return { partes: lista.map(p => ({ id: p.id, papel: p.papel, A: p.A, b: p.b, h: p.h, d: p.s - sc })), J, circular };
 }
 

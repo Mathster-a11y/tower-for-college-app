@@ -14,6 +14,7 @@ import type { GrupoDib, Muro, Proyecto, Ubicacion } from './modelo';
 import { tipoDe } from './modelo';
 import { agrupar } from './dibujo';
 import { marcoTrasEspejo, marcoTrasGiro } from './piezasTipo';
+import { espejar as espejarPerfil, girar as girarPerfil, ponerPerfil, trasladar } from './perfil';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export const grupos = (p: Proyecto) => (p.grupos ??= []);
@@ -112,6 +113,7 @@ export function borrarGrupo(p: Proyecto, gid: string): string | null {
 // ------------------------------------------------------------------ transformaciones de muros (giros de 90° y espejos)
 /** gira el muro un cuarto de vuelta antihorario alrededor de (cx, cy) */
 export function girarMuro(m: Muro, cx: number, cy: number): Muro {
+  if (tipoDe(m) === 'perfil') { const x = r4(cx - (m.y - cy)), y = r4(cy + (m.x - cx)); return { ...ponerPerfil(m, trasladar(girarPerfil(m.perfil!, 90), x, y)), rolA: '', rolB: '' }; }
   const n: Muro = { ...m, x: r4(cx - (m.y - cy)), y: r4(cy + (m.x - cx)), dir: m.dir === 'X' ? 'Y' : 'X', rolA: '', rolB: '' };
   if (m.pieza) n.pieza = { ...m.pieza, med: marcoTrasGiro(m.pieza.med) };
   if (tipoDe(m) === 'tubo-rect') { n.largo = m.ladoY ?? m.largo; n.ladoY = m.largo; n.dir = m.dir; }
@@ -119,6 +121,7 @@ export function girarMuro(m: Muro, cx: number, cy: number): Muro {
 }
 /** espeja el muro respecto de la recta x = c (eje «x») o y = c (eje «y») */
 export function espejarMuro(m: Muro, eje: 'x' | 'y', c: number): Muro {
+  if (tipoDe(m) === 'perfil') { const x = eje === 'x' ? r4(2 * c - m.x) : m.x, y = eje === 'y' ? r4(2 * c - m.y) : m.y; return ponerPerfil(m, trasladar(espejarPerfil(m.perfil!, eje), x, y)); }
   const n: Muro = eje === 'x' ? { ...m, x: r4(2 * c - m.x) } : { ...m, y: r4(2 * c - m.y) };
   if (m.pieza) n.pieza = { ...m.pieza, med: marcoTrasEspejo(m.pieza.med, eje) };
   return n;

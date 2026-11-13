@@ -288,11 +288,10 @@ export function panelMuros(c: H) {
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
   c.append(seccionEsquema(), acc);
-  seccionGrupos(c);
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],
-    escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; m[clave] = x; },
+    escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; if (tipoDe(m) === 'perfil' && (clave === 'largo' || clave === 'espesor')) { avisoPanel(`${m.id} es un perfil irregular: su forma se edita con doble clic en la planta.`); return false; } m[clave] = x; },
   });
   const txt = (titulo: string, clave: 'piezaA' | 'pegadoA' | 'piezaB' | 'pegadoB'): Columna<Muro> => ({ titulo, clave, leer: m => m[clave], escribir: (m, v) => { m[clave] = v.trim(); } });
   const iSel = p.muros.findIndex(m => m.id === estado.seleccion);
@@ -311,10 +310,11 @@ export function panelMuros(c: H) {
       escribir: (m, v) => { const t = v.trim().toLowerCase(); if (['sí', 'si', 's', '1', 'true', 'x', ''].includes(t)) m.llega = true; else if (['no', 'n', '0', 'false'].includes(t)) m.llega = false; else return false; } },
     numM('Área inf. (m²)', 'areaInf', 0),
     txt('Pieza A', 'piezaA'), txt('Pegado a (A)', 'pegadoA'), txt('Pieza B', 'piezaB'), txt('Pegado a (B)', 'pegadoB'),
-    { titulo: 'Tipo', clave: 'tipo', tipo: 'lista', opciones: ['tabique', 'tubo rect.', 'tubo circ.'], ayuda: 'tabique (o columna rectangular) · tubo rectangular · tubo circular',
-      leer: m => ({ tabique: 'tabique', 'tubo-rect': 'tubo rect.', 'tubo-circ': 'tubo circ.' } as Record<TipoElemento, string>)[tipoDe(m)],
+    { titulo: 'Tipo', clave: 'tipo', tipo: 'lista', opciones: ['tabique', 'tubo rect.', 'tubo circ.'], ayuda: 'tabique (o columna rectangular) · tubo rectangular · tubo circular · perfil (forma libre: se edita con doble clic en la planta)',
+      leer: m => ({ tabique: 'tabique', 'tubo-rect': 'tubo rect.', 'tubo-circ': 'tubo circ.', perfil: 'perfil' } as Record<TipoElemento, string>)[tipoDe(m)],
       escribir: (m, v) => {
         const t = v.trim().toLowerCase();
+        if (tipoDe(m) === 'perfil') { if (t.startsWith('perf')) return; avisoPanel(`${m.id} es un perfil irregular: para volverlo un tabique, editá su contorno (doble clic) hasta que sea un rectángulo.`); return false; }
         const nuevo: TipoElemento | null = !t || t.startsWith('tab') || t.startsWith('col') ? 'tabique' : t.includes('rect') ? 'tubo-rect' : t.includes('circ') ? 'tubo-circ' : null;
         if (!nuevo) return false;
         if (nuevo === 'tubo-rect' && !m.ladoY) m.ladoY = m.largo;
@@ -329,6 +329,8 @@ export function panelMuros(c: H) {
       leer: m => (m.zHasta == null ? '' : p.niveles.find(n => Math.abs(n.cota - m.zHasta!) < 1e-6)?.nombre ?? `${m.zHasta} m`),
       escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
   ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null) }));
+  // las piezas agrupadas van debajo de la tabla (la tabla es lo principal)
+  seccionGrupos(c);
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];
   if (pap) c.append(h('p', { class: 'nota' }, `Muro ${estado.seleccion}: viento A «${pap.A}», viento B «${pap.B}». En la planta: arrastrar o flechas para moverlo (Mayús: de a 1 m).`));
 }
@@ -459,7 +461,12 @@ export function panelAyuda(c: H) {
   pasos.forEach(([t, d]) => ol.append(h('li', {}, h('b', {}, t + ': '), d)));
   c.append(ol);
   c.append(h('h3', {}, 'Atajos'));
-  c.append(h('p', { class: 'nota' }, 'Ctrl+Z deshacer · Ctrl+Y (o Ctrl+Mayús+Z) rehacer · flechas: mover el muro elegido · Supr: borrar el muro elegido.'));
+  const at = h('ul', { class: 'nota atajos' });
+  [['Ctrl+Z · Ctrl+Y', 'deshacer · rehacer'], ['Clic · Mayús+clic', 'elegir · sumar o sacar de lo elegido'], ['Ctrl+A', 'elegir todo'], ['Lazo (o Mayús + arrastrar el fondo)', 'elegir varios; rectángulo de izquierda a derecha: entero adentro, de derecha a izquierda: tocando'],
+   ['Supr', 'borrar lo elegido'], ['Flechas (Mayús: 1 m)', 'mover lo elegido 5 cm'], ['Ctrl+G · Ctrl+Mayús+G', 'agrupar · desagrupar'], ['Doble clic', 'en un grupo: entrar a editarlo · en un muro o perfil: editar su contorno'],
+   ['Esc o clic derecho', 'cancelar, terminar o salir del grupo'], ['Enter', 'terminar (contorno, camino, largo tipeado)'], ['Números + Enter', 'largo del muro al dibujar · distancia al mover o copiar'], ['G', 'grilla de 5 cm'], ['Rueda · botón del medio', 'acercar · desplazar']]
+    .forEach(([k, t]) => at.append(h('li', {}, h('b', {}, k), ` — ${t}`)));
+  c.append(at);
   c.append(h('h3', {}, 'Dónde quedan los datos'));
   c.append(h('p', { class: 'nota' }, 'El proyecto se guarda solo en este navegador. Para llevarlo a otra computadora usá «Guardar proyecto» (.json) o la planilla escrita (.xlsx). La app no manda datos a ningún servidor.'));
   c.append(h('h3', {}, 'Autoría y licencia'));

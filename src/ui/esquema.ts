@@ -80,7 +80,7 @@ export function seccionEsquema(): H {
   const sueltos = murosDirectos(p, null);
   if (sueltos.length) {
     const ab = abiertos.has('__sueltos');
-    const tog = h('button', { type: 'button', class: 'esq-abrir' }, ab ? '▾' : '▸');
+    const tog = h('button', { type: 'button', class: 'esq-abrir', 'aria-label': ab ? 'Cerrar' : 'Abrir', title: ab ? 'Cerrar' : 'Abrir' }, ab ? '▾' : '▸');
     const li = h('li', { class: 'esq-grupo sueltos', style: '--n:0' }, tog, h('span', { class: 'esq-nombre' }, 'Muros sueltos'), h('span', { class: 'esq-tipo' }, `${sueltos.length} muros fuera de grupos`));
     li.addEventListener('click', () => { if (ab) abiertos.delete('__sueltos'); else abiertos.add('__sueltos'); estado.avisarPanel(); });
     arbol.append(li);

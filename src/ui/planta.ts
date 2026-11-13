@@ -1,7 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
-import { dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
+import { cajaMuro, dInterior, huella, presenteEn, rectangulos, tipoDe, type Muro } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto, type TipoVano } from '../engine/dibujo';
 import { partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
@@ -9,7 +9,9 @@ import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
+import { enPlanta, polilinea } from '../engine/perfil';
 import { imanDeGuias, montarGuias } from './guias';
+import { montarEditorContorno } from './editorContorno';
 import { agruparNodos, ancestros, borrarMuros, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
@@ -35,7 +37,7 @@ export function montarPlanta(cont: HTMLElement) {
   // leyenda de colores (los de la planilla)
   const ley = document.createElement('div');
   ley.className = 'leyenda leyenda-planta';
-  ([['alma', 'alma (izq.)'], ['alma der.', 'alma der.'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['columna', 'columna (circular o de pórtico)'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
+  ([['alma', 'alma (izq.)'], ['alma der.', 'alma der.'], ['ala sup.', 'ala sup.'], ['ala inf.', 'ala inf.'], ['tubo', 'tubo'], ['perfil', 'perfil'], ['columna', 'columna (circular o de pórtico)'], ['fuera del cálculo', 'fuera del cálculo']] as const).forEach(([k, t]) => {
     const sp = document.createElement('span'); const i = document.createElement('i'); i.className = 'caja'; i.style.background = COLORES[k]; sp.append(i, t); ley.append(sp);
   });
   cont.appendChild(ley);
@@ -54,6 +56,7 @@ export function montarPlanta(cont: HTMLElement) {
     bSel('Soltar', 'Vacía la selección (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }));
   cont.appendChild(barraSel);
   // opciones del lazo
+  let bMasRef: HTMLButtonElement | null = null;
   const opLazo = { forma: 'libre' as 'libre' | 'rect', criterio: 'auto' as 'auto' | 'centro' | 'entero' | 'tocando' };
   const barraLazo = document.createElement('div'); barraLazo.className = 'barra-lazo'; barraLazo.hidden = true;
   const segL = (etq: string, ops: [string, string, string][], get: () => string, set: (v: string) => void) => {
@@ -136,9 +139,9 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina. Después del primer punto se puede escribir el largo y Enter.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
+  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
-  bDibujar.addEventListener('click', () => ponerModo('dibujar'));
+  bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
   // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
   const bCalco = document.createElement('label');
@@ -215,7 +218,7 @@ export function montarPlanta(cont: HTMLElement) {
     return [...set].filter(id => { const o = p.muros.find(x => x.id === id); return o && !muroBloqueado(p, o); });
   };
   /** forma y criterio del lazo: libre o rectángulo; centro adentro, entero adentro o tocando (automático: rectángulo de izquierda a derecha = entero, de derecha a izquierda = tocando) */
-  const esquinasMuro = (m: Muro): Punto[] => { const { ax, ay } = huella(m); return [{ x: m.x - ax / 2, y: m.y - ay / 2 }, { x: m.x + ax / 2, y: m.y - ay / 2 }, { x: m.x + ax / 2, y: m.y + ay / 2 }, { x: m.x - ax / 2, y: m.y + ay / 2 }]; };
+  const esquinasMuro = (m: Muro): Punto[] => { const k = cajaMuro(m); return [{ x: k.x0, y: k.y0 }, { x: k.x1, y: k.y0 }, { x: k.x1, y: k.y1 }, { x: k.x0, y: k.y1 }]; };
   const cruzan = (a: Punto, b: Punto, c: Punto, d: Punto) => { const o = (p: Punto, q: Punto, r: Punto) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); };
   const tocaPol = (m: Muro, pol: Punto[]) => {
     const e = esquinasMuro(m);
@@ -589,10 +592,10 @@ export function montarPlanta(cont: HTMLElement) {
     panelMed.append(tit, gen, ...(PARTES[tipo].length ? [porParte] : []), vista, datos, nota, listo);
   }
   let ultimoToque: { id: string; t: number } | null = null;
+  /** doble clic en un elemento: las medidas de su pieza tipo, o si no, el editor de su contorno */
   function abrirMedidas(m: Muro) {
-    if (!m.grupo) return;
-    if (!m.pieza) { mensaje(`${m.id} está en el grupo ${m.grupo}, que no es una pieza tipo: sus muros se editan uno por uno en «Muros».`); return; }
-    medGrupo = m.grupo; armarPanelMed();
+    if (m.grupo && m.pieza) { medGrupo = m.grupo; armarPanelMed(); return; }
+    edc.abrir(m);
   }
   // áreas de influencia de la losa (cada punto descarga en el elemento más cercano)
   let verAreas = false, areasCache: { clave: string; a: AreasInfluencia } | null = null;
@@ -656,20 +659,27 @@ export function montarPlanta(cont: HTMLElement) {
       const nodo = nodoAlTocar(p, m, estado.contexto);
       return !nodo ? { m: [], g: [] } : nodo.t === 'g' ? { m: [], g: [nodo.id] } : { m: compas(m).filter(id => { const o = p.muros.find(x => x.id === id); return o && (o.gd ?? null) === (estado.contexto ?? null); }), g: [] };
     },
-    activar: on => { if (on) { if (modo !== 'colocar') ponerModo('colocar'); } else if (modo === 'colocar') ponerModo('mover'); },
+    activar: on => { if (on) { if (modo !== 'colocar') ponerModo('colocar'); } else if (modo !== 'mover' && modo !== 'lazo') ponerModo('mover'); },
+    centrarEn: (x, y) => {
+      // solo si el punto queda tapado por los paneles de la izquierda o fuera de la vista
+      const w = svg.clientWidth || 600, h = svg.clientHeight || 500, px = ox + x * escala, py = oy - y * escala;
+      if (px > 290 && px < w - 290 && py > 60 && py < h - 60) return;
+      centroVista = { x, y }; dibujar();
+    },
   };
   const col = montarColocar(apiPlanta);
   const gui = montarGuias(apiPlanta);
+  const edc = montarEditorContorno(apiPlanta);
   estado.suscribir(() => { col.refrescar(); gui.refrescar(); });
   estado.suscribirSeleccion(() => col.refrescar());
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
-  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
+  const bMas = document.createElement('button'); bMasRef = bMas; bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
   listaMas.append(bCalco, bSil, bAreas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
-  document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node)) listaMas.hidden = true; });
+  document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
   mas.append(bMas);
   cont.appendChild(listaMas);
   barra.append(bMover, bLazo, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
@@ -976,7 +986,10 @@ export function montarPlanta(cont: HTMLElement) {
       const fueraCtx = !dentroDe(p, m, estado.contexto), bloq = muroBloqueado(p, m);
       const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
-      if (t === 'tubo-circ') {
+      if (t === 'perfil') {
+        const pp = enPlanta(m), anillo = (vs: typeof pp.v) => { const ps = polilinea(vs, 4, 20); return `M${ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' L')} Z`; };
+        forma.appendChild(el('path', { d: [pp.v, ...(pp.huecos ?? [])].map(anillo).join(' '), fill: COLORES[papel], 'fill-rule': 'evenodd', class: 'perfil' }));
+      } else if (t === 'tubo-circ') {
         forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.largo / 2) * escala, fill: COLORES[papel] }));
         if (dInterior(m) > 0) forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (dInterior(m) / 2) * escala, class: 'hueco' }));
       } else rectangulos(m).forEach(r => forma.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: Math.max(2, r.ax * escala), height: Math.max(2, r.ay * escala), fill: COLORES[papel] })));
@@ -1040,7 +1053,7 @@ export function montarPlanta(cont: HTMLElement) {
     const caja = (ms: Muro[], cls: string, rot: string) => {
       if (!ms.length) return;
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      ms.forEach(w => { const { ax, ay } = huella(w); x0 = Math.min(x0, w.x - ax / 2); x1 = Math.max(x1, w.x + ax / 2); y0 = Math.min(y0, w.y - ay / 2); y1 = Math.max(y1, w.y + ay / 2); });
+      ms.forEach(w => { const k = cajaMuro(w); x0 = Math.min(x0, k.x0); x1 = Math.max(x1, k.x1); y0 = Math.min(y0, k.y0); y1 = Math.max(y1, k.y1); });
       const pad = 6;
       svg.appendChild(el('rect', { x: X(x0) - pad, y: Y(y1) - pad, width: (x1 - x0) * escala + 2 * pad, height: (y1 - y0) * escala + 2 * pad, class: cls }));
       if (rot) svg.appendChild(el('text', { x: X(x0) - pad, y: Y(y1) - pad - 4, class: `${cls}-rot` }, rot));
@@ -1053,6 +1066,7 @@ export function montarPlanta(cont: HTMLElement) {
     estado.multi.g.forEach(id => caja(murosDe(p, id), 'caja-multi', ''));
     gui.capa({ X, Y, escala });
     col.capa({ X, Y, escala });
+    edc.capa({ X, Y, escala });
     if (lazo && lazo.pts.length > 1) {
       const pol = opLazo.forma === 'rect' ? rectPol(lazo.pts[0], lazo.pts[1]) : lazo.pts;
       const crit = opLazo.forma === 'rect' && opLazo.criterio === 'auto' ? (lazo.pts[1].x >= lazo.pts[0].x ? 'entero' : 'tocando') : opLazo.criterio;
@@ -1433,8 +1447,13 @@ export function montarPlanta(cont: HTMLElement) {
   });
   let toqueDibujo: { t: number; x: number; y: number } | null = null;
   svg.addEventListener('dblclick', () => { if (modo === 'dibujar') { inicio = null; dibujar(); } });
-  svg.addEventListener('contextmenu', ev => { if (modo === 'dibujar') { ev.preventDefault(); inicio = null; dibujar(); } });
-  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar') && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
+  // clic derecho: como Esc (termina o cancela lo que se está haciendo), como en los programas de CAD
+  svg.addEventListener('contextmenu', ev => {
+    if (modo === 'dibujar') { ev.preventDefault(); if (inicio) { inicio = null; dibujar(); } else ponerModo('mover'); return; }
+    if (modo !== 'mover') { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
+    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+  });
+  document.addEventListener('keydown', ev => { if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar' || (modo === 'silueta' && !(ev.target as HTMLElement).closest?.('input, select, textarea'))) && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 
   svg.addEventListener('pointermove', ev => {
     const co = document.getElementById('coords');

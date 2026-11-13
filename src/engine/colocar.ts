@@ -8,9 +8,10 @@
  * (o giran al múltiplo de 90° más cercano a la tangente).
  */
 import type { Camino, Muro, Proyecto, Ubicacion } from './modelo';
-import { huella, tipoDe } from './modelo';
+import { cajaMuro, tipoDe } from './modelo';
 import { agruparNodos, copiarNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
 import { puntosSilueta, type Punto } from './silueta';
+import { desdeEje, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export type Seleccion = { m: string[]; g: string[] };
@@ -28,7 +29,7 @@ export const vacia = (sel: Seleccion) => !sel.m.length && !sel.g.length;
 /** caja de un conjunto de muros */
 export function caja(ms: Muro[]): { x0: number; x1: number; y0: number; y1: number; cx: number; cy: number } {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  ms.forEach(m => { const { ax, ay } = huella(m); x0 = Math.min(x0, m.x - ax / 2); x1 = Math.max(x1, m.x + ax / 2); y0 = Math.min(y0, m.y - ay / 2); y1 = Math.max(y1, m.y + ay / 2); });
+  ms.forEach(m => { const k = cajaMuro(m); x0 = Math.min(x0, k.x0); x1 = Math.max(x1, k.x1); y0 = Math.min(y0, k.y0); y1 = Math.max(y1, k.y1); });
   if (!isFinite(x0)) return { x0: 0, x1: 0, y0: 0, y1: 0, cx: 0, cy: 0 };
   return { x0, x1, y0, y1, cx: r4((x0 + x1) / 2), cy: r4((y0 + y1) / 2) };
 }
@@ -71,6 +72,7 @@ export function aplicar(p: Proyecto, sel: Seleccion, op: Operacion): string | nu
   // escalar: posiciones y largos; el espesor solo si se pide
   if (!(op.f > 0)) return 'El factor tiene que ser mayor que cero.';
   cada(m => {
+    if (tipoDe(m) === 'perfil') return ponerPerfil(m, trasladar(escalarPerfil(m.perfil!, op.f), r4(op.c.x + (m.x - op.c.x) * op.f), r4(op.c.y + (m.y - op.c.y) * op.f)));
     const n: Muro = { ...m, x: r4(op.c.x + (m.x - op.c.x) * op.f), y: r4(op.c.y + (m.y - op.c.y) * op.f), largo: r4(m.largo * op.f) };
     if (tipoDe(m) === 'tubo-rect' && m.ladoY) n.ladoY = r4(m.ladoY * op.f);
     if (op.espesor) n.espesor = r4(m.espesor * op.f);
@@ -315,4 +317,51 @@ export function distribuir(p: Proyecto, sel: Seleccion, sentido: 'h' | 'v'): str
     pos += tam(e) + libre;
   }
   return null;
+}
+
+// ------------------------------------------------------------------ perfiles desde caminos y giros libres
+const idMuroLibre = (p: Proyecto) => { for (let k = 1; ; k++) if (!p.muros.some(m => m.id === `M${k}`)) return `M${k}`; };
+const piezaLibre = (p: Proyecto) => { const u = new Set(p.muros.flatMap(m => [m.piezaA, m.piezaB, m.grupo ?? ''])); for (let k = 1; ; k++) if (!u.has(`T${k}`)) return `T${k}`; };
+function muroPerfil(p: Proyecto, perfil: import('./perfil').Perfil, gd?: string): Muro {
+  const id = idMuroLibre(p), t = piezaLibre(p);
+  const base: Muro = { id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: 1, llega: true, areaInf: 10, piezaA: t, pegadoA: '', piezaB: `${t}B`, pegadoB: '', ...(gd ? { gd } : {}) };
+  return ponerPerfil(base, perfil);
+}
+/** perfil irregular con el contorno de un camino cerrado */
+export function perfilDesdeCamino(p: Proyecto, c: Camino, gd?: string): { id: string } | { error: string } {
+  if (!c.cerrado) return { error: 'El camino tiene que estar cerrado (unilo o cerralo) para ser el contorno de un perfil.' };
+  if (c.v.length < 3 && !c.v.some(q => q.b)) return { error: 'El camino necesita al menos tres puntos.' };
+  const m = muroPerfil(p, { v: c.v.map(q => ({ ...q })) }, gd);
+  p.muros.push(m);
+  return { id: m.id };
+}
+/** muro (perfil) de espesor e a lo largo de un camino abierto: el eje es el camino */
+export function muroSobreCamino(p: Proyecto, c: Camino, e: number, gd?: string): { id: string } | { error: string } {
+  if (c.cerrado) return { error: 'Para un muro sobre el camino, el camino tiene que estar abierto.' };
+  const pf = desdeEje(puntosCamino(c, 3), e);
+  if (!pf) return { error: 'No se pudo armar el muro (espesor o camino inválidos).' };
+  const m = muroPerfil(p, pf, gd);
+  p.muros.push(m);
+  return { id: m.id };
+}
+/**
+ * Giro con cualquier ángulo alrededor de c: los perfiles giran; los tabiques y tubos se convierten antes en perfiles
+ * (quedan en diagonal). Devuelve cuántos se convirtieron.
+ */
+export function girarLibre(p: Proyecto, sel: Seleccion, c: Punto, grados: number): { convertidos: number } | { error: string } {
+  const { ids } = resolver(p, sel);
+  if (!ids.size) return { error: 'No hay nada elegido.' };
+  if (p.muros.some(m => ids.has(m.id) && muroBloqueado(p, m))) return { error: 'Lo elegido tiene muros bloqueados 🔒.' };
+  const a = (grados * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+  let convertidos = 0;
+  p.muros = p.muros.map(m => {
+    if (!ids.has(m.id)) return m;
+    if (tipoDe(m) !== 'perfil') convertidos++;
+    const pl = perfilDeMuro(m);                                  // en la planta
+    const local = trasladar(pl, -c.x, -c.y), g = girarPerfil(local, grados);
+    void cs; void sn;
+    const { pegadoA: _a, pegadoB: _b, rolA: _ra, rolB: _rb, ...resto } = m; void _a; void _b; void _ra; void _rb;
+    return ponerPerfil({ ...resto, pegadoA: '', pegadoB: '' } as Muro, trasladar(g, c.x, c.y));
+  });
+  return { convertidos };
 }

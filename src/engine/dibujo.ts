@@ -166,6 +166,7 @@ export function espejarGrupo(muros: Muro[], g: string, eje: 'x' | 'y'): Muro[] {
 export type TipoNodoMuro = 'esquina' | 'medio' | 'centro';
 /** nodos de un elemento: esquinas, medios de los lados y centro (columnas circulares: centro y cuadrantes) */
 export function nodosMuro(m: Muro): (Punto & { t: TipoNodoMuro })[] {
+  if (tipoDe(m) === 'perfil') return [{ x: m.x, y: m.y, t: 'centro' as const }, ...m.perfil!.v.map(q => ({ x: +(m.x + q.x).toFixed(4), y: +(m.y + q.y).toFixed(4), t: 'esquina' as const }))];
   if (tipoDe(m) === 'tubo-circ') { const r = m.largo / 2; return [{ x: m.x, y: m.y, t: 'centro' }, { x: m.x + r, y: m.y, t: 'medio' }, { x: m.x - r, y: m.y, t: 'medio' }, { x: m.x, y: m.y + r, t: 'medio' }, { x: m.x, y: m.y - r, t: 'medio' }]; }
   const ax = tipoDe(m) === 'tubo-rect' ? m.largo : m.dir === 'Y' ? m.espesor : m.largo, ay = tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : m.dir === 'Y' ? m.largo : m.espesor;
   const x0 = m.x - ax / 2, x1 = m.x + ax / 2, y0 = m.y - ay / 2, y1 = m.y + ay / 2;

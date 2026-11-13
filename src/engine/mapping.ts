@@ -17,9 +17,10 @@
  */
 import { N_FILAS, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { acople, propiedades, rectanguloEquivalente } from './perfil';
 
 export type Direccion = 'A' | 'B';
-export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'fuera del cálculo' | 'sin pieza';
+export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'perfil' | 'fuera del cálculo' | 'sin pieza';
 export type Molde = 'simétrico' | 'asimétrico' | 'tubo' | 'pórtico';
 
 export interface PiezaEquivalente {
@@ -85,6 +86,19 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
     cols.forEach(m => set(m, 'fuera del cálculo'));
     avisos.push(cols.length === 2 ? `El pórtico ${muros.map(m => m.id).join('–')} trabaja en su plano: con este viento sus columnas quedan fuera del cálculo.` : 'Un pórtico tiene dos columnas; esta pieza queda fuera del cálculo.');
     return { ...base, molde: 'pórtico', fila: {} };
+  }
+  // perfil irregular (solo o con otros muros en la pieza): en la hoja J va el rectángulo equivalente de este viento,
+  // con el mismo J (exacto, con Steiner) y la misma área
+  const perf = muros.filter(m => tipoDe(m) === 'perfil');
+  if (perf.length) {
+    const J = Jreal(muros, dir);
+    muros.forEach(m => set(m, 'perfil'));
+    if (!(J > 0 && area > 0)) return { ...base, molde: 'simétrico', fila: {} };
+    const { b, h } = rectanguloEquivalente(J, area);
+    const f2 = (v: number) => v.toFixed(3).replace('.', ',');
+    avisos.push(`Perfil irregular: en la hoja J va el rectángulo equivalente de ${f2(b)} × ${f2(h)} m (mismo J y misma área). La flexión usa la fibra real del contorno.`);
+    perf.forEach(m => { const k = propiedades(m.perfil!); if (acople(k) > 0.1) avisos.push(`${m.id}: J xy pesa ${(acople(k) * 100).toFixed(0)} % (el perfil no es simétrico respecto de x ni de y): la flexión se tuerce hacia el otro lado; el cálculo del curso sigue por direcciones.`); });
+    return { ...base, molde: 'simétrico', fila: { B: b, C: h }, Jreal: J };
   }
   const circ = muros.filter(m => tipoDe(m) === 'tubo-circ');
   if (circ.length) {
@@ -270,8 +284,10 @@ function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: As
 
 /** J de la sección real respecto de su baricentro, para el viento dado: cada rectángulo con su Steiner (m⁴) */
 export function Jreal(muros: Muro[], dir: Direccion): number {
-  const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ').flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));
-  const circ = muros.filter(m => tipoDe(m) === 'tubo-circ').map(m => ({ A: (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2), I: (Math.PI / 64) * (m.largo ** 4 - dInterior(m) ** 4), s: dir === 'A' ? m.y : m.x }));
+  // perfiles: con sus propiedades exactas (como un círculo: A, J propio y posición)
+  const perf = muros.filter(m => tipoDe(m) === 'perfil').map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });
+  const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ' && tipoDe(m) !== 'perfil').flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));
+  const circ = [...perf, ...muros.filter(m => tipoDe(m) === 'tubo-circ').map(m => ({ A: (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2), I: (Math.PI / 64) * (m.largo ** 4 - dInterior(m) ** 4), s: dir === 'A' ? m.y : m.x }))];
   const A = rs.reduce((q, r) => q + r.b * r.h, 0) + circ.reduce((q, c) => q + c.A, 0);
   if (!(A > 0)) return 0;
   const sg = (rs.reduce((q, r) => q + r.b * r.h * r.s, 0) + circ.reduce((q, c) => q + c.A * c.s, 0)) / A;

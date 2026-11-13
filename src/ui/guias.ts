@@ -30,7 +30,8 @@ export function montarGuias(api: ApiPlanta) {
   b.title = 'Grilla de ejes y líneas guía (rectas y círculos) para ubicar los muros: el imán toma sus cruces';
   const panel = document.createElement('div'); panel.className = 'calco-panel colocar-panel guias-panel'; panel.hidden = true;
   api.dock.appendChild(panel);
-  b.addEventListener('click', () => { abierto = !abierto; panel.classList.remove('plegado'); poner(null); });
+  b.addEventListener('click', () => { abierto = !abierto; panel.classList.remove('plegado'); if (abierto) document.dispatchEvent(new CustomEvent('torre:panel-planta', { detail: 'guias' })); poner(null); });
+  document.addEventListener('torre:panel-planta', ev => { if ((ev as CustomEvent).detail !== 'guias' && (abierto || herr)) { abierto = false; sel = null; herr = null; pts = []; elegidas = []; svg.classList.remove('colocando'); armar(); } });
 
   const poner = (h: Herr) => { herr = h; pts = []; elegidas = []; cursor = null; api.activar(!!h); svg.classList.toggle('colocando', !!h); armar(); api.dibujar(); if (h) api.mensaje(instr()); };
   const instr = () => ({
@@ -130,6 +131,14 @@ export function montarGuias(api: ApiPlanta) {
     const cerrar = boton('✕', 'Cerrar', () => { abierto = false; sel = null; poner(null); }); cerrar.className = 'col-cerrar';
     panel.append(tit, cerrar);
     if (herr) panel.append(mk('p', instr(), 'col-instr'));
+    panel.classList.toggle('compacto', !!herr);
+    if (herr) {
+      const extra: HTMLElement[] = [];
+      if (herr === 'paralela') extra.push(campoN('a', op.d, v => { op.d = v; }), mk('span', 'm'));
+      if (herr === 'compas' || herr === 'ttr') extra.push(campoN('radio', op.r, v => { op.r = Math.max(0, v); }), mk('span', 'm'));
+      panel.append(fila(...extra, boton('Cancelar', 'Esc', () => poner(null))));
+      return;
+    }
     panel.append(mk('div', 'Grilla de ejes', 'col-sub'));
     panel.append(fila(campo('ejes en x', op.sepX, v => { op.sepX = v; }, 92), selNombres(op.nx, v => { op.nx = v; })));
     panel.append(fila(campo('ejes en y', op.sepY, v => { op.sepY = v; }, 92), selNombres(op.ny, v => { op.ny = v; })));

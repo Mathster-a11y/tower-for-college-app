@@ -1,3 +1,4 @@
+import { propiedades, tiras } from './perfil';
 /**
  * El proyecto tal como lo dibuja el alumno: datos del sitio, niveles y muros de la planta de PB.
  *
@@ -77,6 +78,11 @@ export interface Muro {
    * la guía, que verifica el corte en el dintel). «hueco»: abertura de toda la altura, sin dintel.
    */
   vano?: { con: string; ancho: number; tipo: 'dintel' | 'hueco' };
+  /**
+   * perfil irregular (tipo «perfil»): contorno cerrado con rectas, arcos y Bézier, y sus huecos, con los vértices
+   * respecto del baricentro (x, y). largo, espesor y dir son los de su caja (para las tablas).
+   */
+  perfil?: import('./perfil').Perfil;
   /** grupo de dibujo que lo contiene (ver grupos.ts); no cambia el cálculo */
   gd?: string;
   /** en una copia de componente: referencia del muro en la definición (el mismo en todas las copias) */
@@ -102,9 +108,9 @@ export interface GrupoDib {
   cref?: string;
 }
 
-export type TipoElemento = 'tabique' | 'tubo-rect' | 'tubo-circ';
+export type TipoElemento = 'tabique' | 'tubo-rect' | 'tubo-circ' | 'perfil';
 export type RolMolde = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'fuera';
-export const tipoDe = (m: Muro): TipoElemento => m.tipo ?? (m.circular ? 'tubo-circ' : 'tabique');
+export const tipoDe = (m: Muro): TipoElemento => (m.perfil ? 'perfil' : m.tipo === 'perfil' ? 'tabique' : m.tipo ?? (m.circular ? 'tubo-circ' : 'tabique'));
 
 /** Convierte datos de versiones anteriores (columna circular con D y d) al modelo actual. */
 export function normalizarMuro(m: Muro): Muro {
@@ -124,6 +130,8 @@ export const dInterior = (m: Muro) => Math.max(0, Math.round((m.largo - 2 * m.es
 /** Rectángulos que forman el elemento en planta (centro y medidas en x e y), para dibujar y calcular. */
 export function rectangulos(m: Muro): { x: number; y: number; ax: number; ay: number }[] {
   const t = tipoDe(m);
+  // perfil: tiras que lo aproximan (el cálculo usa sus propiedades exactas)
+  if (t === 'perfil') return tiras(m.perfil!).map(r => ({ ...r, x: r.x + m.x, y: r.y + m.y }));
   if (t === 'tubo-rect') {
     const B = m.largo, H = m.ladoY ?? m.largo, e = Math.min(m.espesor, B / 2, H / 2);
     if (e >= B / 2 || e >= H / 2) return [{ x: m.x, y: m.y, ax: B, ay: H }];
@@ -139,6 +147,7 @@ export function rectangulos(m: Muro): { x: number; y: number; ax: number; ay: nu
 /** área en planta del elemento (m²) */
 export function areaMuro(m: Muro): number {
   const t = tipoDe(m);
+  if (t === 'perfil') return propiedades(m.perfil!).A;
   if (t === 'tubo-circ') return (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2);
   return rectangulos(m).reduce((a, r) => a + r.ax * r.ay, 0);
 }
@@ -146,9 +155,17 @@ export function areaMuro(m: Muro): number {
 /** medidas totales en x e y (caja que lo contiene) */
 export function huella(m: Muro): { ax: number; ay: number } {
   const t = tipoDe(m);
+  if (t === 'perfil') { const k = propiedades(m.perfil!); return { ax: 2 * Math.max(Math.abs(k.x0), Math.abs(k.x1)), ay: 2 * Math.max(Math.abs(k.y0), Math.abs(k.y1)) }; }
   if (t === 'tubo-rect') return { ax: m.largo, ay: m.ladoY ?? m.largo };
   if (t === 'tubo-circ') return { ax: m.largo, ay: m.largo };
   return m.dir === 'Y' ? { ax: m.espesor, ay: m.largo } : { ax: m.largo, ay: m.espesor };
+}
+
+/** caja real del elemento en la planta (x0, x1, y0, y1) */
+export function cajaMuro(m: Muro): { x0: number; x1: number; y0: number; y1: number } {
+  if (tipoDe(m) === 'perfil') { const k = propiedades(m.perfil!); return { x0: m.x + k.x0, x1: m.x + k.x1, y0: m.y + k.y0, y1: m.y + k.y1 }; }
+  const { ax, ay } = huella(m);
+  return { x0: m.x - ax / 2, x1: m.x + ax / 2, y0: m.y - ay / 2, y1: m.y + ay / 2 };
 }
 
 /** El muro está en la planta del nivel de cota z (arranca en z o más abajo y sigue más arriba de z). */
