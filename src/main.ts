@@ -318,8 +318,9 @@ document.addEventListener('torre:tabla', () => { void descargarTabla(); });
 $('b-deshacer').addEventListener('click', () => estado.deshacer());
 $('b-rehacer').addEventListener('click', () => estado.rehacer());
 document.addEventListener('keydown', ev => {
-  const t = ev.target as HTMLElement;
-  const escribiendo = t.matches('input, select, textarea') || $<HTMLDialogElement>('dialogo').open;
+  // el evento puede venir de un elemento o del documento (eventos armados por la app)
+  const t = ev.target instanceof Element ? ev.target : null;
+  const escribiendo = !!t?.matches('input, select, textarea') || $<HTMLDialogElement>('dialogo').open;
   if (escribiendo) return;
   const k = ev.key.toLowerCase();
   if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); if (ev.shiftKey) estado.rehacer(); else estado.deshacer(); }

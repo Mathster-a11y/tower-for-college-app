@@ -1068,3 +1068,4 @@ button.peligro { color: var(--mal); }
 .areas-leyenda .muestra.r-v { background-image: repeating-linear-gradient(90deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
 .planta .areas-relleno { pointer-events: none; }
 .colocar-panel > * { flex-shrink: 0; }   /* el panel es una columna con scroll: sin esto, las filas con overflow se aplastan */
+.barra-grupo button { font-size: 12px; }

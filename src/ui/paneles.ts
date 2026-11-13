@@ -10,6 +10,8 @@ import { cotasDesdeCorte, factorUnidad, leerDXFCompleto, nombrarNiveles } from '
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
 import { seccionEsquema } from './esquema';
+import { borrarMuros, copiarNodo, grupoCerrado, grupoPorId, motivoNoEditable, muroBloqueado, murosDe } from '../engine/grupos';
+import { cajaMuro } from '../engine/modelo';
 
 const num = (v: string) => { const x = parseFloat(v.replace(',', '.')); return isFinite(x) ? x : null; };
 
@@ -233,7 +235,8 @@ function seccionGrupos(c: H) {
     });
     t.append(tb);
     const acc = h('div', { class: 'fila-acciones' });
-    const b = (txt: string, titulo: string, f: () => void) => { const x = h('button', { type: 'button', class: 'mini', title: titulo }, txt); x.addEventListener('click', () => estado.cambiar(f)); return x; };
+    const cerrado = ms.map(m => motivoNoEditable(p, m, estado.contexto)).find(Boolean);
+    const b = (txt: string, titulo: string, f: () => void) => { const x = h('button', { type: 'button', class: 'mini', title: titulo }, txt); x.addEventListener('click', () => { if (cerrado) { avisoPanel(cerrado); return; } estado.cambiar(f); }); return x; };
     acc.append(
       b('Girar 90°', 'Gira el grupo alrededor de su baricentro (los papeles elegidos a mano se borran: un alma pasa a ser ala)', () => { p.muros = girarGrupo(p.muros, g); }),
       b('Espejar ↔', 'Espeja el grupo respecto de un eje vertical por su baricentro', () => { p.muros = espejarGrupo(p.muros, g, 'x'); }),
@@ -259,16 +262,39 @@ export function panelMuros(c: H) {
   const nuevo = h('button', { type: 'button' }, 'Nuevo muro');
   nuevo.addEventListener('click', () => estado.cambiar(() => { const m = nuevoMuro(); m.piezaA = `T${contador}`; p.muros.push(m); estado.seleccion = m.id; }));
   const dup = h('button', { type: 'button' }, 'Duplicar');
-  dup.addEventListener('click', () => estado.cambiar(() => {
-    const s = p.muros.find(m => m.id === estado.seleccion); if (!s) return;
-    const m = { ...nuevoMuro(), ...s, id: nuevoMuro().id, x: +(s.x + 1).toFixed(2) }; p.muros.push(m); estado.seleccion = m.id;
-  }));
+  dup.title = 'Duplica el elemento elegido (si está en un grupo cerrado, duplica el grupo entero)';
+  dup.addEventListener('click', () => {
+    const s = p.muros.find(m => m.id === estado.seleccion);
+    const gsel = estado.grupoSel && estado.grupoSel !== estado.contexto ? estado.grupoSel : s ? grupoCerrado(p, s, estado.contexto)?.id : undefined;
+    if (gsel) {
+      // grupo cerrado: se duplica entero, corrido a la derecha de su caja
+      const ms = murosDe(p, gsel), x1 = Math.max(...ms.map(m => cajaMuro(m).x1)), x0 = Math.min(...ms.map(m => cajaMuro(m).x0));
+      const r: { v: { id: string } | { error: string } | null } = { v: null };
+      estado.cambiar(() => { r.v = copiarNodo(estado.proyecto, gsel, +(x1 - x0 + 1).toFixed(2), 0, false); });
+      if (r.v && 'id' in r.v) { estado.grupoSel = r.v.id; avisoPanel(`Grupo duplicado: «${grupoPorId(estado.proyecto, r.v.id)?.nombre}». Arrastralo a su lugar.`); estado.avisarPanel(); }
+      else if (r.v) avisoPanel(r.v.error);
+      return;
+    }
+    if (!s) { avisoPanel('Elegí un muro o un grupo para duplicar.'); return; }
+    if (muroBloqueado(p, s)) { avisoPanel(`${s.id} está bloqueado 🔒.`); return; }
+    estado.cambiar(() => {
+      // copia suelta: su propia pieza, sin «pegado a», sin vano y sin la referencia del componente
+      const id = nuevoMuro().id, t = `T${id.slice(1)}`;
+      const { cref: _c, vano: _v, grupo: _g, pieza: _pz, ...resto } = s; void _c; void _v; void _g; void _pz;
+      const m: Muro = { ...resto, id, x: +(s.x + 1).toFixed(2), piezaA: t, piezaB: `${t}B`, pegadoA: '', pegadoB: '' };
+      p.muros.push(m); estado.seleccion = id;
+    });
+  });
   const borrar = h('button', { type: 'button' }, 'Borrar filas elegidas');
-  borrar.addEventListener('click', () => estado.cambiar(() => {
+  borrar.addEventListener('click', () => {
     const s = filasElegidas('muros');
     const ids = s ? p.muros.slice(s[0], s[1] + 1).map(m => m.id) : estado.seleccion ? [estado.seleccion] : [];
-    p.muros = p.muros.filter(m => !ids.includes(m.id)); estado.seleccion = null;
-  }));
+    // los muros de grupos cerrados (o bloqueados) no se borran sueltos
+    const no = ids.map(id => p.muros.find(m => m.id === id)).filter(m => m && motivoNoEditable(p, m, estado.contexto)) as Muro[];
+    const si = ids.filter(id => !no.some(m => m.id === id));
+    if (si.length) estado.cambiar(() => { borrarMuros(estado.proyecto, si); estado.seleccion = null; });
+    if (no.length) avisoPanel(`${no.length === 1 ? motivoNoEditable(p, no[0], estado.contexto) : `${no.length} muros están en grupos cerrados o bloqueados y no se borraron: entrá al grupo (doble clic) o borrá el grupo entero.`}`);
+  });
   const imp = h('button', { type: 'button' }, 'Importar desde Excel…');
   imp.addEventListener('click', () => document.dispatchEvent(new CustomEvent('torre:importar')));
   const tab = h('button', { type: 'button' }, 'Descargar tabla (.xlsx)');
@@ -279,6 +305,7 @@ export function panelMuros(c: H) {
   bAgr.addEventListener('click', () => estado.cambiar(() => {
     const sel = p.muros.find(m => m.id === estado.seleccion);
     if (!sel) { avisoPanel('Elegí un muro de la pieza (en la planta o en la tabla) y después «Agrupar pieza».'); return; }
+    { const mot = motivoNoEditable(p, sel, estado.contexto); if (mot) { avisoPanel(mot); return; } }
     let ids = sel.piezaA ? p.muros.filter(m => m.piezaA === sel.piezaA).map(m => m.id) : [sel.id];
     if (ids.length === 1) {               // sin pieza: los que se tocan con él (y los que se tocan con esos)
       const set = new Set([sel.id]); let cambio = true;
@@ -333,7 +360,7 @@ export function panelMuros(c: H) {
     { titulo: 'Hasta', clave: 'zHasta', tipo: 'lista', opciones: ['', ...p.niveles.map(n => n.nombre)], ayuda: 'Nivel donde termina (vacío = en la azotea)',
       leer: m => (m.zHasta == null ? '' : p.niveles.find(n => Math.abs(n.cota - m.zHasta!) < 1e-6)?.nombre ?? `${m.zHasta} m`),
       escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
-  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null) }));
+  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => motivoNoEditable(estado.proyecto, m, estado.contexto) }));
   // las piezas agrupadas van debajo de la tabla (la tabla es lo principal)
   seccionGrupos(c);
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];

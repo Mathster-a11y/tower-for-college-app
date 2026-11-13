@@ -190,3 +190,17 @@ describe('borrar muros', () => {
     expect(s.muros.find(m => m.id === 'M6')!.pegadoA).toBe('');
   });
 });
+
+describe('grupos cerrados', () => {
+  it('desde afuera los muros de un grupo no se editan sueltos; adentro sí', async () => {
+    const { motivoNoEditable, grupoCerrado } = await import('./grupos');
+    const p = ejemploGuia();
+    const g = ok(agruparNodos(p, ['M5', 'M6', 'M7'], [], null)).id;
+    const m6 = p.muros.find(m => m.id === 'M6')!;
+    expect(grupoCerrado(p, m6, null)?.id).toBe(g);
+    expect(motivoNoEditable(p, m6, null)).toMatch(/doble clic/);
+    expect(motivoNoEditable(p, m6, g)).toBeNull();
+    expect(motivoNoEditable(p, p.muros.find(m => m.id === 'M1')!, g)).toMatch(/fuera del grupo/);
+    expect(motivoNoEditable(p, p.muros.find(m => m.id === 'M1')!, null)).toBeNull();
+  });
+});

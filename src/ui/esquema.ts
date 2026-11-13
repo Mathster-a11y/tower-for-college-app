@@ -44,8 +44,13 @@ export function seccionEsquema(): H {
     li.addEventListener('click', ev => {
       ev.stopPropagation();
       if (ev.shiftKey || ev.ctrlKey || ev.metaKey || estado.eligeVarios) { const n = nodoAlTocar(p, m, estado.contexto); if (n?.t === 'm') { const i = estado.multi.m.indexOf(m.id); if (i >= 0) estado.multi.m.splice(i, 1); else estado.multi.m.push(m.id); estado.avisarPanel(); } return; }
-      estado.grupoSel = null; estado.seleccion = m.id; estado.avisarPanel();
+      // un muro de un grupo cerrado elige el grupo (sus muros se editan entrando al grupo)
+      const n = nodoAlTocar(p, m, estado.contexto);
+      if (n?.t === 'g') { estado.grupoSel = n.id; estado.seleccion = m.id; aviso(`${m.id} está en «${grupoPorId(p, n.id)?.nombre}»: se eligió el grupo. Doble clic en el grupo para entrar a editarlo.`); }
+      else { estado.grupoSel = null; estado.seleccion = m.id; }
+      estado.avisarPanel();
     });
+    li.addEventListener('dblclick', ev => { ev.stopPropagation(); const n = nodoAlTocar(p, m, estado.contexto); if (n?.t === 'g') { estado.contexto = m.gd ?? null; estado.grupoSel = null; estado.seleccion = m.id; aviso(`Editando el grupo de ${m.id}.`); estado.avisarPanel(); } });
     return li;
   };
   const filaGrupo = (g: GrupoDib, nivel: number): H[] => {

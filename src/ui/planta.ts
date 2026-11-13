@@ -12,7 +12,8 @@ import { montarColocar, type ApiPlanta } from './colocar';
 import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias } from './guias';
 import { montarEditorContorno } from './editorContorno';
-import { agruparNodos, ancestros, borrarMuros, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
+import { borrarGrupo, copiarNodo, espejarNodo, girarNodo } from '../engine/grupos';
+import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -52,9 +53,35 @@ export function montarPlanta(cont: HTMLElement) {
   const bSel = (t: string, titulo: string, f: () => void, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = titulo; if (cls) b.className = cls; b.addEventListener('click', f); return b; };
   barraSel.append(cuentaSel,
     bSel('Borrar', 'Borra lo elegido (Supr). Ctrl+Z deshace.', () => borrarElegidos(), 'peligro'),
-    bSel('Agrupar', 'Junta lo elegido en un grupo (Ctrl+G)', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', ctrlKey: true }))),
+    bSel('Agrupar', 'Junta lo elegido en un grupo (Ctrl+G)', () => agruparElegidos()),
     bSel('Soltar', 'Vacía la selección (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }));
   cont.appendChild(barraSel);
+  // barra del grupo elegido: el grupo es un elemento cerrado; se copia, gira y espeja entero
+  const barraGrupo = document.createElement('div'); barraGrupo.className = 'barra-sel barra-grupo'; barraGrupo.hidden = true;
+  const nombreGrupo = document.createElement('span');
+  const conGrupo = (f: (p: import('../engine/modelo').Proyecto, id: string) => string | null | void, ok: string) => {
+    const id = estado.grupoSel; if (!id) return;
+    let err: string | null | void = null;
+    estado.cambiar(pp => { err = f(pp, id); }); estado.limpiarGrupos();
+    mensaje(err || estado.avisoGrupos || ok); estado.avisarPanel();
+  };
+  const duplicarGrupo = (vinculada: boolean) => {
+    const id = estado.grupoSel; if (!id) return;
+    const ms = murosDe(estado.proyecto, id), x0 = Math.min(...ms.map(m => cajaMuro(m).x0)), x1 = Math.max(...ms.map(m => cajaMuro(m).x1));
+    const r: { v: { id: string } | { error: string } | null } = { v: null };
+    estado.cambiar(pp => { r.v = copiarNodo(pp, id, +(x1 - x0 + 1).toFixed(2), 0, vinculada); });
+    if (r.v && 'id' in r.v) { estado.grupoSel = r.v.id; mensaje(`${vinculada ? 'Copia vinculada' : 'Copia'} de «${grupoPorId(estado.proyecto, id)?.nombre}» a la derecha: arrastrala a su lugar.`); } else if (r.v) mensaje(r.v.error);
+    estado.avisarPanel();
+  };
+  barraGrupo.append(nombreGrupo,
+    bSel('Entrar', 'Editar sus elementos (doble clic)', () => { const id = estado.grupoSel; if (!id) return; estado.contexto = id; estado.grupoSel = null; mensaje(`Editando «${grupoPorId(estado.proyecto, id)?.nombre}»: Esc para salir.`); estado.avisarPanel(); }),
+    bSel('Duplicar', 'Copia independiente del grupo entero', () => duplicarGrupo(false)),
+    bSel('Copia vinculada', 'Otra copia del mismo componente: si se edita una, cambian todas', () => duplicarGrupo(true)),
+    bSel('↺ 90°', 'Girar el grupo 90° (antihorario) alrededor del centro de su caja', () => conGrupo((pp, id) => { girarNodo(pp, id); }, 'Grupo girado 90°.')),
+    bSel('⇋', 'Espejar con un eje vertical por el centro de su caja', () => conGrupo((pp, id) => { espejarNodo(pp, id, 'x'); }, 'Grupo espejado.')),
+    bSel('⇵', 'Espejar con un eje horizontal por el centro de su caja', () => conGrupo((pp, id) => { espejarNodo(pp, id, 'y'); }, 'Grupo espejado.')),
+    bSel('Borrar', 'Borra el grupo con todo lo que tiene (Supr)', () => { conGrupo((pp, id) => borrarGrupo(pp, id), 'Grupo borrado. Ctrl+Z deshace.'); estado.grupoSel = null; estado.avisarPanel(); }, 'peligro'));
+  cont.appendChild(barraGrupo);
   // opciones del lazo
   let bMasRef: HTMLButtonElement | null = null;
   /** dibujo de muros: ortogonal (lo normal) o en cualquier ángulo (F8 o el botón «Orto»); los diagonales son perfiles */
@@ -99,6 +126,16 @@ export function montarPlanta(cont: HTMLElement) {
   const fmtN = (v: number) => v.toFixed(2).replace('.', ',');
   document.addEventListener('torre:elegir-iguales', elegirIguales);
   barraSel.insertBefore(bSel('Iguales', 'Elige todos los muros con el mismo tipo, largo y espesor', elegirIguales), barraSel.lastChild);
+  /** junta lo elegido (o el elemento elegido) en un grupo nuevo, dentro del grupo que se está editando */
+  function agruparElegidos() {
+    const p = estado.proyecto;
+    const ms = [...estado.multi.m], gs = [...estado.multi.g];
+    if (!ms.length && !gs.length) { const m = p.muros.find(x => x.id === estado.seleccion); const n = m && nodoAlTocar(p, m, estado.contexto); if (n) (n.t === 'g' ? gs : ms).push(n.id); else if (estado.grupoSel) gs.push(estado.grupoSel); }
+    const res: { r: { id: string } | { error: string } } = { r: { error: 'Elegí muros o grupos (Mayúsculas + clic o el lazo) para agrupar.' } };
+    if (ms.length || gs.length) estado.cambiar(pp => { res.r = agruparNodos(pp, ms, gs, estado.contexto); });
+    const r = res.r;
+    if ('error' in r) mensaje(r.error); else { estado.grupoSel = r.id; estado.multi = { m: [], g: [] }; mensaje(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.id)?.nombre}». Doble clic para entrar a editarlo.`); estado.avisarPanel(); }
+  }
   const salirDeGrupo = () => { const g = grupoPorId(estado.proyecto, estado.contexto); estado.grupoSel = g?.id ?? null; estado.contexto = g?.padre ?? null; mensaje(estado.contexto ? `Editando «${grupoPorId(estado.proyecto, estado.contexto)?.nombre}».` : 'De vuelta en la planta.'); estado.avisarPanel(); };
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], .grilla-caja')) return;
@@ -124,12 +161,7 @@ export function montarPlanta(cont: HTMLElement) {
         const g = estado.grupoSel; if (!g) { mensaje('Elegí un grupo para desagrupar.'); return; }
         let err: string | null = null; estado.cambiar(pp => { err = desagruparNodo(pp, g); }); estado.grupoSel = null; mensaje(err ?? 'Grupo deshecho.'); estado.avisarPanel(); return;
       }
-      const ms = [...estado.multi.m], gs = [...estado.multi.g];
-      if (!ms.length && !gs.length) { const m = p.muros.find(x => x.id === estado.seleccion); const n = m && nodoAlTocar(p, m, estado.contexto); if (n) (n.t === 'g' ? gs : ms).push(n.id); }
-      const res: { r: { id: string } | { error: string } } = { r: { error: 'Elegí muros o grupos (Mayúsculas + clic) para agrupar.' } };
-      if (ms.length || gs.length) estado.cambiar(pp => { res.r = agruparNodos(pp, ms, gs, estado.contexto); });
-      const r = res.r;
-      if ('error' in r) mensaje(r.error); else { estado.grupoSel = r.id; estado.multi = { m: [], g: [] }; mensaje(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.id)?.nombre}». Doble clic para entrar a editarlo.`); estado.avisarPanel(); }
+      void p; agruparElegidos();
     }
   });
   // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
@@ -219,6 +251,7 @@ export function montarPlanta(cont: HTMLElement) {
     // lo elegido (lazo, Mayúsculas + clic) se mueve todo junto
     if (enMultiM(m)) ids = [...new Set([...estado.multi.m, ...estado.multi.g.flatMap(g => murosDe(p, g).map(o => o.id))])];
     else if (estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel)) ids = murosDe(p, estado.grupoSel).map(o => o.id);
+    else if (grupoCerrado(p, m, estado.contexto)) ids = murosDe(p, grupoCerrado(p, m, estado.contexto)!.id).map(o => o.id);   // un grupo cerrado se mueve entero
     else ids = m.grupo ? p.muros.filter(o => o.grupo === m.grupo).map(o => o.id) : [m.id];
     // los tramos de un muro calado van juntos (los dos lados del vano)
     const set = new Set(ids);
@@ -278,7 +311,7 @@ export function montarPlanta(cont: HTMLElement) {
     let ids: string[] = [...estado.multi.m];
     estado.multi.g.forEach(g => ids.push(...murosDe(p, g).map(m => m.id)));
     if (!ids.length && estado.grupoSel) ids = murosDe(p, estado.grupoSel).map(m => m.id);
-    if (!ids.length && estado.seleccion) ids = [estado.seleccion];
+    if (!ids.length && estado.seleccion) { const m = p.muros.find(x => x.id === estado.seleccion); const g = m && grupoCerrado(p, m, estado.contexto); ids = g ? murosDe(p, g.id).map(x => x.id) : [estado.seleccion]; }
     if (!ids.length) { mensaje('No hay nada elegido para borrar.'); return; }
     const r = { b: 0, s: 0 };
     estado.cambiar(pp => { const x = borrarMuros(pp, ids); r.b = x.borrados; r.s = x.bloqueados; });
@@ -793,6 +826,8 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || ev.ctrlKey || ev.metaKey || ev.altKey || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return;
     if (!svg.isConnected || !svg.getClientRects().length) return;
+    // solo con el foco en la planta (o en ningún lado): las letras tipeadas en la tabla o los paneles no son comandos
+    { const t = ev.target; if (t instanceof Element && t !== document.body && !cont.contains(t)) return; }
     if (/^[a-zA-ZñÑ]$/.test(ev.key) && !(ev.key.toLowerCase() === 'g' && !comando)) {
       comando += ev.key.toUpperCase(); ev.preventDefault(); ev.stopPropagation();
       const posibles = Object.keys(COMANDOS).filter(k => k.startsWith(comando));
@@ -1253,6 +1288,9 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'dibujar' && document.activeElement !== iEsp) iEsp.value = String(ultimoEspesor).replace('.', ',');
     const nSel = estado.multi.m.length + estado.multi.g.length;
     barraSel.hidden = !nSel;
+    const gB = !nSel && estado.grupoSel && estado.grupoSel !== estado.contexto ? grupoPorId(p, estado.grupoSel) : undefined;
+    barraGrupo.hidden = !gB || modo !== 'mover';
+    if (gB) { nombreGrupo.textContent = `${gB.bloq ? '🔒 ' : ''}${gB.nombre}${gB.comp ? ' ◆' : ''}`; barraGrupo.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = !!gB.bloq && b.textContent !== 'Duplicar' && b.textContent !== 'Copia vinculada'; }); }
     if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; }
     barraCtx.hidden = !estado.contexto;
     if (estado.contexto) {
@@ -1578,6 +1616,7 @@ export function montarPlanta(cont: HTMLElement) {
       ev.preventDefault();
       const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id;
       if (!idM) { mensaje('Calar: tocá un tabique o un núcleo, en el lugar del vano.'); return; }
+      { const mm = estado.proyecto.muros.find(x => x.id === idM), mot = mm && motivoNoEditable(estado.proyecto, mm, estado.contexto); if (mot) { mensaje(mot); return; } }
       const r = calarMuro(estado.proyecto.muros, idM, aMundo(ev), calAncho, calTipo);
       if ('error' in r) { mensaje(`No se puede calar ${idM}: ${r.error}.`); return; }
       estado.cambiar(() => { estado.proyecto.muros = r.muros; });
@@ -1674,8 +1713,8 @@ export function montarPlanta(cont: HTMLElement) {
   // clic derecho: como Esc (termina o cancela lo que se está haciendo), como en los programas de CAD
   svg.addEventListener('contextmenu', ev => {
     if (modo === 'dibujar') { ev.preventDefault(); if (inicio) { inicio = null; dibujar(); } else ponerModo('mover'); return; }
-    if (modo !== 'mover') { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
-    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+    if (modo !== 'mover') { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
+    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
   });
   document.addEventListener('keydown', ev => { if (modo === 'calar' && calQue === 'losa' && huecoSel && (ev.key === 'Delete' || ev.key === 'Backspace') && !(ev.target as HTMLElement).closest?.('input, select, textarea')) { ev.preventDefault(); const id = huecoSel; huecoSel = null; estado.cambiar(pp => { pp.huecosLosa = (pp.huecosLosa ?? []).filter(x => x.id !== id); }); armarPanelCal(); mensaje('Hueco de losa borrado.'); return; } if (modo === 'calar' && calQue === 'losa' && losaIni && ev.key === 'Escape') { losaIni = null; armarPanelCal(); dibujar(); return; } if ((modo === 'calibrar' || modo === 'insertar' || modo === 'calar' || (modo === 'silueta' && !(ev.target as HTMLElement).closest?.('input, select, textarea'))) && ev.key === 'Escape') { ponerModo('mover'); return; } if (modo === 'dibujar' && ev.key === 'Escape') { if (inicio) inicio = null; else ponerModo('mover'); dibujar(); } });
 

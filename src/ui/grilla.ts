@@ -29,6 +29,8 @@ export interface OpcionesGrilla<T> {
   /** fila «activa» (para sincronizar con la planta) */
   alElegirFila?: (f: T | null) => void;
   rotuloFila?: (f: T, i: number) => string;
+  /** la fila no se puede editar desde la tabla (devuelve el motivo): por ejemplo, un muro de un grupo cerrado */
+  bloqueo?: (f: T) => string | null;
 }
 
 interface Sel { r0: number; c0: number; r1: number; c1: number; }
@@ -132,7 +134,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   // ---------------------------------------------------------------- cambios
   /** aplica valores [fila][col] desde (r, c); agrega filas si hace falta; un solo paso de deshacer */
   function poner(r0: number, c0: number, vals: string[][]) {
-    let malos = 0;
+    let malos = 0, motivo = '';
     estado.cambiar(() => {
       const lista = op.filas();
       vals.forEach((fila, i) => {
@@ -140,10 +142,12 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
         while (r >= lista.length && op.nueva) lista.push(op.nueva());
         const f = lista[r];
         if (!f) return;
+        const b = op.bloqueo?.(f); if (b) { motivo = b; return; }
         fila.forEach((v, j) => { const col = cols[c0 + j]; if (col && col.escribir(f, v) === false) malos++; });
       });
     });
-    if (malos) avisar(`${malos} valor${malos > 1 ? 'es' : ''} no ${malos > 1 ? 'válidos' : 'válido'}: ${malos > 1 ? 'quedaron' : 'quedó'} sin cambiar.`);
+    if (motivo) avisar(motivo);
+    else if (malos) avisar(`${malos} valor${malos > 1 ? 'es' : ''} no ${malos > 1 ? 'válidos' : 'válido'}: ${malos > 1 ? 'quedaron' : 'quedó'} sin cambiar.`);
   }
   function texto(r: number, c: number) { return celdas[r]?.[c]?.textContent ?? ''; }
 
@@ -169,7 +173,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     }
     estado.cambiar(() => {
       const lista = op.filas();
-      salida.forEach((v, k) => { const [r, c] = k.split(',').map(Number); const f = lista[r]; if (f) cols[c].escribir(f, v); });
+      salida.forEach((v, k) => { const [r, c] = k.split(',').map(Number); const f = lista[r]; if (f && !op.bloqueo?.(f)) cols[c].escribir(f, v); });
     });
     sel = { r0: Math.min(ra, R.ra), c0: Math.min(ca, R.ca), r1: Math.max(rb, R.rb), c1: Math.max(cb, R.cb) };
     selecciones.set(op.id, sel);
@@ -178,6 +182,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   // ---------------------------------------------------------------- edición en la celda
   let editor: HTMLInputElement | HTMLSelectElement | null = null;
   function editar(inicial?: string) {
+    { const f = filas[sel.r1], b = f ? op.bloqueo?.(f) : null; if (b) { avisar(b); return; } }
     const td = celdas[sel.r1]?.[sel.c1];
     if (!td) return;
     const col = cols[sel.c1];

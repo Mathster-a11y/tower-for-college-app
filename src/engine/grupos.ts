@@ -58,6 +58,22 @@ export function nodoAlTocar(p: Proyecto, m: Muro, contexto: string | null): { t:
   return k <= 0 ? { t: 'm', id: m.id } : { t: 'g', id: cad[k - 1].id };
 }
 
+/**
+ * Grupo cerrado que contiene al muro, visto desde el grupo que se está editando (null = el muro se puede editar
+ * directo). Un grupo cerrado se mueve, copia, gira y espeja entero; sus muros solo se editan entrando (doble clic).
+ */
+export function grupoCerrado(p: Proyecto, m: Muro, contexto: string | null): GrupoDib | null {
+  const n = nodoAlTocar(p, m, contexto);
+  return n?.t === 'g' ? grupoPorId(p, n.id) ?? null : null;
+}
+/** por qué no se puede editar el muro directamente (grupo cerrado, bloqueado o fuera del grupo en edición), o null */
+export function motivoNoEditable(p: Proyecto, m: Muro, contexto: string | null): string | null {
+  if (muroBloqueado(p, m)) return `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.`;
+  if (contexto !== null && !dentroDe(p, m, contexto)) return `${m.id} está fuera del grupo que estás editando: salí con Esc.`;
+  const g = grupoCerrado(p, m, contexto);
+  return g ? `${m.id} está dentro de «${g.nombre}»: para editarlo, entrá al grupo con doble clic en la planta (o «Entrar» en el Esquema). Desde afuera el grupo se mueve, copia, gira y espeja entero.` : null;
+}
+
 /** nombre libre: «Grupo 1», «Grupo 2»… */
 function nombreLibre(p: Proyecto, base: string) {
   const usados = new Set((p.grupos ?? []).map(g => g.nombre));

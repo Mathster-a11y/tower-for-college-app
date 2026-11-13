@@ -16,6 +16,7 @@ import {
 } from '../engine/colocar';
 import { cotaDesdeCursor, geometria, idCota, puntoCota } from '../engine/cotas';
 import { alargar, desfasar, esquina, partir, unir } from '../engine/editar';
+import { motivoNoEditable } from '../engine/grupos';
 
 export interface Vista { X: (x: number) => number; Y: (y: number) => number; escala: number }
 export interface ApiPlanta {
@@ -218,6 +219,7 @@ export function montarColocar(api: ApiPlanta) {
       }
       case 'desfase': case 'alargar': case 'unir': case 'esquina': case 'partir': {
         const id = muroBajo(ev);
+        if (id && !(herr === 'alargar' && tocados.length)) { const mm = estado.proyecto.muros.find(x => x.id === id), mot = mm && motivoNoEditable(estado.proyecto, mm, estado.contexto); if (mot) { api.mensaje(mot); return; } }
         const w = api.aMundo(ev);
         if (herr === 'partir') {
           if (!id) { api.mensaje('Tocá sobre un muro.'); return; }
