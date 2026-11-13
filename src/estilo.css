@@ -264,7 +264,7 @@ svg.planta { display: block; width: 100%; height: 100%; background: var(--lienzo
 .planta .muro.ausente { opacity: .18; pointer-events: none; }
 .planta .hueco { fill: var(--lienzo); stroke: #222; stroke-width: 1; }
 .planta .etiqueta { fill: var(--ink); font-size: 11px; pointer-events: none; font-family: var(--mono); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
-.sel-nivel { position: absolute; top: 8px; right: 10px; z-index: 2; font-size: 12.5px; }
+.sel-nivel { position: absolute; top: 46px; right: 10px; z-index: 2; font-size: 12.5px; }
 .leyenda-planta { position: absolute; left: 10px; bottom: 8px; z-index: 2; background: color-mix(in srgb, var(--lienzo) 85%, transparent); border-radius: 6px; padding: 3px 7px; }
 
 /* ------------------------------------------------------------------ gráficos (SVG) */
@@ -546,7 +546,7 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .informe .dg-tabla tr:nth-child(even) td { background: #f3f5f7; }
 }
 /* herramientas de la planta */
-.herr-planta { position: absolute; top: 8px; left: 10px; z-index: 2; }
+.herr-planta { position: absolute; top: 8px; left: 10px; z-index: 2; display: flex; flex-wrap: nowrap; max-width: calc(100% - 20px); }
 svg.planta.dibujando { cursor: crosshair; }
 svg.planta.dibujando .muro { cursor: crosshair; }
 .planta .previa rect { fill: color-mix(in srgb, var(--accent) 35%, transparent); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 2; }
@@ -938,7 +938,7 @@ svg.planta.calando g.muro { cursor: crosshair; }
 .planta .caja-grupo-rot, .planta .caja-grupo.comp-rot { font: 600 11px var(--fuente, sans-serif); fill: var(--ink); paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; pointer-events: none; }
 .planta .caja-ctx { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
 .planta .caja-multi { fill: none; stroke: var(--accent); stroke-width: 1.6; pointer-events: none; }
-.barra-ctx { position: absolute; left: 50%; transform: translateX(-50%); bottom: 40px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-ctx { position: absolute; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .barra-ctx button { font-size: 12px; padding: 3px 8px; }
 .ruta-ctx { font-size: 12.5px; margin: 0 0 6px; }
 .esquema-caja { max-height: 260px; overflow: auto; border: 1px solid var(--hair); border-radius: 6px; background: var(--field, #fff); }
@@ -963,3 +963,9 @@ svg.planta.calando g.muro { cursor: crosshair; }
 .esq-uso { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; margin-top: 8px; }
 .esq-uso label { display: flex; gap: 4px; align-items: center; }
 button.peligro { color: var(--mal); }
+.planta.con-lazo { cursor: crosshair; }
+.planta.con-lazo .muro { cursor: crosshair; }
+.planta .lazo-traza { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 3; pointer-events: none; }
+.planta .lazo-traza.saca { stroke: var(--mal); fill: color-mix(in srgb, var(--mal) 8%, transparent); }
+.barra-sel { position: absolute; left: 50%; transform: translateX(-50%); bottom: 40px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
+.barra-sel button { font-size: 12px; padding: 4px 10px; min-height: 30px; }

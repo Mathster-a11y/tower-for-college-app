@@ -104,7 +104,9 @@ export function seccionEsquema(): H {
       hacer(() => { if (ms.length || g2.length) r.v = agruparNodos(estado.proyecto, ms, g2, estado.contexto); return 'error' in r.v ? r.v.error : null; });
       if (!('error' in r.v)) { estado.grupoSel = r.v.id; estado.multi = { m: [], g: [] }; estado.eligeVarios = false; aviso(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.v.id)?.nombre}».`); estado.avisarPanel(); }
     }, nMulti > 0 || !!selMuro),
-    b('Limpiar', 'Vacía la selección múltiple (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }, nMulti > 0));
+    b('Limpiar', 'Vacía la selección múltiple (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }, nMulti > 0),
+    b(`Borrar${nMulti ? ` (${nMulti})` : ''}`, 'Borra lo elegido (Supr en la planta). Ctrl+Z deshace.', () => document.dispatchEvent(new CustomEvent('torre:borrar-elegidos')), nMulti > 0, 'mini peligro'),
+    b('Elegir fuera del cálculo', 'Elige todos los muros que no entran al cálculo (no llegan a la fundación o quedan fuera del molde en los dos vientos), para borrarlos o agruparlos', () => document.dispatchEvent(new CustomEvent('torre:elegir-fuera'))));
   c.append(acc);
 
   if (selG) {

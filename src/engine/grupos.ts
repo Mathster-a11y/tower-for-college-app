@@ -400,3 +400,27 @@ export function protegerBloqueados(previo: Proyecto | null, p: Proyecto): number
   });
   return n;
 }
+
+/**
+ * Borra muros (los bloqueados no): limpia los «pegado a» y los vanos que los nombraban, y los grupos que quedan vacíos.
+ */
+export function borrarMuros(p: Proyecto, ids: string[]): { borrados: number; bloqueados: number } {
+  const pedir = new Set(ids);
+  const fuera = new Set(p.muros.filter(m => pedir.has(m.id) && !muroBloqueado(p, m)).map(m => m.id));
+  const bloqueados = p.muros.filter(m => pedir.has(m.id) && muroBloqueado(p, m)).length;
+  p.muros = p.muros.filter(m => !fuera.has(m.id)).map(m => {
+    const n = { ...m };
+    if (fuera.has(n.pegadoA)) n.pegadoA = '';
+    if (fuera.has(n.pegadoB)) n.pegadoB = '';
+    if (n.vano && fuera.has(n.vano.con)) delete n.vano;
+    return n;
+  });
+  // grupos vacíos (de abajo hacia arriba)
+  let cambio = true;
+  while (cambio && p.grupos?.length) {
+    cambio = false;
+    const vacios = p.grupos.filter(g => !p.muros.some(m => m.gd === g.id) && !p.grupos!.some(h => h.padre === g.id) && !g.bloq);
+    if (vacios.length) { const v = new Set(vacios.map(g => g.id)); p.grupos = p.grupos.filter(g => !v.has(g.id)); cambio = true; }
+  }
+  return { borrados: fuera.size, bloqueados };
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ejemploGuia, type Proyecto } from './modelo';
-import { agruparNodos, aLocal, aPlanta, copiarNodo, desagruparNodo, espejarNodo, girarNodo, grupoPorId, hacerComponente, hacerUnico, moverNodo, murosDe, nodoAlTocar, protegerBloqueados, sincronizarComponentes, usoDeGrupo, borrarGrupo } from './grupos';
+import { agruparNodos, borrarMuros, aLocal, aPlanta, copiarNodo, desagruparNodo, espejarNodo, girarNodo, grupoPorId, hacerComponente, hacerUnico, moverNodo, murosDe, nodoAlTocar, protegerBloqueados, sincronizarComponentes, usoDeGrupo, borrarGrupo } from './grupos';
 import { aPlanilla } from './mapping';
 import { calcularPlanilla } from './planilla';
 
@@ -168,5 +168,25 @@ describe('bloqueo', () => {
     p.muros.find(m => m.id === 'M1')!.x = -9;
     expect(protegerBloqueados(previo, p)).toBe(0);
     expect(p.muros.find(m => m.id === 'M1')!.x).toBe(-9);
+  });
+});
+
+describe('borrar muros', () => {
+  it('borra, limpia los «pegado a» y los grupos vacíos; no toca los bloqueados', () => {
+    const p = ejemploGuia();
+    const g = ok(agruparNodos(p, ['M6', 'M7'], [], null)).id;
+    const r = borrarMuros(p, ['M5', 'M6', 'M7']);
+    expect(r).toEqual({ borrados: 3, bloqueados: 0 });
+    expect(p.grupos).toEqual([]);
+    void g;
+    const q = ejemploGuia();
+    const h = ok(agruparNodos(q, ['M1'], [], null)).id;
+    grupoPorId(q, h)!.bloq = true;
+    expect(borrarMuros(q, ['M1', 'M2'])).toEqual({ borrados: 1, bloqueados: 1 });
+    expect(q.muros.some(m => m.id === 'M1')).toBe(true);
+    // el ala que quedaba pegada a un alma borrada queda sin «pegado a»
+    const s = ejemploGuia();
+    borrarMuros(s, ['M5']);
+    expect(s.muros.find(m => m.id === 'M6')!.pegadoA).toBe('');
   });
 });
