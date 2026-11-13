@@ -229,6 +229,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
 
   // ---------------------------------------------------------------- mouse
   let arrastrando = false;
+  let toque: { x: number; y: number; p: { r: number; c: number }; shift: boolean } | null = null;
   const celdaDe = (t: EventTarget | null) => {
     const el = (t as HTMLElement | null)?.closest?.('td[data-c], th[data-r]') as HTMLElement | null;
     if (!el) return null;
@@ -244,6 +245,8 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     }
     const p = celdaDe(e.target);
     if (!p) return;
+    // dedo o lápiz: arrastrar desplaza la tabla (como en el celular); un toque sin moverse elige la celda (al soltar)
+    if (e.pointerType !== 'mouse') { toque = { x: e.clientX, y: e.clientY, p, shift: e.shiftKey }; return; }
     e.preventDefault();
     caja.focus();
     if (p.c === -1) sel = e.shiftKey ? { ...sel, r1: p.r, c1: nC - 1 } : { r0: p.r, c0: 0, r1: p.r, c1: nC - 1 };
@@ -263,8 +266,21 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
     pintar();
   });
   const soltar = () => { if (llenado) { enfocada = op.id; llenar(); } arrastrando = false; };
-  caja.addEventListener('pointerup', soltar);
-  caja.addEventListener('pointercancel', () => { llenado = null; arrastrando = false; pintar(); });
+  caja.addEventListener('pointerup', e => {
+    if (toque && e.pointerType !== 'mouse') {
+      const t = toque; toque = null;
+      if (Math.hypot(e.clientX - t.x, e.clientY - t.y) > 10) return;          // fue un desplazamiento
+      caja.focus({ preventScroll: true });
+      if (t.p.c === -1) sel = t.shift ? { ...sel, r1: t.p.r, c1: nC - 1 } : { r0: t.p.r, c0: 0, r1: t.p.r, c1: nC - 1 };
+      else if (sel.r0 === t.p.r && sel.c0 === t.p.c && sel.r1 === t.p.r && sel.c1 === t.p.c) { editar(); return; }   // segundo toque en la misma celda: editar
+      else sel = { r0: t.p.r, c0: t.p.c, r1: t.p.r, c1: t.p.c };
+      pintar(); elegirFila();
+      return;
+    }
+    soltar();
+  });
+  caja.addEventListener('scroll', () => { toque = null; }, { passive: true });
+  caja.addEventListener('pointercancel', () => { llenado = null; arrastrando = false; toque = null; pintar(); });
   caja.addEventListener('dblclick', e => { if (celdaDe(e.target)?.c !== -1) editar(); });
 
   // ---------------------------------------------------------------- teclado
@@ -330,7 +346,16 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
 
   const envoltura = document.createElement('div');
   envoltura.className = 'grilla-envoltura';
-  envoltura.append(caja, aviso);
+  // botones para recorrer la tabla de a una página (con el lápiz o el dedo, las barras de Android son muy finas)
+  const pasos = document.createElement('div'); pasos.className = 'grilla-pasos';
+  ([['▲', 'Subir una página', -1], ['▼', 'Bajar una página', 1]] as const).forEach(([t, ti, sg]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = ti; b.setAttribute('aria-label', ti);
+    b.addEventListener('click', () => caja.scrollBy({ top: sg * caja.clientHeight * 0.85, behavior: 'smooth' }));
+    pasos.append(b);
+  });
+  const fila = document.createElement('div'); fila.className = 'grilla-con-pasos';
+  fila.append(caja, pasos);
+  envoltura.append(fila, aviso);
   // después de montarse: pintar la selección y devolver el foco si la grilla lo tenía
   requestAnimationFrame(() => {
     pintar();

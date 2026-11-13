@@ -386,8 +386,17 @@ export function montarPlanta(cont: HTMLElement) {
     };
     const ef = partes(med);
     const gen = document.createElement('div'); gen.className = 'medidas';
-    gen.append(campo('h', tipo === 'columna' ? 'D' : 'h', tipo === 'columna' ? 'diámetro exterior (m)' : 'largo del alma, medida total (m)', false, med.h));
-    if (t.usaB) gen.append(campo('b', 'b', 'ancho de las alas (m), si no se da uno por ala', false, med.b));
+    if (tipo === 'pórtico') {
+      // la luz (de eje a eje de las columnas) es lo que se piensa al proyectar; h = luz + b
+      const l = document.createElement('label'); l.title = 'distancia entre los ejes de las dos columnas (m)';
+      const i = document.createElement('input'); i.type = 'number'; i.step = '0.05'; i.min = '0.1'; i.dataset.k = 'luz';
+      i.value = String(+(med.h - med.b).toFixed(3));
+      i.addEventListener('change', () => { const v = Number(i.value); if (v > 0) cambiar('h', +(v + med.b).toFixed(3)); else i.value = String(+(med.h - med.b).toFixed(3)); });
+      l.append('luz entre columnas', i);
+      gen.append(l);
+    }
+    gen.append(campo('h', tipo === 'columna' ? 'D' : 'h', tipo === 'columna' ? 'diámetro exterior (m)' : tipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)', false, med.h));
+    if (t.usaB) gen.append(campo('b', 'b', tipo === 'pórtico' ? 'lado de cada columna en el plano del pórtico (m)' : 'ancho de las alas (m), si no se da uno por ala', false, med.b));
     gen.append(campo('e', 'e', 'espesor general (m), si no se da uno por parte', false, med.e));
     const porParte = document.createElement('div'); porParte.className = 'medidas por-parte';
     PARTES[tipo].forEach(k => porParte.append(campo(k, NOMBRE_PARTE[k][0], `${NOMBRE_PARTE[k][1]}; vacío = la general`, true, ef[k])));
@@ -525,6 +534,12 @@ export function montarPlanta(cont: HTMLElement) {
     };
     panelPrec.replaceChildren();
     panelPrec.append(mk('b', `Mover con precisión · ${m.id}${m.grupo ? ` (grupo ${m.grupo}: ${ids.length} muros)` : ''}`));
+    if (m.pieza) {
+      const bm = mk('button', m.pieza.tipo === 'pórtico' ? 'Medidas del pórtico (luz entre columnas)…' : 'Medidas de la pieza…', 'b-medidas');
+      (bm as HTMLButtonElement).type = 'button';
+      bm.addEventListener('click', () => abrirMedidas(m));
+      panelPrec.append(bm);
+    }
     const sel = mk('select'); sel.setAttribute('aria-label', 'Nodo de referencia');
     nodos.forEach((n, i) => { const o = mk('option', (circ ? NOMBRE_NODO_CIRC : NOMBRE_NODO)[i] ?? n.t); o.value = String(i); sel.append(o); });
     sel.value = String(iRef);

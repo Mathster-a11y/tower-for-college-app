@@ -330,7 +330,12 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 
 /* ------------------------------------------------------------------ grilla tipo planilla */
 .grilla-envoltura { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.grilla-caja { position: relative; overflow: auto; max-height: 52vh; border: 1px solid var(--field-edge); border-radius: 6px; background: var(--field); outline: none; user-select: none; -webkit-user-select: none; touch-action: none; }
+.grilla-caja { position: relative; overflow: auto; max-height: 52vh; border: 1px solid var(--field-edge); border-radius: 6px; background: var(--field); outline: none; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: auto; }
+/* barras de desplazamiento visibles y anchas (se agarran con el mouse o el lápiz) */
+.grilla-caja::-webkit-scrollbar { width: 14px; height: 14px; }
+.grilla-caja::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 7px; border: 3px solid var(--field); }
+.grilla-caja::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+.grilla-caja::-webkit-scrollbar-track { background: var(--panel); }
 .grilla-caja:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .grilla { border-collapse: collapse; font-family: var(--mono); font-size: 12px; min-width: 100%; }
 .grilla th { position: sticky; top: 0; background: var(--header); color: var(--ink2); font-family: var(--fuente); font-weight: 600; font-size: 11.5px; padding: 3px 6px; border: 1px solid var(--edge); white-space: nowrap; z-index: 1; text-align: left; }
@@ -902,3 +907,22 @@ svg.zoomable.acercado line, svg.zoomable.acercado path, svg.zoomable.acercado po
 svg.planta.calando g.muro { cursor: crosshair; }
 .calar-panel span { color: var(--ink2); font-size: 11.5px; }
 .calar-panel .seg { display: flex; } .calar-panel .seg button { flex: 1; font-size: 11.5px; }
+
+/* recuadro «J de la planta» (Diseño) */
+.recuadro-j .j-fila { display: grid; gap: 3px; padding: 6px 0; border-bottom: 1px solid var(--hair); }
+.recuadro-j .j-fila:last-of-type { border-bottom: 0; }
+.recuadro-j .j-tit { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.recuadro-j .j-val { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-family: var(--mono); }
+.recuadro-j .j-val span, .recuadro-j .j-nota { color: var(--ink2); font-size: 11.5px; }
+.recuadro-j .j-barra { position: relative; height: 6px; border-radius: 3px; background: var(--hair); overflow: visible; }
+.recuadro-j .j-barra i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--ok); }
+.recuadro-j .j-fila.mal .j-barra i { background: var(--mal); }
+.recuadro-j .j-barra b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink); }
+.recuadro-j .j-cambio { font: 600 11.5px var(--mono); }
+.recuadro-j .j-cambio.sube { color: var(--ok); } .recuadro-j .j-cambio.baja { color: var(--mal); }
+
+.grilla-con-pasos { display: flex; gap: 4px; align-items: stretch; min-width: 0; }
+.grilla-con-pasos > .grilla-caja { flex: 1; min-width: 0; }
+.grilla-pasos { display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+.grilla-pasos button { width: 26px; flex: 1; max-height: 60px; padding: 0; font-size: 11px; color: var(--ink2); }
+@media (pointer: coarse) { .grilla-pasos button { width: 36px; } }

@@ -3,10 +3,11 @@
  *
  * Planta de 39,60 × 18,00 m entre ejes (40,10 × 18,50 m a las caras de las columnas):
  *  - 20 columnas cuadradas de 0,50 × 0,50 m en el perímetro y en los ejes x = 7,20 y x = 21,60;
- *  - 12 columnas en cruz en los costados (0,50 × 0,50 m con dos aletas de 0,20 × 0,30 m; en las esquinas, una);
+ *  - 12 columnas en cruz en los costados (0,50 × 0,50 m con dos aletas de 0,20 × 0,30 m; en las esquinas, una), que forman
+ *    los pórticos de las fachadas cortas: seis pórticos de dos columnas (luz de 3,60 m) que toman el viento A;
  *  - cuatro núcleos de tabiques de 0,35 y 0,20 m entre y = 7,20 y y = 18,25: los dos de la derecha son el espejo de los de
  *    la izquierda respecto del eje x = 21,60.
- * Las columnas toman carga de losa (área de influencia) pero no rigidez lateral: quedan «fuera» del molde de la hoja J
+ * Las columnas interiores y de las fachadas largas toman carga de losa pero no rigidez lateral: quedan «fuera» del molde de la hoja J
  * (el viento lo toman los núcleos, como en la guía). Supuestos: un subsuelo de 3,60 m, el sitio del ejemplo de la guía y H30.
  */
 import { agrupar } from './dibujo';
@@ -40,11 +41,20 @@ export function ejemploPlanta34(): Proyecto {
   const cuadradas: [number, number][] = [[3.6, 0], [3.6, 18], [7.2, 0], [7.2, 7.2], [7.2, 10.8], [7.2, 14.4], [7.2, 18], [10.8, 0], [14.4, 0], [18, 0],
     [21.6, 0], [21.6, 7.2], [21.6, 10.8], [21.6, 14.4], [21.6, 18], [25.2, 0], [28.8, 0], [32.4, 0], [36, 0], [36, 18]];
   cuadradas.forEach(([x, y]) => pieza([rect(x - 0.25, x + 0.25, y - 0.25, y + 0.25, fuera)]));
-  for (const x of [0, 39.6]) for (const y of [0, 3.6, 7.2, 10.8, 14.4, 18]) {
-    const ms = [rect(x - 0.25, x + 0.25, y - 0.25, y + 0.25, fuera)];
-    if (y < 18) ms.push(rect(x - 0.1, x + 0.1, y + 0.25, y + 0.55, fuera));     // aleta hacia arriba
-    if (y > 0) ms.push(rect(x - 0.1, x + 0.1, y - 0.55, y - 0.25, fuera));      // aleta hacia abajo
-    pieza(ms);
+  // columnas de los costados: pórticos en el plano de la fachada (dirección y, viento A), de a dos columnas vecinas
+  // (la hoja J arma cada pórtico con dos columnas, AO a AU); las aletas de las cruces van aparte, fuera del molde
+  for (const x of [0, 39.6]) {
+    for (const [y0, y1] of [[0, 3.6], [7.2, 10.8], [14.4, 18]]) {
+      const col = (y: number) => rect(x - 0.25, x + 0.25, y - 0.25, y + 0.25, { portico: true });
+      const luz = y1 - y0, med = { h: +(luz + 0.5).toFixed(3), b: 0.5, e: 0.5, giro: 0 as const };
+      pieza([col(y0), col(y1)].map(m => ({ ...m, pieza: { tipo: 'pórtico' as const, med } })));
+    }
+    for (const y of [0, 3.6, 7.2, 10.8, 14.4, 18]) {
+      const aletas: Muro[] = [];
+      if (y < 18) aletas.push(rect(x - 0.1, x + 0.1, y + 0.25, y + 0.55, fuera));   // aleta hacia arriba
+      if (y > 0) aletas.push(rect(x - 0.1, x + 0.1, y - 0.55, y - 0.25, fuera));    // aleta hacia abajo
+      pieza(aletas);
+    }
   }
 
   const B = 40.1, L = 18.5;

@@ -48,15 +48,16 @@ describe('calar tabiques y tubos', () => {
 });
 
 describe('torre de 34 pisos (planta del PDF)', () => {
-  it('se arma completa: 34 niveles sobre PB, 4 núcleos que toman viento y 32 columnas fuera del molde', async () => {
+  it('se arma completa: 34 niveles sobre PB, núcleos y pórticos de fachada que toman viento, columnas fuera del molde', async () => {
     const { ejemploPlanta34 } = await import('./ejemplo34');
     const { calcularPlanilla } = await import('./planilla');
     const p = ejemploPlanta34();
     expect(p.niveles.filter(n => n.cota > 0)).toHaveLength(34);
     expect(p.niveles[0].cota).toBeCloseTo(122.4, 6);
     const asig = aPlanilla(p);
-    expect(asig.piezas.filter(z => z.dir === 'A' && z.filaHoja !== null)).toHaveLength(6);
-    expect(asig.avisos.some(a => a.includes('32 piezas quedan fuera del molde'))).toBe(true);
+    expect(asig.piezas.filter(z => z.dir === 'A' && z.filaHoja !== null)).toHaveLength(12);              // 6 núcleos y 6 pórticos
+    expect(asig.piezas.filter(z => z.dir === 'A' && z.molde === 'pórtico' && z.filaHoja !== null)).toHaveLength(6);
+    expect(asig.avisos.some(a => a.includes('piezas quedan fuera del molde'))).toBe(true);
     const r = calcularPlanilla(asig.datos);
     [r.mnyq.H61, r.mnyq.L99, r.jpar.AY24, r.jort.AY24].forEach(v => expect(Number.isFinite(v)).toBe(true));
     // las áreas de influencia cubren la losa (39,6 + 0,5) × (18 + 0,5) m, con las columnas

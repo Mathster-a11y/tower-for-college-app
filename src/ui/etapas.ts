@@ -45,6 +45,35 @@ function datos() {
   const Mv = dir === 'A' ? R.mnyq.J61 : R.mnyq.O61;
   return { p, asig, res, corr, controles, dir, iPB, filaPB, R, alt, W, Mv, hw: W > 0 ? Mv / W : NaN };
 }
+/**
+ * J de la planta completa, siempre a la vista en Diseño: ΣJ de cada viento (el de la hoja y el de la sección real)
+ * contra el J mínimo de la flecha h/500, y cuánto cambió con la última modificación de la planta.
+ */
+let jAnterior: { A: number; B: number } | null = null, jCambio: { A: number; B: number } = { A: 0, B: 0 }, claveJ = '';
+function recuadroJ(c: HTMLElement) {
+  const { asig, corr } = estado.calculo;
+  if (!asig?.piezas.length || !corr) return;
+  const rg = rigidez(corr.guia, estado.proyecto.hormigon || 'H30');
+  const real = (d: 'A' | 'B') => asig.piezas.filter(z => z.dir === d && z.filaHoja !== null).reduce((s2, z) => s2 + (z.Jreal ?? z.Jhoja ?? 0), 0);
+  const ahora = { A: rg.find(x => x.dir === 'A')!.J, B: rg.find(x => x.dir === 'B')!.J };
+  const clave = estado.proyecto.muros.map(m => `${m.id}${m.x}${m.y}${m.largo}${m.espesor}${m.dir}${m.piezaA}${m.rolA ?? ''}${m.rolB ?? ''}`).join('|');
+  if (clave !== claveJ) { if (jAnterior && claveJ) jCambio = { A: ahora.A - jAnterior.A, B: ahora.B - jAnterior.B }; jAnterior = ahora; claveJ = clave; }
+  const fila = (d: 'A' | 'B') => {
+    const g = rg.find(x => x.dir === d)!, min = g.minimos.h500, ok = g.J >= min, Jr = real(d), dif = Jr > 0 ? (g.J - Jr) / Jr : 0;
+    const cambio = Math.abs(jCambio[d]) > 1e-6 ? h('span', { class: `j-cambio ${jCambio[d] > 0 ? 'sube' : 'baja'}` }, `${jCambio[d] > 0 ? '+' : '−'}${fmt(Math.abs(jCambio[d]), 2)} m⁴ con el último cambio`) : null;
+    const barra = h('div', { class: 'j-barra', title: `ΣJ / J mín = ${fmt(g.J / min, 2)}` }, h('i', { style: `width:${Math.min(100, (g.J / (2 * min)) * 100).toFixed(1)}%` }), h('b', { style: 'left:50%' }));
+    return h('div', { class: `j-fila ${ok ? 'ok' : 'mal'}` },
+      h('div', { class: 'j-tit' }, `Viento ${d} ${d === 'A' ? '(↑)' : '(→)'}`, chip(ok ? 'verifica' : 'no verifica')),
+      h('div', { class: 'j-val' }, h('b', {}, `ΣJ = ${fmt(g.J, 2)} m⁴`), h('span', {}, `J mín = ${fmt(min, 2)} m⁴ (h/500, ${g.hormigon})`)),
+      barra,
+      h('div', { class: 'j-nota' }, `sección real ${fmt(Jr, 2)} m⁴${Math.abs(dif) > 0.05 ? ` · la hoja ${dif > 0 ? '+' : '−'}${fmt(Math.abs(dif) * 100, 0)} %` : ''} · ${asig.piezas.filter(z => z.dir === d && z.filaHoja !== null).length} piezas`),
+      ...(cambio ? [cambio] : []));
+  };
+  const caja = seccion('J de la planta', fila('A'), fila('B'), h('p', { class: 'nota chica' }, 'ΣJ de las piezas que toman cada viento (hoja J de la planilla) contra el mínimo para que la azotea se corra menos de h/500. La barra llega a la marca cuando ΣJ = J mín.'));
+  caja.el.classList.add('recuadro-j');
+  c.append(caja.el);
+}
+
 const fuenteTxt = () => (estado.fuente === 'guia' ? 'Valores «Guía/CIRSOC»: Kz con z mínimo de 5 m, sin viento en PB ni en los subsuelos.' : 'Valores de la planilla original, tal como los calcula.');
 const peor = (cs: Control[]): EstadoChip => (cs.some(c => c.estado === 'no verifica') ? 'no verifica' : cs.some(c => c.estado === 'atención') ? 'revisar' : cs.length ? 'verifica' : 'pendiente');
 const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => pre.some(g => c.grupo.startsWith(g))) ?? [];
@@ -96,6 +125,7 @@ const diseno: Etapa = {
   icono: '<rect x="4" y="4" width="18" height="16" rx="2"/><path d="M4 12h9M13 4v16"/>',
   globo: 'Diseño|Los datos de la torre: niveles, muros y piezas. Cada muro va en una pieza por dirección; la app arma con ellas los perfiles de las hojas J.',
   panel(c, sub) {
+    recuadroJ(c);
     if (sub === 'Niveles') panelNiveles(c);
     else if (sub === 'Muros') panelMuros(c);
     else if (sub === 'Piezas') panelPiezas(c);
