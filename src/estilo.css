@@ -969,3 +969,50 @@ button.peligro { color: var(--mal); }
 .planta .lazo-traza.saca { stroke: var(--mal); fill: color-mix(in srgb, var(--mal) 8%, transparent); }
 .barra-sel { position: absolute; left: 50%; transform: translateX(-50%); bottom: 40px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
 .barra-sel button { font-size: 12px; padding: 4px 10px; min-height: 30px; }
+
+/* ---------- colocar y cotas ---------- */
+.colocar-panel { width: 250px; max-height: calc(100% - 120px); overflow: auto; }
+.colocar-panel .col-fila { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.colocar-panel .col-fila > b { flex: 1; }
+.colocar-panel button { font-size: 11.5px; padding: 3px 7px; min-height: 26px; }
+.colocar-panel button.activo, .colocar-panel button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.colocar-panel .col-cerrar { border: 0; background: none; padding: 0 4px; }
+.colocar-panel .col-sub { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--hair); font-weight: 600; font-size: 11.5px; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; }
+.colocar-panel .col-campo { display: inline-flex; gap: 3px; align-items: center; font-size: 11.5px; }
+.colocar-panel .col-campo input[type="text"] { padding: 2px 4px; font-size: 12px; }
+.colocar-panel .col-instr { margin: 2px 0; padding: 4px 6px; border-radius: 6px; background: var(--tint); color: var(--accent-dark, var(--accent)); font-size: 12px; }
+.colocar-panel .col-nota { margin: 2px 0; color: var(--ink2); font-size: 11.5px; }
+.colocar-panel .col-seg { display: flex; } .colocar-panel .col-seg button { flex: 1; }
+.colocar-panel select { max-width: 100%; font-size: 12px; }
+.colocar-panel .col-lista { display: flex; flex-direction: column; gap: 2px; }
+.colocar-panel .col-camino { display: flex; gap: 4px; align-items: center; font-size: 11.5px; }
+.colocar-panel .col-camino span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.colocar-panel .col-camino.sel span { font-weight: 600; color: var(--serie-5, #6a3d9a); }
+.planta.colocando, .planta.colocando .muro { cursor: crosshair; }
+.planta .capa-colocar { pointer-events: none; }
+.planta .capa-colocar .cota[data-cota] { pointer-events: visiblePainted; cursor: pointer; }
+.planta .cota-lin, .planta .cota-ext, .planta .cota-marca { stroke: var(--ink2); stroke-width: .9; fill: none; }
+.planta .cota-marca { stroke-width: 1.4; }
+.planta .cota-txt { font: 500 11px var(--mono, monospace); fill: var(--ink); paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; }
+.planta .cota.auto .cota-lin, .planta .cota.auto .cota-ext, .planta .cota.auto .cota-marca { stroke: var(--elegido); }
+.planta .cota.auto .cota-txt { fill: var(--elegido); }
+.planta .cota.previa .cota-lin, .planta .cota.previa .cota-ext, .planta .cota.previa .cota-marca { stroke: var(--accent); }
+.planta .cota.sel .cota-lin, .planta .cota.sel .cota-marca { stroke: var(--accent); stroke-width: 2; }
+.planta .cota.sel .cota-txt { fill: var(--accent); }
+.planta .cota-previa { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+.planta .camino { fill: none; stroke: var(--serie-5, #6a3d9a); stroke-width: 1.6; stroke-dasharray: 7 3; }
+.planta .camino.sel { stroke-width: 2.6; stroke-dasharray: none; }
+.planta .camino.previa { stroke: var(--accent); }
+.planta .camino-ini { fill: var(--serie-5, #6a3d9a); }
+.planta .camino-rot { font: 600 10.5px var(--fuente, sans-serif); fill: var(--serie-5, #6a3d9a); paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; }
+.planta .camino-vert { fill: var(--window, #fff); stroke: var(--accent); stroke-width: 1.4; }
+.planta .camino-paso { fill: var(--accent); }
+.planta .fantasma { fill: color-mix(in srgb, var(--accent) 25%, transparent); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }
+.planta .eje-simetria { stroke: var(--mal); stroke-width: 1.2; stroke-dasharray: 8 3 2 3; }
+.planta .cursor-colocar { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+.planta .centro-polar { stroke: var(--mal); stroke-width: 1.6; }
+.herr-planta.seg.chico button { padding: 2px 8px; }
+.colocar-panel { position: relative; }
+.colocar-panel > b { cursor: pointer; padding-right: 24px; }
+.colocar-panel > .col-cerrar { position: absolute; top: 4px; right: 4px; }
+.colocar-panel .col-seg { flex-wrap: nowrap; } .colocar-panel .col-seg button { flex: 1 1 0; min-width: 0; padding: 3px 4px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

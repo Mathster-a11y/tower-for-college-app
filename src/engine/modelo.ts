@@ -175,7 +175,17 @@ export interface Proyecto {
   muros: Muro[];
   /** grupos de dibujo (jerarquía, componentes y bloqueo) */
   grupos?: GrupoDib[];
+  /** caminos (rectas y arcos) para la matriz sobre un camino */
+  caminos?: Camino[];
+  /** cotas de medición de la planta */
+  cotas?: Cota[];
 }
+/** camino abierto o cerrado: vértices con bulge (el tramo que sale de cada vértice es un arco si b ≠ 0) */
+export interface Camino { id: string; nombre: string; v: { x: number; y: number; b?: number }[]; cerrado: boolean }
+/** punto de una cota: fijo, o pegado a un nodo de un muro (la cota sigue al muro si se mueve) */
+export interface PuntoCota { x: number; y: number; ref?: { id: string; k: number } }
+/** cota: horizontal, vertical o alineada entre dos puntos, con su línea corrida «d» m (con signo) */
+export interface Cota { id: string; a: PuntoCota; b: PuntoCota; tipo: 'h' | 'v' | 'alineada'; d: number }
 
 /** Ejemplo de la «Guía de predimensionado. Edificio en torre» 2024 (Neuquén, 20 pisos, planta 20 × 16 m). */
 export function ejemploGuia(): Proyecto {

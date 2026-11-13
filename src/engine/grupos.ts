@@ -152,7 +152,7 @@ export function centroCaja(ms: Muro[]): { x: number; y: number } {
 }
 
 /** rehace los «pegado a» y los grupos de pieza de los muros tocados por un giro (un alma pasa a ser ala) */
-function rehacerPiezas(muros: Muro[], ids: Set<string>): Muro[] {
+export function rehacerPiezas(muros: Muro[], ids: Set<string>): Muro[] {
   let out = muros;
   const gs = new Set(out.filter(m => ids.has(m.id) && m.grupo).map(m => m.grupo!));
   gs.forEach(g => { out = agrupar(out, out.filter(m => m.grupo === g).map(m => m.id), g).muros; });
@@ -235,8 +235,11 @@ function mapaPiezas(p: Proyecto, ms: Muro[]): Map<string, string> {
 export function copiarNodo(p: Proyecto, gid: string, dx: number, dy: number, vinculada = false): { id: string } | { error: string } {
   const g = grupoPorId(p, gid);
   if (!g) return { error: 'No existe el grupo.' };
-  if (vinculada && !g.comp) { const e = hacerComponente(p, gid); if (e) return { error: e }; }
+  // si no se puede hacer componente (tiene componentes adentro), la copia es independiente y sus componentes de adentro siguen vinculados
+  if (vinculada && !g.comp && hacerComponente(p, gid)) vinculada = false;
   const sg = subgrupos(p, gid), mapaG = new Map<string, string>();
+  /** el subgrupo es (o está dentro de) un componente anidado, debajo de la raíz copiada */
+  const dentroDeInstancia = (s: string) => ancestros(p, s).some(a => a.id !== gid && a.comp && sg.includes(a.id));
   const nuevosG: GrupoDib[] = [];
   sg.forEach(s => { const id = idLibre({ ...p, grupos: [...(p.grupos ?? []), ...nuevosG] } as Proyecto); mapaG.set(s, id); nuevosG.push({ id, nombre: '' }); });
   sg.forEach((s, i) => {
@@ -245,8 +248,10 @@ export function copiarNodo(p: Proyecto, gid: string, dx: number, dy: number, vin
     if (i === 0) n.nombre = g.comp && vinculada ? o.nombre.replace(/ \(\d+\)$/, '') + ` (${copiasDe(p, g.comp).length + 1})` : `${o.nombre} (copia)`;
     if (n.padre === undefined) delete n.padre;
     delete n.bloq;
-    if (i === 0 && n.T) n.T = { ...n.T, x: r4(n.T.x + dx), y: r4(n.T.y + dy) };
-    if (!vinculada) { delete n.comp; delete n.T; delete n.cref; }
+    if (n.T) n.T = { ...n.T, x: r4(n.T.x + dx), y: r4(n.T.y + dy) };
+    // una copia no vinculada deja de ser instancia; las copias vinculadas de adentro (componentes anidados) siguen siéndolo
+    if (!vinculada && (i === 0 || !dentroDeInstancia(s))) { delete n.comp; delete n.T; delete n.cref; }
+    if (!vinculada && i === 0) { delete n.comp; delete n.T; }
   });
   const ms = murosDe(p, gid), extra = new Set<string>(), mapaM = new Map<string, string>();
   ms.forEach(m => mapaM.set(m.id, idMuroLibre(p, extra)));
@@ -257,7 +262,7 @@ export function copiarNodo(p: Proyecto, gid: string, dx: number, dy: number, vin
     if (m.grupo) n.grupo = pz.get(m.grupo) ?? m.grupo;
     n.pegadoA = mapaM.get(m.pegadoA) ?? ''; n.pegadoB = mapaM.get(m.pegadoB) ?? '';
     if (m.vano) { if (mapaM.has(m.vano.con)) n.vano = { ...m.vano, con: mapaM.get(m.vano.con)! }; else delete n.vano; }
-    if (!vinculada) delete n.cref;
+    if (!vinculada && !(m.gd && dentroDeInstancia(m.gd))) delete n.cref;
     return n;
   });
   p.muros.push(...nuevos);

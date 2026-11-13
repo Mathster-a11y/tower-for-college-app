@@ -8,6 +8,7 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, type AreasInfluencia } from '../engine/areas';
+import { montarColocar } from './colocar';
 import { agruparNodos, ancestros, borrarMuros, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
@@ -78,7 +79,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
   });
   // herramientas: mover (arrastrar muros) o dibujar (dos clics por muro, encadenados; Esc termina)
-  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' | 'calar' | 'lazo' = 'mover';
+  let modo: 'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' | 'calar' | 'lazo' | 'colocar' = 'mover';
   // pieza tipo a insertar (biblioteca)
   let insTipo: TipoPieza = 'C';
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
@@ -100,7 +101,7 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
+  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') col.cerrar(); modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo('dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
@@ -579,7 +580,25 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('keydown', ev => { if ((ev.key === 'g' || ev.key === 'G') && !ev.ctrlKey && !ev.metaKey && !(ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) ponerGrilla(!estado.grillaFina); });
   try { estado.grillaFina = localStorage.getItem('torre3d.grilla') === '1'; } catch { /* sin almacenamiento */ }
   fijarPasoGrilla(estado.grillaFina ? 0.05 : 0.01); bGrilla.setAttribute('aria-pressed', String(estado.grillaFina));
-  barra.append(bMover, bLazo, bDibujar, bArmar, bCalco, bSil, bIns, bCalar, bAreas, bGrilla);
+  const col = montarColocar({
+    svg, dock, el,
+    aMundo: ev => aMundo(ev),
+    pegar: ev => { ultimoIdIman = undefined; const q = pegarNodo(ev, new Set()); return { p: q, id: ultimoIdIman }; },
+    dibujar: () => dibujar(), pedirDibujo: () => pedirDibujo(), mensaje: t => mensaje(t),
+    seleccion: () => {
+      const p = estado.proyecto;
+      if (estado.multi.m.length || estado.multi.g.length) return { m: [...estado.multi.m], g: [...estado.multi.g] };
+      if (estado.grupoSel && estado.grupoSel !== estado.contexto) return { m: [], g: [estado.grupoSel] };
+      const m = p.muros.find(x => x.id === estado.seleccion);
+      if (!m) return { m: [], g: [] };
+      const nodo = nodoAlTocar(p, m, estado.contexto);
+      return !nodo ? { m: [], g: [] } : nodo.t === 'g' ? { m: [], g: [nodo.id] } : { m: compas(m).filter(id => { const o = p.muros.find(x => x.id === id); return o && (o.gd ?? null) === (estado.contexto ?? null); }), g: [] };
+    },
+    activar: on => { if (on) { if (modo !== 'colocar') ponerModo('colocar'); } else if (modo === 'colocar') ponerModo('mover'); },
+  });
+  estado.suscribir(() => col.refrescar());
+  estado.suscribirSeleccion(() => col.refrescar());
+  barra.append(bMover, bLazo, bDibujar, bArmar, bCalco, bSil, bIns, bCalar, bAreas, bGrilla, ...col.botones);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -957,6 +976,7 @@ export function montarPlanta(cont: HTMLElement) {
       if (g) caja(murosDe(p, g.id).filter(w => !muroOculto(p, w)), 'caja-grupo' + (g.comp ? ' comp' : '') + (g.bloq ? ' bloq' : ''), `${g.bloq ? '🔒 ' : ''}${g.nombre}${g.comp ? ' · componente' : ''}`);
     }
     estado.multi.g.forEach(id => caja(murosDe(p, id), 'caja-multi', ''));
+    col.capa({ X, Y, escala });
     if (lazo && lazo.pts.length > 1) svg.appendChild(el('polygon', { points: lazo.pts.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `lazo-traza ${lazo.op}` }));
     const nSel = estado.multi.m.length + estado.multi.g.length;
     barraSel.hidden = !nSel;
@@ -1117,10 +1137,12 @@ export function montarPlanta(cont: HTMLElement) {
     const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
     const r = imanarNodo(q, estado.proyecto.muros.filter(m => !excluir.has(m.id) && presenteEn(m, zN, zF, zT)), tol);
     ultimoIman = r.a === 'grilla' ? 'grilla' : `${r.a}${r.id ? ` de ${r.id}` : ''}`;
+    ultimoIdIman = r.a === 'grilla' ? undefined : r.id;
     destinoIman = r.a === 'grilla' ? null : r.p;
     return r.p;
   };
   let destinoIman: { x: number; y: number } | null = null;
+  let ultimoIdIman: string | undefined;
   // --- acercar y desplazar ---
   const acercarEn = (f: number, sx: number, sy: number) => {
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
