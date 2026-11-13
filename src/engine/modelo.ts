@@ -77,8 +77,29 @@ export interface Muro {
    * la guía, que verifica el corte en el dintel). «hueco»: abertura de toda la altura, sin dintel.
    */
   vano?: { con: string; ancho: number; tipo: 'dintel' | 'hueco' };
+  /** grupo de dibujo que lo contiene (ver grupos.ts); no cambia el cálculo */
+  gd?: string;
+  /** en una copia de componente: referencia del muro en la definición (el mismo en todas las copias) */
+  cref?: string;
   /** (versiones anteriores) columna circular: se convierte en «tubo-circ» al abrir el proyecto */
   circular?: { D: number; d: number } | null;
+}
+
+/** ubicación de una copia de componente: espejo (en x, primero), giro en cuartos de vuelta antihorarios y traslación */
+export interface Ubicacion { x: number; y: number; g: 0 | 1 | 2 | 3; e: boolean }
+/** grupo de dibujo (jerarquía): junta muros y grupos para moverlos, copiarlos, bloquearlos u ocultarlos */
+export interface GrupoDib {
+  id: string; nombre: string;
+  /** grupo que lo contiene (vacío = la planta) */
+  padre?: string;
+  /** bloqueado: no se elige para mover ni editar (se sigue calculando) */
+  bloq?: boolean;
+  /** oculto en la planta (se sigue calculando) */
+  oculto?: boolean;
+  /** componente al que pertenece esta copia, y su ubicación */
+  comp?: string; T?: Ubicacion;
+  /** subgrupo dentro de una copia de componente: referencia en la definición */
+  cref?: string;
 }
 
 export type TipoElemento = 'tabique' | 'tubo-rect' | 'tubo-circ';
@@ -152,6 +173,8 @@ export interface Proyecto {
   /** hormigón de los tabiques: su número es la resistencia característica σbk en MPa (H30 → 300 kg/cm²) */
   hormigon: string;
   muros: Muro[];
+  /** grupos de dibujo (jerarquía, componentes y bloqueo) */
+  grupos?: GrupoDib[];
 }
 
 /** Ejemplo de la «Guía de predimensionado. Edificio en torre» 2024 (Neuquén, 20 pisos, planta 20 × 16 m). */

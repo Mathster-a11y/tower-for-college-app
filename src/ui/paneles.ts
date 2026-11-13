@@ -8,6 +8,7 @@ import { TENSION_ADM } from '../engine/verificaciones';
 import { cotasDesdeCorte, factorUnidad, leerDXFCompleto, nombrarNiveles } from '../engine/cad';
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
+import { seccionEsquema } from './esquema';
 
 const num = (v: string) => { const x = parseFloat(v.replace(',', '.')); return isFinite(x) ? x : null; };
 
@@ -202,7 +203,7 @@ function seccionGrupos(c: H) {
     return;
   }
   const selGrupo = p.muros.find(m => m.id === estado.seleccion)?.grupo;
-  const sec = seccion('Grupos (piezas como un elemento)');
+  const sec = seccion('Piezas agrupadas (papel de cada muro en la hoja J)');
   nombres.forEach(g => {
     const ms = p.muros.filter(m => m.grupo === g);
     const pz = (d: 'A' | 'B') => asig?.piezas.find(x => x.dir === d && x.muros.includes(ms[0].id));
@@ -286,7 +287,7 @@ export function panelMuros(c: H) {
     p.muros = agrupar(p.muros, ids).muros;
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
-  c.append(acc);
+  c.append(seccionEsquema(), acc);
   seccionGrupos(c);
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({

@@ -3,6 +3,7 @@ import { aPlanilla, type Asignacion } from '../engine/mapping';
 import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
 import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
 import { controles, type Control } from '../engine/verificaciones';
+import { protegerBloqueados, sincronizarComponentes } from '../engine/grupos';
 
 export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
 
@@ -37,6 +38,16 @@ class Estado {
   calco: { url: string; aspecto: number; ancho: number; x: number; y: number; opacidad: number } | null = null;
   /** dibujo de CAD (DXF) de fondo en la planta: entidades en metros, capas (visible y uso) y nodos para el imán */
   cad: { archivo: string; unidad: string; omitidas: number; ents: import('../engine/cad').Entidad[]; capas: Record<string, { ver: boolean; uso: 'referencia' | 'muros' | 'losa' | 'carpintería' }>; nodos: { p: { x: number; y: number }; t: import('../engine/cad').TipoNodo; capa: string }[] } | null = null;
+  /** grupo de dibujo que se está editando (null = la planta entera); el resto queda atenuado */
+  contexto: string | null = null;
+  /** grupo de dibujo elegido (al tocar un muro de un grupo se elige el grupo entero) */
+  grupoSel: string | null = null;
+  /** selección múltiple para agrupar: muros y grupos */
+  multi: { m: string[]; g: string[] } = { m: [], g: [] };
+  /** «Elegir varios» (para el lápiz y el dedo, que no tienen Mayúsculas): cada toque suma o saca de la selección */
+  eligeVarios = false;
+  /** último aviso de grupos (bloqueado, copias actualizadas) */
+  avisoGrupos = '';
   /** pieza elegida en Flexión */
   piezaFlex: string | null = null;
   /** cota del nivel cuya planta se muestra (null = PB) */
@@ -73,6 +84,14 @@ class Estado {
   /** cambia el proyecto, recalcula, guarda en el navegador y avisa a las vistas */
   cambiar(f?: (p: Proyecto) => void) {
     if (f) f(this.proyecto);
+    // grupos: lo bloqueado no cambia y las copias vinculadas siguen a la que se editó
+    if (this.proyecto.grupos?.length) {
+      const previo = this.ultimo ? JSON.parse(this.ultimo) as Proyecto : null;
+      const n = protegerBloqueados(previo, this.proyecto);
+      const hechos = sincronizarComponentes(previo, this.proyecto);
+      this.avisoGrupos = n ? `${n === 1 ? 'Un muro está bloqueado' : `${n} muros están bloqueados`}: no se modificó. Desbloquealo en el Esquema.` : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
+      if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
+    }
     const nuevo = JSON.stringify(this.proyecto);
     if (nuevo !== this.ultimo) {
       this.atras.push(this.ultimo);
@@ -98,9 +117,17 @@ class Estado {
     this.ultimo = t;
     this.proyecto = JSON.parse(t) as Proyecto;
     if (this.seleccion && !this.proyecto.muros.some(m => m.id === this.seleccion)) this.seleccion = null;
+    this.limpiarGrupos();
     this.actualizar();
   }
-  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); this.seleccion = null; this.cambiar(); }
+  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); }
+  /** saca de la selección y del contexto los grupos que ya no existen */
+  limpiarGrupos() {
+    const ids = new Set((this.proyecto.grupos ?? []).map(g => g.id));
+    if (this.contexto && !ids.has(this.contexto)) this.contexto = null;
+    if (this.grupoSel && !ids.has(this.grupoSel)) this.grupoSel = null;
+    this.multi = { m: this.multi.m.filter(id => this.proyecto.muros.some(x => x.id === id)), g: this.multi.g.filter(id => ids.has(id)) };
+  }
 }
 
 export const estado = new Estado();

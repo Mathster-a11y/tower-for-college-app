@@ -926,3 +926,40 @@ svg.planta.calando g.muro { cursor: crosshair; }
 .grilla-pasos { display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
 .grilla-pasos button { width: 26px; flex: 1; max-height: 60px; padding: 0; font-size: 11px; color: var(--ink2); }
 @media (pointer: coarse) { .grilla-pasos button { width: 36px; } }
+
+/* ---------- grupos de dibujo, componentes y bloqueo ---------- */
+.planta .muro.fuera-ctx { opacity: .22; pointer-events: none; }
+.planta .muro.bloqueado { cursor: not-allowed; }
+.planta .muro.bloqueado rect, .planta .muro.bloqueado circle { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 1 2; }
+.planta .muro.multi rect, .planta .muro.multi circle { stroke: var(--accent); stroke-width: 2.4; }
+.planta .caja-grupo { fill: none; stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 6 3; pointer-events: none; }
+.planta .caja-grupo.comp { stroke: var(--serie-5, #6a3d9a); }
+.planta .caja-grupo.bloq { stroke: var(--dim); }
+.planta .caja-grupo-rot, .planta .caja-grupo.comp-rot { font: 600 11px var(--fuente, sans-serif); fill: var(--ink); paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; pointer-events: none; }
+.planta .caja-ctx { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.planta .caja-multi { fill: none; stroke: var(--accent); stroke-width: 1.6; pointer-events: none; }
+.barra-ctx { position: absolute; left: 50%; transform: translateX(-50%); bottom: 40px; z-index: 6; display: flex; gap: 6px; align-items: center; background: var(--window); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-ctx button { font-size: 12px; padding: 3px 8px; }
+.ruta-ctx { font-size: 12.5px; margin: 0 0 6px; }
+.esquema-caja { max-height: 260px; overflow: auto; border: 1px solid var(--hair); border-radius: 6px; background: var(--field, #fff); }
+.esquema { list-style: none; margin: 0; padding: 2px 0; font-size: 12.5px; }
+.esquema li { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px calc(8px + var(--n, 0) * 14px); min-height: 26px; cursor: pointer; border-bottom: 1px solid var(--hair); }
+.esquema li:hover { background: var(--tint); }
+.esquema li.sel { background: color-mix(in srgb, var(--elegido) 18%, transparent); }
+.esquema li.multi { box-shadow: inset 3px 0 0 var(--accent); }
+.esquema li.ctx .esq-nombre { text-decoration: underline; }
+.esquema li.comp .esq-nombre::before { content: '◆ '; color: var(--serie-5, #6a3d9a); }
+.esq-nombre { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.esq-muro .esq-nombre { font-weight: 500; }
+.esq-tipo { color: var(--ink2); font-size: 11.5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.esq-abrir, .esq-icono { border: 0; background: none; padding: 0 4px; min-width: 24px; min-height: 24px; cursor: pointer; font-size: 13px; color: var(--ink2); }
+.esq-icono { opacity: .45; } .esq-icono.on { opacity: 1; }
+.esq-acciones { margin-top: 6px; }
+.esq-acciones .activo { background: var(--accent); color: #fff; }
+.esq-detalle { margin-top: 8px; padding: 8px; border: 1px solid var(--hair); border-radius: 6px; }
+.esq-detalle h4 { margin: 0 0 6px; font-size: 13px; }
+.esq-campo { display: flex; gap: 6px; align-items: center; font-size: 12.5px; margin-bottom: 6px; }
+.esq-input { flex: 1; min-width: 0; }
+.esq-uso { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; margin-top: 8px; }
+.esq-uso label { display: flex; gap: 4px; align-items: center; }
+button.peligro { color: var(--mal); }
