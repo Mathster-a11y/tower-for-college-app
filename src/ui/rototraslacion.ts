@@ -162,9 +162,14 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     : `${p.nombre}\nJ = ${fmt(p.J, 3)} m⁴ (${fmt(p.frac * 100, 1)} % de ΣJ)\na = ${fmt(p.a)} m del eje de inercia\ntraslación: ${fmt(p.tras, 2)} t\nrotación: ${fmt(p.rot, 2)} t\ntotal: ${fmt(p.total, 2)} t`;
   // rótulos sin superponerse: se corren hacia arriba si chocan
   const ocupados: { x: number; y: number }[] = [];
-  const rotulo = (x: number, y: number, texto: string, clase = 'd-valor', ancla = 'middle') => {
-    let yy = y;
-    while (ocupados.some(o => Math.abs(o.x - x) < 46 && Math.abs(o.y - yy) < 12)) yy -= 12;
+  const rotulo = (x0: number, y: number, texto: string, clase = 'd-valor', ancla = 'middle') => {
+    // que no se salga del dibujo por los costados (ancho aproximado del texto: 6 px por letra)
+    const medio = ancla === 'middle' ? texto.length * 3.7 : 0;
+    const x = ancla === 'middle' ? Math.min(ancho - 4 - medio, Math.max(4 + medio, x0)) : x0;
+    const choca = (q: number) => ocupados.some(o => Math.abs(o.x - x) < 46 && Math.abs(o.y - q) < 12);
+    let yy = Math.max(14, y);
+    while (choca(yy) && yy - 12 >= 14) yy -= 12;               // primero hacia arriba, sin salir del dibujo
+    if (choca(yy)) { yy = Math.max(14, y); while (choca(yy) && yy + 12 < alto - 4) yy += 12; }   // si no hay lugar, hacia abajo
     ocupados.push({ x, y: yy });
     g.append(el('text', { x, y: yy, class: clase, 'text-anchor': ancla }, texto));
   };

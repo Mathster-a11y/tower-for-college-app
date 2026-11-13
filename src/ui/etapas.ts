@@ -65,8 +65,17 @@ export function tablaControles(cs: Control[]): H {
   return h('div', { class: 'scroll' }, t);
 }
 /** dos dibujos lado a lado si entran; si no, uno debajo del otro */
-function anchos(tam: Tam, n2 = 2) { const a = tam.ancho ?? 600; return a >= 760 ? { ancho: Math.floor((a - 16 * (n2 - 1)) / n2), alto: Math.max(320, (tam.alto ?? 520) - 70) } : { ancho: a, alto: 380 }; }
-function fila(...hijos: Node[]) { return h('div', { class: 'fila-dibujos' }, ...hijos); }
+/**
+ * Ancho de cada dibujo de una fila: dos por fila solo si cada uno queda de 420 px o más; si no, uno debajo del otro.
+ * El dibujo se arma con el ancho real de su columna, así el texto queda en su tamaño (no se achica al escalar).
+ */
+let columnasFila = 1;
+function anchos(tam: Tam, n2 = 2) {
+  const a = tam.ancho ?? 600;
+  columnasFila = a >= n2 * 420 + 16 * (n2 - 1) ? n2 : 1;
+  return columnasFila > 1 ? { ancho: Math.floor((a - 16 * (n2 - 1)) / n2), alto: Math.max(320, Math.min(560, (tam.alto ?? 520) - 70)) } : { ancho: a, alto: 380 };
+}
+function fila(...hijos: Node[]) { const f = h('div', { class: 'fila-dibujos' }, ...hijos); f.style.gridTemplateColumns = `repeat(${columnasFila}, minmax(0, 1fr))`; return f; }
 function nivelElegido(alt: PuntoAltura[], clave: string): PuntoAltura | undefined {
   const sobre = alt.filter(x => x.z > 0);
   const nom = estado.sub[clave];
@@ -584,7 +593,10 @@ const cartaE: Etapa = {
       seg.append(b);
     });
     c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, VARIANTES.find(x => x[0] === vr)![2]));
-    c.append(carta(dc, vr, Math.max(1000, Math.min(1300, tam.ancho ?? 1100))));
+    // la carta necesita 1000 px: nunca se achica a menos del 86 % (si no entra, el centro se desplaza de costado)
+    const cv = carta(dc, vr, Math.max(1000, Math.min(1300, tam.ancho ?? 1100)));
+    cv.style.minWidth = '860px';
+    c.append(cv);
   },
   nombreCentro: () => `Carta de la torre · viento ${estado.dir}`,
   estado: () => 'informativo',

@@ -67,7 +67,10 @@ export interface GraficoAltura {
 }
 
 export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
-  const ancho = Math.max(300, tam.ancho ?? 400), alto = Math.max(240, tam.alto ?? 340), mi = 56, md = 18, ms = 14, mb = 42;
+  // margen izquierdo según el nombre de nivel más largo (los muy largos se acortan con «…»; el nombre entero va en el título)
+  const corto = (n: string) => (n.length > 14 ? n.slice(0, 13).trimEnd() + '…' : n);
+  const largoNom = Math.max(4, ...g.series.flatMap(s => s.puntos.map(p => corto(String(p.nivel ?? '')).length)));
+  const ancho = Math.max(300, tam.ancho ?? 400), alto = Math.max(240, tam.alto ?? 340), mi = Math.min(120, Math.max(56, 14 + largoNom * 6.7)), md = 18, ms = 14, mb = 42;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
   const cap = document.createElement('figcaption');
@@ -94,13 +97,15 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   // grilla y ejes (recesivos)
   tx.forEach(v => {
     svg.append(el('line', { x1: X(v), x2: X(v), y1: ms, y2: alto - mb, class: v === 0 ? 'd-cero' : 'd-grilla' }));
-    svg.append(el('text', { x: X(v), y: alto - mb + 15, class: 'd-eje', 'text-anchor': 'middle' }, fmt(v, decimales(tx))));
+    // la última marca se apoya hacia adentro para que su número no se salga del dibujo
+    const ancla = X(v) > ancho - md - 24 ? 'end' : 'middle';
+    svg.append(el('text', { x: ancla === 'end' ? Math.min(X(v) + 4, ancho - 2) : X(v), y: alto - mb + 15, class: 'd-eje', 'text-anchor': ancla }, fmt(v, decimales(tx))));
   });
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, `${g.eje} (${g.unidad})`));
   // niveles: rótulos en el eje vertical (no más de ~10)
   const niveles = [...new Map(todos.map(p => [p.z, p.nivel])).entries()].sort((a, b) => b[0] - a[0]);
   const cada = Math.max(1, Math.ceil(niveles.length / 10));
-  niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) svg.append(el('text', { x: mi - 6, y: Math.min(Z(z) + 4, alto - mb - 2), class: 'd-eje', 'text-anchor': 'end' }, n)); });   // el más bajo no baja hasta las marcas del eje
+  niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) { const t = el('text', { x: mi - 6, y: Math.min(Z(z) + 4, alto - mb - 2), class: 'd-eje', 'text-anchor': 'end' }, corto(n)); if (corto(n) !== n) t.append(el('title', {}, n)); svg.append(t); } });   // el más bajo no baja hasta las marcas del eje
   if (!g.categorias && zMin < 0) svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(0), y2: Z(0), class: 'd-pb' }));
   // series
   const dec = g.decimales ?? 2;
@@ -348,7 +353,9 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       const c = el('circle', { cx: X(lejos), cy: Y(m.cargReves / 10), r: 4.5, class: 'd-reves' });
       c.append(el('title', {}, `${m.id}: con el viento al revés, esta fibra queda a ${fmt(m.cargReves / 10, 1)} kg/cm² (compresión máxima)`));
       svg.append(c);
-      svg.append(el('text', { x: X(lejos) + 7, y: Y(m.cargReves / 10) + 4, class: 'd-eje' }, 'viento al revés'));
+      // a la derecha del punto; si no entra, a la izquierda
+      const derecha = X(lejos) + 7 + 90 < ancho;
+      svg.append(el('text', { x: derecha ? X(lejos) + 7 : X(lejos) - 7, y: Y(m.cargReves / 10) + 4, class: 'd-eje', 'text-anchor': derecha ? 'start' : 'end' }, 'viento al revés'));
     }
     svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
   });

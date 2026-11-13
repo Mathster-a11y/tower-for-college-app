@@ -396,7 +396,10 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     const a = P(0, -S / 2 - 18, zw), b = P(0, -S / 2 - 0.3, zw);
     flecha(g, a.x, a.y, b.x, b.y, 'resultante', 3.2);
     txt(g, a.x - 6, a.y - 4, `W = ${fmt(d.W, 1)} t`, 'd-valor', 'end');
-    txt(g, a.x - 6, a.y + 10, `hW = ${fmt(d.hw)} m (desde la fundación)`, 'd-eje', 'end');
+    // si no entra a la izquierda de la flecha, va en dos renglones
+    const tHw = `hW = ${fmt(d.hw)} m (desde la fundación)`;
+    if (a.x - 6 - tHw.length * 6.8 > 2) txt(g, a.x - 6, a.y + 10, tHw, 'd-eje', 'end');
+    else { txt(g, a.x - 6, a.y + 10, `hW = ${fmt(d.hw)} m`, 'd-eje', 'end'); txt(g, a.x - 6, a.y + 22, 'desde la fundación', 'd-eje', 'end'); }
     yW = a.y;
   }
   // eje de la torre por el CR y deformada exagerada (se traslada en el sentido del viento)
@@ -448,11 +451,12 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   const rot = nivelesRotulados(d, Yfake, 14);
   d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0 && !(Math.abs(Yfake(n.z) - yW) < 22)) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
   // leyenda de lectura
-  const xl = ancho - 290;
-  [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', `deformada exagerada del eje (por el CR)${d.roto ? ` · δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm` : ''}`]].forEach(([c, t], i) => {
+  const xl = ancho - 300;
+  [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'deformada exagerada del eje (por el CR)']].forEach(([c, t], i) => {
     g.append(el('rect', { x: xl, y: 60 + i * 18, width: 14, height: 4, rx: 2, class: `ct-ley ${c}` }));
     txt(g, xl + 20, 65 + i * 18, t, 'd-eje');
   });
+  if (d.roto) txt(g, xl + 20, 65 + 4 * 18, `δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm`, 'd-eje');
 }
 
 // ------------------------------------------------------------------ D · Vuelco y tensiones en el suelo
@@ -533,7 +537,7 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // ---- derecha: planta tipo dentro de la base y las dos tablas de la hoja
   const x0 = xR + 30, w = ancho - x0 - 16;
   txt(g, x0, 54, 'Planta tipo y base', 'ct-col-tit');
-  const kp = Math.min((w - 110) / Math.max(v.bB, S), 150 / Math.max(v.aB, d.T));
+  const kp = Math.min((w - 160) / Math.max(v.bB, S), 150 / Math.max(v.aB, d.T));   // deja lugar a la derecha para la cota a1
   const pcx = x0 + 60 + (Math.max(v.bB, S) / 2) * kp, pcy = 100 + (Math.max(v.aB, d.T) / 2) * kp;
   g.append(el('rect', { x: pcx - (v.bB / 2) * kp, y: pcy - (v.aB / 2) * kp, width: v.bB * kp, height: v.aB * kp, class: 'ct-base-planta' }));
   g.append(el('rect', { x: pcx - (S / 2) * kp, y: pcy - (d.T / 2) * kp, width: S * kp, height: d.T * kp, class: 'ct-planta' }));

@@ -208,11 +208,20 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
   svg.append(el('text', { x: (PX(0) + PX(c.W)) / 2, y: yF - 26, class: 'f-txt f-nota', 'text-anchor': 'middle' }, `W = ${fmt(c.W, 1)} t`));
   svg.append(el('circle', { cx: Ox, cy: Oy, r: 3.5, class: 'f-punto ok' }));
   svg.append(el('text', { x: Ox + 6, y: Oy + 4, class: 'f-txt f-fuerza' }, 'O (polo)'));
-  svg.append(el('text', { x: px, y: Oy + 28, class: 'f-txt f-nota' }, `escala: 1 px = ${fmt(1 / escF, 2)} t`));
-  svg.append(el('text', { x: px, y: Oy + 44, class: 'f-txt f-nota' }, 'rayo Oc ∥ lado c (misma letra y color)'));
-  svg.append(el('text', { x: px, y: Oy + 68, class: 'f-txt f-fuerza' }, `R: W = ${fmt(c.W, 1)} t`));
-  svg.append(el('text', { x: px, y: Oy + 84, class: 'f-txt' }, `a hw = ${fmt(c.zR - zBase)} m de la base`));
-  svg.append(el('text', { x: px, y: Oy + 100, class: 'f-txt f-nota' }, 'fuerzas de los pisos: sin la franja de PB, que va al terreno'));
+  // notas debajo del polo, cortadas en renglones según el lugar que queda a la derecha (no se salen del dibujo)
+  const porRenglon = Math.max(14, Math.floor((ancho - px - 6) / 6.6));
+  let yN = Oy + 28;
+  const nota = (t: string, clase = 'f-txt f-nota', salto = 13) => {
+    const renglones: string[] = [];
+    t.split(' ').forEach(w => { const u = renglones.length - 1; if (u >= 0 && (renglones[u] + ' ' + w).length <= porRenglon) renglones[u] += ' ' + w; else renglones.push(w); });
+    renglones.forEach(r => { svg.append(el('text', { x: px, y: yN, class: clase }, r)); yN += salto; });
+  };
+  nota(`escala: 1 px = ${fmt(1 / escF, 2)} t`);
+  nota('rayo Oc ∥ lado c (misma letra y color)');
+  yN += 8;
+  nota(`R: W = ${fmt(c.W, 1)} t`, 'f-txt f-fuerza', 16);
+  nota(`a hw = ${fmt(c.zR - zBase)} m de la base`, 'f-txt', 16);
+  nota('fuerzas de los pisos: sin la franja de PB, que va al terreno');
   activarResaltado(svg);
   return svg;
 }

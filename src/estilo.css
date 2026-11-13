@@ -60,6 +60,8 @@
 }
 
 /* ------------------------------------------------------------------ base */
+/* lo oculto (atributo hidden) se oculta siempre, aunque su clase le ponga display: flex, grid o block */
+[hidden] { display: none !important; }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--window); color: var(--ink); font: 13px/1.45 var(--fuente); display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
@@ -874,3 +876,9 @@ body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !impor
 .bloque3d > .tira .plegar { margin-left: 6px; }
 @media (prefers-reduced-motion: reduce) { .plegar { transition: none; } }
 @media (max-width: 1280px) { .divisor-der { display: none; } .app.sin-der > .derecha { visibility: visible; } }
+/* paneles flotantes de la planta: nunca más altos que la planta (se desplazan por dentro) y sin tapar los botones de zoom */
+.calco-panel { max-height: calc(100% - 60px); overflow-y: auto; overscroll-behavior: contain; z-index: 3; }
+.piezas-panel { right: 58px !important; left: auto !important; max-height: calc(100% - 120px) !important; }
+/* menús largos (Ejemplos con las torres de prueba): se desplazan dentro de la pantalla */
+.menu { max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; }
+#torres-prueba { max-height: none; overflow: visible; }
