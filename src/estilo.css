@@ -544,7 +544,7 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 /* informe para imprimir */
 .informe { display: none; }
 @media print {
-  body.imprimiendo > *:not(.informe):not(.lamina-doc) { display: none !important; }
+  body.imprimiendo > *:not(.informe):not(.lamina-doc):not(.carta-pdf) { display: none !important; }
   body.imprimiendo { background: #fff; overflow: visible; height: auto; }
   body.imprimiendo .informe { display: block; color: #111; font: 10.5pt var(--fuente); }
   .informe .inf-portada { border-bottom: 2px solid #111; margin-bottom: 10mm; padding-bottom: 4mm; }
@@ -1118,3 +1118,21 @@ button.peligro { color: var(--mal); }
 
 /* rótulos de la axonometría legibles sobre el volumen de viento y el prisma deformado */
 .carta-C text { paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; stroke-linejoin: round; }
+
+/* ---- Carta PDF (A4 apaisado, una carta por hoja) ---- */
+.carta-pdf { display: none; }
+@media print {
+  body.imprimiendo .carta-pdf { display: block; }
+  .cp-hoja { width: 297mm; height: 210mm; padding: 8mm 10mm 7mm; box-sizing: border-box; break-after: page; display: flex; flex-direction: column; gap: 3mm; overflow: hidden; background: #fff; }
+  .cp-hoja:last-child { break-after: auto; }
+  .cp-cab { display: flex; justify-content: space-between; gap: 8mm; border-bottom: 1.2pt solid #1a6bbd; padding-bottom: 2mm; }
+  .cp-cab b { display: block; font-size: 14pt; color: #1f2328; }
+  .cp-cab span { display: block; font-size: 9pt; color: #5f6b76; max-width: 170mm; }
+  .cp-rotulo { text-align: right; flex: none; }
+  .cp-rotulo b { font-size: 11pt; }
+  .cp-carta { flex: 1; width: 100%; height: auto; min-height: 0; max-height: 165mm; }
+  .cp-pie { display: flex; flex-wrap: wrap; gap: 2mm 5mm; font-size: 8.5pt; color: #1f2328; align-items: center; }
+  .cp-ctrl i { display: inline-block; width: 7pt; height: 7pt; border-radius: 50%; background: #8a949e; margin-right: 3pt; vertical-align: middle; }
+  .cp-ctrl.verifica i, .cp-ctrl.ok i { background: #1a7a3a; } .cp-ctrl.no-verifica i, .cp-ctrl.mal i { background: #c62828; } .cp-ctrl.revisar i { background: #8a5f00; }
+  .cp-marca { margin-left: auto; color: #8a949e; }
+}
