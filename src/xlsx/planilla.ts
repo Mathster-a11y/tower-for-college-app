@@ -12,6 +12,9 @@ import JSZip from 'jszip';
 import type { PlanillaDatos, PlanillaRes } from '../engine/planilla';
 import type { Proyecto } from '../engine/modelo';
 import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
+import { ejemploGuia } from '../engine/modelo';
+import { proyectoDesdeTablas, tablasProyecto, type Tabla } from './proyectoTablas';
+import { leerLibro } from './tablas';
 
 export const HOJAS = {
   viento: 'viento', mnyq: 'M,NyQ', jpar: 'J Tabiques paralelos', jort: 'J Tabiques ortogonales',
@@ -92,6 +95,19 @@ function hojaT3D(p: Proyecto): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${filas.join('')}</sheetData></worksheet>`;
 }
 
+const COLS = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+/** hoja simple con una tabla (encabezados en la fila 1, fija) */
+function tablaXml(t: Tabla): string {
+  const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const cols = `<cols>${t.anchos.map((w, j) => `<col min="${j + 1}" max="${j + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>`;
+  const filas = t.filas.map((f, r) => `<row r="${r + 1}">${f.map((v, c) => {
+    if (v === null || v === '') return '';
+    const ref = `${COLS(c + 1)}${r + 1}`;
+    return typeof v === 'number' ? `<c r="${ref}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+  }).join('')}</row>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${filas}</sheetData></worksheet>`;
+}
+
 async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Record<string, string>) {
   if (rutas[nombre]) { zip.file(rutas[nombre], xml); return; }
   let n = 1;
@@ -128,6 +144,8 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
     const f = zip.file(ruta);
     if (f) zip.file(ruta, borrarResultadosGuardados(await f.async('string')));
   }
+  // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
+  for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);
   // recalcular todo al abrir y descartar la cadena de cálculo vieja
   let wb = await zip.file('xl/workbook.xml')!.async('string');
@@ -141,8 +159,12 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 }
 
-/** Abre una planilla: si tiene la hoja «T3D» devuelve el proyecto guardado; si no, solo los datos del sitio y los niveles. */
-export async function leerPlanilla(archivo: ArrayBuffer | Uint8Array): Promise<{ proyecto: Proyecto | null; sitio: Partial<Proyecto['sitio']>; cotas: number[] }> {
+/**
+ * Abre una planilla: si tiene las tablas «T3D …» arma el proyecto con ellas (mandan sobre el JSON, por si se
+ * editaron a mano); si solo tiene la hoja «T3D», usa el JSON; si no, devuelve los datos del sitio y los niveles.
+ */
+export async function leerPlanilla(archivo: ArrayBuffer | Uint8Array): Promise<{ proyecto: Proyecto | null; sitio: Partial<Proyecto['sitio']>; cotas: number[]; avisos: string[] }> {
+  const avisos: string[] = [];
   const zip = await JSZip.loadAsync(archivo);
   const rutas = await rutasHojas(zip);
   const comp = leerCompartidos(await zip.file('xl/sharedStrings.xml')?.async('string') ?? null);
@@ -154,6 +176,8 @@ export async function leerPlanilla(archivo: ArrayBuffer | Uint8Array): Promise<{
     for (let i = 0; i < n; i++) json += String(leerCelda(xml, `A${3 + i}`, comp) ?? '');
     try { proyecto = JSON.parse(json) as Proyecto; } catch { proyecto = null; }
   }
+  const desdeTablas = proyectoDesdeTablas(await leerLibro(archivo), proyecto ?? ejemploGuia());
+  if (desdeTablas) { proyecto = desdeTablas.proyecto; avisos.push(...desdeTablas.avisos); }
   const sitio: Partial<Proyecto['sitio']> = {};
   const cotas: number[] = [];
   if (rutas[HOJAS.viento]) {
@@ -162,5 +186,5 @@ export async function leerPlanilla(archivo: ArrayBuffer | Uint8Array): Promise<{
     Object.assign(sitio, { V: g('C4'), Kd: g('D4'), I: g('E4'), zg: g('F4'), alfa: g('G4'), Kzt: g('I4'), G: g('J4'), Cpb: g('K4'), Cps: g('L4'), GCpi: g('O4') });
     for (let r = 5; r <= 58; r++) cotas.push(g(`B${r}`) ?? 0);
   }
-  return { proyecto, sitio, cotas };
+  return { proyecto, sitio, cotas, avisos };
 }

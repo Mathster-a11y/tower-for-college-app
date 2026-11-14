@@ -245,7 +245,9 @@ async function abrirArchivo(f: File) {
   if (leido.proyecto) {
     if (!proyectoValido(leido.proyecto)) throw new Error('La hoja «T3D» de la planilla está dañada.');
     plantillaAbierta = buf;
-    reemplazarConCopia(leido.proyecto); return;
+    reemplazarConCopia(leido.proyecto);
+    if (leido.avisos.length) mensaje(`Planilla abierta · ${leido.avisos.length} aviso${leido.avisos.length > 1 ? 's' : ''}: ${leido.avisos[0]}`);
+    return;
   }
   const imp = interpretar(await leerLibro(buf));
   dialogoImportar(imp, f.name, imp.tipo === 'planilla' ? buf : null);

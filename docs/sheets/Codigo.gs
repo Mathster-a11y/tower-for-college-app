@@ -14,7 +14,7 @@
  *    este script lo anota y Torre 3D lo trae en unos segundos.
  * La dirección /exec es la llave: quien la tenga puede leer y escribir esta planilla. No la publiques.
  */
-const HOJAS_EDITABLES = ['T3D Niveles', 'T3D Muros'];
+const HOJAS_EDITABLES = ['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías'];
 const CELDAS_VIENTO = ['C4', 'D4', 'E4', 'F4', 'G4', 'I4', 'J4', 'K4', 'L4', 'O4'];
 const TROZO = 40000;   // largo de cada celda de «T3D» (Sheets admite 50 000 caracteres por celda)
 

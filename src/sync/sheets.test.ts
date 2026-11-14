@@ -24,12 +24,12 @@ describe('sincronización con Google Sheets', () => {
     let recibido: Lectura | null = null;
     const c = new SincroSheets('https://script.google.com/macros/s/X/exec', { remoto: l => { recibido = l; }, estado: () => {} }, fetchFn);
     expect(await c.conectar(() => paquete(p, {}))).toBe('escrito');
-    expect(s.tablas.map(t => t.nombre)).toEqual(['T3D Niveles', 'T3D Muros']);
+    expect(s.tablas.map(t => t.nombre)).toEqual(['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías']);
     // sin cambios en la hoja no trae nada (tampoco su propia escritura)
     expect(await c.revisar()).toBe(false);
     // a mano: el muro M1 pasa a medir 5 m y la velocidad del viento a 50 m/s
     editarAMano(() => {
-      const t = s.tablas[1].filas; const col = t[0].indexOf('Largo (m)'); const fila = t.find(f => f[0] === 'M1')!; fila[col] = 5;
+      const t = s.tablas.find(x => x.nombre === 'T3D Muros')!.filas; const col = t[0].indexOf('Largo (m)'); const fila = t.find(f => f[0] === 'M1')!; fila[col] = 5;
       s.viento = { C4: 50 };
     });
     expect(await c.revisar()).toBe(true);

@@ -12,11 +12,14 @@
  * Si las dos cambian a la vez gana la última y la app avisa. La dirección es la llave: quien la tenga puede escribir.
  */
 import type { Proyecto } from '../engine/modelo';
-import { interpretar, tablaDelProyecto } from '../engine/importar';
+import { interpretar } from '../engine/importar';
+import { proyectoDesdeTablas, tablasProyecto, T } from '../xlsx/proyectoTablas';
 import type { Hoja, Valor } from '../xlsx/tablas';
 import type { ValorCelda } from '../xlsx/xml';
 
 export const HOJA_NIVELES = 'T3D Niveles', HOJA_MUROS = 'T3D Muros';
+/** hojas que la app escribe y vuelve a leer (las tablas del proyecto) */
+export const HOJAS_TABLAS = Object.values(T) as string[];
 /** celdas de datos de la hoja «viento» que se leen de vuelta */
 export const CELDAS_SITIO: Record<string, keyof Proyecto['sitio']> = { C4: 'V', D4: 'Kd', E4: 'I', F4: 'zg', G4: 'alfa', I4: 'Kzt', J4: 'G', K4: 'Cpb', L4: 'Cps', O4: 'GCpi' };
 
@@ -31,12 +34,24 @@ const plano = (v: ValorCelda): ValorPlano => ('num' in v ? v.num : 'str' in v ? 
 export function paquete(p: Proyecto, celdas: Record<string, Record<string, ValorCelda>>): Paquete {
   const c: Paquete['celdas'] = {};
   for (const [hoja, cs] of Object.entries(celdas)) { c[hoja] = {}; for (const [ref, v] of Object.entries(cs)) c[hoja][ref] = plano(v); }
-  const tablas = tablaDelProyecto(p.niveles, p.muros).filter(t => t.nombre !== 'Cómo llenar').map(t => ({ nombre: t.nombre === 'Niveles' ? HOJA_NIVELES : HOJA_MUROS, filas: t.filas }));
+  // la torre completa en tablas legibles: con ellas la hoja alcanza sola para volver a armarla
+  const tablas = tablasProyecto(p).map(t => ({ nombre: t.nombre, filas: t.filas }));
   return { celdas: c, tablas, t3d: JSON.stringify(p) };
 }
 
 /** el proyecto que queda después de una edición hecha en la hoja: niveles, muros y viento de la hoja sobre el anterior */
 export function proyectoDesdeHoja(base: Proyecto, l: Lectura): { proyecto: Proyecto; avisos: string[] } {
+  // si la hoja trae todas las tablas «T3D …», el proyecto sale entero de ellas (viento incluido, desde «T3D Proyecto»)
+  const completas = proyectoDesdeTablas(l.tablas.map(t => ({ ...t, celda: () => null })), base);
+  if (completas && l.tablas.some(t => t.nombre === T.proyecto && t.filas.length > 1)) {
+    // los datos del viento cambiados a mano en la hoja «viento» (la planilla del curso) también valen
+    for (const [ref, campo] of Object.entries(CELDAS_SITIO)) {
+      const v = l.viento[ref];
+      const x = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.'));
+      if (v !== null && v !== undefined && v !== '' && isFinite(x) && x !== base.sitio[campo]) completas.proyecto.sitio[campo] = x;
+    }
+    return completas;
+  }
   const hojas = l.tablas.map(t => ({ ...t, nombre: t.nombre === HOJA_NIVELES ? 'Niveles' : t.nombre === HOJA_MUROS ? 'Muros' : t.nombre }));
   const imp = interpretar(hojas);
   const p: Proyecto = structuredClone(base);
