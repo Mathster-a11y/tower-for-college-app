@@ -1202,3 +1202,28 @@ button.peligro { color: var(--mal); }
 .exo-dibujo .ex-neutro { stroke: var(--ink2); stroke-dasharray: 4 3; }
 .exo-detalle { max-width: 1100px; }
 .exo-detalle .exo-barra-detalle { width: 100%; height: auto; }
+
+/* barra de transformaciones (siempre a mano) y herramienta en uso abajo */
+.barra-transformar { position: absolute; left: 10px; bottom: 40px; z-index: 3; display: flex; gap: 2px; padding: 3px; border: 1px solid var(--edge); border-radius: 10px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 1px 4px rgb(0 0 0 / .08); max-width: calc(100% - 90px); overflow-x: auto; scrollbar-width: none; }
+.barra-transformar[hidden] { display: none; }
+.barra-transformar button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 42px; height: 40px; padding: 2px 5px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); line-height: 1; touch-action: manipulation; }
+.barra-transformar button .ic { font-size: 17px; }
+.barra-transformar button .tx { font-size: 9.5px; color: var(--ink2); margin-top: 2px; white-space: nowrap; }
+.barra-transformar button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.barra-transformar button[aria-pressed="true"] { background: var(--accent); color: #fff; } .barra-transformar button[aria-pressed="true"] .tx { color: #fff; }
+.barra-transformar button[aria-disabled="true"] { opacity: .38; }
+@media (pointer: coarse) { .barra-transformar button { min-width: 48px; height: 46px; } .barra-transformar button .ic { font-size: 19px; } }
+.colocar-panel.compacto { position: absolute; left: 10px; bottom: 96px; top: auto; width: auto; max-width: min(520px, calc(100% - 20px)); max-height: none; z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px; box-shadow: 0 2px 8px rgb(0 0 0 / .12); }
+.colocar-panel.compacto > b { display: none; }
+.colocar-panel.compacto .col-instr { margin: 0; font-size: 12.5px; flex: 1 1 220px; }
+@media (pointer: coarse) { .colocar-panel.compacto { bottom: 102px; } }
+.prec-panel > b, .med-panel > b { cursor: pointer; }
+.prec-panel > b::after, .med-panel > b::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
+.prec-panel.plegado > b::after, .med-panel.plegado > b::after { content: ' ▸ (tocá para ver)'; }
+.prec-panel.plegado > :not(b), .med-panel.plegado > :not(b) { display: none !important; }
+.prec-panel.plegado, .med-panel.plegado { width: auto; }
+
+.barra-transformar.angosta { gap: 0; max-width: calc(100% - 64px); }
+.barra-transformar.angosta button { min-width: 30px; height: 40px; padding: 1px 2px; }
+.barra-transformar.angosta button .tx { display: none; }
+.colocar-panel.compacto { max-width: min(520px, calc(100% - 80px)); }

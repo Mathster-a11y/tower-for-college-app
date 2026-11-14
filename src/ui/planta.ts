@@ -187,7 +187,8 @@ export function montarPlanta(cont: HTMLElement) {
   bMover.title = 'Arrastrar un muro para moverlo (flechas: 5 cm; con Mayúsculas: 1 m)';
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina. Después del primer punto se puede escribir el largo y Enter.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
-  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); };
+  let refrescarBarraTr = () => { /* se completa cuando está la barra de transformaciones */ };
+  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
   bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
@@ -795,9 +796,51 @@ export function montarPlanta(cont: HTMLElement) {
     },
   };
   const col = montarColocar(apiPlanta);
+  // barra de transformaciones: siempre a mano (abajo a la izquierda de la planta), con lápiz, dedo o mouse
+  const barraTr = document.createElement('div'); barraTr.className = 'barra-transformar'; barraTr.setAttribute('role', 'toolbar'); barraTr.setAttribute('aria-label', 'Transformar lo elegido');
+  const TR: [string, string, string, () => void, string?][] = [
+    ['✥', 'Mover', 'Mover: tocá un punto base y el destino (o escribí la distancia)', () => col.herramienta('mover'), 'mover'],
+    ['⧉', 'Copiar', 'Copiar: punto base y destino; deja el original', () => col.herramienta('copiar'), 'copiar'],
+    ['↺', '90°', 'Girar 90° a la izquierda, alrededor del centro de lo elegido', () => col.transformar('g90')],
+    ['↻', '90°', 'Girar 90° a la derecha, alrededor del centro de lo elegido', () => col.transformar('g270')],
+    ['∠', 'Girar°', 'Girar en cualquier ángulo: tocá el centro (el ángulo se escribe abajo)', () => col.herramienta('girar-libre'), 'girar-libre'],
+    ['⇋', 'Espejar', 'Espejar con un eje vertical por el centro de lo elegido', () => col.transformar('ex')],
+    ['⇵', 'Espejar', 'Espejar con un eje horizontal por el centro de lo elegido', () => col.transformar('ey')],
+    ['⟋', 'Simetría', 'Simetría por un eje: tocá dos puntos (horizontal, vertical o a 45°)', () => col.herramienta('espejar'), 'espejar'],
+    ['⤡', 'Escalar', 'Escalar: tocá el punto base (el factor se escribe abajo)', () => col.herramienta('escalar'), 'escalar'],
+  ];
+  const botonesTr = TR.map(([ic, t, tit, f, h]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.title = tit; b.dataset.h = h ?? '';
+    const i = document.createElement('span'); i.className = 'ic'; i.textContent = ic; const sp = document.createElement('span'); sp.className = 'tx'; sp.textContent = t;
+    b.append(i, sp);
+    b.addEventListener('click', () => { if (b.getAttribute('aria-disabled') === 'true') { mensaje('Primero elegí qué transformar: tocá un muro o un grupo, o varios con el lazo.'); return; } f(); refrescarTr(); });
+    barraTr.append(b); return b;
+  });
+  const bMasTr = document.createElement('button'); bMasTr.type = 'button'; bMasTr.title = 'Todas las herramientas de colocar: copias, matrices, alinear, editar muros'; bMasTr.innerHTML = '<span class="ic">⋯</span><span class="tx">Más</span>';
+  bMasTr.addEventListener('click', () => col.botones[0].click());
+  barraTr.append(bMasTr);
+  cont.appendChild(barraTr);
+  // en plantas angostas (tablet vertical) la barra queda solo con íconos, para que entren todos los botones
+  try { new ResizeObserver(() => barraTr.classList.toggle('angosta', cont.clientWidth < 620)).observe(cont); } catch { /* sin ResizeObserver */ }
+  function refrescarTr() {
+    const hay = col.hayEleccion(), act = col.herramientaActiva();
+    barraTr.hidden = modo !== 'mover' && modo !== 'lazo' && modo !== 'colocar';
+    botonesTr.forEach(b => { b.setAttribute('aria-disabled', String(!hay && !(b.dataset.h && b.dataset.h === act))); b.setAttribute('aria-pressed', String(!!b.dataset.h && b.dataset.h === act)); });
+  }
+  // los cuadros de la derecha (medidas, mover con precisión) se pliegan tocando el título; con pantalla táctil arrancan plegados
+  const tactilPlegar = matchMedia('(pointer: coarse)').matches;
+  cont.addEventListener('click', ev => {
+    const t = ev.target as HTMLElement;
+    const pan = t.closest('.prec-panel, .med-panel');
+    if (pan && t.tagName === 'B' && t.parentElement === pan) { pan.classList.toggle('plegado'); try { localStorage.setItem('torre3d.plegar.' + (pan.classList.contains('prec-panel') ? 'prec' : 'med'), pan.classList.contains('plegado') ? '1' : '0'); } catch { /* sin almacenamiento */ } }
+  });
+  const plegarInicial = (pan: HTMLElement, k: string) => { let v: string | null = null; try { v = localStorage.getItem('torre3d.plegar.' + k); } catch { /* */ } if (v === '1' || (v === null && tactilPlegar)) pan.classList.add('plegado'); };
+  plegarInicial(panelMed, 'med');
   const gui = montarGuias(apiPlanta);
   const edc = montarEditorContorno(apiPlanta);
-  estado.suscribir(() => { col.refrescar(); gui.refrescar(); });
+  estado.suscribir(() => { col.refrescar(); gui.refrescar(); refrescarTr(); });
+  refrescarBarraTr = refrescarTr;
+  refrescarTr();
   // comandos de teclado como en CAD: se escribe el alias (L, M, CO, RO, MI, ES, O, AL, PA, UN, F…) y Enter o Espacio
   const COMANDOS: Record<string, [string, () => void]> = {};
   const cmd = (alias: string[], nombre: string, f: () => void) => alias.forEach(a => { COMANDOS[a] = [nombre, f]; });
@@ -891,6 +934,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelPrec.className = 'calco-panel prec-panel';
   panelPrec.hidden = true;
   cont.appendChild(panelPrec);
+  plegarInicial(panelPrec, 'prec');
   let clavePrec = '';
   function armarPanelPrec() {
     const p = estado.proyecto, m = modo === 'mover' ? p.muros.find(x => x.id === estado.seleccion) : undefined;

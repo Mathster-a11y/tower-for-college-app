@@ -68,6 +68,8 @@ export function montarColocar(api: ApiPlanta) {
   const bCotas = document.createElement('button'); bCotas.type = 'button'; bCotas.textContent = 'Cotas';
   bCotas.title = 'Cotas de medición: tocá dos puntos (se pegan a los nodos de los muros) y después dónde va la línea de cota';
   let panelAbierto: 'colocar' | 'cotas' | null = null;
+  /** la herramienta se abrió desde la barra de transformaciones: al terminar se cierra todo (no queda el panel grande) */
+  let desdeBarra = false;
   const abrir = (q: typeof panelAbierto) => {
     panelAbierto = panelAbierto === q ? null : q;
     if (panelAbierto) document.dispatchEvent(new CustomEvent('torre:panel-planta', { detail: 'colocar' }));
@@ -85,6 +87,7 @@ export function montarColocar(api: ApiPlanta) {
   api.dock.appendChild(panel);
 
   const poner = (h: Herr) => {
+    if (!h && desdeBarra) { desdeBarra = false; if (panelAbierto === 'colocar') panelAbierto = null; }
     herr = h; pts = []; tocados = []; tipeo = ''; cursor = null; caminoNuevo = h === 'camino' ? { v: [] } : null;
     api.activar(!!h);
     svg.classList.toggle('colocando', !!h);
@@ -346,15 +349,20 @@ export function montarColocar(api: ApiPlanta) {
     // con una herramienta en uso, el panel se achica a la instrucción (no tapa la planta)
     if (herr) {
       panel.classList.add('compacto');
+      const planta = api.dock.parentElement;
+      if (planta && panel.parentElement !== planta) planta.appendChild(panel);
       const extra: HTMLElement[] = [];
       if (herr === 'camino') extra.push(tilde('arco', op.arco, v => { op.arco = v; if (v) op.curva = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), tilde('Bézier', op.curva, v => { op.curva = v; if (v) op.arco = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), boton('Terminar', 'Enter', () => { terminarCamino(); poner(null); }), boton('Cerrar', 'Cierra el camino', () => { terminarCamino(true); poner(null); }));
       if (herr === 'desfase') extra.push(campoN('a', op.dDesf, v => { op.dDesf = v; }, 44, 'm'));
       if (herr === 'girar-libre') extra.push(campoN('ángulo', op.angLibre, v => { op.angLibre = v; }, 44, '°'));
       if (herr === 'escalar') extra.push(campoN('factor', op.factor, v => { op.factor = v; }, 44));
+      if (herr === 'espejar') extra.push(tilde('dejar el original (copia)', op.conservar, v => { op.conservar = v; }));
+      if (herr === 'copiar') extra.push(campoN('copias', op.copias, v => { op.copias = Math.max(1, Math.round(v)); }, 36));
       panel.append(fila(...extra, boton('Cancelar', 'Esc', () => poner(null))));
       return;
     }
     panel.classList.remove('compacto');
+    if (panel.parentElement !== api.dock) api.dock.appendChild(panel);
     const s = sel(), n = resolver(estado.proyecto, s).ids.size;
     panel.append(mk('p', n ? `Elegido: ${n} muro${n > 1 ? 's' : ''}${s.g.length ? ` en ${s.g.length} grupo${s.g.length > 1 ? 's' : ''}` : ''}.` : 'Elegí un muro, un grupo o varios con el lazo.', 'col-nota'));
     // transformar
@@ -551,6 +559,20 @@ export function montarColocar(api: ApiPlanta) {
       document.dispatchEvent(new CustomEvent('torre:panel-planta', { detail: 'colocar' }));
       panel.classList.remove('plegado'); poner(h);
     },
+    /** desde la barra de transformaciones: la herramienta con su instrucción abajo, sin el panel grande */
+    herramienta: (h: 'mover' | 'copiar' | 'girar-libre' | 'espejar' | 'escalar') => {
+      if (vacia(sel())) { api.mensaje('Primero elegí qué transformar: tocá un muro o un grupo, o varios con el lazo.'); return; }
+      if (herr === h) { poner(null); return; }
+      desdeBarra = true; panelAbierto = 'colocar'; poner(h);
+    },
+    /** giros y simetrías al instante, alrededor del centro de lo elegido */
+    transformar: (t: 'g90' | 'g270' | 'ex' | 'ey') => {
+      const k = cajaSel(estado.proyecto, sel()), c = { x: k.cx, y: k.cy };
+      if (t === 'g90' || t === 'g270') operar({ t: 'girar', c, q: t === 'g90' ? 1 : 3 }, false);
+      else operar({ t: 'espejar', eje: t === 'ex' ? 'x' : 'y', c }, false);
+    },
+    hayEleccion: () => !vacia(sel()),
+    herramientaActiva: () => herr,
     botones: [bColocar, bCotas],
     capa,
     /** la planta cambió de herramienta: se cierra lo de acá */
