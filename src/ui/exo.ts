@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, vientoDeCuarto, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -270,7 +270,20 @@ export function panelExo(c: H) {
     const peores = [...d.r.controles].sort((a, b) => b.sigma / (def.sigmaAdm) - a.sigma / def.sigmaAdm).slice(0, 12);
     c.append(seccion('Barras más cargadas', tablaValores(['Barra', 'clase', 'N (t)', 'M (tm)', 'σ (kg/cm²)', 'λ', ''],
       peores.map(x => [`${x.cara} · ${x.id}`, x.clase, x.N, x.M, x.sigma / 10, x.lambda, x.estado === 'verifica' ? '✓' : '✗']), [0, 0, 1, 2, 0, 0, 0])).el);
-    c.append(h('p', { class: 'nota chica' }, `Acero: E = 2,1·10⁶ kg/cm², σ adm = ${fmt(def.sigmaAdm / 10, 0)} kg/cm². Pandeo: N ≤ π²·E·I / (1,7·L²) y λ = L / i ≤ 200. Los valores con el viento ${d.dir}.`));
+    c.append(h('p', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'}: E = ${fmt(def.E / 10, 0)} kg/cm², σ adm = ${fmt(def.sigmaAdm / 10, 0)} kg/cm². Pandeo: N ≤ π²·E·I / (1,7·L²) y λ = L / i ≤ 200. Los valores con el viento ${d.dir}.`));
+    // viento de cuarto: 0,71·A + 0,71·B en las columnas de las esquinas (lo que se descubrió en el Citicorp en 1978)
+    const dA = datosExo('A', def), dB = datosExo('B', def);
+    if (dA && dB) {
+      const filas = vientoDeCuarto(dA.r, dB.r).filter(x => x.NA + x.NB > 1e-6);
+      if (filas.length) {
+        const peor = filas.reduce((m, x) => (x.N45 > m.N45 ? x : m), filas[0]);
+        const sec = seccion('Viento a 45° (de cuarto)',
+          h('p', { class: 'nota' }, 'Con el viento en diagonal cada cara recibe 0,71 (cos 45°) del viento de frente y las dos direcciones actúan a la vez: 0,71·A + 0,71·B. Las columnas de las esquinas son de dos caras: suman las dos partes. Así se revisó el Citicorp en 1978.'),
+          tablaValores(['desde z (m)', 'N esquina, viento A (t)', 'N esquina, viento B (t)', 'N a 45° (t)', '45° / frente'], filas.slice().reverse().map(x => [x.z, x.NA, x.NB, x.N45, x.razon]), [2, 0, 0, 0, 2]),
+          h('p', { class: 'nota chica' }, `Peor tramo: desde ${fmt(peor.z, 2)} m, ${fmt(peor.N45, 0)} t a 45° contra ${fmt(Math.max(peor.NA, peor.NB), 0)} t de frente (× ${fmt(peor.razon, 2)}). Peor esquina, con los dos vientos en el sentido que suma; las diagonales de cada cara toman 0,71 de lo de frente.`));
+        c.append(sec.el);
+      }
+    }
   }
 }
 

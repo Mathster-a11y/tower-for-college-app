@@ -659,3 +659,32 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
   const def = armar();
   return { def, verifica: false, peso: pesoExo(def, entradas), pasos: maxPasos, motivo: 'no se encontró en los pasos previstos' };
 }
+
+// ------------------------------------------------------------------ viento de cuarto (45°)
+export interface FilaCuarto { z: number; NA: number; NB: number; N45: number; razon: number }
+/**
+ * Viento a 45°: cada cara recibe 0,71 (= cos 45°) del viento de frente y las dos direcciones actúan juntas
+ * (superposición lineal: 0,71·A + 0,71·B). Las columnas de las esquinas son de dos caras a la vez: suman las dos
+ * partes. Se toma la peor esquina (los dos vientos con el signo que suma) y |N| de la columna de esquina más cargada
+ * de cada tramo. razon = N45 / máx(NA, NB): 1,41 si las dos caras tiran igual.
+ */
+export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo): FilaCuarto[] {
+  const esquinas = (r: ResultadoExo) => {
+    const m = new Map<number, number>();
+    r.caras.forEach(c => {
+      const cols = c.esfuerzos.filter(e => e.clase === 'columna' && (e.fraccion ?? 1) === 1 && Math.abs(e.a.s) > 1e-6);
+      cols.forEach(e => {
+        const zb = Math.min(e.a.z, e.b.z), sMax = Math.max(...cols.filter(x => Math.abs(Math.min(x.a.z, x.b.z) - zb) < 1e-6).map(x => Math.abs(x.a.s)));
+        if (Math.abs(Math.abs(e.a.s) - sMax) > 1e-6) return;
+        const k = Math.round(zb * 1000) / 1000;
+        m.set(k, Math.max(m.get(k) ?? 0, Math.abs(e.N)));
+      });
+    });
+    return m;
+  };
+  const a = esquinas(rA), b = esquinas(rB), c45 = Math.SQRT1_2;
+  return [...a.keys()].filter(z => b.has(z)).sort((x, y) => x - y).map(z => {
+    const NA = a.get(z)!, NB = b.get(z)!, N45 = c45 * (NA + NB);
+    return { z, NA, NB, N45, razon: Math.max(NA, NB) > 1e-9 ? N45 / Math.max(NA, NB) : 0 };
+  });
+}

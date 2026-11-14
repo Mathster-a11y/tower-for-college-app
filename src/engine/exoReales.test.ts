@@ -81,3 +81,15 @@ describe('exoesqueleto · lo que piden los edificios reales', () => {
     equilibrio(r, W);
   });
 });
+
+import { vientoDeCuarto } from './exo';
+describe('viento de cuarto', () => {
+  it('torre cuadrada y simétrica: las esquinas toman 0,71·(A + B) = 1,41 veces lo de frente', () => {
+    const zs = Array.from({ length: 13 }, (_, i) => i * 3), W = zs.slice(1).map(() => 5);
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'D', modulo: 4, pesoPropio: false };
+    const r = calcularExo(def, zs, W, () => 3e6 * 20, 20, [-10, 10], 3e6);
+    const f = vientoDeCuarto(r, r);
+    expect(f.length).toBeGreaterThan(5);
+    f.filter(x => x.NA > 1e-6).forEach(x => expect(x.razon).toBeCloseTo(Math.SQRT2, 9));
+  });
+});
