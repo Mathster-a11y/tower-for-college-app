@@ -73,6 +73,8 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   }],
   ['Exo: barras agregadas', 'barras agregadas a mano entre nudos de la cara (s, z en m), en JSON', p => (p.exo?.nuevas?.length ? JSON.stringify(p.exo.nuevas) : null),
     (p, v) => { if (!p.exo || !txt(v)) return; try { const x = JSON.parse(txt(v)); if (Array.isArray(x)) p.exo.nuevas = x.filter(b => ['diagonal', 'viga', 'columna'].includes(b?.clase) && Array.isArray(b.a) && Array.isArray(b.b)); } catch { /* texto que no es JSON: se ignora */ } }],
+  ['Juntas entre muros', 'qué pasa en cada encuentro: «M1|M2=inglete; M3|M4=pasaA» (pasaA: pasa el primero; vacío = el convenio por defecto)', p => (p.juntas && Object.keys(p.juntas).length ? Object.entries(p.juntas).map(([k, v]) => `${k}=${v}`).join('; ') : null),
+    (p, v) => { const t = txt(v); if (!t) return; const o: Record<string, 'inglete' | 'pasaA' | 'pasaB'> = {}; t.split(';').forEach(par => { const k = par.lastIndexOf('='); if (k < 0) return; const val = par.slice(k + 1).trim(); if (val === 'inglete' || val === 'pasaA' || val === 'pasaB') o[par.slice(0, k).trim()] = val; }); if (Object.keys(o).length) p.juntas = o; }],
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
 ];
 

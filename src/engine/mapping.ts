@@ -18,6 +18,7 @@
 import { N_FILAS, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
+import { detectarJuntas, huellasLimpias, propiedadesPoligonos } from './juntas';
 
 export type Direccion = 'A' | 'B';
 export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'perfil' | 'fuera del cálculo' | 'sin pieza';
@@ -302,9 +303,12 @@ function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: As
 /** J de la sección real respecto de su baricentro, para el viento dado: cada rectángulo con su Steiner (m⁴) */
 export function Jreal(muros: Muro[], dir: Direccion): number {
   // perfiles: con sus propiedades exactas (como un círculo: A, J propio y posición)
-  const perf = muros.filter(m => tipoDe(m) === 'perfil').map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });
-  const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ' && tipoDe(m) !== 'perfil').flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));
-  const circ = [...perf, ...muros.filter(m => tipoDe(m) === 'tubo-circ').map(m => ({ A: (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2), I: (Math.PI / 64) * (m.largo ** 4 - dInterior(m) ** 4), s: dir === 'A' ? m.y : m.x }))];
+  // muros que se encuentran (L, T, X): con su huella limpia (sin superposición ni hueco en la esquina)
+  const limpias = huellasLimpias(muros, detectarJuntas(muros));
+  const deLimpias = [...limpias.values()].flat().filter(pg => pg.length >= 3).map(pg => { const k = propiedadesPoligonos([pg]); return { A: k.A, I: dir === 'A' ? k.Jx : k.Jy, s: dir === 'A' ? k.yg : k.xg }; });
+  const perf = muros.filter(m => tipoDe(m) === 'perfil' && !limpias.has(m.id)).map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });
+  const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ' && tipoDe(m) !== 'perfil' && !limpias.has(m.id)).flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));
+  const circ = [...perf, ...deLimpias, ...muros.filter(m => tipoDe(m) === 'tubo-circ').map(m => ({ A: (Math.PI / 4) * (m.largo ** 2 - dInterior(m) ** 2), I: (Math.PI / 64) * (m.largo ** 4 - dInterior(m) ** 4), s: dir === 'A' ? m.y : m.x }))];
   const A = rs.reduce((q, r) => q + r.b * r.h, 0) + circ.reduce((q, c) => q + c.A, 0);
   if (!(A > 0)) return 0;
   const sg = (rs.reduce((q, r) => q + r.b * r.h * r.s, 0) + circ.reduce((q, c) => q + c.A * c.s, 0)) / A;

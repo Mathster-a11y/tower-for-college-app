@@ -233,6 +233,8 @@ export interface Proyecto {
   guias?: import('./guias').Guia[];
   /** huecos de la losa (ascensores, escaleras, plenos): no tienen losa, no cargan los muros */
   huecosLosa?: HuecoLosa[];
+  /** encuentros entre muros: qué pasa en cada junta («A|B» → inglete, pasa A o pasa B); vacío = el convenio por defecto */
+  juntas?: Record<string, 'inglete' | 'pasaA' | 'pasaB'>;
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */

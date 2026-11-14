@@ -1,4 +1,5 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
+import { claveJunta, detectarJuntas, huellasLimpias } from '../engine/juntas';
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
@@ -886,7 +887,12 @@ export function montarPlanta(cont: HTMLElement) {
   const mas = document.createElement('div'); mas.className = 'menu-mas';
   const bMas = document.createElement('button'); bMasRef = bMas; bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
-  listaMas.append(bCalco, bSil, bAreas);
+  const bJuntas = document.createElement('button'); bJuntas.type = 'button';
+  const pintarJuntas = () => { bJuntas.textContent = estado.juntasLimpias ? 'Juntas: unidas ✓' : 'Juntas: muros separados'; bJuntas.setAttribute('aria-pressed', String(estado.juntasLimpias)); };
+  bJuntas.title = 'Unidas: los muros que se encuentran (L, T, X, también en ángulo) se dibujan como una sola pieza, sin la línea de la junta y sin superposición. Separados: cada muro con su rectángulo.';
+  bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
+  pintarJuntas();
+  listaMas.append(bCalco, bSil, bAreas, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
@@ -1027,6 +1033,25 @@ export function montarPlanta(cont: HTMLElement) {
         });
         caja.append(mas);
         panelPrec.append(caja);
+      }
+      // juntas de este muro con los otros: qué pasa en cada una (L: inglete o pasa uno; X: pasa uno; T: el que llega se corta)
+      const js = detectarJuntas(p.muros.filter(o => !muroOculto(p, o))).filter(j => j.a === m.id || j.b === m.id);
+      if (js.length) {
+        const cj = mk('div', '', 'prec-juntas');
+        cj.append(mk('span', 'Encuentros con otros muros', 'prec-sub'));
+        js.forEach(j => {
+          const otro = j.a === m.id ? j.b : j.a, clave = claveJunta(j.a, j.b), [primero] = clave.split('|');
+          const fila = mk('div', '', 'prec-fila prec-junta');
+          fila.append(mk('span', `${j.tipo} con ${otro}${Math.abs(j.angulo - 90) > 0.5 ? ` · ${j.angulo.toFixed(0)}°` : ''}`));
+          if (j.tipo === 'T') { fila.append(mk('span', j.a === m.id ? 'este llega y se corta' : 'pasa este', 'prec-nota')); cj.append(fila); return; }
+          const sel = mk('select');
+          const ops: [string, string][] = j.tipo === 'L' ? [['inglete', 'inglete'], [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]] : [['', 'pasa el más grueso'], [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]];
+          ops.forEach(([v, t]) => { const o = mk('option', t); o.value = v; sel.append(o); });
+          sel.value = p.juntas?.[clave] ?? (j.tipo === 'L' ? 'inglete' : '');
+          sel.addEventListener('change', () => { clavePrec = ''; estado.cambiar(pp => { pp.juntas = { ...(pp.juntas ?? {}) }; if (sel.value) pp.juntas[clave] = sel.value as 'inglete' | 'pasaA' | 'pasaB'; else delete pp.juntas[clave]; if (!Object.keys(pp.juntas).length) delete pp.juntas; }); mensaje(`Junta ${m.id}–${otro}: ${sel.selectedOptions[0]?.textContent}.`); });
+          fila.append(sel); cj.append(fila);
+        });
+        panelPrec.append(cj);
       }
       panelPrec.append(mk('span', 'Mover con precisión', 'prec-sub'));
     }
@@ -1295,6 +1320,16 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(g);
     });
     if (modo === 'calar' && calQue === 'losa' && losaIni && cursorLosa) svg.appendChild(el('polygon', { points: rectHueco(losaIni, cursorLosa).map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'hueco-previa' }));
+    // juntas entre los muros de este nivel: se dibujan unidos (debajo, el contorno de todos; arriba, el relleno sin borde)
+    const msNivel = p.muros.filter(m => !muroOculto(p, m) && presenteEn(m, zN, zFund, zTop));
+    const juntasN = estado.juntasLimpias ? detectarJuntas(msNivel) : [];
+    const limpias = estado.juntasLimpias ? huellasLimpias(msNivel, juntasN, p.juntas ?? {}) : new Map<string, { x: number; y: number }[][]>();
+    const ptsPg = (pg: { x: number; y: number }[]) => pg.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ');
+    if (limpias.size) {
+      const gc = el('g', { class: 'juntas-contorno' });
+      limpias.forEach(pgs => pgs.forEach(pg => gc.appendChild(el('polygon', { points: ptsPg(pg) }))));
+      svg.appendChild(gc);
+    }
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const yaRotuladas = new Set<string>();
@@ -1309,7 +1344,8 @@ export function montarPlanta(cont: HTMLElement) {
       const fueraCtx = !dentroDe(p, m, estado.contexto), bloq = muroBloqueado(p, m);
       const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
-      if (t === 'perfil') {
+      if (limpias.has(m.id)) limpias.get(m.id)!.forEach(pg => forma.appendChild(el('polygon', { points: ptsPg(pg), fill: COLORES[papel], class: 'limpio' })));
+      else if (t === 'perfil') {
         const pp = enPlanta(m), anillo = (vs: typeof pp.v) => { const ps = polilinea(vs, 4, 20); return `M${ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' L')} Z`; };
         forma.appendChild(el('path', { d: [pp.v, ...(pp.huecos ?? [])].map(anillo).join(' '), fill: COLORES[papel], 'fill-rule': 'evenodd', class: 'perfil' }));
       } else if (t === 'tubo-circ') {

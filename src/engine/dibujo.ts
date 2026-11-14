@@ -6,10 +6,12 @@
  */
 import type { Muro } from './modelo';
 import { rectangulos, tipoDe } from './modelo';
+import { ejeDeMuro } from './juntas';
 import { marcoTrasEspejo, marcoTrasGiro } from './piezasTipo';
 
 export type Punto = { x: number; y: number };
 const r2 = (v: number) => Math.round(v * 100) / 100;
+const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 /** paso del imán a la grilla (m): 0,05 con la grilla de discretización encendida; 0,01 apagada */
 let pasoGrilla = 0.05;
 export function fijarPasoGrilla(paso: number) { pasoGrilla = paso > 0 ? paso : 0.05; }
@@ -31,7 +33,18 @@ export function imanar(p: Punto, muros: Muro[], tol = 0.4): { p: Punto; a: 'extr
     const d = Math.hypot(e.x - p.x, e.y - p.y);
     if (d <= tol && (!mejor || d < mejor.d)) mejor = { p: e, d, id: m.id };
   }));
-  if (mejor) return { p: { x: r2((mejor as { p: Punto }).p.x), y: r2((mejor as { p: Punto }).p.y) }, a: 'extremo', id: (mejor as { id: string }).id };
+  // muros rectos en diagonal (perfiles rectangulares): también se engancha a las puntas de su eje
+  muros.filter(m => tipoDe(m) === 'perfil').forEach(m => { const E = ejeDeMuro(m); if (!E) return; [E.a, E.b].forEach(e => {
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (d <= tol && (!mejor || d < mejor.d)) mejor = { p: e, d, id: m.id };
+  }); });
+  if (mejor) return { p: { x: r4((mejor as { p: Punto }).p.x), y: r4((mejor as { p: Punto }).p.y) }, a: 'extremo', id: (mejor as { id: string }).id };
+  for (const m of muros.filter(x => tipoDe(x) === 'perfil')) {
+    // eje de un muro en diagonal: el punto se proyecta sobre el eje (sin redondear a la grilla, para que quede justo encima)
+    const E = ejeDeMuro(m); if (!E) continue;
+    const t = (p.x - E.a.x) * E.u.x + (p.y - E.a.y) * E.u.y, d = Math.abs((p.x - E.a.x) * E.n.x + (p.y - E.a.y) * E.n.y);
+    if (d <= tol && t > 0 && t < E.L) return { p: { x: r4(E.a.x + E.u.x * t), y: r4(E.a.y + E.u.y * t) }, a: 'eje', id: m.id };
+  }
   for (const m of muros.filter(x => tipoDe(x) === 'tabique')) {
     const [a, b] = extremos(m);
     if (m.dir === 'X' && Math.abs(p.y - m.y) <= tol && p.x >= a.x - 1e-9 && p.x <= b.x + 1e-9) return { p: { x: grilla(p.x), y: r2(m.y) }, a: 'eje', id: m.id };
@@ -166,7 +179,11 @@ export function espejarGrupo(muros: Muro[], g: string, eje: 'x' | 'y'): Muro[] {
 export type TipoNodoMuro = 'esquina' | 'medio' | 'centro';
 /** nodos de un elemento: esquinas, medios de los lados y centro (columnas circulares: centro y cuadrantes) */
 export function nodosMuro(m: Muro): (Punto & { t: TipoNodoMuro })[] {
-  if (tipoDe(m) === 'perfil') return [{ x: m.x, y: m.y, t: 'centro' as const }, ...m.perfil!.v.map(q => ({ x: +(m.x + q.x).toFixed(4), y: +(m.y + q.y).toFixed(4), t: 'esquina' as const }))];
+  if (tipoDe(m) === 'perfil') {
+    // muro recto en diagonal: además, las puntas de su eje (para engancharlo a otros muros por la punta)
+    const E = ejeDeMuro(m);
+    return [{ x: m.x, y: m.y, t: 'centro' as const }, ...m.perfil!.v.map(q => ({ x: +(m.x + q.x).toFixed(4), y: +(m.y + q.y).toFixed(4), t: 'esquina' as const })), ...(E ? [E.a, E.b].map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4), t: 'medio' as const })) : [])];
+  }
   if (tipoDe(m) === 'tubo-circ') { const r = m.largo / 2; return [{ x: m.x, y: m.y, t: 'centro' }, { x: m.x + r, y: m.y, t: 'medio' }, { x: m.x - r, y: m.y, t: 'medio' }, { x: m.x, y: m.y + r, t: 'medio' }, { x: m.x, y: m.y - r, t: 'medio' }]; }
   const ax = tipoDe(m) === 'tubo-rect' ? m.largo : m.dir === 'Y' ? m.espesor : m.largo, ay = tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : m.dir === 'Y' ? m.largo : m.espesor;
   const x0 = m.x - ax / 2, x1 = m.x + ax / 2, y0 = m.y - ay / 2, y1 = m.y + ay / 2;
