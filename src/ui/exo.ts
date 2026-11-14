@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, dimensionarExo, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, CATALOGO_TUBOS, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -37,62 +37,83 @@ const normal = (e: EsfuerzoBarra, P: Plano) => {
   // y local = x local girado 90° antihorario en (s, z); en pantalla z va hacia abajo
   return { ax, ay, bx, by, L, nx: (by - ay) / L, ny: -(bx - ax) / L };
 };
-/** M(x) = Ma + (Mb − Ma)·x/L: se dibuja del lado traccionado (M > 0 tracciona la cara −y), cruzando el eje una sola vez */
+/** puntos del diagrama de una función f(t) a lo largo de la barra, corridos en perpendicular (−y: lado traccionado de M) */
+function curvaBarra(e: EsfuerzoBarra, P: Plano, f: (t: number) => number, k: number, signo: 1 | -1, n = 24) {
+  const { ax, ay, bx, by, nx, ny } = normal(e, P);
+  const pts: string[] = [`${ax.toFixed(1)},${ay.toFixed(1)}`];
+  for (let i = 0; i <= n; i++) { const t = i / n, v = f(t) * k * signo; pts.push(`${(ax + (bx - ax) * t + nx * v).toFixed(1)},${(ay + (by - ay) * t + ny * v).toFixed(1)}`); }
+  pts.push(`${bx.toFixed(1)},${by.toFixed(1)}`);
+  return pts.join(' ');
+}
+/** máximo de |f| a lo largo de la barra y dónde está */
+function maxBarra(f: (t: number) => number, n = 40) {
+  let t0 = 0, v0 = f(0);
+  for (let i = 1; i <= n; i++) { const v = f(i / n); if (Math.abs(v) > Math.abs(v0)) { v0 = v; t0 = i / n; } }
+  return { t: t0, v: v0 };
+}
+/** M(x) de cada barra (con la carga repartida es una curva): del lado traccionado, cruza el eje donde cambia de signo */
 function capaMomentos(svg: SVGSVGElement, es: EsfuerzoBarra[], P: Plano) {
-  const flex = es.filter(e => e.clase !== 'diagonal');
-  const Mmax = Math.max(...flex.map(e => Math.max(Math.abs(e.Ma), Math.abs(e.Mb))), 1e-9), kM = 26 / Mmax;
-  flex.forEach(e => {
-    const { ax, ay, bx, by, nx, ny } = normal(e, P);
-    const off = (x: number, y: number, M: number) => `${(x - nx * M * kM).toFixed(1)},${(y - ny * M * kM).toFixed(1)}`;
-    if (e.Ma * e.Mb < 0) {
-      const t = e.Ma / (e.Ma - e.Mb), zx = ax + (bx - ax) * t, zy = ay + (by - ay) * t;
-      svg.append(el('polygon', { points: `${ax},${ay} ${off(ax, ay, e.Ma)} ${zx.toFixed(1)},${zy.toFixed(1)}`, class: 'ex-momento' }));
-      svg.append(el('polygon', { points: `${zx.toFixed(1)},${zy.toFixed(1)} ${off(bx, by, e.Mb)} ${bx},${by}`, class: 'ex-momento' }));
-    } else svg.append(el('polygon', { points: `${ax},${ay} ${off(ax, ay, e.Ma)} ${off(bx, by, e.Mb)} ${bx},${by}`, class: 'ex-momento' }));
-  });
-  // rótulos: los cinco extremos con más momento
+  const M = (e: EsfuerzoBarra) => (t: number) => esfuerzosEn(e, t).M;
+  const Mmax = Math.max(...es.map(e => Math.abs(maxBarra(M(e)).v)), 1e-9), kM = 26 / Mmax;
+  es.forEach(e => svg.append(el('polygon', { points: curvaBarra(e, P, M(e), kM, -1), class: 'ex-momento' })));
   if (Mmax < 0.05) { svg.append(el('text', { x: P.X(0), y: P.Y(Math.min(...es.map(e => Math.min(e.a.z, e.b.z)))) + 42, class: 'ex-nota', 'text-anchor': 'middle' }, 'M ≈ 0: en esta ficha las barras trabajan casi solo a esfuerzo normal')); return; }
-  flex.flatMap(e => [{ e, M: e.Ma, a: true }, { e, M: e.Mb, a: false }]).filter(x => Math.abs(x.M) >= 0.05).sort((u, v) => Math.abs(v.M) - Math.abs(u.M)).slice(0, 5).forEach(({ e, M, a }) => {
+  // rótulos: los cinco máximos de |M|
+  es.map(e => ({ e, ...maxBarra(M(e)) })).filter(x => Math.abs(x.v) >= 0.05).sort((u, v) => Math.abs(v.v) - Math.abs(u.v)).slice(0, 5).forEach(({ e, t, v }) => {
     const { ax, ay, bx, by, nx, ny } = normal(e, P);
-    const x = (a ? ax : bx) - nx * M * kM, y = (a ? ay : by) - ny * M * kM;
-    svg.append(el('text', { x: x + (x >= (a ? ax : bx) ? 4 : -4), y: y + 4, class: 'ex-valor momento', 'text-anchor': x >= (a ? ax : bx) ? 'start' : 'end' }, `${fmt(Math.abs(M), 1)}`));
+    const x0 = ax + (bx - ax) * t, y0 = ay + (by - ay) * t, x = x0 - nx * v * kM, y = y0 - ny * v * kM;
+    svg.append(el('text', { x: x + (x >= x0 ? 4 : -4), y: y + 4, class: 'ex-valor momento', 'text-anchor': x >= x0 ? 'start' : 'end' }, `${fmt(Math.abs(v), 1)}`));
   });
 }
-/** Q constante en cada tramo: un rectángulo del lado +y si Q > 0 */
+/** V(x) de cada barra (lineal si hay carga repartida, constante si no) */
 function capaCortes(svg: SVGSVGElement, es: EsfuerzoBarra[], P: Plano) {
-  const flex = es.filter(e => e.clase !== 'diagonal');
-  const Qmax = Math.max(...flex.map(e => Math.abs(e.Q)), 1e-9), kQ = 16 / Qmax;
-  flex.forEach(e => {
+  const V = (e: EsfuerzoBarra) => (t: number) => esfuerzosEn(e, t).V;
+  const Qmax = Math.max(...es.map(e => Math.abs(maxBarra(V(e)).v)), 1e-9), kQ = 16 / Qmax;
+  es.forEach(e => svg.append(el('polygon', { points: curvaBarra(e, P, V(e), kQ, 1, 8), class: `ex-corte ${esfuerzosEn(e, 0.5).V >= 0 ? 'pos' : 'neg'}` })));
+  es.map(e => ({ e, ...maxBarra(V(e)) })).filter(x => Math.abs(x.v) >= 0.01).sort((u, v) => Math.abs(v.v) - Math.abs(u.v)).slice(0, 4).forEach(({ e, t, v }) => {
     const { ax, ay, bx, by, nx, ny } = normal(e, P);
-    const dx = nx * e.Q * kQ, dy = ny * e.Q * kQ;
-    svg.append(el('polygon', { points: `${ax},${ay} ${ax + dx},${ay + dy} ${bx + dx},${by + dy} ${bx},${by}`, class: `ex-corte ${e.Q >= 0 ? 'pos' : 'neg'}` }));
-  });
-  flex.filter(e => Math.abs(e.Q) >= 0.01).sort((u, v) => Math.abs(v.Q) - Math.abs(u.Q)).slice(0, 4).forEach(e => {
-    const { ax, ay, bx, by, nx, ny } = normal(e, P);
-    const x = (ax + bx) / 2 + nx * e.Q * kQ, y = (ay + by) / 2 + ny * e.Q * kQ;
-    svg.append(el('text', { x: x + (nx * e.Q >= 0 ? 4 : -4), y: y + 4, class: 'ex-valor corte', 'text-anchor': nx * e.Q >= 0 ? 'start' : 'end' }, fmt(Math.abs(e.Q), 2)));
+    const x = ax + (bx - ax) * t + nx * v * kQ, y = ay + (by - ay) * t + ny * v * kQ;
+    svg.append(el('text', { x: x + (nx * v >= 0 ? 4 : -4), y: y + 4, class: 'ex-valor corte', 'text-anchor': nx * v >= 0 ? 'start' : 'end' }, fmt(Math.abs(v), 2)));
   });
 }
-/** tensión en las fibras extremas: σ(±c) = N/A ∓ M/W (M > 0 comprime la cara +y); se pinta cada cara por tramos */
+/** tensión en las fibras extremas: σ(±c) = N/A ∓ M/W (M > 0 comprime la cara +y) */
 export function sigmaFibras(e: EsfuerzoBarra, p: { A: number; W: number }, t: number) {
-  const M = e.clase === 'diagonal' ? 0 : e.Ma + (e.Mb - e.Ma) * t;
-  return { sup: e.N / p.A - M / p.W, inf: e.N / p.A + M / p.W };
+  const f = esfuerzosEn(e, t);
+  return { sup: f.N / p.A - f.M / p.W, inf: f.N / p.A + f.M / p.W };
 }
 /** color de una tensión en la escala ±escala (la máxima de la cara, o la admisible si es menor) */
 const colorSigma = (sig: number, escala: number) => {
   const u = Math.min(1, Math.abs(sig) / escala), pc = Math.round(10 + 90 * u);
   return `color-mix(in srgb, ${sig >= 0 ? 'var(--ex-trac)' : 'var(--ex-comp)'} ${pc}%, var(--ex-neutro))`;
 };
-function capaFibras(g: SVGGElement, e: EsfuerzoBarra, p: { A: number; W: number }, adm: number, escala: number, P: Plano) {
-  const { ax, ay, bx, by, nx, ny } = normal(e, P), sep = 2.6, n = e.clase === 'diagonal' ? 1 : 8;
+let idGrad = 0;
+/**
+ * Listón continuo de la barra (el ancho representa la sección): por tramos a lo largo, cada uno con un degradado de una
+ * cara a la otra (σ lineal en la altura de la sección, con el blanco del eje neutro donde σ = 0). Los tramos se
+ * solapan medio píxel para que no queden costuras.
+ */
+function capaFibras(g: SVGGElement, e: EsfuerzoBarra, p: { A: number; W: number }, adm: number, escala: number, P: Plano, defs: SVGDefsElement) {
+  const { ax, ay, bx, by, nx, ny, L } = normal(e, P), w = 3.4, n = 12, ux = (bx - ax) / L, uy = (by - ay) / L;
+  let pasa = false;
   for (let i = 0; i < n; i++) {
     const t0 = i / n, t1 = (i + 1) / n, s = sigmaFibras(e, p, (t0 + t1) / 2);
-    const x0 = ax + (bx - ax) * t0, y0 = ay + (by - ay) * t0, x1 = ax + (bx - ax) * t1, y1 = ay + (by - ay) * t1;
-    for (const [lado, sg] of [[1, s.sup], [-1, s.inf]] as const) {
-      const ox = nx * sep * lado, oy = ny * sep * lado;
-      g.append(el('line', { x1: x0 + ox, y1: y0 + oy, x2: x1 + ox, y2: y1 + oy, class: `ex-fibra${Math.abs(sg) > adm ? ' pasada' : ''}`, style: `stroke: ${colorSigma(sg, escala)}` }));
-    }
+    pasa = pasa || Math.abs(s.sup) > adm || Math.abs(s.inf) > adm;
+    const x0 = ax + (bx - ax) * t0 - ux * 0.5, y0 = ay + (by - ay) * t0 - uy * 0.5, x1 = ax + (bx - ax) * t1 + ux * 0.5, y1 = ay + (by - ay) * t1 + uy * 0.5;
+    const id = `exg${++idGrad}`, gr = el('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: (x0 + nx * w).toFixed(2), y1: (y0 + ny * w).toFixed(2), x2: (x0 - nx * w).toFixed(2), y2: (y0 - ny * w).toFixed(2) });
+    const paradas: [number, number][] = [[0, s.sup]];
+    if (s.sup * s.inf < 0) paradas.push([s.sup / (s.sup - s.inf), 0]);
+    paradas.push([1, s.inf]);
+    paradas.forEach(([o, sg]) => gr.append(el('stop', { offset: o.toFixed(3), style: `stop-color: ${colorSigma(sg, escala)}` })));
+    defs.append(gr);
+    g.append(el('polygon', { points: `${(x0 + nx * w).toFixed(1)},${(y0 + ny * w).toFixed(1)} ${(x1 + nx * w).toFixed(1)},${(y1 + ny * w).toFixed(1)} ${(x1 - nx * w).toFixed(1)},${(y1 - ny * w).toFixed(1)} ${(x0 - nx * w).toFixed(1)},${(y0 - ny * w).toFixed(1)}`, fill: `url(#${id})`, class: 'ex-liston' }));
   }
+  // contorno fino del listón (rojo si en algún punto pasa la admisible)
+  g.append(el('polygon', { points: `${ax + nx * w},${ay + ny * w} ${bx + nx * w},${by + ny * w} ${bx - nx * w},${by - ny * w} ${ax - nx * w},${ay - ny * w}`, class: `ex-liston-borde${pasa ? ' pasada' : ''}` }));
+}
+/** articulaciones: un círculo hueco en el extremo liberado */
+function pines(svg: SVGSVGElement, e: EsfuerzoBarra, P: Plano, yaEnNudo: (q: { s: number; z: number }) => boolean) {
+  const { ax, ay, bx, by, L } = normal(e, P), ux = (bx - ax) / L, uy = (by - ay) / L, r = 3.2, o = 6;
+  if (e.relA && !yaEnNudo(e.a)) svg.append(el('circle', { cx: ax + ux * o, cy: ay + uy * o, r, class: 'ex-pin' }));
+  if (e.relB && !yaEnNudo(e.b)) svg.append(el('circle', { cx: bx - ux * o, cy: by - uy * o, r, class: 'ex-pin' }));
 }
 function leyendaModo(svg: SVGSVGElement, x: number, y: number, escala: number) {
   if (modo === 'sigma') {
@@ -124,6 +145,7 @@ export function entradaExo(dir: 'A' | 'B', def: ExoDef): EntradaExo | null {
 
 export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): (DatosExo & { entrada: EntradaExo }) | null {
   if (!def) return null;
+  ultimoError = '';
   try {
     const { asig, res, corr } = estado.calculo, p = estado.proyecto;
     const R: PlanillaRes = estado.fuente === 'guia' ? corr.guia : res;
@@ -143,8 +165,9 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E);
     const h0 = zs[zs.length - 1] - zPB;
     return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0 } };
-  } catch { return null; }
+  } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
+let ultimoError = '';
 
 export function estadoExo(): EstadoChip {
   if (!estado.proyecto.exo) return 'pendiente';
@@ -186,10 +209,10 @@ export function panelExo(c: H) {
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `Acero de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
+  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
-  campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => (x.modulo = Math.round(v))), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
   campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
@@ -197,7 +220,28 @@ export function panelExo(c: H) {
     campo(fo, `${nombre}: espesor`, `exo-${k}-e`, s.e * 1000, nu((x, v) => (x[k].e = v / 1000)), { tipo: 'number', unidad: 'mm' });
   };
   sec('Columna', 'columna'); sec('Diagonal', 'diagonal'); sec('Viga / cinturón', 'viga');
+  if (def.tipo === 'E') {
+    campo(fo, 'Chevrones desde el piso', 'exo-ini', def.pisoInicio ?? 0, nu((x, v) => { x.pisoInicio = Math.round(v); delete x.barras; }), { tipo: 'number', ayuda: 'número de piso sobre PB (0 = desde la base): abajo queda solo el mástil, como las supercolumnas del Citicorp' });
+    const m = def.mastil ?? def.columna, pm = propsSeccion(m);
+    campo(fo, 'Mástil: lado', 'exo-mast-b', m.b * 1000, nu((x, v) => { x.mastil = { ...(x.mastil ?? x.columna), b: v / 1000 }; }), { tipo: 'number', unidad: 'mm', ayuda: `columna central de cada cara · A = ${fmt(pm.A * 1e4, 0)} cm²` });
+    campo(fo, 'Mástil: espesor', 'exo-mast-e', m.e * 1000, nu((x, v) => { x.mastil = { ...(x.mastil ?? x.columna), e: v / 1000 }; }), { tipo: 'number', unidad: 'mm' });
+  }
   c.append(seccion('Ficha y perfiles', fo).el);
+  // uniones y cargas
+  const fu = h('div', { class: 'formulario' });
+  const un = { ...UNIONES_POR_DEFECTO, ...(def.uniones ?? {}) };
+  const UN = ['rígida', 'articulada'], aUn = (v: string) => (v === 'articulada' ? 'articulada' : 'rigida') as 'rigida' | 'articulada';
+  (['columna', 'diagonal', 'viga'] as const).forEach(k => campo(fu, `Uniones de ${k === 'viga' ? 'vigas' : k === 'columna' ? 'columnas' : 'diagonales'}`, `exo-un-${k}`, un[k] === 'articulada' ? 'articulada' : 'rígida', v => set(x => { x.uniones = { ...(x.uniones ?? {}), [k]: aUn(v) }; }),
+    { lista: UN, ayuda: k === 'columna' ? 'rígida: la columna sigue de un piso al otro; articulada: cada tramo con pernos (empalmes que no pasan momento)' : k === 'diagonal' ? 'articulada: biela, solo N (lo habitual); rígida: soldada, también toma M' : 'rígida: pórtico (la viga pasa momento a la columna); articulada: apoyada' }));
+  campo(fu, 'Base de las columnas', 'exo-un-base', un.base, v => set(x => { x.uniones = { ...(x.uniones ?? {}), base: v === 'articulada' ? 'articulada' : 'empotrada' }; }), { lista: ['empotrada', 'articulada'] });
+  campo(fu, 'El viento llega al exo', 'exo-viento', def.viento === 'fachada' ? 'repartido por la fachada' : 'por las losas, en cada piso', v => set(x => { x.viento = v.startsWith('repartido') ? 'fachada' : 'losas'; }),
+    { lista: ['por las losas, en cada piso', 'repartido por la fachada'], ayuda: 'por las losas: la fachada apoya en las losas y el viento entra al exo en los nudos de cada piso (como el Wi de la planilla); repartido: la fachada cuelga del exo y el viento carga las barras de borde a lo largo, repartido piso por piso' });
+  const pp = h('label', { class: 'campo-linea' }); const cbp = h('input', { type: 'checkbox' }) as HTMLInputElement; cbp.checked = def.pesoPropio !== false;
+  cbp.addEventListener('change', () => set(x => { x.pesoPropio = cbp.checked; })); pp.append(cbp, ' Peso propio del acero (carga repartida en cada barra)');
+  fu.append(pp);
+  const nCamb = Object.keys(def.barras ?? {}).length;
+  if (nCamb) { const bl = h('button', { type: 'button' }, `Borrar los cambios de ${nCamb} barra${nCamb > 1 ? 's' : ''}`); bl.addEventListener('click', () => set(x => { delete x.barras; })); fu.append(bl); }
+  c.append(seccion('Uniones y cargas', fu).el);
   if (d) {
     const peores = [...d.r.controles].sort((a, b) => b.sigma / (def.sigmaAdm) - a.sigma / def.sigmaAdm).slice(0, 12);
     c.append(seccion('Barras más cargadas', tablaValores(['Barra', 'clase', 'N (t)', 'M (tm)', 'σ (kg/cm²)', 'λ', ''],
@@ -223,18 +267,20 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   zs.forEach(z => svg.append(el('line', { x1: X(-sTorre), x2: X(sTorre), y1: Y(z), y2: Y(z), class: 'ex-losa' })));
   const Nmax = Math.max(...cara.esfuerzos.map(e => Math.abs(e.N)), 1e-9);
   const P = { X, Y, k };
-  const propsDe = (e: EsfuerzoBarra) => propsSeccion(e.clase === 'columna' ? d.def.columna : e.clase === 'diagonal' ? d.def.diagonal : d.def.viga);
+  const propsDe = (e: EsfuerzoBarra) => propsSeccion(e.sec);
   // escala de las tensiones: la máxima de la cara (en las dos fibras, a lo largo de cada barra), sin pasar la admisible
-  const sMax = Math.max(...cara.esfuerzos.flatMap(e => [0, 0.5, 1].flatMap(t => { const f = sigmaFibras(e, propsDe(e), t); return [Math.abs(f.sup), Math.abs(f.inf)]; })), 1e-9);
+  const sMax = Math.max(...cara.esfuerzos.flatMap(e => [0, 0.25, 0.5, 0.75, 1].flatMap(t => { const f = sigmaFibras(e, propsDe(e), t); return [Math.abs(f.sup), Math.abs(f.inf)]; })), 1e-9);
   const escalaS = Math.min(sMax, d.def.sigmaAdm);
   if (modo === 'M') capaMomentos(svg, cara.esfuerzos, P);
   else if (modo === 'Q') capaCortes(svg, cara.esfuerzos, P);
   // barras: en «N» el color es tracción o compresión y el grosor según |N|; en «σ», las dos fibras extremas con su tensión
+  const defsF = el('defs'); svg.append(defsF);
   cara.esfuerzos.forEach(e => {
-    const props = propsSeccion(e.clase === 'columna' ? d.def.columna : e.clase === 'diagonal' ? d.def.diagonal : d.def.viga);
-    const tit = `${e.id} · ${e.clase} · N = ${fmt(e.N, 1)} t (${e.N >= 0 ? 'tracción' : 'compresión'}) · Q = ${fmt(e.Q, 2)} t · M = ${fmt(e.Ma, 2)} / ${fmt(e.Mb, 2)} tm · L = ${fmt(e.L)} m · tocá para ver el detalle`;
+    const props = propsDe(e);
+    const mMax = maxBarra(t => esfuerzosEn(e, t).M).v;
+    const tit = `${e.id} · ${e.clase} · N = ${fmt(e.N, 1)} t (${e.N >= 0 ? 'tracción' : 'compresión'}) · M máx = ${fmt(mMax, 2)} tm · uniones ${e.relA ? 'articulada' : 'rígida'} / ${e.relB ? 'articulada' : 'rígida'} · L = ${fmt(e.L)} m · tocá para ver el detalle`;
     const g = el('g', { class: `ex-g-barra${barraSel === e.id ? ' elegida' : ''}`, 'data-id': e.id });
-    if (modo === 'sigma') capaFibras(g, e, props, d.def.sigmaAdm, escalaS, P);
+    if (modo === 'sigma') capaFibras(g, e, props, d.def.sigmaAdm, escalaS, P, defsF);
     else {
       const w = modo === 'N' ? 1.2 + 6 * Math.abs(e.N) / Nmax : 1.6;
       g.append(el('line', { x1: X(e.a.s), y1: Y(e.a.z), x2: X(e.b.s), y2: Y(e.b.z), class: modo === 'N' ? `ex-barra ${e.N >= 0 ? 'traccion' : 'compresion'} ${e.clase}` : 'ex-barra neutra', 'stroke-width': w.toFixed(1) }));
@@ -245,10 +291,16 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
     g.addEventListener('click', () => { barraSel = barraSel === e.id ? null : e.id; estado.avisarPanel(); });
     svg.append(g);
   });
+  // articulaciones: si en un nudo todas las barras llegan articuladas, un solo círculo en el nudo; si no, uno por barra
+  const enNudo = new Map<string, { x: number; y: number; total: number; libres: number }>();
+  cara.esfuerzos.forEach(e => (['a', 'b'] as const).forEach(k => { const q = e[k], key = `${q.s.toFixed(3)},${q.z.toFixed(3)}`, x = enNudo.get(key) ?? { x: X(q.s), y: Y(q.z), total: 0, libres: 0 }; x.total++; if (k === 'a' ? e.relA : e.relB) x.libres++; enNudo.set(key, x); }));
+  enNudo.forEach(v => { if (v.libres >= 2 && v.libres === v.total) svg.append(el('circle', { cx: v.x, cy: v.y, r: 3.6, class: 'ex-pin' })); });
+  cara.esfuerzos.forEach(e => pines(svg, e, P, q => { const v = enNudo.get(`${q.s.toFixed(3)},${q.z.toFixed(3)}`)!; return v.libres >= 2 && v.libres === v.total; }));
   // base: empotramientos y reacciones verticales
   cara.reacciones.forEach(q => {
     const x = X(q.s), y = Y(z0);
-    svg.append(el('path', { d: `M${x - 10},${y + 1} h20 l-10,-9 z`, class: 'ex-apoyo' }));
+    if ((d.def.uniones?.base ?? 'empotrada') === 'articulada') { svg.append(el('path', { d: `M${x - 9},${y + 11} h18 l-9,-10 z`, class: 'ex-apoyo' })); svg.append(el('circle', { cx: x, cy: y, r: 3, class: 'ex-pin' })); }
+    else svg.append(el('rect', { x: x - 11, y: y + 1, width: 22, height: 6, class: 'ex-apoyo' }));
     svg.append(el('text', { x, y: y + 24, class: `ex-valor ${q.V >= 0 ? 'compresion' : 'traccion'}`, 'text-anchor': 'middle' }, `${q.V >= 0 ? '↑' : '↓'} ${fmt(Math.abs(q.V), 0)} t`));
   });
   // viento de cada piso que va al exo (flechas a la izquierda, sobre la losa)
@@ -294,11 +346,11 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
 export function centroExo(c: H, tam: Tam) {
   if (!estado.proyecto.exo) {
     c.append(h('div', { class: 'tarjeta-vacia' }, h('h3', {}, 'Sin exoesqueleto'), h('p', { class: 'nota' }, 'Tildá «Agregar un exoesqueleto» en el panel de la izquierda para ver cómo cambia la torre: la flecha, el reparto del viento y los esfuerzos de cada barra.'),
-      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
+      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
     return;
   }
   const d = datosExo();
-  if (!d) { c.append(h('p', { class: 'error' }, 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
+  if (!d) { c.append(h('p', { class: 'error' }, ultimoError ? `No se pudo calcular: ${ultimoError} Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Qué se ve en el alzado' });
   MODOS.forEach(([m, t, ayuda]) => { const b = h('button', { type: 'button', 'aria-pressed': String(modo === m), title: ayuda }, t); b.addEventListener('click', () => { modo = m; estado.avisarPanel(); }); seg.append(b); });
@@ -307,12 +359,12 @@ export function centroExo(c: H, tam: Tam) {
   const cara = d.r.caras[0], e = cara?.esfuerzos.find(x => x.id === barraSel);
   if (barraSel && !e) barraSel = null;
   if (e) {
-    const sec = e.clase === 'columna' ? d.def.columna : e.clase === 'diagonal' ? d.def.diagonal : d.def.viga;
+    const sec = e.sec;
     const ctl = d.r.controles.find(x => x.cara === cara.nombre && x.id === e.id);
     const cerrar = h('button', { type: 'button' }, 'Cerrar');
     cerrar.addEventListener('click', () => { barraSel = null; estado.avisarPanel(); });
     c.append(h('section', { class: 'tarjeta exo-detalle' }, h('div', { class: 'fila-acciones' }, h('b', {}, `Barra ${e.id} · ${e.clase} · ${cara.nombre}`), ctl ? chip(ctl.estado === 'verifica' ? 'verifica' : 'no verifica') : '', cerrar),
-      detalleBarra(e, propsSeccion(sec), sec, d.def)));
+      editorBarra(e), detalleBarra(e, propsSeccion(sec), sec, d.def)));
   }
   const n = d.r.u.length;
   c.append(seccion('Piso por piso', tablaValores(['Nivel', 'viento (t)', 'tabiques (t)', 'exo (t)', 'M tabiques (tm)', 'M sin exo (tm)', 'δ con exo (mm)', 'δ sin exo (mm)'],
@@ -341,23 +393,29 @@ export function detalleBarra(e: EsfuerzoBarra, p: { A: number; I: number; W: num
     const va = v(0), vb = v(1);
     svg.append(el('text', { x: x0 - 6, y: y - va * k + 4, class: 'ex-valor', 'text-anchor': 'end' }, fmt(va, dec)));
     svg.append(el('text', { x: x1 + 6, y: y - vb * k + 4, class: 'ex-valor' }, fmt(vb, dec)));
-    if (va * vb < 0) { const t = va / (va - vb); svg.append(el('circle', { cx: Xb(t), cy: y, r: 3, class: 'ex-cero' })); svg.append(el('text', { x: Xb(t), y: y + 16, class: 'ex-nota', 'text-anchor': 'middle' }, `M = 0 a ${fmt(t * e.L, 2)} m`)); }
+    // un máximo adentro de la barra (con carga repartida): se rotula
+    const mx = maxBarra(v);
+    if (mx.t > 0.02 && mx.t < 0.98 && Math.abs(mx.v) > 1.02 * Math.max(Math.abs(va), Math.abs(vb))) svg.append(el('text', { x: Xb(mx.t), y: y - mx.v * k + (mx.v >= 0 ? -6 : 14), class: 'ex-valor', 'text-anchor': 'middle' }, fmt(mx.v, dec)));
   };
-  const M = (t: number) => (e.clase === 'diagonal' ? 0 : e.Ma + (e.Mb - e.Ma) * t);
+  const M = (t: number) => esfuerzosEn(e, t).M;
   // nombre de cada cara de la barra en el alzado: la +y local es la de la izquierda de a→b (con z hacia arriba)
   const L0 = Math.hypot(e.b.s - e.a.s, e.b.z - e.a.z) || 1, ns = -(e.b.z - e.a.z) / L0, nz = (e.b.s - e.a.s) / L0;
   const cara = (lado: 1 | -1) => { const a = ns * lado, b = nz * lado; return Math.abs(b) >= Math.abs(a) ? (b > 0 ? 'la cara de arriba' : 'la cara de abajo') : (a < 0 ? 'la cara izquierda' : 'la cara derecha'); };
   svg.append(el('text', { x: x0, y: 22, class: 'ex-nota' }, `extremo a (${fmt(e.a.s, 2)}; ${fmt(e.a.z, 2)})`));
   svg.append(el('text', { x: x1, y: 22, class: 'ex-nota', 'text-anchor': 'end' }, `extremo b (${fmt(e.b.s, 2)}; ${fmt(e.b.z, 2)}) · L = ${fmt(e.L, 2)} m`));
   svg.append(el('line', { x1: x0, y1: 36, x2: x1, y2: 36, class: `ex-barra ${e.N >= 0 ? 'traccion' : 'compresion'}`, 'stroke-width': 5 }));
-  fila(92, 'N', 't (+ tracción)', () => e.N, `ex-area-n ${e.N >= 0 ? 'traccion' : 'compresion'}`, Math.abs(e.N), 1);
-  fila(170, 'Q', 't', () => (e.clase === 'diagonal' ? 0 : e.Q), 'ex-corte pos', Math.abs(e.Q), 2);
-  fila(258, 'M', `tm (+: tracciona ${cara(-1)})`, M, 'ex-momento', Math.max(Math.abs(e.Ma), Math.abs(e.Mb)), 2);
-  // sección en el extremo con más momento: tensión lineal entre la cara superior (+y) y la inferior
-  const tCrit = Math.abs(M(0)) >= Math.abs(M(1)) ? 0 : 1, Mc = M(tCrit);
-  const sSup = e.N / p.A - Mc / p.W, sInf = e.N / p.A + Mc / p.W, adm = def.sigmaAdm;
+  const Nf = (t: number) => esfuerzosEn(e, t).N, Vf = (t: number) => esfuerzosEn(e, t).V;
+  fila(92, 'N', 't (+ tracción)', Nf, `ex-area-n ${e.N >= 0 ? 'traccion' : 'compresion'}`, Math.abs(maxBarra(Nf).v), 1);
+  fila(170, 'Q', 't', Vf, 'ex-corte pos', Math.abs(maxBarra(Vf).v), 2);
+  fila(258, 'M', `tm (+: tracciona ${cara(-1)})`, M, 'ex-momento', Math.abs(maxBarra(M).v), 2);
+  cerosDeM(e).forEach(t => { svg.append(el('circle', { cx: Xb(t), cy: 258, r: 3, class: 'ex-cero' })); svg.append(el('text', { x: Xb(t), y: 274, class: 'ex-nota', 'text-anchor': 'middle' }, `M = 0 a ${fmt(t * e.L, 2)} m`)); });
+  if (e.qa || e.qb || e.pa || e.pb) svg.append(el('text', { x: x0, y: 54, class: 'ex-nota' }, `carga repartida: q⊥ ${fmt(e.qa, 3)} → ${fmt(e.qb, 3)} t/m · p∥ ${fmt(e.pa, 3)} → ${fmt(e.pb, 3)} t/m (peso propio${e.qa !== e.qb ? ' y viento' : ''})`));
+  [['a', e.relA, x0], ['b', e.relB, x1]].forEach(([, rel, x]) => { if (rel) svg.append(el('circle', { cx: x as number, cy: 36, r: 5, class: 'ex-pin' })); });
+  // sección donde la tensión es máxima (a lo largo de la barra): tensión lineal entre la cara +y y la −y
+  const tCrit = maxBarra(t => { const f = esfuerzosEn(e, t); return Math.abs(f.N) / p.A + Math.abs(f.M) / p.W; }).t, fc = esfuerzosEn(e, tCrit), Mc = fc.M;
+  const sSup = fc.N / p.A - Mc / p.W, sInf = fc.N / p.A + Mc / p.W, adm = def.sigmaAdm;
   const cx = 640, cy = 70, hS = 200, bS = 40;
-  svg.append(el('text', { x: cx - 30, y: 22, class: 'ex-subtitulo' }, `Sección en el extremo ${tCrit ? 'b' : 'a'}`));
+  svg.append(el('text', { x: cx - 30, y: 22, class: 'ex-subtitulo' }, `Sección más cargada (a ${fmt(tCrit * e.L, 2)} m de a)`));
   svg.append(el('text', { x: cx - 30, y: 38, class: 'ex-nota' }, `tubo ${fmt(sec.b * 1000, 0)} × ${fmt(sec.e * 1000, 1)} mm · A = ${fmt(p.A * 1e4, 0)} cm² · W = ${fmt(p.W * 1e6, 0)} cm³`));
   // tubo en corte (hueco) a escala de la altura
   svg.append(el('rect', { x: cx - 30, y: cy, width: bS, height: hS, class: 'ex-seccion' }));
@@ -380,7 +438,40 @@ export function detalleBarra(e: EsfuerzoBarra, p: { A: number; I: number; W: num
   svg.append(el('text', { x: Xs(sSup) + (sSup >= 0 ? 5 : -5), y: cy + 4, class: 'ex-valor', 'text-anchor': sSup >= 0 ? 'start' : 'end' }, `${fmt(sSup / 10, 0)} kg/cm²`));
   svg.append(el('text', { x: Xs(sInf) + (sInf >= 0 ? 5 : -5), y: cy + hS, class: 'ex-valor', 'text-anchor': sInf >= 0 ? 'start' : 'end' }, `${fmt(sInf / 10, 0)} kg/cm²`));
   if (sSup * sInf < 0) { const yn = cy + hS * (sSup / (sSup - sInf)); svg.append(el('line', { x1: cx - 36, y1: yn, x2: xs + 4, y2: yn, class: 'ex-neutro' })); svg.append(el('text', { x: cx - 38, y: yn + 4, class: 'ex-nota', 'text-anchor': 'end' }, 'eje neutro')); }
-  svg.append(el('text', { x: cx - 30, y: H - 34, class: 'ex-nota' }, `σ = N/A ± M/W = ${fmt(e.N / p.A / 10, 0)} ± ${fmt(Math.abs(Mc) / p.W / 10, 0)} kg/cm²`));
+  svg.append(el('text', { x: cx - 30, y: H - 34, class: 'ex-nota' }, `σ = N/A ± M/W = ${fmt(fc.N / p.A / 10, 0)} ± ${fmt(Math.abs(Mc) / p.W / 10, 0)} kg/cm²`));
   svg.append(el('text', { x: cx - 30, y: H - 18, class: 'ex-nota' }, `máx |σ| = ${fmt(Math.max(Math.abs(sSup), Math.abs(sInf)) / 10, 0)} de ${fmt(adm / 10, 0)} kg/cm² (${fmt(Math.max(Math.abs(sSup), Math.abs(sInf)) / adm * 100, 0)} %)`));
   return svg;
+}
+
+/**
+ * Editor barra por barra: uniones de cada extremo, sección (del catálogo) o sacarla. El cambio vale para la misma
+ * barra en las dos caras y en los dos vientos (la ficha es una sola); se borra si cambia la ficha o el módulo.
+ */
+function editorBarra(e: EsfuerzoBarra) {
+  const p = estado.proyecto, def = p.exo!;
+  const cam = def.barras?.[e.id] ?? {};
+  const poner = (f: (c: NonNullable<ExoDef['barras']>[string]) => void) => estado.cambiar(() => {
+    const x = p.exo!; x.barras = { ...(x.barras ?? {}) }; const c = { ...(x.barras[e.id] ?? {}) }; f(c);
+    if (Object.keys(c).length) x.barras[e.id] = c; else delete x.barras[e.id];
+    if (!Object.keys(x.barras).length) delete x.barras;
+  });
+  const sel = (etq: string, val: string, opciones: [string, string][], f: (v: string) => void) => {
+    const s = h('select', {}) as HTMLSelectElement;
+    opciones.forEach(([v, t]) => s.append(h('option', { value: v }, t)));
+    s.value = val; s.addEventListener('change', () => f(s.value));
+    return h('label', { class: 'campo-linea' }, etq, ' ', s);
+  };
+  const un: [string, string][] = [['rig', 'rígida'], ['art', 'articulada']];
+  const tubos: [string, string][] = [['', `como su clase (${fmt(e.sec.b * 1000, 0)}×${fmt(e.sec.e * 1000, 1)})`], ...CATALOGO_TUBOS.map((t, i) => [String(i), `${fmt(t.b * 1000, 0)} × ${fmt(t.e * 1000, 1)} mm`] as [string, string])];
+  const iSec = cam.sec ? CATALOGO_TUBOS.findIndex(t => t.b === cam.sec!.b && t.e === cam.sec!.e) : -1;
+  const quitar = h('button', { type: 'button', class: 'peligro' }, 'Sacar la barra');
+  quitar.addEventListener('click', () => { poner(c => { c.quitar = true; }); barraSel = null; });
+  const volver = h('button', { type: 'button' }, 'Como estaba');
+  volver.addEventListener('click', () => poner(c => { delete c.relA; delete c.relB; delete c.sec; delete c.quitar; }));
+  return h('div', { class: 'fila-acciones exo-editor' },
+    sel('Unión en a', e.relA ? 'art' : 'rig', un, v => poner(c => { c.relA = v === 'art'; })),
+    sel('Unión en b', e.relB ? 'art' : 'rig', un, v => poner(c => { c.relB = v === 'art'; })),
+    sel('Sección', iSec >= 0 ? String(iSec) : '', tubos, v => poner(c => { if (v === '') delete c.sec; else c.sec = CATALOGO_TUBOS[+v]; })),
+    quitar, ...(Object.keys(cam).length ? [volver] : []),
+    h('span', { class: 'nota chica' }, 'Vale para esta barra en las dos caras y con los dos vientos. Si queda un mecanismo, la app avisa.'));
 }

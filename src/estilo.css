@@ -1184,8 +1184,11 @@ button.peligro { color: var(--mal); }
 .exo-dibujo .ex-toque { stroke: transparent; stroke-width: 14; cursor: pointer; }
 .exo-dibujo .ex-g-barra:hover .ex-barra, .exo-dibujo .ex-g-barra.elegida .ex-barra { stroke: var(--elegido); }
 .exo-dibujo .ex-g-barra.elegida .ex-toque { stroke: color-mix(in srgb, var(--elegido) 22%, transparent); }
-.exo-dibujo .ex-fibra { stroke-width: 2.4; stroke-linecap: butt; }
-.exo-dibujo .ex-fibra.pasada { stroke-width: 4.2; }
+.exo-dibujo .ex-liston { stroke: none; }
+.exo-dibujo .ex-liston-borde { fill: none; stroke: color-mix(in srgb, var(--ink2) 35%, transparent); stroke-width: .5; }
+.exo-dibujo .ex-liston-borde.pasada { stroke: var(--mal); stroke-width: 1.6; }
+.exo-dibujo .ex-pin { fill: var(--lienzo); stroke: var(--ink); stroke-width: 1.3; }
+.exo-editor select { min-width: 0; }
 .exo-dibujo .ex-corte { stroke-width: .7; }
 .exo-dibujo .ex-corte.pos { fill: color-mix(in srgb, var(--corte, var(--accent)) 22%, transparent); stroke: var(--corte, var(--accent)); }
 .exo-dibujo .ex-corte.neg { fill: color-mix(in srgb, var(--corte, var(--accent)) 10%, transparent); stroke: var(--corte, var(--accent)); stroke-dasharray: 3 2; }

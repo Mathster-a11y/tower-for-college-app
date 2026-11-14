@@ -5,20 +5,26 @@
  *  - Las losas son diafragmas rígidos: en cada piso i hay un solo corrimiento u_i en el sentido del viento.
  *  - Tabiques: ménsula empotrada en PB con E·J(z) (vigas de Euler por piso); se condensa a los u_i → K_tab.
  *  - Exoesqueleto: pórticos planos en las caras paralelas al viento (método directo de la rigidez, 3 gdl por nudo:
- *    u, w, φ), con columnas (viga-columna), diagonales (bielas, solo EA) y vigas o cinturones (viga). Los nudos de un
- *    mismo piso comparten u (diafragma) y se condensan w y φ → K_exo = Σ caras (Kuu − Kur·Krr⁻¹·Kru).
- *  - Sistema combinado: (K_tab + K_exo)·u = W → F_tab = K_tab·u, F_exo = K_exo·u, F_tab + F_exo = W.
- *  - Esfuerzos de cada barra: con u se recuperan w y φ de cada cara y, barra por barra, f = k_local · T · d.
- *    Cargas solo en los nudos: N y Q constantes en cada barra, M lineal entre sus extremos.
+ *    u, w, φ). Cada extremo de barra es una unión rígida o una articulación (el giro se libera y se condensa en la
+ *    barra: k' = k_cc − k_cr·k_rr⁻¹·k_rc). Las bases de las columnas, empotradas o articuladas.
+ *  - Cargas en las barras, repartidas y lineales (trapecio) en globales: el peso propio del acero (γ·A, siempre) y,
+ *    si la fachada cuelga del exo, el viento de cada piso repartido en las barras de borde. Entran como cargas
+ *    nodales equivalentes P (empotramiento perfecto, con las articulaciones condensadas como k').
+ *  - Los nudos de un mismo piso comparten u (diafragma) y se condensan w y φ:
+ *      K_c = Kmm − Kms·Kss⁻¹·Ksm,   F_c = Fm − Kms·Kss⁻¹·Fs   (la carga propia de la cara, llevada a los pisos)
+ *  - Sistema combinado: (K_tab + Σ K_c)·u = W_losas + Σ F_c → F_tab = K_tab·u; el exo toma el resto.
+ *  - Esfuerzos de cada barra: f = k'·T·d − P' en los extremos y, a lo largo, con la carga repartida:
+ *      N(x) = Na − ∫p,  V(x) = Va + ∫q,  M(x) = Ma + Va·x + ∫∫q   (M parabólica o cúbica si hay carga en la barra)
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
   C: { nombre: 'Mega-columnas y cinturones', texto: 'Columnas en las esquinas atadas por reticulados cinturón (muy rígidos) en dos niveles.' },
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
+  E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
 };
 
 /** sección de una barra: tubo cuadrado b × e (m) */
@@ -28,6 +34,9 @@ export const propsSeccion = (s: Seccion) => {
   const A = s.b * s.b - bi * bi, I = (s.b ** 4 - bi ** 4) / 12;
   return { A, I, i: Math.sqrt(I / (A || 1)), c: s.b / 2, W: I / (s.b / 2 || 1) };
 };
+export type Union = 'rigida' | 'articulada';
+/** cambios de una barra sola (editor barra por barra): sus uniones, su sección, o sacarla */
+export interface CambioBarra { relA?: boolean; relB?: boolean; sec?: Seccion; quitar?: boolean }
 
 /** el exoesqueleto del proyecto (lo que el alumno elige) */
 export interface ExoDef {
@@ -41,76 +50,165 @@ export interface ExoDef {
   E: number; sigmaAdm: number;
   /** flecha objetivo en la azotea: δ ≤ h / limiteH (por defecto 500, el límite del curso; se puede pedir más) */
   limiteH?: number;
+  /** uniones de cada clase de barra en sus dos extremos y de la base de las columnas */
+  uniones?: { columna?: Union; diagonal?: Union; viga?: Union; base?: 'empotrada' | 'articulada' };
+  /** cómo llega el viento: por las losas a los nudos de cada piso (lo de la planilla) o repartido por la fachada colgada del exo */
+  viento?: 'losas' | 'fachada';
+  /** peso propio del acero (γ = 7,85 t/m³) como carga repartida en cada barra; por defecto sí */
+  pesoPropio?: boolean;
+  /** ficha E: piso donde empiezan los chevrones (abajo, solo el mástil) y la sección del mástil */
+  pisoInicio?: number; mastil?: Seccion;
+  /** cambios barra por barra, por el id de la barra (se borran si cambia la ficha o el módulo) */
+  barras?: Record<string, CambioBarra>;
 }
 export const EXO_POR_DEFECTO: ExoDef = {
   tipo: 'D', separacion: 1, modulo: 4,
   columna: { b: 0.5, e: 0.03 }, diagonal: { b: 0.3, e: 0.0125 }, viga: { b: 0.4, e: 0.02 },
   E: 2.1e7, sigmaAdm: 14000,
 };
+export const UNIONES_POR_DEFECTO = { columna: 'rigida', diagonal: 'articulada', viga: 'rigida', base: 'empotrada' } as const;
+const GAMMA_ACERO = 7.85;
 
 export type ClaseBarra = 'columna' | 'diagonal' | 'viga';
 export interface Nudo { id: number; s: number; z: number; piso: number }
-export interface Barra { id: string; clase: ClaseBarra; a: number; b: number; A: number; I: number; sec: Seccion }
-export interface Cara { nombre: string; nudos: Nudo[]; barras: Barra[] }
+/** carga repartida lineal en globales (t/m de barra): x horizontal (s), z vertical; en el extremo a y en el b */
+export interface CargaBarra { xa: number; za: number; xb: number; zb: number }
+export interface Barra {
+  id: string; clase: ClaseBarra; a: number; b: number; A: number; I: number; sec: Seccion;
+  /** articulación en el extremo a / b (el giro queda libre: M = 0 ahí) */
+  relA: boolean; relB: boolean;
+  /** barra de borde (sus dos nudos en las esquinas): ahí se cuelga la fachada */
+  borde: boolean;
+  carga?: CargaBarra;
+}
+export interface Cara { nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean }
 
 /**
- * Arma una cara (pórtico plano en s, z) del tipo pedido.
+ * Arma una cara (pórtico plano en s, z) del tipo pedido, con sus uniones y los cambios barra por barra.
  * @param ancho distancia entre las columnas de esquina, en el sentido del viento (m)
- * @param zs cotas de los pisos sobre PB, de abajo hacia arriba; zs[0] = PB (base, empotrada)
+ * @param zs cotas de los pisos sobre PB, de abajo hacia arriba; zs[0] = PB (base)
  */
 export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara'): Cara {
   const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
+  const un = { ...UNIONES_POR_DEFECTO, ...(def.uniones ?? {}) };
   const nudos: Nudo[] = [], barras: Barra[] = [];
   const nudo = (s: number, k: number) => {
     let q = nudos.find(x => x.piso === k && Math.abs(x.s - s) < 1e-9);
     if (!q) { q = { id: nudos.length, s, z: zs[k], piso: k }; nudos.push(q); }
     return q.id;
   };
-  const pc = propsSeccion(def.columna), pd = propsSeccion(def.diagonal), pv = propsSeccion(def.viga);
-  const barra = (clase: ClaseBarra, a: number, b: number) => {
-    if (a === b) return;                                       // barra de largo cero (módulos muy cortos)
-    const p = clase === 'columna' ? pc : clase === 'diagonal' ? pd : pv, sec = clase === 'columna' ? def.columna : clase === 'diagonal' ? def.diagonal : def.viga;
-    barras.push({ id: `${clase[0].toUpperCase()}${barras.filter(x => x.clase === clase).length + 1}`, clase, a, b, A: p.A, I: clase === 'diagonal' ? 0 : p.I, sec });
+  /** nudo en (s, z) cualquiera: si cae en un piso es un nudo de ese piso; si no, queda entre pisos (piso −1, u libre) */
+  const nudoEn = (s: number, z: number) => {
+    const k = zs.findIndex(zz => Math.abs(zz - z) < 1e-6);
+    if (k >= 0) return nudo(s, k);
+    let q = nudos.find(x => x.piso < 0 && Math.abs(x.s - s) < 1e-9 && Math.abs(x.z - z) < 1e-9);
+    if (!q) { q = { id: nudos.length, s, z, piso: -1 }; nudos.push(q); }
+    return q.id;
   };
   const s0 = -ancho / 2, s1 = ancho / 2;
-  // niveles con nudos del exo: cada piso en las columnas (A: solo en los bordes de los diamantes)
+  /** cruz de San Andrés con las dos diagonales unidas en el cruce (así cada una tiene la mitad de luz) */
+  const cruz = (a0: number, a1: number) => {
+    const zc = (zs[a0] + zs[a1]) / 2, c = nudoEn(0, zc);
+    barra('diagonal', nudo(s0, a0), c); barra('diagonal', c, nudo(s1, a1));
+    barra('diagonal', nudo(s1, a0), c); barra('diagonal', c, nudo(s0, a1));
+  };
+  const enBorde = (k: number) => Math.abs(Math.abs(nudos[k].s) - ancho / 2) < 1e-9;
+  const barra = (clase: ClaseBarra, a: number, b: number, sec?: Seccion) => {
+    if (a === b) return;                                       // barra de largo cero (módulos muy cortos)
+    const s = sec ?? (clase === 'columna' ? def.columna : clase === 'diagonal' ? def.diagonal : def.viga), p = propsSeccion(s);
+    const rel = un[clase] === 'articulada';
+    barras.push({ id: `${clase[0].toUpperCase()}${barras.filter(x => x.clase === clase).length + 1}`, clase, a, b, A: p.A, I: p.I, sec: s, relA: rel, relB: rel, borde: enBorde(a) && enBorde(b) });
+  };
+  // niveles con nudos del exo (los bordes de cada módulo)
+  const k0 = def.tipo === 'E' ? Math.min(n - 1, Math.max(0, Math.round(def.pisoInicio ?? 0))) : 0;
   const mods: number[] = [];
-  for (let k = 0; k <= n; k += m) mods.push(k);
+  for (let k = k0; k <= n; k += m) mods.push(k);
   if (mods[mods.length - 1] !== n) mods.push(n);
   // un último módulo de un solo piso se junta con el anterior (en el diagrid el diamante necesita al menos 2 pisos)
   if (mods.length > 2 && mods[mods.length - 1] - mods[mods.length - 2] < 2) mods.splice(mods.length - 2, 1);
   if (def.tipo === 'A') {
     // diagrid: nudos en los bordes y en el centro; diamantes de «módulo» pisos de alto
     for (let j = 0; j + 1 < mods.length; j++) {
-      const k0 = mods[j], k1 = mods[j + 1], km = Math.round((k0 + k1) / 2);
-      const L0 = nudo(s0, k0), R0 = nudo(s1, k0), C0 = nudo(0, k0), Lm = nudo(s0, km), Rm = nudo(s1, km), L1 = nudo(s0, k1), R1 = nudo(s1, k1), C1 = nudo(0, k1);
+      const a0 = mods[j], a1 = mods[j + 1], km = Math.round((a0 + a1) / 2);
+      const C0 = nudo(0, a0), Lm = nudo(s0, km), Rm = nudo(s1, km), C1 = nudo(0, a1);
+      const L0 = nudo(s0, a0), R0 = nudo(s1, a0), L1 = nudo(s0, a1), R1 = nudo(s1, a1);
       barra('diagonal', C0, Lm); barra('diagonal', C0, Rm); barra('diagonal', Lm, C1); barra('diagonal', Rm, C1);
       barra('diagonal', L0, Lm); barra('diagonal', Lm, L1); barra('diagonal', R0, Rm); barra('diagonal', Rm, R1);
-      void L0; void R0; void L1; void R1;
     }
-    // anillo (viga de borde) arriba y en la base del último módulo, para cerrar los diamantes
+    // anillo (viga de borde) arriba, para cerrar los diamantes
     barra('viga', nudo(s0, n), nudo(0, n)); barra('viga', nudo(0, n), nudo(s1, n));
-    return { nombre, nudos, barras };
-  }
-  // columnas de esquina, de piso a piso
-  for (const s of [s0, s1]) for (let k = 0; k < n; k++) barra('columna', nudo(s, k), nudo(s, k + 1));
-  for (let j = 0; j + 1 < mods.length; j++) {
-    const k0 = mods[j], k1 = mods[j + 1];
-    if (def.tipo === 'D') {                          // cruz de San Andrés en el módulo
-      barra('diagonal', nudo(s0, k0), nudo(s1, k1)); barra('diagonal', nudo(s1, k0), nudo(s0, k1));
+  } else if (def.tipo === 'E') {
+    // mástil central de la base a la azotea; esquinas desde el primer módulo (abajo vuelan); V por módulo y viga en cada borde
+    for (let k = 0; k < n; k++) barra('columna', nudo(0, k), nudo(0, k + 1), def.mastil ?? def.columna);
+    for (const s of [s0, s1]) for (let k = mods[1] ?? n; k < n; k++) barra('columna', nudo(s, k), nudo(s, k + 1));
+    for (let j = 0; j + 1 < mods.length; j++) {
+      const a0 = mods[j], a1 = mods[j + 1];
+      barra('diagonal', nudo(s0, a1), nudo(0, a0)); barra('diagonal', nudo(s1, a1), nudo(0, a0));
+      barra('viga', nudo(s0, a1), nudo(0, a1)); barra('viga', nudo(0, a1), nudo(s1, a1));
     }
-    if (def.tipo === 'B' || def.tipo === 'D') barra('viga', nudo(s0, k1), nudo(s1, k1));
+  } else {
+    // columnas de esquina, de piso a piso
+    for (const s of [s0, s1]) for (let k = 0; k < n; k++) barra('columna', nudo(s, k), nudo(s, k + 1));
+    for (let j = 0; j + 1 < mods.length; j++) {
+      const a0 = mods[j], a1 = mods[j + 1];
+      if (def.tipo === 'D') cruz(a0, a1);
+      if (def.tipo === 'B' || def.tipo === 'D') barra('viga', nudo(s0, a1), nudo(s1, a1));
+    }
+    if (def.tipo === 'C') {
+      // dos cinturones: a la mitad y arriba, cada uno un reticulado de un módulo de alto (vigas arriba y abajo + X)
+      const cint = [Math.max(m, Math.round(n / 2)), n];
+      cint.forEach(kt => {
+        const kb = Math.max(0, kt - Math.min(m, kt));
+        barra('viga', nudo(s0, kt), nudo(s1, kt)); barra('viga', nudo(s0, kb), nudo(s1, kb));
+        cruz(kb, kt);
+      });
+    }
   }
-  if (def.tipo === 'C') {
-    // dos cinturones: a la mitad y arriba, cada uno un reticulado de un módulo de alto (vigas arriba y abajo + X)
-    const cint = [Math.max(m, Math.round(n / 2)), n];
-    cint.forEach(kt => {
-      const kb = Math.max(0, kt - Math.min(m, kt));
-      barra('viga', nudo(s0, kt), nudo(s1, kt)); barra('viga', nudo(s0, kb), nudo(s1, kb));
-      barra('diagonal', nudo(s0, kb), nudo(s1, kt)); barra('diagonal', nudo(s1, kb), nudo(s0, kt));
-    });
+  // cambios barra por barra
+  const cambios = def.barras ?? {};
+  const fin = barras.filter(b => !cambios[b.id]?.quitar).map(b => {
+    const c = cambios[b.id];
+    if (!c) return b;
+    const sec = c.sec ?? b.sec, p = propsSeccion(sec);
+    return { ...b, sec, A: p.A, I: p.I, relA: c.relA ?? b.relA, relB: c.relB ?? b.relB };
+  });
+  return { nombre, nudos, barras: fin, baseArticulada: un.base === 'articulada' };
+}
+
+/**
+ * Cargas repartidas de una cara: el peso propio (vertical, γ·A) y, si la fachada cuelga del exo, el viento de cada
+ * piso repartido en altura en las barras de borde (lineal entre pisos; cada cara toma la mitad y cada borde otra mitad:
+ * un cuarto del viento total por borde). Se escala para que el viento sobre la fachada sume exactamente ΣW (la parte
+ * del primer tramo que queda por debajo del primer piso baja directo a la base).
+ */
+export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[]): Cara {
+  const n = zs.length - 1, peso = def.pesoPropio !== false;
+  // viento por metro de altura en cada piso (t/m, de toda la torre): W_k / D_k
+  const D = (k: number) => ((k < n ? zs[k + 1] : zs[k]) - zs[k - 1]) / (k < n ? 2 : 2);
+  const w = zs.map((_, k) => (k === 0 ? 0 : W[k - 1] / Math.max(D(k), 1e-9)));
+  w[0] = w[1] ?? 0;
+  const wz = (z: number) => { let k = 1; while (k < n && zs[k] < z - 1e-9) k++; const za = zs[k - 1], zb = zs[k]; const t = zb > za ? (z - za) / (zb - za) : 0; return w[k - 1] + (w[k] - w[k - 1]) * t; };
+  const bordes = cara.barras.filter(b => b.borde);
+  // factor para que el viento sobre las barras de borde de las dos caras sume ΣW
+  let f = 1;
+  if (def.viento === 'fachada' && bordes.length) {
+    const sumW = W.reduce((s, v) => s + v, 0);
+    let tot = 0;
+    bordes.forEach(b => { const A = cara.nudos[b.a], B = cara.nudos[b.b]; const za = Math.min(A.z, B.z), zb = Math.max(A.z, B.z); tot += ((wz(za) + wz(zb)) / 2) * (zb - za) / 4; });
+    // cada cara tiene dos bordes; con las dos caras, cada borde lleva 1/4: tot es lo de una cara → por 2
+    f = tot > 0 ? sumW / (2 * tot) : 1;
   }
-  return { nombre, nudos, barras };
+  return { ...cara, barras: cara.barras.map(b => {
+    const A = cara.nudos[b.a], B = cara.nudos[b.b], L = Math.hypot(B.s - A.s, B.z - A.z) || 1;
+    const c: CargaBarra = { xa: 0, za: 0, xb: 0, zb: 0 };
+    if (peso) { c.za = c.zb = -GAMMA_ACERO * b.A; }
+    if (def.viento === 'fachada' && b.borde) {
+      // t/m de altura → t/m de barra (por la proyección vertical)
+      const k = (Math.abs(B.z - A.z) / L) * f / 4;
+      c.xa = wz(A.z) * k; c.xb = wz(B.z) * k;
+    }
+    return c.xa || c.xb || c.za || c.zb ? { ...b, carga: c } : b;
+  }) };
 }
 
 // ------------------------------------------------------------------ álgebra densa
@@ -140,19 +238,39 @@ function resolver(A0: Mat, B0: Mat): Mat {
   return X;
 }
 
-/** rigidez de una barra de pórtico plano en coordenadas globales (u, w, φ en cada extremo) */
-function rigidezBarra(E: number, A: number, I: number, x1: number, z1: number, x2: number, z2: number): { K: Mat; T: Mat; k: Mat; L: number } {
+/** barra en locales con sus articulaciones condensadas y sus cargas como fuerzas nodales equivalentes */
+interface BarraLocal { K: Mat; T: Mat; k: Mat; P: number[]; L: number; c: number; s: number; qa: number; qb: number; pa: number; pb: number }
+function barraLocal(E: number, br: Barra, x1: number, z1: number, x2: number, z2: number): BarraLocal {
   const L = Math.hypot(x2 - x1, z2 - z1), c = (x2 - x1) / L, s = (z2 - z1) / L;
-  const a = (E * A) / L, b = (12 * E * I) / L ** 3, d = (6 * E * I) / L ** 2, e4 = (4 * E * I) / L, e2 = (2 * E * I) / L;
-  const k: Mat = [
+  const a = (E * br.A) / L, I = br.I, b = (12 * E * I) / L ** 3, d = (6 * E * I) / L ** 2, e4 = (4 * E * I) / L, e2 = (2 * E * I) / L;
+  let k: Mat = [
     [a, 0, 0, -a, 0, 0], [0, b, d, 0, -b, d], [0, d, e4, 0, -d, e2],
     [-a, 0, 0, a, 0, 0], [0, -b, -d, 0, b, -d], [0, d, e2, 0, -d, e4],
   ];
+  // cargas en locales: p a lo largo (de a hacia b), q perpendicular (+y local = x girado 90° antihorario)
+  const g = br.carga ?? { xa: 0, za: 0, xb: 0, zb: 0 };
+  const pa = g.xa * c + g.za * s, pb = g.xb * c + g.zb * s, qa = -g.xa * s + g.za * c, qb = -g.xb * s + g.zb * c;
+  let P = [L * (2 * pa + pb) / 6, L * (7 * qa + 3 * qb) / 20, L * L * (3 * qa + 2 * qb) / 60,
+    L * (pa + 2 * pb) / 6, L * (3 * qa + 7 * qb) / 20, -L * L * (2 * qa + 3 * qb) / 60];
+  // articulaciones: se condensan los giros liberados (k' = k_cc − k_cr·k_rr⁻¹·k_rc, P' = P_c − k_cr·k_rr⁻¹·P_r)
+  const r = [...(br.relA ? [2] : []), ...(br.relB ? [5] : [])];
+  if (r.length && I > 0) {
+    const cc = [0, 1, 2, 3, 4, 5].filter(i => !r.includes(i));
+    const krr = r.map(i => r.map(j => k[i][j])), krc = r.map(i => cc.map(j => k[i][j]));
+    const X = resolver(krr, [...krc.map((f, i) => [...f, P[r[i]]])].map(f => f));   // k_rr⁻¹·[k_rc | P_r]
+    const k2 = ceros(6, 6), P2 = [...P];
+    cc.forEach(i => {
+      cc.forEach((j, jj) => { k2[i][j] = k[i][j] - r.reduce((sm, rr, p) => sm + k[i][rr] * X[p][jj], 0); });
+      P2[i] = P[i] - r.reduce((sm, rr, p) => sm + k[i][rr] * X[p][cc.length], 0);
+    });
+    r.forEach(i => (P2[i] = 0));
+    k = k2; P = P2;
+  }
   const T: Mat = ceros(6, 6);
   for (const o of [0, 3]) { T[o][o] = c; T[o][o + 1] = s; T[o + 1][o] = -s; T[o + 1][o + 1] = c; T[o + 2][o + 2] = 1; }
   const K = ceros(6, 6);
   for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) { let v = 0; for (let p = 0; p < 6; p++) for (let q = 0; q < 6; q++) v += T[p][i] * k[p][q] * T[q][j]; K[i][j] = v; }
-  return { K, T, k, L };
+  return { K, T, k, P, L, c, s, qa, qb, pa, pb };
 }
 
 /**
@@ -170,37 +288,82 @@ function condensar(Kg: Mat, master: number[], esclavos: number[]): Condensada {
   return { K, Kss, Ksm, nEsc: esclavos.length };
 }
 
-/** cara armada y condensada a los pisos 1..n (el piso 0 es la base empotrada) */
-export interface CaraCondensada { cara: Cara; K: Mat; recuperar: (u: number[]) => EsfuerzoBarra[]; reacciones: (u: number[]) => { s: number; V: number; H: number }[] }
-export interface EsfuerzoBarra { id: string; clase: ClaseBarra; a: { s: number; z: number }; b: { s: number; z: number }; L: number; N: number; Q: number; Ma: number; Mb: number }
+/** cara armada y condensada a los pisos 1..n (el piso 0 es la base) */
+export interface CaraCondensada {
+  cara: Cara; K: Mat;
+  /** cargas propias de la cara (peso, viento por la fachada) llevadas a los pisos: F_c = Fm − Kms·Kss⁻¹·Fs */
+  F: number[];
+  recuperar: (u: number[]) => EsfuerzoBarra[]; reacciones: (u: number[]) => { s: number; V: number; H: number }[];
+}
+/**
+ * Esfuerzos de una barra. Convenio: N > 0 tracción; V y M de viga (dM/dx = V; M > 0 tracciona la cara −y local, la de
+ * la derecha de a→b). Con carga repartida lineal p (axial) y q (perpendicular) de a a b, entre los extremos:
+ *   N(x) = Na − pa·x − (pb − pa)·x²/2L,  V(x) = Va + qa·x + (qb − qa)·x²/2L,  M(x) = Ma + Va·x + qa·x²/2 + (qb − qa)·x³/6L
+ */
+export interface EsfuerzoBarra {
+  id: string; clase: ClaseBarra; a: { s: number; z: number }; b: { s: number; z: number }; L: number;
+  /** en el extremo a (Q = V(0)) y en el b */
+  N: number; Q: number; Ma: number; Mb: number; Nb: number; Qb: number;
+  relA: boolean; relB: boolean; sec: Seccion;
+  /** cargas repartidas en locales (t/m): p axial, q perpendicular, en a y en b */
+  pa: number; pb: number; qa: number; qb: number;
+}
+/** N, V y M de la barra a la fracción t de su largo (0 = extremo a, 1 = extremo b) */
+export function esfuerzosEn(e: EsfuerzoBarra, t: number) {
+  const x = t * e.L, L = e.L || 1;
+  return {
+    N: e.N - e.pa * x - (e.pb - e.pa) * x * x / (2 * L),
+    V: e.Q + e.qa * x + (e.qb - e.qa) * x * x / (2 * L),
+    M: e.Ma + e.Q * x + e.qa * x * x / 2 + (e.qb - e.qa) * x ** 3 / (6 * L),
+  };
+}
+/** fracciones donde M cambia de signo (pueden ser 0, 1 o 2 con carga repartida) */
+export function cerosDeM(e: EsfuerzoBarra, n = 60): number[] {
+  const out: number[] = [];
+  let prev = esfuerzosEn(e, 0).M;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, m = esfuerzosEn(e, t).M;
+    if (prev * m < 0) { let lo = (i - 1) / n, hi = t; for (let k = 0; k < 30; k++) { const md = (lo + hi) / 2; if (esfuerzosEn(e, lo).M * esfuerzosEn(e, md).M <= 0) hi = md; else lo = md; } out.push((lo + hi) / 2); }
+    prev = m;
+  }
+  return out;
+}
 
 export function condensarCara(cara: Cara, E: number, nPisos: number): CaraCondensada {
   // numeración: gdl 0..n-1 = u de los pisos 1..n (master); después w y φ de cada nudo que no está en la base
+  // (con la base articulada, el giro de los nudos de la base también queda libre)
   const master = Array.from({ length: nPisos }, (_, i) => i);
   const mapa = new Map<number, [number, number, number]>();   // nudo → índices globales (u, w, φ); −1 = fijo
   let k = nPisos;
   cara.nudos.forEach(q => {
-    if (q.piso === 0) mapa.set(q.id, [-1, -1, -1]);
+    if (q.piso === 0) { if (cara.baseArticulada) { mapa.set(q.id, [-1, -1, k]); k += 1; } else mapa.set(q.id, [-1, -1, -1]); }
+    else if (q.piso < 0) { mapa.set(q.id, [k, k + 1, k + 2]); k += 3; }      // entre pisos: u propio (no lo toca la losa)
     else { mapa.set(q.id, [q.piso - 1, k, k + 1]); k += 2; }
   });
-  const N = k, Kg = ceros(N, N);
+  const N = k, Kg = ceros(N, N), Fg = new Array<number>(N).fill(0);
   const datos = cara.barras.map(b => {
     const A = cara.nudos[b.a], B = cara.nudos[b.b];
-    const r = rigidezBarra(E, b.A, b.I, A.s, A.z, B.s, B.z);
+    const r = barraLocal(E, b, A.s, A.z, B.s, B.z);
     const g = [...mapa.get(b.a)!, ...mapa.get(b.b)!];
-    // biela: sin giro propio (los φ de sus nudos los dan las columnas; si un nudo solo tiene bielas, su φ queda suelto)
-    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) if (g[i] >= 0 && g[j] >= 0) Kg[g[i]][g[j]] += r.K[i][j];
+    for (let i = 0; i < 6; i++) {
+      if (g[i] < 0) continue;
+      for (let j = 0; j < 6; j++) if (g[j] >= 0) Kg[g[i]][g[j]] += r.K[i][j];
+      Fg[g[i]] += r.T.reduce((sm, f, p) => sm + f[i] * r.P[p], 0);     // Tᵀ·P
+    }
     return { b, A, B, r, g };
   });
-  // gdl φ sin rigidez (nudos con solo bielas): se fijan para que Kss no sea singular (no cambia nada)
-  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < 1e-12) Kg[i][i] = 1;
+  // giros sin rigidez (nudos donde todas las barras llegan articuladas): se fijan (no cambia nada)
+  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < 1e-12) { Kg[i][i] = 1; Fg[i] = 0; }
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
   const c = condensar(Kg, master, esc);
+  const Fs = esc.map(i => [Fg[i]]);
+  const KssFs = c.nEsc ? resolver(c.Kss, Fs).map(f => f[0]) : [];
+  const Fc = master.map(i => Fg[i] - esc.reduce((sm, j, p) => sm + Kg[i][j] * KssFs[p], 0));
   const desplaz = (u: number[]) => {
     const d = new Array<number>(N).fill(0);
     u.forEach((v, i) => (d[i] = v));
     if (c.nEsc) {
-      const rhs = c.Ksm.map(f => [-f.reduce((s, kv, j) => s + kv * u[j], 0)]);
+      const rhs = c.Ksm.map((f, i) => [Fg[esc[i]] - f.reduce((s, kv, j) => s + kv * u[j], 0)]);
       const x = resolver(c.Kss, rhs);
       x.forEach((f, i) => (d[nPisos + i] = f[0]));
     }
@@ -211,25 +374,26 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     return datos.map(({ b, A, B, r, g }) => {
       const dg = g.map(i => (i >= 0 ? d[i] : 0));
       const dl = r.T.map(f => f.reduce((s, v, j) => s + v * dg[j], 0));
-      const f = r.k.map(fl => fl.reduce((s, v, j) => s + v * dl[j], 0));
-      return { b, A, B, r, f, dg };
+      const f = r.k.map((fl, i) => fl.reduce((s, v, j) => s + v * dl[j], 0) - r.P[i]);
+      return { b, A, B, r, f };
     });
   };
   return {
-    cara, K: c.K,
+    cara, K: c.K, F: Fc,
     recuperar: u => fuerzasLocales(u).map(({ b, A, B, r, f }) => ({
-      // convención: N > 0 tracción; Q y M de extremo con la convención de la viga (M en a y en b, horario +)
-      id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: r.L, N: -f[0], Q: f[1], Ma: -f[2], Mb: f[5],
+      id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: r.L,
+      N: -f[0], Q: f[1], Ma: -f[2], Mb: f[5], Nb: f[3], Qb: -f[4],
+      relA: b.relA, relB: b.relB, sec: b.sec, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb,
     })),
     reacciones: u => {
       const out = new Map<number, { s: number; V: number; H: number }>();
       fuerzasLocales(u).forEach(({ A, B, r, f }) => {
-        const c2 = (B.s - A.s) / r.L, s2 = (B.z - A.z) / r.L;
-        // fuerzas de extremo en globales: F = Tᵀ f
+        const c2 = r.c, s2 = r.s;
+        // fuerzas de extremo sobre la barra en globales: F = Tᵀ f; la reacción del apoyo es esa misma fuerza
         const glob = (o: number) => ({ H: c2 * f[o] - s2 * f[o + 1], V: s2 * f[o] + c2 * f[o + 1] });
         for (const [q, o] of [[A, 0], [B, 3]] as const) if (q.piso === 0) {
-          const g = glob(o), x = out.get(q.id) ?? { s: q.s, V: 0, H: 0 };
-          x.V += g.V; x.H += g.H; out.set(q.id, x);
+          const gg = glob(o), x = out.get(q.id) ?? { s: q.s, V: 0, H: 0 };
+          x.V += gg.V; x.H += gg.H; out.set(q.id, x);
         }
       });
       return [...out.values()];
@@ -278,12 +442,15 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
 export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number): ResultadoExo {
   const n = zs.length - 1;
   const Kt = rigidezTabiques(zs, EJ);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`), def.E, n) }));
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`), def, zs, W), def.E, n) }));
+  // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
+  const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
+  const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
   const K = Kt.map((f, i) => f.map((v, j) => v + caras.reduce((s, c) => s + c.c.K[i][j], 0)));
-  const u = resolver(K, W.map(w => [w])).map(f => f[0]);
+  const u = resolver(K, P.map(w => [w])).map(f => f[0]);
   const uSin = resolver(Kt, W.map(w => [w])).map(f => f[0]);
   const mult = (A: Mat, x: number[]) => A.map(f => f.reduce((s, v, j) => s + v * x[j], 0));
-  const Ftab = mult(Kt, u), Fexo = W.map((w, i) => w - Ftab[i]);
+  const Ftab = mult(Kt, u), Fexo = P.map((w, i) => w - Ftab[i]);
   const acumula = (F: number[]) => {
     const V = new Array<number>(n + 1).fill(0), M = new Array<number>(n + 1).fill(0);
     for (let i = n - 1; i >= 0; i--) V[i] = V[i + 1] + F[i];                      // V[i]: corte en el tramo de i a i+1 (y en el nivel i)
@@ -300,11 +467,12 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
   });
   const controles: ControlBarra[] = [];
   res.forEach(c => c.esfuerzos.forEach(e => {
-    const sec = e.clase === 'columna' ? def.columna : e.clase === 'diagonal' ? def.diagonal : def.viga, p = propsSeccion(sec);
-    const M = Math.max(Math.abs(e.Ma), Math.abs(e.Mb));
-    const sigma = Math.abs(e.N) / p.A + (e.clase === 'diagonal' ? 0 : M / p.W);
+    const p = propsSeccion(e.sec);
+    // a lo largo de la barra (con carga repartida, el máximo puede estar adentro)
+    let sigma = 0, M = 0, Nc = 0;
+    for (let i = 0; i <= 20; i++) { const f = esfuerzosEn(e, i / 20); sigma = Math.max(sigma, Math.abs(f.N) / p.A + Math.abs(f.M) / p.W); M = Math.max(M, Math.abs(f.M)); Nc = Math.min(Nc, f.N); }
     const lambda = e.L / p.i, Ncr = (Math.PI ** 2 * def.E * p.I) / e.L ** 2;
-    const pandeo = e.N < 0 && (-e.N > Ncr / 1.7 || lambda > 200);
+    const pandeo = Nc < 0 && (-Nc > Ncr / 1.7 || lambda > 200);
     controles.push({ cara: c.nombre, id: e.id, clase: e.clase, N: e.N, M, sigma, lambda, Ncr, estado: sigma <= def.sigmaAdm && !pandeo ? 'verifica' : 'no verifica' });
   }));
   return { zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res, controles };

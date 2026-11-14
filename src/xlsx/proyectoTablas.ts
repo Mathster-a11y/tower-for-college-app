@@ -44,13 +44,33 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ...(['V', 'Kd', 'I', 'zg', 'alfa', 'Kzt', 'G', 'Cpb', 'Cps', 'GCpi'] as const).map(k => [
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
-  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X (vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
-    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
+  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil (vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
+    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
   ...([['Exo: separación (m)', 'distancia de la fachada al eje de las columnas', 'separacion'], ['Exo: módulo (pisos)', 'alto de cada cruz, marco o diamante', 'modulo'],
     ['Exo: E del acero (t/m²)', 'módulo de elasticidad', 'E'], ['Exo: σ admisible (t/m²)', 'tensión admisible del acero', 'sigmaAdm'], ['Exo: flecha objetivo (h / …)', 'δ azotea ≤ h / este número (vacío = 500)', 'limiteH']] as const).map(([k, q, c]) =>
     [k, q, (p: Proyecto) => p.exo?.[c] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   ...(['columna', 'diagonal', 'viga'] as const).flatMap(c => (['b', 'e'] as const).map(k =>
     [`Exo: ${c} ${k === 'b' ? 'lado' : 'espesor'} (m)`, `tubo cuadrado de la ${c}`, (p: Proyecto) => p.exo?.[c][k] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c][k] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void])),
+  ['Exo: uniones', 'columna, diagonal y viga: rígida o articulada; base: empotrada o articulada', p => (p.exo?.uniones ? (['columna', 'diagonal', 'viga', 'base'] as const).filter(k => p.exo!.uniones![k]).map(k => `${k}=${p.exo!.uniones![k] === 'rigida' ? 'rígida' : p.exo!.uniones![k]}`).join('; ') : null),
+    (p, v) => { if (!p.exo) return; const u: NonNullable<NonNullable<Proyecto['exo']>['uniones']> = {}; txt(v).split(';').forEach(par => { const [k, w] = par.split('=').map(x => x.trim().toLowerCase()); if (k === 'base') u.base = w.startsWith('art') ? 'articulada' : 'empotrada'; else if (k === 'columna' || k === 'diagonal' || k === 'viga') u[k] = w.startsWith('art') ? 'articulada' : 'rigida'; }); if (Object.keys(u).length) p.exo.uniones = u; }],
+  ['Exo: viento', 'cómo llega el viento al exo: «losas» (en cada piso) o «fachada» (repartido en las barras de borde)', p => p.exo?.viento ?? null, (p, v) => { if (p.exo && txt(v)) p.exo.viento = txt(v).toLowerCase().startsWith('fach') ? 'fachada' : 'losas'; }],
+  ['Exo: peso propio', 'peso del acero como carga repartida (sí / no; vacío = sí)', p => (p.exo?.pesoPropio === undefined ? null : p.exo.pesoPropio ? SI : 'no'), (p, v) => { if (p.exo && txt(v)) p.exo.pesoPropio = txt(v).toLowerCase() !== 'no'; }],
+  ['Exo: chevrones desde el piso (ficha E)', 'piso sobre PB donde empiezan los chevrones; abajo solo el mástil', p => p.exo?.pisoInicio ?? null, (p, v) => { const x = num(v); if (p.exo && x !== null) p.exo.pisoInicio = x; }],
+  ...(['b', 'e'] as const).map(k => [`Exo: mástil ${k === 'b' ? 'lado' : 'espesor'} (m)`, 'columna central de cada cara (ficha E)', (p: Proyecto) => p.exo?.mastil?.[k] ?? null,
+    (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo.mastil = { ...(p.exo.mastil ?? p.exo.columna), [k]: x }; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  ['Exo: cambios por barra', 'barra por barra: «C5 a=art b=rig sec=0.3x0.0125; D3 quitar» (a, b: uniones de cada extremo)', p => {
+    const b = p.exo?.barras; if (!b || !Object.keys(b).length) return null;
+    return Object.entries(b).map(([id, c]) => [id, ...(c.quitar ? ['quitar'] : []), ...(c.relA !== undefined ? [`a=${c.relA ? 'art' : 'rig'}`] : []), ...(c.relB !== undefined ? [`b=${c.relB ? 'art' : 'rig'}`] : []), ...(c.sec ? [`sec=${c.sec.b}x${c.sec.e}`] : [])].join(' ')).join('; ');
+  }, (p, v) => {
+    if (!p.exo || !txt(v)) return;
+    const out: NonNullable<NonNullable<Proyecto['exo']>['barras']> = {};
+    txt(v).split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
+      const [id, ...partes] = item.split(/\s+/); const c: NonNullable<NonNullable<Proyecto['exo']>['barras']>[string] = {};
+      partes.forEach(pt => { if (pt === 'quitar') c.quitar = true; else if (pt.startsWith('a=')) c.relA = pt.slice(2).startsWith('art'); else if (pt.startsWith('b=')) c.relB = pt.slice(2).startsWith('art'); else if (pt.startsWith('sec=')) { const [bb, ee] = pt.slice(4).replace(/,/g, '.').split('x').map(Number); if (bb > 0 && ee > 0) c.sec = { b: bb, e: ee }; } });
+      out[id] = c;
+    });
+    p.exo.barras = out;
+  }],
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
 ];
 

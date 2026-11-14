@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armarCara, calcularExo, CATALOGO_TUBOS, condensarCara, dimensionarExo, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type EntradaExo, type ExoDef } from './exo';
+import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
 const resolver1 = (K: number[][], W: number[]) => {        // Gauss simple para las pruebas
@@ -36,7 +36,7 @@ describe('exoesqueleto · motor', () => {
   it('equilibrio: lo que toman los tabiques más el exo es el viento de cada piso; sin exo, todo a los tabiques', () => {
     const zs = pisos(20), W = zs.slice(1).map((_z, i) => 4 + i * 0.2);
     for (const tipo of ['A', 'B', 'C', 'D'] as const) {
-      const r = calcularExo({ ...EXO_POR_DEFECTO, tipo }, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+      const r = calcularExo({ ...EXO_POR_DEFECTO, tipo, pesoPropio: false }, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
       r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 6));
       expect(r.u[19]).toBeLessThan(r.uSin[19]);
       expect(r.fraccionExo).toBeGreaterThan(0); expect(r.fraccionExo).toBeLessThan(1);
@@ -94,8 +94,11 @@ describe('exoesqueleto · signos de los esfuerzos de cada barra', () => {
       const def: ExoDef = { ...EXO_POR_DEFECTO, tipo };
       const zs = pisos(16, 3.5), W = zs.slice(1).map(() => 4);
       const r = calcularExo(def, zs, W, () => 30, 20, [-11, 11], 3.4e6);
+      // con su carga repartida (peso propio), N, V y M a lo largo de la barra llegan al extremo b con los valores de f
       r.caras[0].esfuerzos.forEach(e => {
-        expect(Math.abs(e.Mb - e.Ma - e.Q * e.L)).toBeLessThan(1e-6 * Math.max(1, Math.abs(e.Ma), Math.abs(e.Mb)));
+        const f = esfuerzosEn(e, 1), tol = 1e-6 * Math.max(1, Math.abs(e.Ma), Math.abs(e.Mb), Math.abs(e.N));
+        expect(Math.abs(f.M - e.Mb)).toBeLessThan(tol); expect(Math.abs(f.V - e.Qb)).toBeLessThan(tol); expect(Math.abs(f.N - e.Nb)).toBeLessThan(tol);
+        if (e.relA) expect(Math.abs(e.Ma)).toBeLessThan(1e-9); if (e.relB) expect(Math.abs(e.Mb)).toBeLessThan(1e-9);
       });
       // equilibrio de momentos en cada nudo libre: la suma de los momentos de extremo (como acción sobre el nudo) es cero
       const suma = new Map<string, number>();
@@ -148,5 +151,75 @@ describe('exoesqueleto · dimensionado (el más liviano que verifica)', () => {
     const colsB = 2 * (61 * propsSeccion(def.columna).A * 7.85) * 2;   // dos columnas por cara, dos caras
     const otro = pesoExo(def, [entradas[1]]);
     expect(ambos).toBeCloseTo(solo + otro - colsB, 6);
+  });
+});
+
+describe('exoesqueleto · articulaciones y cargas repartidas (casos cerrados)', () => {
+  // viga horizontal entre dos nudos de la base (fijos): q hacia abajo, L = 6 m
+  const viga = (relA: boolean, relB: boolean): Cara => {
+    const p = propsSeccion({ b: 0.4, e: 0.02 }), q = 2;
+    const b: Barra = { id: 'V1', clase: 'viga', a: 0, b: 1, A: p.A, I: p.I, sec: { b: 0.4, e: 0.02 }, relA, relB, borde: false, carga: { xa: 0, za: -q, xb: 0, zb: -q } };
+    return { nombre: 'v', nudos: [{ id: 0, s: 0, z: 0, piso: 0 }, { id: 1, s: 6, z: 0, piso: 0 }], barras: [b] };
+  };
+  const q = 2, L = 6;
+  it('empotrada-empotrada: M extremos = −qL²/12, M centro = qL²/24, cruza el eje dos veces', () => {
+    const e = condensarCara(viga(false, false), 2.1e7, 0).recuperar([])[0];
+    expect(e.Ma).toBeCloseTo(-q * L * L / 12, 9); expect(e.Mb).toBeCloseTo(-q * L * L / 12, 9);
+    expect(esfuerzosEn(e, 0.5).M).toBeCloseTo(q * L * L / 24, 9);
+    expect(cerosDeM(e).length).toBe(2);
+  });
+  it('simplemente apoyada (articulada en los dos extremos): M = 0 en los apoyos y qL²/8 en el centro', () => {
+    const e = condensarCara(viga(true, true), 2.1e7, 0).recuperar([])[0];
+    expect(Math.abs(e.Ma)).toBeLessThan(1e-9); expect(Math.abs(e.Mb)).toBeLessThan(1e-9);
+    expect(esfuerzosEn(e, 0.5).M).toBeCloseTo(q * L * L / 8, 9);
+    expect(e.Q).toBeCloseTo(q * L / 2, 9);
+  });
+  it('empotrada y articulada: M empotramiento = −qL²/8, reacción del lado articulado = 3qL/8', () => {
+    const e = condensarCara(viga(false, true), 2.1e7, 0).recuperar([])[0];
+    expect(e.Ma).toBeCloseTo(-q * L * L / 8, 9); expect(Math.abs(e.Mb)).toBeLessThan(1e-9);
+    expect(-e.Qb).toBeCloseTo(3 * q * L / 8, 9);
+  });
+  it('ménsula vertical con carga horizontal repartida: δ punta = qH⁴ / 8EI (con la carga llevada al piso)', () => {
+    const sec = { b: 0.5, e: 0.03 }, p = propsSeccion(sec), H = 10, w = 1.5, E = 2.1e7;
+    const b: Barra = { id: 'C1', clase: 'columna', a: 0, b: 1, A: p.A, I: p.I, sec, relA: false, relB: false, borde: true, carga: { xa: w, za: 0, xb: w, zb: 0 } };
+    const c = condensarCara({ nombre: 'm', nudos: [{ id: 0, s: 0, z: 0, piso: 0 }, { id: 1, s: 0, z: H, piso: 1 }], barras: [b] }, E, 1);
+    const u = c.F[0] / c.K[0][0];
+    expect(u).toBeCloseTo(w * H ** 4 / (8 * E * p.I), 9);
+    const e = c.recuperar([u])[0];
+    expect(Math.abs(e.Mb)).toBeLessThan(1e-6);                       // punta libre: el piso no le hace fuerza
+    expect(Math.abs(e.Ma)).toBeCloseTo(w * H * H / 2, 6);
+  });
+  it('fachada colgada del exo: Σ reacciones horizontales de las caras + corte de los tabiques = viento total aplicado', () => {
+    const zs = pisos(20), W = zs.slice(1).map((_z, i) => 4 + i * 0.2), sumW = W.reduce((a, b) => a + b, 0);
+    for (const tipo of ['A', 'B', 'C', 'D', 'E'] as const) {
+      const def: ExoDef = { ...EXO_POR_DEFECTO, tipo, viento: 'fachada', pisoInicio: 2 };
+      const r = calcularExo(def, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+      // viento que entra en las barras de borde de las dos caras
+      let aplicado = 0;
+      [-10, 10].forEach(() => cargarCara(armarCara(def, 18, zs), def, zs, W).barras.forEach(br => { if (!br.carga) return; const c = armarCara(def, 18, zs); const A = c.nudos[br.a], B = c.nudos[br.b]; aplicado += (br.carga.xa + br.carga.xb) / 2 * Math.hypot(B.s - A.s, B.z - A.z); }));
+      const Hcaras = r.caras.reduce((s, c) => s + c.reacciones.reduce((q2, x) => q2 + x.H, 0), 0);
+      expect(r.Vtab[0] - Hcaras).toBeCloseTo(aplicado, 4);
+      // el viento sobre la fachada es ΣW; a los pisos llega un poco menos (lo de abajo del primer piso va directo a la base)
+      expect(aplicado).toBeCloseTo(sumW, 6);
+      expect(r.Ftab.reduce((a, b) => a + b, 0) + r.Fexo.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(sumW * (1 + 1e-5));
+    }
+  });
+  it('uniones: con vigas y columnas articuladas el tubo en X sigue rígido; los mega-marcos todo articulado no suman rigidez (los sostienen los tabiques)', () => {
+    const zs = pisos(16), W = zs.slice(1).map(() => 4);
+    const ok = calcularExo({ ...EXO_POR_DEFECTO, tipo: 'D', uniones: { columna: 'articulada', viga: 'articulada', base: 'articulada' } }, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+    expect(ok.u[15]).toBeLessThan(ok.uSin[15]);
+    const zs2 = pisos(8);
+    const c = condensarCara(armarCara({ ...EXO_POR_DEFECTO, tipo: 'B', uniones: { viga: 'articulada', columna: 'articulada', base: 'articulada' } }, 18, zs2), 2.1e7, 8);
+    const rigida = condensarCara(armarCara({ ...EXO_POR_DEFECTO, tipo: 'B' }, 18, zs2), 2.1e7, 8);
+    expect(Math.max(...c.K.flat().map(Math.abs))).toBeLessThan(1e-6 * Math.max(...rigida.K.flat().map(Math.abs)));
+  });
+  it('ficha E (chevrones al mástil, esquinas colgadas): estable, en equilibrio y las esquinas no llegan al suelo', () => {
+    const zs = pisos(25), W = zs.slice(1).map(() => 4);
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'E', modulo: 8, pisoInicio: 1, pesoPropio: false };
+    const c = armarCara(def, 18, zs);
+    expect(c.nudos.filter(q => q.piso === 0).map(q => q.s)).toEqual([0]);
+    const r = calcularExo(def, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+    r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 6));
+    expect(r.u[24]).toBeLessThan(r.uSin[24]);
   });
 });
