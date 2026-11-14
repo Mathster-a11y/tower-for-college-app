@@ -1230,3 +1230,6 @@ button.peligro { color: var(--mal); }
 
 .exo-dibujo .ex-g-barra.ala .ex-barra, .exo-dibujo .ex-g-barra.ala .ex-liston-borde { stroke-dasharray: 6 4; }
 .exo-dibujo .ex-g-barra.ala .ex-liston { opacity: .55; }
+.exo-dibujo .ex-nudo-toque { fill: color-mix(in srgb, var(--accent) 18%, var(--lienzo)); stroke: var(--accent); stroke-width: 1.4; cursor: pointer; }
+.exo-dibujo .ex-nudo-toque.elegido { fill: var(--accent); }
+@media (pointer: coarse) { .exo-dibujo .ex-nudo-toque { r: 10; } }

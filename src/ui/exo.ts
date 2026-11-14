@@ -24,6 +24,9 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, stri
 type ModoExo = 'N' | 'M' | 'Q' | 'sigma';
 let modo: ModoExo = 'N';
 let barraSel: string | null = null;
+/** agregar barras: la clase elegida y el primer nudo tocado */
+let agregando: 'diagonal' | 'viga' | 'columna' | null = null;
+let nudoA: [number, number] | null = null;
 const MODOS: [ModoExo, string, string][] = [
   ['N', 'Flujo de fuerzas (N)', 'Tracción en azul, compresión en rojo; el grosor según |N|.'],
   ['M', 'Momentos (M)', 'Diagrama de momento flector de columnas y vigas, del lado traccionado.'],
@@ -216,10 +219,10 @@ export function panelExo(c: H) {
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `Acero de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
+  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
-  campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; delete x.nuevas; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
   campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
@@ -303,6 +306,26 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   cara.esfuerzos.forEach(e => (['a', 'b'] as const).forEach(k => { const q = e[k], key = `${q.s.toFixed(3)},${q.z.toFixed(3)}`, x = enNudo.get(key) ?? { x: X(q.s), y: Y(q.z), total: 0, libres: 0 }; x.total++; if (k === 'a' ? e.relA : e.relB) x.libres++; enNudo.set(key, x); }));
   enNudo.forEach(v => { if (v.libres >= 2 && v.libres === v.total) svg.append(el('circle', { cx: v.x, cy: v.y, r: 3.6, class: 'ex-pin' })); });
   cara.esfuerzos.forEach(e => pines(svg, e, P, q => { const v = enNudo.get(`${q.s.toFixed(3)},${q.z.toFixed(3)}`)!; return v.libres >= 2 && v.libres === v.total; }));
+  // agregar barras: se tocan dos nudos
+  if (agregando) {
+    const vistos = new Set<string>();
+    cara.esfuerzos.forEach(e => [e.a, e.b].forEach(q => {
+      const key = `${q.s.toFixed(3)},${q.z.toFixed(3)}`; if (vistos.has(key)) return; vistos.add(key);
+      const elegido = nudoA && Math.abs(nudoA[0] - q.s) < 1e-3 && Math.abs(nudoA[1] - q.z) < 1e-3;
+      const c = el('circle', { cx: X(q.s), cy: Y(q.z), r: 7, class: `ex-nudo-toque${elegido ? ' elegido' : ''}` });
+      c.append(el('title', {}, `nudo (${fmt(q.s, 2)}; ${fmt(q.z, 2)})`));
+      c.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const pt: [number, number] = [+q.s.toFixed(4), +q.z.toFixed(4)];
+        if (!nudoA) { nudoA = pt; estado.avisarPanel(); return; }
+        if (Math.abs(nudoA[0] - pt[0]) < 1e-3 && Math.abs(nudoA[1] - pt[1]) < 1e-3) { nudoA = null; estado.avisarPanel(); return; }
+        const a = nudoA, clase = agregando!; nudoA = null;
+        estado.cambiar(() => { const x = estado.proyecto.exo; if (x) x.nuevas = [...(x.nuevas ?? []), { clase, a, b: pt }]; });
+        const m = document.getElementById('mensaje'); if (m) m.textContent = `Barra nueva (${clase}) de (${fmt(a[0], 2)}; ${fmt(a[1], 2)}) a (${fmt(pt[0], 2)}; ${fmt(pt[1], 2)}). Tocá otro par de nudos, o otra vez «+ ${clase}» para terminar.`;
+      });
+      svg.append(c);
+    }));
+  }
   // base: empotramientos y reacciones verticales
   const xsR = cara.reacciones.map(q => X(q.s)).sort((u, v) => u - v);
   cara.reacciones.forEach(q => {
@@ -362,7 +385,17 @@ export function centroExo(c: H, tam: Tam) {
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Qué se ve en el alzado' });
   MODOS.forEach(([m, t, ayuda]) => { const b = h('button', { type: 'button', 'aria-pressed': String(modo === m), title: ayuda }, t); b.addEventListener('click', () => { modo = m; estado.avisarPanel(); }); seg.append(b); });
-  c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota chica' }, MODOS.find(x => x[0] === modo)![2]));
+  const segAg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Agregar barras' });
+  (['diagonal', 'viga', 'columna'] as const).forEach(k => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(agregando === k), title: `Agregar una ${k}: tocá dos nudos del alzado` }, `+ ${k}`);
+    b.addEventListener('click', () => { agregando = agregando === k ? null : k; nudoA = null; estado.avisarPanel(); });
+    segAg.append(b);
+  });
+  const nNuevas = d.def.nuevas?.length ?? 0;
+  const bBorrarN = h('button', { type: 'button' }, `Sacar las ${nNuevas} barras agregadas`);
+  bBorrarN.addEventListener('click', () => { estado.cambiar(() => { if (estado.proyecto.exo) delete estado.proyecto.exo.nuevas; }); });
+  c.append(h('div', { class: 'fila-acciones' }, seg, segAg, ...(nNuevas ? [bBorrarN] : [])),
+    h('p', { class: 'nota chica' }, agregando ? (nudoA ? `Tocá el segundo nudo de la ${agregando} (o el mismo para soltarlo).` : `Agregar ${agregando}: tocá el primer nudo (los círculos). Vale para las dos caras; tocá de nuevo el botón para terminar.`) : MODOS.find(x => x[0] === modo)![2]));
   c.append(dibujoExo(d, tam));
   const cara = d.r.caras[0], e = cara?.esfuerzos.find(x => x.id === barraSel);
   if (barraSel && !e) barraSel = null;

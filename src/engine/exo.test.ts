@@ -230,3 +230,17 @@ describe('exoesqueleto · articulaciones y cargas repartidas (casos cerrados)', 
     expect(r.u[24]).toBeLessThan(r.uSin[24]);
   });
 });
+
+describe('exoesqueleto · barras agregadas a mano', () => {
+  it('una diagonal nueva en los mega-marcos los hace más rígidos y queda en equilibrio', () => {
+    const zs = pisos(12), W = zs.slice(1).map(() => 4);
+    const base: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'B', pesoPropio: false };
+    const r0 = calcularExo(base, zs, W, () => 3.4e6 * 5, 18, [-10, 10], 3.4e6);
+    const def: ExoDef = { ...base, nuevas: [{ clase: 'diagonal', a: [-9, 0], b: [9, 12] }, { clase: 'diagonal', a: [9, 12], b: [-9, 24] }] };
+    const c = armarCara(def, 18, zs);
+    expect(c.barras.filter(b => b.id.startsWith('N')).length).toBe(2);
+    const r1 = calcularExo(def, zs, W, () => 3.4e6 * 5, 18, [-10, 10], 3.4e6);
+    expect(r1.u[11]).toBeLessThan(r0.u[11]);
+    r1.Ftab.forEach((f, i) => expect(f + r1.Fexo[i]).toBeCloseTo(W[i], 6));
+  });
+});

@@ -60,7 +60,10 @@ export interface ExoDef {
   pisoInicio?: number; mastil?: Seccion;
   /** cambios barra por barra, por el id de la barra (se borran si cambia la ficha o el módulo) */
   barras?: Record<string, CambioBarra>;
+  /** barras agregadas a mano entre dos nudos de la cara (s, z en m); su id es N1, N2… */
+  nuevas?: BarraNueva[];
 }
+export interface BarraNueva { clase: ClaseBarra; a: [number, number]; b: [number, number]; sec?: Seccion; relA?: boolean; relB?: boolean }
 export const EXO_POR_DEFECTO: ExoDef = {
   tipo: 'D', separacion: 1, modulo: 4,
   columna: { b: 0.5, e: 0.03 }, diagonal: { b: 0.3, e: 0.0125 }, viga: { b: 0.4, e: 0.02 },
@@ -184,6 +187,14 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
       });
     }
   }
+  // barras agregadas a mano (entre nudos que ya existen o en un piso)
+  (def.nuevas ?? []).forEach((nb, i) => {
+    const a = nudoEn(nb.a[0], nb.a[1]), b = nudoEn(nb.b[0], nb.b[1]);
+    if (a === b) return;
+    const sec = nb.sec ?? (nb.clase === 'columna' ? def.columna : nb.clase === 'diagonal' ? def.diagonal : def.viga), p = propsSeccion(sec);
+    const rel = un[nb.clase] === 'articulada';
+    barras.push({ id: `N${i + 1}`, clase: nb.clase, a, b, A: p.A, I: p.I, sec, relA: nb.relA ?? rel, relB: nb.relB ?? rel, borde: enBorde(a) && enBorde(b) });
+  });
   // cambios barra por barra
   const cambios = def.barras ?? {};
   const fin = barras.filter(b => !cambios[b.id]?.quitar).map(b => {

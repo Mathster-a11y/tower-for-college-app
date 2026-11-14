@@ -71,6 +71,8 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
     });
     p.exo.barras = out;
   }],
+  ['Exo: barras agregadas', 'barras agregadas a mano entre nudos de la cara (s, z en m), en JSON', p => (p.exo?.nuevas?.length ? JSON.stringify(p.exo.nuevas) : null),
+    (p, v) => { if (!p.exo || !txt(v)) return; try { const x = JSON.parse(txt(v)); if (Array.isArray(x)) p.exo.nuevas = x.filter(b => ['diagonal', 'viga', 'columna'].includes(b?.clase) && Array.isArray(b.a) && Array.isArray(b.b)); } catch { /* texto que no es JSON: se ignora */ } }],
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
 ];
 
