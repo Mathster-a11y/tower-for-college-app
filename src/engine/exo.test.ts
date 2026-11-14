@@ -87,3 +87,25 @@ describe('exoesqueleto · números de la torre de la guía (para el informe)', (
     console.log(`peor barra ${peor.cara} ${peor.id} ${peor.clase} N=${peor.N.toFixed(1)} t σ=${(peor.sigma / 10).toFixed(0)} kg/cm² λ=${peor.lambda.toFixed(0)}`);
   });
 });
+
+describe('exoesqueleto · signos de los esfuerzos de cada barra', () => {
+  it('Ma y Mb tienen el mismo convenio (flector): Mb − Ma = Q·L, y los nudos están en equilibrio de momentos', () => {
+    for (const tipo of ['A', 'B', 'C', 'D'] as const) {
+      const def: ExoDef = { ...EXO_POR_DEFECTO, tipo };
+      const zs = pisos(16, 3.5), W = zs.slice(1).map(() => 4);
+      const r = calcularExo(def, zs, W, () => 30, 20, [-11, 11], 3.4e6);
+      r.caras[0].esfuerzos.forEach(e => {
+        expect(Math.abs(e.Mb - e.Ma - e.Q * e.L)).toBeLessThan(1e-6 * Math.max(1, Math.abs(e.Ma), Math.abs(e.Mb)));
+      });
+      // equilibrio de momentos en cada nudo libre: la suma de los momentos de extremo (como acción sobre el nudo) es cero
+      const suma = new Map<string, number>();
+      r.caras[0].esfuerzos.forEach(e => {
+        if (e.clase === 'diagonal') return;
+        const ka = `${e.a.s.toFixed(3)},${e.a.z.toFixed(3)}`, kb = `${e.b.s.toFixed(3)},${e.b.z.toFixed(3)}`;
+        // momento de extremo sobre la barra (antihorario +): en a = −Ma, en b = Mb; sobre el nudo, el opuesto
+        suma.set(ka, (suma.get(ka) ?? 0) + e.Ma); suma.set(kb, (suma.get(kb) ?? 0) - e.Mb);
+      });
+      suma.forEach((v, k) => { if (!k.endsWith(',0.000')) expect(Math.abs(v)).toBeLessThan(1e-5); });
+    }
+  });
+});

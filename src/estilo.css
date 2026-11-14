@@ -1177,3 +1177,25 @@ button.peligro { color: var(--mal); }
 .exo-dibujo .ex-serie.sin { fill: var(--dim); } .exo-dibujo .ex-serie.con { fill: var(--deformada); }
 .exo-dibujo .ex-linea { fill: none; stroke-width: 2.2; } .exo-dibujo .ex-linea.sin { stroke: var(--dim); stroke-dasharray: 5 3; } .exo-dibujo .ex-linea.con { stroke: var(--deformada); }
 .tarjeta-vacia { border: 1px dashed var(--edge); border-radius: 10px; padding: 18px; margin: 16px; background: var(--panel); }
+
+/* exoesqueleto: modos del alzado y detalle de barra */
+.exo-dibujo { --ex-trac: var(--compresion); --ex-comp: var(--traccion); --ex-neutro: color-mix(in srgb, var(--ink2) 18%, var(--lienzo)); }
+.exo-dibujo .ex-barra.neutra { stroke: var(--dim); }
+.exo-dibujo .ex-toque { stroke: transparent; stroke-width: 14; cursor: pointer; }
+.exo-dibujo .ex-g-barra:hover .ex-barra, .exo-dibujo .ex-g-barra.elegida .ex-barra { stroke: var(--elegido); }
+.exo-dibujo .ex-g-barra.elegida .ex-toque { stroke: color-mix(in srgb, var(--elegido) 22%, transparent); }
+.exo-dibujo .ex-fibra { stroke-width: 2.4; stroke-linecap: butt; }
+.exo-dibujo .ex-fibra.pasada { stroke-width: 4.2; }
+.exo-dibujo .ex-corte { stroke-width: .7; }
+.exo-dibujo .ex-corte.pos { fill: color-mix(in srgb, var(--corte, var(--accent)) 22%, transparent); stroke: var(--corte, var(--accent)); }
+.exo-dibujo .ex-corte.neg { fill: color-mix(in srgb, var(--corte, var(--accent)) 10%, transparent); stroke: var(--corte, var(--accent)); stroke-dasharray: 3 2; }
+.exo-dibujo .ex-valor.momento { fill: var(--reaccion); } .exo-dibujo .ex-valor.corte { fill: var(--corte, var(--accent)); }
+.exo-dibujo text { paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; stroke-linejoin: round; }
+.exo-dibujo .ex-area-n.traccion { fill: color-mix(in srgb, var(--ex-trac) 22%, transparent); stroke: var(--ex-trac); }
+.exo-dibujo .ex-area-n.compresion { fill: color-mix(in srgb, var(--ex-comp) 22%, transparent); stroke: var(--ex-comp); }
+.exo-dibujo .ex-cero { fill: var(--ink); }
+.exo-dibujo .ex-seccion { fill: var(--dim); stroke: var(--ink2); }
+.exo-dibujo .ex-linea-sigma { stroke: var(--ink); stroke-width: 1.4; }
+.exo-dibujo .ex-neutro { stroke: var(--ink2); stroke-dasharray: 4 3; }
+.exo-detalle { max-width: 1100px; }
+.exo-detalle .exo-barra-detalle { width: 100%; height: auto; }
