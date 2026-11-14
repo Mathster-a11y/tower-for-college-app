@@ -22,6 +22,13 @@ export interface OpcionesG {
   areas?: (string | number | null)[][];
   /** carta de la torre y dibujos de la app (PNG) */
   imagenes?: ImagenG[];
+  /** exoesqueleto calculado por la app, viento A y B (si el proyecto tiene) */
+  exo?: { A: ExoHoja | null; B: ExoHoja | null } | null;
+}
+export interface ExoHoja {
+  ficha: string; ancho: number; t: number; Eh: number; Eacero: number; colA: number; fraccion: number; Jeq: number;
+  niveles: string[]; zs: number[]; W: number[]; Ftab: number[]; Fexo: number[]; u: number[]; uSin: number[];
+  barras: (string | number)[][];
 }
 export interface PerpApp { nombre: string; pos: number; J: number; muro?: string }
 
@@ -381,6 +388,46 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
   (o.areas ?? []).forEach((f, i) => f.forEach((v, j) => pa.p(`${col(j + 1)}${ra + 2 + i}`, v, typeof v === 'number' ? 'n3' : 't')));
   hojas.push(pa);
 
+  // --- G · Exoesqueleto (valores de la app: el cálculo necesita la matriz de rigidez de cada cara)
+  if (o.exo && (o.exo.A || o.exo.B)) {
+    const ex = new Hoja('G · Exoesqueleto', [12, 9, 10, 11, 11, 11, 11, 2, 10, 9, 11, 9, 10, 10, 11, 9, 10]);
+    ex.p('A1', 'Exoesqueleto: reparto del viento entre tabiques y exoesqueleto, flecha y esfuerzos de cada barra', 'tit');
+    ex.p('A2', 'Valores de la app (etapa 08): cada cara del exo es un pórtico plano atado a las losas; se suma a la ménsula de tabiques y cada uno toma el viento según su rigidez. Las celdas verdes son fórmulas de control a mano.', 'nota');
+    ex.p('A3', 'Si en algún piso «exo» da negativo no es un error: los tabiques (ménsula) y el pórtico se deforman distinto y arriba el pórtico empuja a los tabiques hacia atrás. Lo que cuenta es el momento total en la base (fila «momento que toma el exo»). La equivalencia con los pórticos de las hojas J queda a criterio de la cátedra.', 'nota');
+    let col0 = 1;
+    for (const dirn of ['A', 'B'] as const) {
+      const e = o.exo[dirn]; if (!e) continue;
+      const C = (k: number) => col(col0 + k);
+      ex.p(`${C(0)}4`, `Viento ${dirn} · ficha ${e.ficha}`, 'sub');
+      const filasDato: [string, ValorG, Estilo][] = [
+        ['ancho de la cara (m)', e.ancho, 'n3'], ['caras a ± (m)', e.t, 'n3'], ['E hormigón (t/m²)', e.Eh, 'n3'], ['E acero (t/m²)', e.Eacero, 'n3'],
+        ['n = E acero / E hormigón', `=${C(1)}8/${C(1)}7`, 'r3'], ['A columna (m²)', e.colA, 'n4'],
+        ['J columnas = n·2·A·(ancho/2)² (m⁴)', `=${C(1)}9*2*${C(1)}10*(${C(1)}5/2)^2`, 'r3'],
+        ['J equivalente de la cara (app, m⁴)', e.Jeq, 'n3'], ['momento que toma el exo', e.fraccion, 'pc'],
+      ];
+      filasDato.forEach(([t, v, st], k) => { ex.p(`${C(0)}${5 + k}`, t, 't'); ex.p(`${C(1)}${5 + k}`, v, st); });
+      const r0e = 16;
+      ['Nivel', 'z (m)', 'W (t)', 'tabiques (t)', 'exo (t)', 'δ sin exo (mm)', 'δ con exo (mm)'].forEach((t, j) => ex.p(`${C(j)}${r0e}`, t, 'h'));
+      e.niveles.forEach((nv, i) => {
+        const r = r0e + 1 + i;
+        ex.p(`${C(0)}${r}`, nv); ex.p(`${C(1)}${r}`, e.zs[i + 1], 'n3'); ex.p(`${C(2)}${r}`, e.W[i], 'n3');
+        ex.p(`${C(3)}${r}`, e.Ftab[i], 'n3'); ex.p(`${C(4)}${r}`, `=${C(2)}${r}-${C(3)}${r}`, 'r3');
+        ex.p(`${C(5)}${r}`, e.uSin[i] * 1000, 'n3'); ex.p(`${C(6)}${r}`, e.u[i] * 1000, 'r3');
+      });
+      const r1e = r0e + e.niveles.length, EXN = 'G · Exoesqueleto';
+      ex.graficos.push({ tipo: 'dispersion', titulo: `Corrimiento de cada piso · viento ${dirn} (mm)`, ejeX: 'mm', ejeY: 'z (m)', desde: [col0 - 1, r1e + 2], hasta: [col0 + 6, r1e + 22], series: [
+        { nombre: 'sin exo', x: ref(EXN, C(5), r0e + 1, r1e), y: ref(EXN, C(1), r0e + 1, r1e), color: '8A949E' },
+        { nombre: 'con exo', x: ref(EXN, C(6), r0e + 1, r1e), y: ref(EXN, C(1), r0e + 1, r1e), color: '1D9E75' }] });
+      // barras
+      const rb = r1e + 25;
+      ex.p(`${C(0)}${rb - 1}`, `Barras de las caras · viento ${dirn}`, 'sub');
+      ['Cara · barra', 'clase', 'L (m)', 'N (t)', 'M (tm)', 'σ (kg/cm²)', 'λ', 'estado'].forEach((t, j) => ex.p(`${col(col0 + j)}${rb}`, t, 'h'));
+      e.barras.forEach((f, i) => f.forEach((v, j) => ex.p(`${col(col0 + j)}${rb + 1 + i}`, v, typeof v === 'number' ? 'n3' : 't')));
+      col0 += 9;
+    }
+    hojas.push(ex);
+  }
+
   // --- G · Dibujos de la app (carta y dibujos de cada etapa, como imágenes)
   if (o.imagenes?.length) {
     const di = new Hoja('G · Dibujos de la app', [100]);
@@ -401,7 +448,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
 /** orden final: cada hoja «G ·» al lado de la original con la que trabaja; las «T3D …» al final */
 const ORDEN = ['Léame', 'viento', 'G · Viento corregido', 'M,NyQ', 'G · Carta de la torre', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'G · Sección real',
   'G · Planta', 'G · Perfiles y áreas (app)', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'G · Rotación muro por muro', 'Flex comp PB paralelos', 'G · Peso por muro',
-  'G · Dibujos de la app', ...Object.values(T), 'T3D'];
+  'G · Exoesqueleto', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
 
 /** agrega las hojas «G ·» (o las reemplaza si la planilla ya las tenía) con sus gráficos e imágenes, y ordena el libro */
 export async function agregarHojasG(zip: JSZip, p: Proyecto, o: OpcionesG, agregarHoja: (nombre: string, xml: string) => Promise<string>): Promise<void> {

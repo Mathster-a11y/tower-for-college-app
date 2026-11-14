@@ -202,6 +202,8 @@ export interface Proyecto {
   huecosLosa?: HuecoLosa[];
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
+  /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
+  exo?: import('./exo').ExoDef | null;
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }

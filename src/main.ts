@@ -23,6 +23,8 @@ import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { opcionesG } from './xlsx/opcionesG';
+import { datosExo } from './ui/exo';
+import { TIPOS_EXO, propsSeccion } from './engine/exo';
 import { imprimirCartaPdf } from './ui/cartaPdf';
 import { figurasDesdeMeta, type MetaFigura } from './xlsx/figuras';
 import metaFiguras from './assets/figuras/figuras.json';
@@ -226,6 +228,13 @@ async function exportar() {
         const base = plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
         // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
         const g = opcionesG(estado.proyecto);
+        if (estado.proyecto.exo) {
+          const hoja = (dir: 'A' | 'B') => { const d = datosExo(dir); if (!d) return null; return {
+            ficha: `${d.def.tipo} · ${TIPOS_EXO[d.def.tipo].nombre}`, ancho: d.ancho, t: d.tCaras[1], Eh: d.Eh, Eacero: d.def.E, colA: propsSeccion(d.def.columna).A,
+            fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin,
+            barras: d.r.controles.map(c => { const e = d.r.caras.find(x => x.nombre === c.cara)!.esfuerzos.find(x => x.id === c.id)!; return [`${c.cara} · ${c.id}`, c.clase, e.L, c.N, c.M, c.sigma / 10, c.lambda, c.estado]; }) }; };
+          g.exo = { A: hoja('A'), B: hoja('B') };
+        }
         try {
           const dib = (await dibujosPorHoja()).flat();
           g.imagenes = dib.map(d => ({ titulo: d.titulo, ancho: d.ancho, alto: d.alto, png: Uint8Array.from(atob(d.png.split(',')[1] ?? ''), c => c.charCodeAt(0)) })).filter(d => d.png.length);

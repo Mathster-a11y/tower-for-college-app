@@ -14,6 +14,7 @@ import type { VerticePerfil } from '../engine/perfil';
 import type { Guia } from '../engine/guias';
 import type { MedidasPieza, TipoPieza } from '../engine/piezasTipo';
 import type { Hoja, Valor } from './tablas';
+import { EXO_POR_DEFECTO, type TipoExo } from '../engine/exo';
 
 export interface Tabla { nombre: string; filas: Valor[][]; anchos: number[] }
 export const T = {
@@ -43,6 +44,13 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ...(['V', 'Kd', 'I', 'zg', 'alfa', 'Kzt', 'G', 'Cpb', 'Cps', 'GCpi'] as const).map(k => [
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X (vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
+    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
+  ...([['Exo: separación (m)', 'distancia de la fachada al eje de las columnas', 'separacion'], ['Exo: módulo (pisos)', 'alto de cada cruz, marco o diamante', 'modulo'],
+    ['Exo: E del acero (t/m²)', 'módulo de elasticidad', 'E'], ['Exo: σ admisible (t/m²)', 'tensión admisible del acero', 'sigmaAdm']] as const).map(([k, q, c]) =>
+    [k, q, (p: Proyecto) => p.exo?.[c] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  ...(['columna', 'diagonal', 'viga'] as const).flatMap(c => (['b', 'e'] as const).map(k =>
+    [`Exo: ${c} ${k === 'b' ? 'lado' : 'espesor'} (m)`, `tubo cuadrado de la ${c}`, (p: Proyecto) => p.exo?.[c][k] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c][k] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void])),
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
 ];
 
@@ -109,6 +117,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
   const p: Proyecto = structuredClone(base);
   p.sitio = { ...p.sitio }; p.fundacion = { ...p.fundacion };
   delete p.areasAuto;
+  delete p.exo;
   for (const g of leerHoja(H(T.proyecto))) {
     const d = DATOS.find(x => norm(x[0]) === norm(g('Dato')));
     if (d) d[3](p, g('Valor'));

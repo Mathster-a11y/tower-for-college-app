@@ -1153,3 +1153,25 @@ button.peligro { color: var(--mal); }
   .cp-ctrl.verifica i, .cp-ctrl.ok i { background: #1a7a3a; } .cp-ctrl.no-verifica i, .cp-ctrl.mal i { background: #c62828; } .cp-ctrl.revisar i { background: #8a5f00; }
   .cp-marca { margin-left: auto; color: #8a949e; }
 }
+
+/* ---- etapa 08 · exoesqueleto ---- */
+.exo-dibujo .ex-fondo { fill: var(--lienzo); }
+.exo-dibujo .ex-titulo { font: 700 14px var(--fuente); fill: var(--ink); }
+.exo-dibujo .ex-subtitulo { font: 600 12.5px var(--fuente); fill: var(--ink); }
+.exo-dibujo .ex-nota { font: 11px var(--fuente); fill: var(--ink2); }
+.exo-dibujo .ex-valor { font: 600 11px var(--mono); }
+.exo-dibujo .ex-valor.traccion { fill: var(--compresion); } .exo-dibujo .ex-valor.compresion { fill: var(--traccion); }
+.exo-dibujo .ex-torre { fill: color-mix(in srgb, var(--ink2) 7%, transparent); stroke: var(--edge); }
+.exo-dibujo .ex-losa { stroke: var(--hair); stroke-width: .8; }
+.exo-dibujo .ex-barra { stroke-linecap: round; cursor: help; }
+.exo-dibujo .ex-barra.traccion { stroke: var(--compresion); } .exo-dibujo .ex-barra.compresion { stroke: var(--traccion); }
+.exo-dibujo .ex-barra:hover { stroke: var(--elegido); }
+.exo-dibujo .ex-momento { fill: color-mix(in srgb, var(--reaccion) 20%, transparent); stroke: var(--reaccion); stroke-width: .7; }
+.exo-dibujo .ex-apoyo { fill: var(--ink2); }
+.exo-dibujo .ex-viento { stroke: var(--carga); stroke-width: 1.4; } .exo-dibujo .ex-viento-punta { fill: var(--carga); }
+.exo-dibujo .ex-eje { stroke: var(--ink2); stroke-width: 1; }
+.exo-dibujo .ex-limite { stroke: var(--mal); stroke-dasharray: 5 3; stroke-width: 1.2; }
+.exo-dibujo .ex-serie.tab { fill: var(--accent); } .exo-dibujo .ex-serie.exo { fill: var(--carga); }
+.exo-dibujo .ex-serie.sin { fill: var(--dim); } .exo-dibujo .ex-serie.con { fill: var(--deformada); }
+.exo-dibujo .ex-linea { fill: none; stroke-width: 2.2; } .exo-dibujo .ex-linea.sin { stroke: var(--dim); stroke-dasharray: 5 3; } .exo-dibujo .ex-linea.con { stroke: var(--deformada); }
+.tarjeta-vacia { border: 1px dashed var(--edge); border-radius: 10px; padding: 18px; margin: 16px; background: var(--panel); }

@@ -16,7 +16,7 @@ import { cajaMuro } from '../engine/modelo';
 const num = (v: string) => { const x = parseFloat(v.replace(',', '.')); return isFinite(x) ? x : null; };
 
 /** Fila de formulario: rótulo · campo · unidad, y la ayuda debajo (sistema de ventanas). */
-function campo(cont: H, etq: string, id: string, valor: string | number, onChange: (v: string) => void, opts: { tipo?: string; ayuda?: string; lista?: string[]; unidad?: string; globo?: string } = {}) {
+export function campo(cont: H, etq: string, id: string, valor: string | number, onChange: (v: string) => void, opts: { tipo?: string; ayuda?: string; lista?: string[]; unidad?: string; globo?: string } = {}) {
   const lab = h('label', { for: id }, etq);
   if (opts.globo) lab.setAttribute('data-globo', opts.globo);
   let inp: HTMLInputElement | HTMLSelectElement;

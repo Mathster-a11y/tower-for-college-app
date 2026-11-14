@@ -66,6 +66,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   };
   const pc = propsSeccion(def.columna), pd = propsSeccion(def.diagonal), pv = propsSeccion(def.viga);
   const barra = (clase: ClaseBarra, a: number, b: number) => {
+    if (a === b) return;                                       // barra de largo cero (módulos muy cortos)
     const p = clase === 'columna' ? pc : clase === 'diagonal' ? pd : pv, sec = clase === 'columna' ? def.columna : clase === 'diagonal' ? def.diagonal : def.viga;
     barras.push({ id: `${clase[0].toUpperCase()}${barras.filter(x => x.clase === clase).length + 1}`, clase, a, b, A: p.A, I: clase === 'diagonal' ? 0 : p.I, sec });
   };
@@ -74,6 +75,8 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   const mods: number[] = [];
   for (let k = 0; k <= n; k += m) mods.push(k);
   if (mods[mods.length - 1] !== n) mods.push(n);
+  // un último módulo de un solo piso se junta con el anterior (en el diagrid el diamante necesita al menos 2 pisos)
+  if (mods.length > 2 && mods[mods.length - 1] - mods[mods.length - 2] < 2) mods.splice(mods.length - 2, 1);
   if (def.tipo === 'A') {
     // diagrid: nudos en los bordes y en el centro; diamantes de «módulo» pisos de alto
     for (let j = 0; j + 1 < mods.length; j++) {

@@ -34,7 +34,7 @@ describe('exoesqueleto · motor', () => {
   });
 
   it('equilibrio: lo que toman los tabiques más el exo es el viento de cada piso; sin exo, todo a los tabiques', () => {
-    const zs = pisos(20), W = zs.slice(1).map((z, i) => 4 + i * 0.2);
+    const zs = pisos(20), W = zs.slice(1).map((_z, i) => 4 + i * 0.2);
     for (const tipo of ['A', 'B', 'C', 'D'] as const) {
       const r = calcularExo({ ...EXO_POR_DEFECTO, tipo }, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
       r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 6));
@@ -63,6 +63,18 @@ describe('exoesqueleto · motor', () => {
     expect(r.u[20] / r.uSin[20]).toBeLessThan(0.5);
     expect(r.fraccionExo).toBeGreaterThan(0.5);
     r.caras.forEach(c => expect(c.Jeq).toBeGreaterThan(5));
+  });
+});
+
+describe('exoesqueleto · pisos que no son múltiplo del módulo', () => {
+  it('21 pisos con módulo 4: las cuatro fichas dan números finitos y en equilibrio', () => {
+    const zs = pisos(21), W = new Array(21).fill(6);
+    for (const tipo of ['A', 'B', 'C', 'D'] as const) {
+      const r = calcularExo({ ...EXO_POR_DEFECTO, tipo }, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+      expect(r.u.every(Number.isFinite)).toBe(true);
+      expect(r.caras[0].esfuerzos.every(e => Number.isFinite(e.N) && e.L > 0)).toBe(true);
+      r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(6, 6));
+    }
   });
 });
 

@@ -17,6 +17,7 @@ import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
 import { TENSION_ADM, type Control } from '../engine/verificaciones';
 import type { PlanillaRes } from '../engine/planilla';
+import { panelExo, centroExo, estadoExo } from './exo';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -658,7 +659,17 @@ const ayuda: Etapa = {
   estado: () => 'informativo',
 };
 
-export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion];
+const exoesqueleto: Etapa = {
+  id: 'exo', nro: '08', nombre: 'Exoesqueleto', rol: '--r-rototrasl', dependeDir: true, conFuente: true,
+  icono: '<path d="M5 21V3M19 21V3M5 3l14 6M19 3L5 9M5 9l14 6M19 9L5 15M5 15l14 6M19 15L5 21"/>',
+  globo: 'Exoesqueleto|Una estructura de acero por fuera de la fachada que trabaja junto con los tabiques: cuánto viento toma, cuánto baja la flecha y los esfuerzos de cada barra.',
+  panel(c) { panelExo(c); },
+  centro(c, tam) { centroExo(c, tam); },
+  nombreCentro: () => `Exoesqueleto · viento ${estado.dir}`,
+  estado: () => estadoExo(),
+};
+
+export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto];
 export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;
