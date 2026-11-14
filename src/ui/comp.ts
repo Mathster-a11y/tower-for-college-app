@@ -14,10 +14,20 @@ export const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<s
 export const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** títulos de las secciones plegadas (se recuerdan entre sesiones: los paneles se rearman con cada cambio) */
-const CLAVE_PLEGADAS = 'torre3d.plegadas';
+const CLAVE_PLEGADAS = 'torre3d.plegadas.v2';
+/**
+ * Lo secundario empieza plegado (para no llenar la pantalla del alumno): las fórmulas con las celdas, las tablas
+ * nivel por nivel o pieza por pieza y las notas sobre la planilla. Lo principal de cada etapa queda abierto.
+ * Cada sección que se abre o se cierra a mano se recuerda.
+ */
+export const PLEGADAS_AL_EMPEZAR = ['Fórmulas', 'Fórmulas, nivel por nivel', 'Nivel por nivel', 'J de cada pieza', 'Tabiques paralelos al viento (t)',
+  'M, N y Q por nivel', 'Planilla y guía, lado a lado', 'Notas sobre cómo se escribe en la planilla', 'De la planilla virgen (valen para todos los proyectos)',
+  'Piezas agrupadas (papel de cada muro en la hoja J)', 'Datos del viento · CIRSOC 102'];
 let plegadas: Set<string> | null = null;
 export function seccionesPlegadas(): Set<string> {
-  if (!plegadas) { try { plegadas = new Set(JSON.parse(localStorage.getItem(CLAVE_PLEGADAS) ?? '[]') as string[]); } catch { plegadas = new Set(); } }
+  if (!plegadas) {
+    try { const g = localStorage.getItem(CLAVE_PLEGADAS); plegadas = new Set(g === null ? PLEGADAS_AL_EMPEZAR : JSON.parse(g) as string[]); } catch { plegadas = new Set(PLEGADAS_AL_EMPEZAR); }
+  }
   return plegadas;
 }
 export function plegarSeccion(clave: string, plegar: boolean) {
