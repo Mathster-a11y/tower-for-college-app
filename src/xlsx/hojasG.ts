@@ -28,6 +28,8 @@ export interface OpcionesG {
 export interface ExoHoja {
   ficha: string; ancho: number; t: number; Eh: number; Eacero: number; colA: number; fraccion: number; Jeq: number; limiteH?: number; peso?: number;
   niveles: string[]; zs: number[]; W: number[]; Ftab: number[]; Fexo: number[]; u: number[]; uSin: number[];
+  /** momento de los tabiques según el motor del exo, en cada cota de zs (PB = 0), para el control de la hoja de balance */
+  Mtab?: number[];
   barras: (string | number)[][];
 }
 export interface PerpApp { nombre: string; pos: number; J: number; muro?: string }
@@ -150,6 +152,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     'G · Sección real: área, baricentro y J de cada pieza con todos sus muros y su Steiner (lo que la hoja J aproxima con el molde).',
     'G · Rotación muro por muro: eje de inercia, e, Mt y Σ J·a² con las piezas y los muros perpendiculares (criterio de la guía).',
     'G · Peso por muro: peso propio y losas que bajan por cada muro en PB.',
+    'G · Exoesqueleto y G · Balance tabiques + exo (si la torre tiene exo): reparto del viento entre tabiques y exoesqueleto, piso por piso, y el momento que les queda a los tabiques y a cada pieza.',
     'G · Planta: los muros de «T3D Muros» dibujados (se actualiza al cambiar la tabla).',
     'G · Perfiles y áreas (app): perfiles irregulares y áreas de influencia, calculados por la app.',
     'G · Dibujos de la app: la carta de la torre y los dibujos de cada etapa, como imágenes.',
@@ -429,6 +432,75 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     hojas.push(ex);
   }
 
+  // --- G · Balance tabiques + exo: cuánto trabaja cada parte, leyendo las hojas originales con fórmulas
+  if (o.exo && (o.exo.A || o.exo.B)) {
+    const BA = 'G · Balance tabiques + exo';
+    const ba = new Hoja(BA, [10, 8, 7, 9, 9, 9, 9, 9, 10, 10, 9, 10, 9, 9, 2, 10, 8, 7, 9, 9, 9, 9, 9, 10, 10, 9, 10, 9, 9]);
+    ba.p('A1', 'Balance: cuánto viento toman los tabiques y cuánto el exoesqueleto, piso por piso', 'tit');
+    ba.p('A2', 'No cambia ninguna hoja original: lee «M,NyQ» y «Rototrasl.» con fórmulas. La única columna que viene de la app es ρ, la parte de la fuerza de cada piso que toman los tabiques (sale de la matriz de rigidez de las caras, que no entra en Excel).', 'nota');
+    ba.p('A3', 'Q y M de los tabiques se acumulan igual que las columnas I y J de «M,NyQ» (Q = Σ W de arriba, M = M de arriba + Q·h). Con ρ = 1 en todos los pisos (exo de rigidez cero) la hoja da exactamente M,NyQ. «Δ con la app» compara M de los tabiques con el motor del exo: da 0 si la app usa los valores de la planilla y unas décimas por mil con los de la Guía/CIRSOC (Kz desde 5 m). Las celdas verdes son fórmulas.', 'nota');
+    const zPB = (() => { const i = p.niveles.reduce((k, nv, j) => (nv.cota >= 0 ? j : k), -1); return i >= 0 ? p.niveles[i].cota : 0; })();
+    // niveles del balance: de la azotea a PB, en el orden de «M,NyQ»
+    const filasB = p.niveles.map((nv, j) => ({ nv, fm: nivRows[j] })).filter(x => x.fm !== undefined && x.nv.cota >= zPB - 1e-6);
+    const r0 = 6, r1 = r0 + filasB.length - 1;
+    let col0 = 1;
+    for (const dirn of ['A', 'B'] as const) {
+      const e = o.exo[dirn]; if (!e) continue;
+      const A = dirn === 'A', C = (k: number) => col(col0 + k);
+      ba.p(`${C(0)}4`, `Viento ${dirn} · ${A ? 'cara a (M,NyQ columnas H, I, J)' : 'cara b (M,NyQ columnas D·F·G, N, O)'}`, 'sub');
+      ['Nivel', 'z (m)', 'h (m)', 'W (t)', 'ρ tabiques (app)', 'W tabiques (t)', 'W exo (t)', 'Q tabiques (t)', 'M tabiques (tm)', 'M sin exo (tm)', 'Q exo (t)', 'M exo (tm)', 'M exo / M', 'Δ con la app'].forEach((t, j) => ba.p(`${C(j)}5`, t, 'h'));
+      filasB.forEach(({ nv, fm }, i) => {
+        const r = r0 + i, m = (c: string) => `'M,NyQ'!${c}${fm}`;
+        const k = e.zs.findIndex(z => Math.abs(z - nv.cota) < 1e-6);     // índice en el motor del exo (0 = PB)
+        const rho = k >= 1 && Math.abs(e.W[k - 1]) > 1e-12 ? e.Ftab[k - 1] / e.W[k - 1] : 1;
+        ba.p(`${C(0)}${r}`, `=${m('A')}&""`); ba.p(`${C(1)}${r}`, `=${m('B')}`, 'n3'); ba.p(`${C(2)}${r}`, `=${m('C')}`, 'n3');
+        ba.p(`${C(3)}${r}`, A ? `=${m('H')}` : `=${m('D')}*${m('F')}*${m('G')}`, 'n3');
+        ba.p(`${C(4)}${r}`, rho, 'n4');
+        ba.p(`${C(5)}${r}`, `=${C(3)}${r}*${C(4)}${r}`, 'r3');
+        ba.p(`${C(6)}${r}`, `=${C(3)}${r}-${C(5)}${r}`, 'r3');
+        ba.p(`${C(7)}${r}`, i === 0 ? 0 : `=${C(7)}${r - 1}+${C(5)}${r - 1}`, i === 0 ? 'n3' : 'r3');
+        ba.p(`${C(8)}${r}`, i === 0 ? 0 : `=${C(8)}${r - 1}+${C(7)}${r}*${C(2)}${r}`, i === 0 ? 'n3' : 'r3');
+        ba.p(`${C(9)}${r}`, `=${m(A ? 'J' : 'O')}`, 'n3');
+        ba.p(`${C(10)}${r}`, `=${m(A ? 'I' : 'N')}-${C(7)}${r}`, 'r3');
+        ba.p(`${C(11)}${r}`, `=${C(9)}${r}-${C(8)}${r}`, 'r3');
+        ba.p(`${C(12)}${r}`, `=IF(ABS(${C(9)}${r})<1E-9,"",${C(11)}${r}/${C(9)}${r})`, 'pc');
+        const Mapp = k >= 0 ? e.Mtab?.[k] : undefined;
+        ba.p(`${C(13)}${r}`, Mapp === undefined ? '' : `=IF(ABS(${Mapp})<1E-9,"",${C(8)}${r}/${Mapp}-1)`, 'pc');
+      });
+      // resumen en PB
+      const rr = r1 + 2;
+      ba.p(`${C(0)}${rr}`, 'En PB', 'sub');
+      const res: [string, string, Estilo][] = [
+        ['M sin exo (M,NyQ)', `=${C(9)}${r1}`, 'r3'], ['M de los tabiques con exo', `=${C(8)}${r1}`, 'r3'], ['M que toma el exo', `=${C(11)}${r1}`, 'r3'],
+        ['baja el momento de los tabiques', `=IF(ABS(${C(9)}${r1})<1E-9,"",1-${C(8)}${r1}/${C(9)}${r1})`, 'pc'],
+        ['control: Σ W tabiques + Σ W exo − Σ W (= 0)', `=SUM(${C(5)}${r0}:${C(5)}${r1})+SUM(${C(6)}${r0}:${C(6)}${r1})-SUM(${C(3)}${r0}:${C(3)}${r1})`, 'r4'],
+      ];
+      res.forEach(([t, v, st], j) => { ba.p(`${C(0)}${rr + 1 + j}`, t, 't'); ba.p(`${C(4)}${rr + 1 + j}`, v, st); });
+      // piezas: el momento de la hoja de rototraslación, con la parte que les deja el exo
+      const rp = rr + 8, RO = A ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor';
+      ba.p(`${C(0)}${rp}`, `Piezas · momento en PB = fracción de ${RO} (columna C) × M de PB`, 'sub');
+      ['Pieza', '', '', 'fracción C', 'M en PB sin exo (tm)', 'M en PB con exo (tm)'].forEach((t, j) => { if (t) ba.p(`${C(j)}${rp + 1}`, t, 'h'); });
+      const pzs = (A ? o.piezasA : o.piezasB) ?? [];
+      let fila = rp + 2;
+      pzs.forEach((nom, i) => {
+        if (!nom) return;
+        const ro = (c: string) => `'${RO}'!${c}${5 + i}`;
+        ba.p(`${C(0)}${fila}`, nom); ba.p(`${C(3)}${fila}`, `=${ro('C')}`, 'n4');
+        ba.p(`${C(4)}${fila}`, `=${C(3)}${fila}*${C(9)}${r1}`, 'r3'); ba.p(`${C(5)}${fila}`, `=${C(3)}${fila}*${C(8)}${r1}`, 'r3');
+        fila++;
+      });
+      // gráficos: quién toma el viento de cada piso y el momento en altura con y sin exo
+      const zR = ref(BA, C(1), r0, r1), g0 = Math.max(fila + 1, rp + 24);
+      ba.graficos.push({ tipo: 'dispersion', titulo: `Viento ${dirn}: quién toma la fuerza de cada piso (t)`, ejeX: 't', ejeY: 'z (m)', desde: [col0 - 1, g0], hasta: [col0 + 6, g0 + 20], series: [
+        { nombre: 'tabiques', x: ref(BA, C(5), r0, r1), y: zR, color: '8A949E' }, { nombre: 'exoesqueleto', x: ref(BA, C(6), r0, r1), y: zR, color: '1D9E75' }] });
+      ba.graficos.push({ tipo: 'dispersion', titulo: `Viento ${dirn}: momento en altura (tm)`, ejeX: 'tm', ejeY: 'z (m)', desde: [col0 + 6, g0], hasta: [col0 + 13, g0 + 20], series: [
+        { nombre: 'sin exo (M,NyQ)', x: ref(BA, C(9), r0, r1), y: zR, color: '8A949E' }, { nombre: 'tabiques con exo', x: ref(BA, C(8), r0, r1), y: zR, color: 'B8401A' },
+        { nombre: 'exoesqueleto', x: ref(BA, C(11), r0, r1), y: zR, color: '1D9E75' }] });
+      col0 += 15;
+    }
+    hojas.push(ba);
+  }
+
   // --- G · Dibujos de la app (carta y dibujos de cada etapa, como imágenes)
   if (o.imagenes?.length) {
     const di = new Hoja('G · Dibujos de la app', [100]);
@@ -449,7 +521,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
 /** orden final: cada hoja «G ·» al lado de la original con la que trabaja; las «T3D …» al final */
 const ORDEN = ['Léame', 'viento', 'G · Viento corregido', 'M,NyQ', 'G · Carta de la torre', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'G · Sección real',
   'G · Planta', 'G · Perfiles y áreas (app)', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'G · Rotación muro por muro', 'Flex comp PB paralelos', 'G · Peso por muro',
-  'G · Exoesqueleto', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
+  'G · Exoesqueleto', 'G · Balance tabiques + exo', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
 
 /** agrega las hojas «G ·» (o las reemplaza si la planilla ya las tenía) con sus gráficos e imágenes, y ordena el libro */
 export async function agregarHojasG(zip: JSZip, p: Proyecto, o: OpcionesG, agregarHoja: (nombre: string, xml: string) => Promise<string>): Promise<void> {
