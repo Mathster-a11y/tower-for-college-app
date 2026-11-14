@@ -33,6 +33,9 @@ export interface Nivel {
   carpinteria?: { x: number; y: number; b?: number }[] | null;
 }
 
+/** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */
+export interface TramoEspesor { desde: number; e: number }
+
 export interface Muro {
   id: string;
   dir: 'X' | 'Y';
@@ -54,6 +57,11 @@ export interface Muro {
   tipo?: TipoElemento;
   /** tubo rectangular: lado en y (m) */
   ladoY?: number | null;
+  /**
+   * espesor que cambia con la altura, por tramos: desde la cota «desde» hacia arriba el muro tiene espesor «e»
+   * (por debajo del primer tramo vale «espesor», que es el de PB y el que va a la hoja J de la planilla)
+   */
+  espesores?: TramoEspesor[] | null;
   /** cota donde arranca el muro (vacío = en la fundación) y donde termina (vacío = en la azotea) */
   zDesde?: number | null;
   zHasta?: number | null;
@@ -142,6 +150,31 @@ export function rectangulos(m: Muro): { x: number; y: number; ax: number; ay: nu
   }
   if (t === 'tubo-circ') return [{ x: m.x, y: m.y, ax: m.largo, ay: m.largo }];
   return [m.dir === 'Y' ? { x: m.x, y: m.y, ax: m.espesor, ay: m.largo } : { x: m.x, y: m.y, ax: m.largo, ay: m.espesor }];
+}
+
+/** espesor del muro a la cota z (el de PB por debajo del primer tramo) */
+export function espesorEn(m: Muro, z: number): number {
+  let e = m.espesor;
+  if (m.espesores?.length) [...m.espesores].sort((a, b) => a.desde - b.desde).forEach(t => { if (z > t.desde + 1e-9 && t.e > 0) e = t.e; });
+  return e;
+}
+/** el muro con el espesor que tiene a la cota z (el mismo objeto si no cambia) */
+export function muroEn(m: Muro, z: number): Muro {
+  if (!m.espesores?.length) return m;
+  const e = espesorEn(m, z);
+  return e === m.espesor ? m : { ...m, espesor: e };
+}
+/** cotas donde el muro cambia de espesor, entre z0 y z1 */
+export function cambiosDeEspesor(m: Muro, z0: number, z1: number): number[] {
+  return [...new Set((m.espesores ?? []).map(t => t.desde).filter(z => z > z0 + 1e-6 && z < z1 - 1e-6))].sort((a, b) => a - b);
+}
+/** peso propio del muro entre z0 y z1 respecto del de una sección constante (la de PB): Σ A(z)·Δz / (A_PB·(z1 − z0)) */
+export function factorPesoEspesor(m: Muro, z0: number, z1: number): number {
+  if (!m.espesores?.length || z1 <= z0) return 1;
+  const cortes = [z0, ...cambiosDeEspesor(m, z0, z1), z1], A0 = areaMuro(m) || 1;
+  let s = 0;
+  for (let i = 0; i + 1 < cortes.length; i++) s += areaMuro(muroEn(m, (cortes[i] + cortes[i + 1]) / 2)) * (cortes[i + 1] - cortes[i]);
+  return s / (A0 * (z1 - z0));
 }
 
 /** área en planta del elemento (m²) */

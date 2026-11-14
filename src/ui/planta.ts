@@ -997,7 +997,38 @@ export function montarPlanta(cont: HTMLElement) {
         }
         if (t !== 'tubo-circ') { const be = mk('button', 'Contorno…'); be.type = 'button'; be.title = 'Editar la polilínea del contorno (también: doble clic)'; be.addEventListener('click', () => edc.abrir(m)); med.append(be); }
       }
-      panelPrec.append(med, mk('span', 'Mover con precisión', 'prec-sub'));
+      panelPrec.append(med);
+      // espesor que cambia con la altura (tabiques y tubos rectangulares), por tramos: «desde el nivel …, espesor …»
+      if (!mot && (t === 'tabique' || t === 'tubo-rect')) {
+        const caja = mk('div', '', 'prec-espesores');
+        const tramos = [...(m.espesores ?? [])].sort((a, b) => a.desde - b.desde);
+        const sobrePB = p.niveles.filter(n => n.cota > 0).sort((a, b) => a.cota - b.cota);
+        const guardar = (nuevos: { desde: number; e: number }[], txt: string) => {
+          clavePrec = ''; (document.activeElement as HTMLElement | null)?.blur?.();   // que el cuadro se vuelva a armar con los tramos nuevos
+          estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (!w) return; const v = nuevos.filter(x => x.e > 0).sort((a, b) => a.desde - b.desde); if (v.length) w.espesores = v; else delete w.espesores; });
+          mensaje(txt);
+        };
+        caja.append(mk('span', `Espesor en altura · en PB ${f2(m.espesor)} m`, 'prec-sub'));
+        tramos.forEach((tr, k) => {
+          const fila = mk('div', '', 'prec-fila prec-tramo');
+          const sel = mk('select'); sobrePB.forEach(n => { const o = mk('option', `desde ${n.nombre}`); o.value = String(n.cota); sel.append(o); }); sel.value = String(tr.desde);
+          sel.addEventListener('change', () => guardar(tramos.map((x, j) => (j === k ? { ...x, desde: Number(sel.value) } : x)), `${m.id}: el tramo empieza en ${sel.selectedOptions[0]?.textContent?.replace('desde ', '')}.`));
+          const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.value = f2(tr.e); i.setAttribute('aria-label', 'espesor del tramo');
+          i.addEventListener('change', () => { const x = Number(i.value.replace(',', '.')); if (!(x > 0)) { i.value = f2(tr.e); return; } guardar(tramos.map((y, j) => (j === k ? { ...y, e: +x.toFixed(3) } : y)), `${m.id}: ${f2(x)} m desde ese nivel.`); });
+          const quitar = mk('button', '✕'); quitar.type = 'button'; quitar.title = 'Sacar este tramo';
+          quitar.addEventListener('click', () => guardar(tramos.filter((_, j) => j !== k), `${m.id}: tramo sacado.`));
+          fila.append(sel, i, mk('span', 'm'), quitar); caja.append(fila);
+        });
+        const mas = mk('button', '+ tramo'); mas.type = 'button'; mas.title = 'El muro cambia de espesor desde un nivel hacia arriba (por ejemplo, se afina en los pisos altos)';
+        mas.addEventListener('click', () => {
+          const ult = tramos[tramos.length - 1], prox = sobrePB.find(n => n.cota > (ult?.desde ?? sobrePB[Math.floor(sobrePB.length / 2) - 1]?.cota ?? 0)) ?? sobrePB[0];
+          if (!prox) return;
+          guardar([...tramos, { desde: prox.cota, e: +((ult?.e ?? m.espesor) * 0.75).toFixed(3) }], `${m.id}: nuevo tramo desde ${prox.nombre}. La hoja J de la planilla usa el espesor de PB; la app calcula J, peso y deformada con cada tramo.`);
+        });
+        caja.append(mas);
+        panelPrec.append(caja);
+      }
+      panelPrec.append(mk('span', 'Mover con precisión', 'prec-sub'));
     }
     if (m.pieza) {
       const bm = mk('button', m.pieza.tipo === 'pórtico' ? 'Medidas del pórtico (luz entre columnas)…' : 'Medidas de la pieza…', 'b-medidas');

@@ -16,7 +16,7 @@
  */
 import type { PiezaEquivalente } from './mapping';
 import type { ResultadoCorregido } from './correcciones';
-import { areaMuro, dInterior, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { areaMuro, dInterior, factorPesoEspesor, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { propiedades } from './perfil';
 
 export const PE_HORMIGON = 2.4;       // t/m³
@@ -102,7 +102,8 @@ export function partesDePieza(muros: Muro[], dir: 'A' | 'B'): { partes: ParteMur
 /** Altura sobre PB y número de losas que carga un muro (las de los niveles sobre PB donde está). */
 export function alturaYLosas(m: Muro, alt: DatosAltura): { altura: number; losas: number } {
   const top = Math.min(m.zHasta ?? alt.zTop, alt.zTop);
-  const altura = Math.max(0, top - alt.zPB);
+  // con espesor por tramos, la «altura» del peso propio es la equivalente a la sección de PB: Σ A(z)·Δz / A_PB
+  const altura = Math.max(0, top - alt.zPB) * factorPesoEspesor(m, alt.zPB, top);
   const losas = alt.cotasSobrePB.filter(z => z <= top + 1e-6 && presenteEnOLlega(m, z, alt)).length;
   return { altura, losas };
 }

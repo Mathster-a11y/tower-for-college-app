@@ -6,7 +6,7 @@
 import type { MNyQRes, PlanillaRes, RotoRes, VientoRes, JMinimo } from './planilla';
 import type { Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
-import { presenteEn } from './modelo';
+import { muroEn, presenteEn } from './modelo';
 import { partesDePieza } from './flexocompresion';
 
 export interface PuntoAltura {
@@ -103,8 +103,9 @@ export function rigidez(res: PlanillaRes, hormigon: string): Rigidez[] {
 export function rigidezPorNivel(p: Proyecto, piezas: PiezaEquivalente[], dir: 'A' | 'B', Jplanilla: number): { z: number; nivel: string; J: number }[] {
   const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
   const porId = new Map(p.muros.map(m => [m.id, m]));
+  // J del entrepiso de abajo de cada nivel (con el espesor que tienen los muros en ese tramo)
   const JdeNivel = (z: number) => piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).reduce((s, pz) => {
-    const ms = pz.muros.map(id => porId.get(id)!).filter(m => m && presenteEn(m, z, zFund, zTop));
+    const ms = pz.muros.map(id => porId.get(id)!).filter(m => m && presenteEn(m, z, zFund, zTop)).map(m => muroEn(m, z - 0.01));
     return s + (ms.length ? partesDePieza(ms, dir).J : 0);
   }, 0);
   const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);

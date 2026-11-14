@@ -373,6 +373,8 @@ export function aPlanilla(p: Proyecto): Asignacion {
   // la fila 4 de M,NyQ es siempre 0: el nivel más alto que entra es el de la fila 5 → 49 niveles sobre PB
   if (arriba.length - 1 > 49) avisos.push(`La planilla admite hasta 49 niveles sobre PB (este proyecto tiene ${arriba.length - 1}): el más alto cae en la fila 4 de «M,NyQ», que la planilla deja siempre en 0, y el corte, el momento y el vuelco salen mal. Sacá niveles o juntá los de arriba.`);
   if (subs.length > 3) avisos.push('La planilla admite hasta 3 subsuelos.');
+  const conTramos = p.muros.filter(m => m.espesores?.length).map(m => m.id);
+  if (conTramos.length) avisos.push(`${conTramos.length === 1 ? 'El muro' : 'Los muros'} ${conTramos.slice(0, 6).join(', ')}${conTramos.length > 6 ? '…' : ''} cambia${conTramos.length > 1 ? 'n' : ''} de espesor en altura: la hoja J de la planilla usa el espesor de PB; la app calcula el J de cada piso, el peso y la deformada con cada tramo (etapas 05 y botón J del 3D).`);
   if (subs.length < 3) avisos.push(`La planilla tiene 3 subsuelos fijos; ${3 - subs.length === 1 ? 'el que falta se carga' : `los ${3 - subs.length} que faltan se cargan`} con altura 0 y sin superficie.`);
 
   const Z = new Array<number>(N_FILAS).fill(0);

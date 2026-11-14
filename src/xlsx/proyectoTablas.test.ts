@@ -36,6 +36,7 @@ function completo(): Proyecto {
   p.muros[0].vano = { con: 'M2', ancho: 1.2, tipo: 'dintel' };
   p.muros[1].rolA = 'ala sup.'; p.muros[1].portico = true; p.muros[1].zDesde = p.niveles[2].cota; p.muros[1].zHasta = 17.3;
   p.muros[2].tipo = 'tubo-rect'; p.muros[2].ladoY = 2.5;
+  p.muros[0].espesores = [{ desde: p.niveles[8].cota, e: 0.15 }, { desde: p.niveles[3].cota, e: 0.12 }];
   p.niveles[0].silueta = [{ x: -10, y: -6 }, { x: 10, y: -6, b: 0.2 }, { x: 10, y: 6 }, { x: -10, y: 6 }];
   p.niveles[1].carpinteria = [{ x: -9, y: -5 }, { x: 9, y: -5 }, { x: 9, y: 5 }, { x: -9, y: 5 }];
   p.huecosLosa = [{ id: 'H1', nombre: 'Ascensor', v: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 2 }, { x: 0, y: 2 }], zDesde: 0.2 }];

@@ -24,6 +24,7 @@ import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
+import { montarDiagramaJ } from './ui/diagramaJ';
 import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
 import { TIPOS_EXO, propsSeccion, pesoExo, type EntradaExo } from './engine/exo';
 import { imprimirCartaPdf } from './ui/cartaPdf';
@@ -473,6 +474,7 @@ estado.suscribir(dibujarTodo);
 estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'planta') dibujarCentro(); });
 montarPlanta($('vista-planta'));
 montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
+montarDiagramaJ($('vista-3d'), $<HTMLButtonElement>('b-j3d'));
 $('b-encuadrar').addEventListener('click', () => $('vista-3d').querySelector('canvas')?.dispatchEvent(new MouseEvent('dblclick')));
 new ResizeObserver(() => {
   const l = $('lienzo');

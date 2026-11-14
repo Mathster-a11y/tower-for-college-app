@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
-import { entraEnCalculo, huecoEn, rectangulos, tipoDe } from '../engine/modelo';
+import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
@@ -217,10 +217,16 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         const pr = new Prisma(ext, zs, mat, tinta, undefined, hs); pr.conBordes = def; prismas.push(pr);
         return;
       }
-      const pols: P2[][] = tipoDe(m) === 'tubo-circ'
-        ? [Array.from({ length: 28 }, (_, i) => ({ x: m.x + (m.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: m.y + (m.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
-        : rectangulos(m).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
-      pols.forEach(pol => { const pr = new Prisma(pol, zs, mat, tinta); pr.conBordes = def; prismas.push(pr); });
+      // con espesor por tramos, un prisma por tramo (el muro se afina en altura)
+      const cortes = [z0, ...cambiosDeEspesor(m, z0, z1), z1];
+      for (let k = 0; k + 1 < cortes.length; k++) {
+        const za = cortes[k], zb = cortes[k + 1], mm = muroEn(m, (za + zb) / 2);
+        const zsT = [za, ...zs.filter(z => z > za + 1e-6 && z < zb - 1e-6), zb];
+        const pols: P2[][] = tipoDe(mm) === 'tubo-circ'
+          ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+          : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
+        pols.forEach(pol => { const pr = new Prisma(pol, zsT, mat, tinta); pr.conBordes = def || cortes.length > 2; prismas.push(pr); });
+      }
     });
     if (espectro && roto) {
       // el mayor corrimiento real de la torre: el de la esquina más alejada del CR en la azotea

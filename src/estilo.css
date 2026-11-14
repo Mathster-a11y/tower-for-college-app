@@ -1233,3 +1233,27 @@ button.peligro { color: var(--mal); }
 .exo-dibujo .ex-nudo-toque { fill: color-mix(in srgb, var(--accent) 18%, var(--lienzo)); stroke: var(--accent); stroke-width: 1.4; cursor: pointer; }
 .exo-dibujo .ex-nudo-toque.elegido { fill: var(--accent); }
 @media (pointer: coarse) { .exo-dibujo .ex-nudo-toque { r: 10; } }
+.prec-panel .prec-espesores { display: flex; flex-direction: column; gap: 4px; }
+.prec-panel .prec-tramo { grid-template-columns: 1fr 64px auto auto !important; }
+.prec-panel .prec-tramo select { min-width: 0; }
+.prec-panel .prec-tramo input { width: 100%; }
+
+/* diagrama ΣJ(z) en el 3D */
+.vista3d .diagrama-j { position: absolute; top: 8px; right: 8px; z-index: 3; padding: 4px 6px 6px; border: 1px solid var(--edge); border-radius: 8px; background: color-mix(in srgb, var(--panel) 92%, transparent); pointer-events: none; }
+.vista3d .diagrama-j[hidden] { display: none; }
+.diagrama-j svg { display: block; }
+.diagrama-j .dj-tit { font: 600 10.5px var(--fuente); fill: var(--ink); }
+.diagrama-j .dj-u { font: 9px var(--mono); fill: var(--ink2); }
+.diagrama-j .dj-val { font: 600 9px var(--mono); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 2.5px; }
+.diagrama-j .dj-tab { fill: color-mix(in srgb, var(--r-rigidez, var(--accent)) 30%, transparent); }
+.diagrama-j .dj-exo { fill: color-mix(in srgb, var(--r-rototrasl, #8a5cc4) 30%, transparent); }
+.diagrama-j .dj-linea { fill: none; stroke: var(--r-rigidez, var(--accent)); stroke-width: 1.4; }
+.diagrama-j .dj-eje { stroke: var(--ink2); stroke-width: .8; }
+.diagrama-j .dj-min { stroke: var(--mal); stroke-width: 1; stroke-dasharray: 4 3; }
+.diagrama-j .dj-ley { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 9.5px; color: var(--ink2); max-width: 150px; }
+.diagrama-j .dj-ley i { display: inline-block; width: 9px; height: 7px; margin-right: 3px; vertical-align: middle; border-radius: 1px; }
+.diagrama-j .dj-ley i.tab { background: color-mix(in srgb, var(--r-rigidez, var(--accent)) 45%, transparent); }
+.diagrama-j .dj-ley i.exo { background: color-mix(in srgb, var(--r-rototrasl, #8a5cc4) 45%, transparent); }
+.diagrama-j .dj-ley i.min { height: 0; border-top: 1.5px dashed var(--mal); }
+#b-j3d { font-weight: 700; font-family: var(--mono); min-width: 30px; }
+#b-j3d[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
