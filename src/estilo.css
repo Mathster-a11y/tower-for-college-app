@@ -1277,3 +1277,5 @@ button.peligro { color: var(--mal); }
 .leyenda-tensiones3d small { color: var(--ink2); }
 .campo-nivel-flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 13px; }
 .campo-nivel-flex select { max-width: 100%; }
+.notas-fuentes { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.notas-fuentes li { margin: 0 0 4px; }

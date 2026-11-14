@@ -294,32 +294,30 @@ export function ejemploAsimetrico(): Proyecto {
  * sobre la iglesia de San Pedro. Los chevrones de acero de 8 pisos por cara (el «exoesqueleto») llevan las cargas
  * de las esquinas a esas columnas. Arriba, un amortiguador de masa sintonizada de unas 400 t.
  *
- * Modelo para empezar a calcular, con supuestos (marcados): 48 pisos de oficinas de 4,064 m (13'-4", pisos 8 a 56,
- * seis módulos de 8, leídos del plano de elevación) más la corona: 49 niveles sobre PB, el máximo de la planilla. El núcleo central es de hormigón y llega
- * al suelo (así lo muestran los dibujos de la obra); sus medidas (21 × 21 m, pared de 0,90 m) son supuestas. Las
- * supercolumnas van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de 0,60 m, supuestos) solo en la
- * base abierta, hasta el piso 8 (34,75 m); de ahí para arriba las sigue el mástil de acero del exoesqueleto.
- *
- * Exoesqueleto (ficha E): en cada cara, el mástil en el medio y seis módulos de chevrones de 8 pisos (pisos 8 a 56)
- * que bajan de las esquinas al mástil; las esquinas no llegan al suelo. Fachada en el plano del exo (separación 0).
- * Las secciones son supuestas (para empezar a dimensionar con el botón de la etapa 08). Para pensar: en 1978,
- * revisando los vientos a 45° (que el cálculo original no había mirado), se vio que las uniones de los chevrones
- * eran abulonadas y no soldadas, y no alcanzaban; se reforzaron soldando chapas en unas 200 uniones. En la app se
- * puede probar qué pasa con las uniones de las diagonales rígidas o articuladas.
+ * Modelo (cada dato con su fuente en exo.notas, que se ven en la etapa 08):
+ *  - Niveles: el 8 (34,75 m, sobre las supercolumnas) junta los pisos 8 y 9 del cajón de transición; del 10 al 56,
+ *    un nivel por piso de 4,064 m (13'-4"); arriba, la corona hasta 278,6 m. Son 49 niveles sobre PB, el máximo de
+ *    la planilla, y los seis módulos de chevrones caen justo en los pisos 8, 16, 24, 32, 40, 48 y 56 (229,82 m).
+ *  - El núcleo lleva la mitad del peso y no toma viento (no entra en ninguna pieza): el viento lo toman los chevrones
+ *    y baja por las supercolumnas, que son las piezas de la planilla en la base abierta (hasta 34,75 m).
+ *  - Exoesqueleto (ficha E) con los módulos por cotas: el mástil se afina arriba del piso 40; diagonales y cordón con
+ *    las medidas de Wikipedia (secciones equivalentes en tubo cuadrado, supuestas).
+ * Para pensar: en 1978, revisando los vientos a 45° (que el cálculo original no había mirado), se vio que las uniones
+ * de los chevrones eran abulonadas y no soldadas, y no alcanzaban; se reforzaron soldando chapas de 2 in en más de
+ * 200 uniones. En la app se puede probar qué pasa con las diagonales articuladas (abulonadas) o rígidas (soldadas).
  */
 export function ejemploCiticorp(): Proyecto {
   const lado = 47.85, base = 34.75, paso = 4.064;
-  // Medidas del plano de elevación original: 914'-0" (278,6 m) de alto. Pisos 1 a 7: la base abierta sobre las
-  // supercolumnas (plaza, iglesia, vestíbulos), hasta 114 ft (34,75 m). Pisos 8 a 56: 48 pisos de 13'-4" (4,064 m), que
-  // llenan los 6 módulos de chevrones de 8 pisos (106'-8"). Arriba del piso 56, la corona: pisos técnicos, el
-  // amortiguador de 400 t y el techo inclinado hasta 278,6 m. Son 49 niveles sobre PB, el máximo de la planilla: el
-  // piso 56 y la corona se juntan en la azotea.
-  const niveles: Nivel[] = [{ nombre: 'Azotea (piso 56 y corona)', cota: 278.6, B: lado, L: lado }];
-  for (let piso = 55; piso >= 8; piso--) niveles.push({ nombre: piso === 8 ? '8º (primer piso sobre las supercolumnas)' : `${piso}º`, cota: +(base + paso * (piso - 8)).toFixed(2) });
+  const z = (piso: number) => +(base + paso * (piso - 8)).toFixed(2);
+  const niveles: Nivel[] = [{ nombre: 'Corona (pisos técnicos y amortiguador)', cota: 278.6, B: lado, L: lado }];
+  for (let piso = 56; piso >= 10; piso--) niveles.push({ nombre: piso === 56 ? '56º (último piso de oficinas)' : `${piso}º`, cota: z(piso) });
+  niveles.push({ nombre: '8º–9º (cajón de transición sobre las supercolumnas)', cota: base });
   niveles.push({ nombre: 'PB (plaza)', cota: 0 }, { nombre: 'Subsuelo', cota: -9, B: lado, L: lado });
   const d = lado / 2 - 3.65;     // centro de cada supercolumna: a 3,65 m de la cara
+  // la mitad del peso de cada losa (47,85² = 2290 m²) baja por el núcleo y la otra mitad por las cuatro supercolumnas
   const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
-    ({ id, dir: 'Y', x, y, largo: 7.3, ladoY: 7.3, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 290, piezaA, pegadoA: '', piezaB, pegadoB: '' });
+    ({ id, dir: 'Y', x, y, largo: 7.3, ladoY: 7.3, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 286, piezaA, pegadoA: '', piezaB, pegadoB: '', zHasta: base });
+  const cortes = [8, 16, 24, 32, 40, 48, 56].map(z);
   return {
     version: 1,
     nombre: 'Citicorp Center (Nueva York, 1977) · modelo aproximado',
@@ -328,14 +326,34 @@ export function ejemploCiticorp(): Proyecto {
     niveles,
     fundacion: { b1: lado, a1: lado },
     hormigon: 'H40',
-    muros: ([
-      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 21, ladoY: 21, espesor: 0.9, tipo: 'tubo-rect', llega: true, areaInf: 1130, piezaA: 'Núcleo', pegadoA: '', piezaB: 'Núcleo B', pegadoB: '' },
+    muros: [
+      // núcleo octogonal de 63 × 72 ft (19,2 × 21,9 m) como un tubo rectangular; solo gravedad (sin pieza)
+      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 19.2, ladoY: 21.9, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 1145, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' },
       col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
-    ] as Muro[]).map((m): Muro => (m.id.startsWith('S') ? { ...m, zHasta: base } : m)),
+    ],
     exo: {
-      tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1,
-      columna: { b: 0.6, e: 0.03 }, diagonal: { b: 1.0, e: 0.04 }, viga: { b: 0.8, e: 0.03 }, mastil: { b: 2.0, e: 0.1 },
+      tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1, cortes,
+      // mástil 60 × 30 in en la base, 18 in de profundidad arriba del piso 40: tubos cuadrados equivalentes (supuesto)
+      // secciones dimensionadas con la app (botón «Dimensionar» de la etapa 08); las reales no están publicadas
+      mastil: { b: 2.0, e: 0.125 }, tramos: [{ clase: 'mastil', desde: z(40), sec: { b: 1.8, e: 0.08 } }],
+      // debajo del cajón, el mástil es la supercolumna de 24 × 24 ft: cajón de acero equivalente (pared supuesta)
+      mastilBase: { hasta: base, sec: { b: 7.3, e: 0.05 } },
+      diagonal: { b: 1.0, e: 0.05 }, viga: { b: 1.2, e: 0.06 }, columna: { b: 2.0, e: 0.125 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { diagonal: 'articulada', viga: 'rigida', columna: 'rigida', base: 'empotrada' },
+      notas: [
+        '59 pisos y techo a 915 ft (279 m) (Wikipedia, «Citigroup Center»); el plano de elevación dice 914′-0″ (278,6 m).',
+        'Planta de 157 × 157 ft (47,85 m) y esquinas que vuelan 72 ft (22 m) (Wikipedia).',
+        'Cuatro supercolumnas de 24 × 24 ft (7,3 m) a media cara, de 112 ft (Wikipedia; el plano: 114 ft = 34,75 m). Acá son tubos de hormigón equivalentes (pared de 0,60 m, supuesta) y son las piezas de la planilla en la base abierta.',
+        'Seis módulos de chevrones de 8 pisos por cara, sin columna en las esquinas en el tope de cada módulo (Wikipedia). Pisos de 13′-4″ (4,064 m) leídos del plano: el sexto módulo termina en el piso 56, a 229,82 m.',
+        'Los pisos 8 y 9 son el cajón de transición (Wikipedia: el piso 9 es un reticulado; el plano: cajón de 2 pisos): acá un solo nivel a 34,75 m, para que entren los 49 niveles de la planilla.',
+        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
+        'Debajo del cajón, el mástil es la supercolumna (24 × 24 ft): un cajón de acero equivalente de 7,30 m con pared de 5 cm (supuesto).',
+        'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app pesa unas 19 900 t.',
+        'Núcleo octogonal de 63 × 72 ft que lleva la mitad del peso (Wikipedia; no dice el material): acá un tubo de hormigón sin pieza (no toma viento).',
+        'Corona: techo a 45° que sube 160 ft (49 m) sobre el último piso, con el amortiguador de 400 t (Wikipedia).',
+        '1978: uniones abulonadas; con el viento a 45° no alcanzaban y se soldaron chapas de 2 in en más de 200 uniones (Wikipedia; NIST 2019 lo revisó). Diagonales articuladas = abulonadas.',
+        'Viento: CIRSOC 102 con V = 49 m/s y exposición de centro de ciudad (supuesto).',
+      ],
     },
   };
 }

@@ -325,8 +325,15 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       // viento A: las caras van en x = ±t y la cara corre a lo largo de y; viento B: en y = ±t, a lo largo de x
       const aPlanta = (s2: number, t: number) => (dir === 'A' ? { x: t, y: s2 } : { x: s2, y: t });
       d.r.caras.forEach(c => c.esfuerzos.forEach(e => {
-        if ((e.fraccion ?? 1) < 1) return;                 // las alas son los mástiles de las otras caras: se dibujan con ellas
-        const pa = aPlanta(e.a.s, c.t), pb = aPlanta(e.b.s, c.t);
+        if ((e.fraccion ?? 1) !== 1) return;                 // las alas son los mástiles de las otras caras: se dibujan con ellas
+        // caras que siguen la planta (Hancock): la cara se mete hacia adentro con la altura
+        const tEn = (z: number) => {
+          if (!d.ts) return c.t;
+          const zs = d.r.zs, k = zs.findIndex(zz => zz >= z - 1e-9);
+          const v = k <= 0 ? d.ts[Math.max(0, k)] : d.ts[k - 1] + (d.ts[k] - d.ts[k - 1]) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
+          return Math.sign(c.t) * v;
+        };
+        const pa = aPlanta(e.a.s, tEn(e.a.z)), pb = aPlanta(e.b.s, tEn(e.b.z));
         const A = new THREE.Vector3(pa.x, e.a.z, -pa.y), Bv = new THREE.Vector3(pb.x, e.b.z, -pb.y);
         const L = A.distanceTo(Bv);
         if (L < 1e-6) return;

@@ -19,6 +19,7 @@ import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from '
 import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
+import { ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
@@ -396,6 +397,9 @@ TORRES_PRUEBA.forEach((t, k) => {
   $('torres-prueba').append(b);
 });
 $('b-ejemplo-34').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploPlanta34()); cerrarMenus(); mensaje('Cargada la torre de 34 pisos: los núcleos toman el viento; las columnas, solo carga de losa.'); });
+$('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHancock()); cerrarMenus(); mensaje('Cargado el John Hancock Center: caras que se angostan con la altura y el tubo en X que toma todo el viento (etapa 08 · Exoesqueleto). Las fuentes de cada número están en la etapa 08.'); });
+$('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
+$('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });

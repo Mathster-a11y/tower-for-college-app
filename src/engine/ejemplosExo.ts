@@ -1,0 +1,151 @@
+/**
+ * Edificios reales con exoesqueleto, para la etapa 08. Cada número lleva su fuente o la marca «supuesto» (en
+ * exo.notas, que se muestran en la etapa 08 y van a la hoja «G · Exoesqueleto»). Lo que no está publicado (secciones
+ * de las barras, medidas del núcleo) se supone y se puede dimensionar con el botón de la etapa 08.
+ *
+ * La planilla admite 49 niveles sobre PB: en las torres más altas cada nivel de la app junta varios pisos reales
+ * (se dice en el nombre del nivel). Las cotas de los módulos del exo (exo.cortes) caen siempre en un nivel.
+ */
+import type { Muro, Nivel, Proyecto } from './modelo';
+
+const FT = 0.3048;
+const r2 = (x: number) => Math.round(x * 100) / 100;
+
+/** interpolación lineal por tramos */
+const tramos = (pts: [number, number][]) => (x: number) => {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0); }
+  return pts[pts.length - 1][1];
+};
+
+const tubo = (id: string, x: number, y: number, lx: number, ly: number, e: number, areaInf: number, piezaA = '', piezaB = ''): Muro =>
+  ({ id, dir: 'Y', x, y, largo: lx, ladoY: ly, espesor: e, tipo: 'tubo-rect', llega: true, areaInf, piezaA, pegadoA: '', piezaB, pegadoB: '' });
+
+/**
+ * John Hancock Center (Chicago, 1969, SOM: Bruce Graham y Fazlur Khan). Tubo arriostrado en X con las caras inclinadas.
+ *  - 100 pisos, 1127 ft (343,5 m) de techo (estudio JHU; CTBUH: 343,7 m).
+ *  - Ancho de la cara angosta: 165 ft en la base, 140 a 400 ft, 130 a 600, 120 a 800 y 100 arriba (1100 ft) (estudio JHU,
+ *    Figura 1). Cara ancha: 265 ft en la base y 165 arriba (estudio JHU), lineal en el medio (supuesto).
+ *  - El núcleo de hormigón lleva la mitad del peso; el viento lo toma entero el tubo de acero (estudio JHU, hipótesis
+ *    del análisis): acá el núcleo no entra a ninguna pieza (solo gravedad).
+ *  - X de unos 200 ft de alto: 5 y media por cara (estudio JHU; Chicago Architecture Center: pisos 2–20, 21–37, 38–55,
+ *    56–74, 75–91 y media X 92–97).
+ */
+export function ejemploHancock(): Proyecto {
+  const angosta = tramos([[0, 165], [400, 140], [600, 130], [800, 120], [1100, 100]]);
+  const ancha = tramos([[0, 265], [1100, 165]]);
+  const paso = 25;                                    // ft: un nivel de la app cada 25 ft ≈ 2,2 pisos reales
+  const niveles: Nivel[] = [];
+  const piso = (zft: number) => Math.max(1, Math.round(zft / (1100 / 97)) + 1);   // piso real aproximado
+  niveles.push({ nombre: 'Azotea (piso 100)', cota: r2(1127 * FT), B: r2(ancha(1100) * FT), L: r2(angosta(1100) * FT) });
+  for (let zft = 1100; zft >= paso; zft -= paso) {
+    const p0 = piso(zft - paso) + 1, p1 = piso(zft);
+    niveles.push({ nombre: p1 > p0 ? `${p0}º–${p1}º` : `${p1}º`, cota: r2(zft * FT), B: r2(ancha(zft) * FT), L: r2(angosta(zft) * FT) });
+  }
+  niveles.push({ nombre: 'PB', cota: 0, B: r2(ancha(0) * FT), L: r2(angosta(0) * FT) }, { nombre: 'Subsuelo', cota: -6 });
+  const cortes = [0, 200, 400, 600, 800, 1000, 1100].map(z => r2(z * FT));
+  return {
+    version: 1,
+    nombre: 'John Hancock Center (Chicago, 1969) · modelo aproximado',
+    alumno: '',
+    sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: r2(ancha(0) * FT) + 4, a1: r2(angosta(0) * FT) + 4 },
+    hormigon: 'H30',
+    // núcleo de hormigón: medidas supuestas (no publicadas); entra en la arriba más angosta (30,5 × 50,3 m)
+    muros: [tubo('N1', 0, 0, 24, 12, 0.5, 1300)],
+    exo: {
+      tipo: 'D', separacion: 0, modulo: 8, anchoVariable: true, cortes, alas: 5,
+      // secciones dimensionadas con la app (botón «Dimensionar»): las reales no están en las fuentes
+      columna: { b: 1.2, e: 0.06 }, diagonal: { b: 1.0, e: 0.05 }, viga: { b: 0.9, e: 0.04 },
+      E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
+      notas: [
+        '100 pisos, techo a 1127 ft (343,5 m): estudio de la Johns Hopkins University (JHU, wk05). CTBUH: 343,7 m.',
+        'Cara angosta 165 → 140 → 130 → 120 → 100 ft a 0, 400, 600, 800 y 1100 ft; cara ancha 265 → 165 ft: estudio JHU. Entre esas cotas, lineal (supuesto).',
+        'El tubo de acero toma todo el viento y el núcleo de hormigón la mitad del peso (hipótesis del estudio JHU): el núcleo no entra en ninguna pieza.',
+        'X de 200 ft, cinco y media por cara (JHU; Chicago Architecture Center: pisos 2–20, 21–37, 38–55, 56–74, 75–91 y media X 92–97). Acá arrancan en PB y la media X de arriba es una X de 100 ft (supuesto).',
+        'Un nivel de la app cada 25 ft (≈ 2,2 pisos reales; la planilla admite 49 niveles): el nombre dice qué pisos junta.',
+        '24 columnas en el perímetro, 7 por cara (estudio JHU): las 5 intermedias de cada cara perpendicular al viento trabajan con las esquinas como alas del tubo (alas = 5; cota superior, sin «shear lag»). Las intermedias de las caras paralelas no se modelan.',
+        'Secciones: las del botón «Dimensionar» (columnas de 1,20 m, diagonales de 1,00 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
+        'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app pesa unas 24 500 t.',
+      ],
+    },
+  };
+}
+
+/**
+ * Hearst Tower (Nueva York, 2006, Foster + Partners; estructura WSP Cantor Seinuk). Diagrid sobre la base histórica.
+ *  - 46 pisos, 597 ft (182 m) (Wikipedia). Torre de 160 × 120 ft dentro de una base de 200 × 200 ft (ENR).
+ *  - Diagrid sobre el piso 10; triángulos de 4 pisos (52 ft), barras de 57 ft, nudos cada 40 ft (Wikipedia, AISC).
+ *  - Núcleo al oeste, corrido del centro (hay torsión). 10 480 t cortas de acero (Wikipedia).
+ */
+export function ejemploHearst(): Proyecto {
+  const B = r2(160 * FT), L = r2(120 * FT), h = 182, n = 45, dz = h / n;      // 45 entrepisos de PB a la azotea
+  const niveles: Nivel[] = [];
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea (piso 46)' : `${k + 1}º`, cota: r2(k * dz), ...(k === n ? { B, L } : {}) });
+  niveles.push({ nombre: 'PB (base histórica de 6 pisos)', cota: 0, B, L }, { nombre: 'Subsuelo', cota: -7 });
+  const zPiso = (piso: number) => r2((piso - 1) * dz);
+  // diagrid: un rombo cada 8 pisos (dos triángulos de 4); el primero baja desde el piso 10 hasta PB por la base
+  const cortes = [0, zPiso(10), zPiso(18), zPiso(26), zPiso(34), zPiso(42), h].map(r2);
+  return {
+    version: 1,
+    nombre: 'Hearst Tower (Nueva York, 2006) · modelo aproximado',
+    alumno: '',
+    sitio: { V: 49, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: B + 4, a1: L + 4 },
+    hormigon: 'H40',
+    // núcleo al oeste (supuesto: medidas y que también toma viento); corrido 12 m del centro → torsión
+    muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700, 'Núcleo', 'Núcleo B')],
+    exo: {
+      tipo: 'A', separacion: 0, modulo: 8, pasoH: r2(40 * FT), cortes,
+      columna: { b: 0.6, e: 0.04 }, diagonal: { b: 0.6, e: 0.04 }, viga: { b: 0.6, e: 0.03 },
+      E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
+      notas: [
+        '46 pisos y 597 ft (182 m): Wikipedia. Torre de 160 × 120 ft (48,8 × 36,6 m) sobre la base histórica de 200 × 200 ft: ENR.',
+        'Diagrid arriba del piso 10, triángulos de 4 pisos (52 ft), barras de 57 ft y nudos cada 40 ft (12,2 m): Wikipedia y AISC. Por eso la cara de 160 ft tiene 4 rombos y la de 120 ft, 3.',
+        'Entrepiso de 182 m / 45 = 4,04 m (el real es de 13′6″ = 4,11 m en los pisos tipo; supuesto para que la azotea quede a 182 m).',
+        'Debajo del piso 10 el diagrid baja por la base histórica hasta PB como un rombo alto (supuesto: en la obra son megacolumnas en el atrio).',
+        'Núcleo al oeste, corrido del centro (Wikipedia): genera torsión. Sus medidas y que también tome viento son supuestos.',
+        '10 480 t cortas de acero en total (Wikipedia). Secciones de las barras: supuestas (los nudos son abulonados). Probá «Dimensionar».',
+      ],
+    },
+  };
+}
+
+/**
+ * Onterie Center, hoy Axis Apartments (Chicago, 1986, SOM: Fazlur Khan). Tubo reticulado de hormigón: X de paneles que
+ * llenan las ventanas.
+ *  - 60 pisos, 570 ft (174 m) (Wikipedia). Primer rascacielos de hormigón con tabiques diagonales en el perímetro.
+ *  - Medidas de la planta y de las X: no publicadas en las fuentes consultadas (supuestas).
+ */
+export function ejemploOnterie(): Proyecto {
+  const B = 48, L = 26, h = 174, n = 30, dz = h / n;                         // un nivel cada 2 pisos
+  const niveles: Nivel[] = [];
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea (pisos 59–60)' : `${2 * k - 1}º–${2 * k}º`, cota: r2(k * dz), ...(k === n ? { B, L } : {}) });
+  niveles.push({ nombre: 'PB', cota: 0, B, L }, { nombre: 'Subsuelo', cota: -5 });
+  return {
+    version: 1,
+    nombre: 'Onterie Center (Chicago, 1986) · modelo aproximado',
+    alumno: '',
+    sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: B + 4, a1: L + 4 },
+    hormigon: 'H40',
+    // núcleo de ascensores (supuesto): también toma viento
+    muros: [tubo('N1', 0, 0, 10, 8, 0.4, 450, 'Núcleo', 'Núcleo B')],
+    exo: {
+      tipo: 'D', separacion: 0, modulo: 5, material: 'hormigon',
+      // hormigón: E ≈ 3·10⁶ t/m² (H40), tensión admisible de compresión ≈ 0,45·f′c ≈ 1800 t/m²; barras macizas (e = b/2)
+      // secciones dimensionadas con la app (catálogo de hormigón macizo)
+      columna: { b: 1.7, e: 0.85 }, diagonal: { b: 0.8, e: 0.4 }, viga: { b: 1.6, e: 0.8 },
+      E: 3.0e6, sigmaAdm: 1800, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
+      notas: [
+        '60 pisos y 570 ft (174 m): Wikipedia («Axis Apartments»). Las X son paneles de hormigón que llenan las ventanas y forman un tubo reticulado; es el primer rascacielos de hormigón con diagonales en el perímetro (Wikipedia; STRUCTURE, «Evolution of the Braced Tube», 2024).',
+        'Planta de 48 × 26 m, X cada 10 pisos y núcleo: supuestos (no encontré las medidas en una fuente confiable).',
+        'Barras de hormigón macizas (e = b/2), E = 3·10⁶ t/m², γ = 2,4 t/m³ y σ adm = 1800 t/m² (0,45 f′c de un H40): supuestos para el modelo. Las barras de la app son cuadradas (las del botón «Dimensionar»: columnas de 1,70 m, diagonales de 0,80 m); los paneles reales son placas que llenan las ventanas.',
+        'Un nivel de la app cada 2 pisos (la planilla admite 49 niveles).',
+      ],
+    },
+  };
+}

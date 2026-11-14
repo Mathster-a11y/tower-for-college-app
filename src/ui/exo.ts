@@ -136,7 +136,9 @@ function leyendaModo(svg: SVGSVGElement, x: number, y: number, escala: number) {
   });
 }
 
-export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho: number; tCaras: number[]; niveles: string[]; h: number; Eh: number }
+export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho: number; tCaras: number[]; niveles: string[]; h: number; Eh: number;
+  /** caras que siguen la planta: ancho y posición (|t|) de la cara en cada cota de zs */
+  anchos?: number[]; ts?: number[] }
 
 /** el cálculo del exoesqueleto para el viento elegido (null si el proyecto no tiene exo o faltan datos) */
 /** lo que necesita el motor para un viento: pisos, viento de cada piso, rigidez de los tabiques y dónde van las caras */
@@ -161,13 +163,21 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
     const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
     const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
-    const EJ = (z: number) => E * ((Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J) || rg.J);
+    // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
+    const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
     const pl = plantaDeNivel(p, iPB);
     const A = dir === 'A';
     const ancho = (A ? pl.L : pl.B) + 2 * def.separacion, t = (A ? pl.B : pl.L) / 2 + def.separacion;
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E);
+    // caras que siguen la planta de cada nivel (Hancock): ancho y posición de la cara en cada cota
+    let anchos: number[] | undefined, ts: number[] | undefined;
+    if (def.anchoVariable) {
+      const plz = zs.map(z => { const i = p.niveles.findIndex(nv => Math.abs(nv.cota - z) < 1e-6); return plantaDeNivel(p, i >= 0 ? i : iPB); });
+      anchos = plz.map(q => (A ? q.L : q.B) + 2 * def.separacion);
+      ts = plz.map(q => (A ? q.B : q.L) / 2 + def.separacion);
+    }
+    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos);
     const h0 = zs[zs.length - 1] - zPB;
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0 } };
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
 let ultimoError = '';
@@ -189,12 +199,16 @@ export function panelExo(c: H) {
   sw.append(cb, ' Agregar un exoesqueleto de acero por fuera de la fachada');
   c.append(h('p', { class: 'nota' }, 'Una estructura de acero por fuera que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.'), sw);
   if (!def) return;
+  if (def.notas?.length) {
+    const ul = h('ul', { class: 'notas-fuentes' }, ...def.notas.map(t => h('li', {}, t)));
+    c.append(seccion('De dónde sale cada número', ul, h('p', { class: 'nota chica' }, 'Lo que dice «supuesto» no está publicado: se puede cambiar o dimensionar.')).el);
+  }
   const d = datosExo();
   if (d) {
     const n = d.r.u.length - 1, lim = d.h / (def.limiteH ?? 500);
     const malos = d.r.controles.filter(x => x.estado !== 'verifica').length;
     c.append(h('div', { class: 'kpis' },
-      kpi('Flecha azotea', `${fmt(d.r.u[n] * 1000, 1)} mm`, `sin exo ${fmt(d.r.uSin[n] * 1000, 1)} mm · límite ${fmt(lim * 1000, 0)}`, colorEstado(d.r.u[n] <= lim)),
+      kpi('Flecha azotea', `${fmt(d.r.u[n] * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · límite ${fmt(lim * 1000, 0)}`, colorEstado(d.r.u[n] <= lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi('J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
       kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (tensión o pandeo)` : 'todas verifican', colorEstado(!malos))));
@@ -212,11 +226,11 @@ export function panelExo(c: H) {
     const dimensionar = () => {
       const r = dimensionarExo(def, ens);
       const t = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
-      estado.cambiar(() => { if (estado.proyecto.exo) { estado.proyecto.exo.columna = r.def.columna; estado.proyecto.exo.diagonal = r.def.diagonal; estado.proyecto.exo.viga = r.def.viga; } });
+      estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.columna = r.def.columna; x.diagonal = r.def.diagonal; x.viga = r.def.viga; if (x.tipo === 'E') { x.mastil = r.def.mastil; x.tramos = r.def.tramos; } } });
       const msg = document.getElementById('mensaje');
-      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)} mm · ${fmt(r.peso, 0)} t de acero (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
+      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
-    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `Acero de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
+    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
   campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
@@ -289,7 +303,7 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
     const props = propsDe(e);
     const mMax = maxBarra(t => esfuerzosEn(e, t).M).v;
     const tit = `${e.id} · ${e.clase} · N = ${fmt(e.N, 1)} t (${e.N >= 0 ? 'tracción' : 'compresión'}) · M máx = ${fmt(mMax, 2)} tm · uniones ${e.relA ? 'articulada' : 'rígida'} / ${e.relB ? 'articulada' : 'rígida'} · L = ${fmt(e.L)} m · tocá para ver el detalle`;
-    const g = el('g', { class: `ex-g-barra${barraSel === e.id ? ' elegida' : ''}${(e.fraccion ?? 1) < 1 ? ' ala' : ''}`, 'data-id': e.id });
+    const g = el('g', { class: `ex-g-barra${barraSel === e.id ? ' elegida' : ''}${(e.fraccion ?? 1) !== 1 ? ' ala' : ''}`, 'data-id': e.id });
     if (modo === 'sigma') capaFibras(g, e, props, d.def.sigmaAdm, escalaS, P, defsF);
     else {
       const w = modo === 'N' ? 1.2 + 6 * Math.abs(e.N) / Nmax : 1.6;
@@ -366,8 +380,9 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
     svg.append(el('text', { x: xg + gw, y: Y(z0) + 16, class: 'ex-nota', 'text-anchor': 'end' }, `${fmt(vmax, unidad === 'mm' ? 1 : 1)} ${unidad}`));
   };
   graf(gx, 'Viento de cada piso:\nquién lo toma', [{ v: r.Ftab, clase: 'tab', nombre: 'tabiques' }, { v: r.Fexo, clase: 'exo', nombre: 'exoesqueleto' }], 't', true);
-  graf(gx + gw + 48, 'Corrimiento\nde cada piso', [{ v: r.uSin.map(x => x * 1000), clase: 'sin', nombre: 'sin exo' }, { v: r.u.map(x => x * 1000), clase: 'con', nombre: 'con exo' }], 'mm');
-  const nLim = d.def.limiteH ?? 500, lim = (d.h / nLim) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...r.uSin.map(x => x * 1000), lim);
+  const conSin = r.uSin.every(x => isFinite(x));
+  graf(gx + gw + 48, 'Corrimiento\nde cada piso', [...(conSin ? [{ v: r.uSin.map(x => x * 1000), clase: 'sin', nombre: 'sin exo' }] : []), { v: r.u.map(x => x * 1000), clase: 'con', nombre: conSin ? 'con exo' : 'con exo (sin exo no hay tabiques arriba)' }], 'mm');
+  const nLim = d.def.limiteH ?? 500, lim = (d.h / nLim) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...(conSin ? r.uSin : r.u).map(x => x * 1000), lim);
   const xl = xs0 + (lim / vmx) * gw;
   svg.append(el('line', { x1: xl, x2: xl, y1: Y(z0), y2: Y(zT), class: 'ex-limite' }));
   svg.append(el('text', { x: xl - 3, y: Y(zT) + 14, class: 'ex-nota', 'text-anchor': 'end' }, `h/${nLim} = ${fmt(lim, 0)} mm`));
