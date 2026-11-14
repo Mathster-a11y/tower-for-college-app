@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, EXO_POR_DEFECTO, TIPOS_EXO, propsSeccion, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, dimensionarExo, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -115,7 +115,14 @@ function leyendaModo(svg: SVGSVGElement, x: number, y: number, escala: number) {
 export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho: number; tCaras: number[]; niveles: string[]; h: number; Eh: number }
 
 /** el cálculo del exoesqueleto para el viento elegido (null si el proyecto no tiene exo o faltan datos) */
-export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): DatosExo | null {
+/** lo que necesita el motor para un viento: pisos, viento de cada piso, rigidez de los tabiques y dónde van las caras */
+export function entradaExo(dir: 'A' | 'B', def: ExoDef): EntradaExo | null {
+  const d = datosExo(dir, def);
+  if (!d) return null;
+  return d.entrada;
+}
+
+export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): (DatosExo & { entrada: EntradaExo }) | null {
   if (!def) return null;
   try {
     const { asig, res, corr } = estado.calculo, p = estado.proyecto;
@@ -134,7 +141,8 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const A = dir === 'A';
     const ancho = (A ? pl.L : pl.B) + 2 * def.separacion, t = (A ? pl.B : pl.L) / 2 + def.separacion;
     const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E);
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: zs[zs.length - 1] - zPB, Eh: E };
+    const h0 = zs[zs.length - 1] - zPB;
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0 } };
   } catch { return null; }
 }
 
@@ -142,7 +150,7 @@ export function estadoExo(): EstadoChip {
   if (!estado.proyecto.exo) return 'pendiente';
   const ds = (['A', 'B'] as const).map(d => datosExo(d));
   if (ds.some(d => !d)) return 'revisar';
-  return ds.every(d => d!.r.controles.every(c => c.estado === 'verifica') && d!.r.u[d!.r.u.length - 1] <= d!.h / 500) ? 'verifica' : 'no verifica';
+  return ds.every(d => d!.r.controles.every(c => c.estado === 'verifica') && d!.r.u[d!.r.u.length - 1] <= d!.h / (d!.def.limiteH ?? 500)) ? 'verifica' : 'no verifica';
 }
 
 // ------------------------------------------------------------------ panel
@@ -157,19 +165,32 @@ export function panelExo(c: H) {
   if (!def) return;
   const d = datosExo();
   if (d) {
-    const n = d.r.u.length - 1, lim = d.h / 500;
+    const n = d.r.u.length - 1, lim = d.h / (def.limiteH ?? 500);
     const malos = d.r.controles.filter(x => x.estado !== 'verifica').length;
     c.append(h('div', { class: 'kpis' },
       kpi('Flecha azotea', `${fmt(d.r.u[n] * 1000, 1)} mm`, `sin exo ${fmt(d.r.uSin[n] * 1000, 1)} mm · límite ${fmt(lim * 1000, 0)}`, colorEstado(d.r.u[n] <= lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi('J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
       kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (tensión o pandeo)` : 'todas verifican', colorEstado(!malos))));
+    const ens = (['A', 'B'] as const).map(x => entradaExo(x, def)).filter(Boolean) as EntradaExo[];
+    const peso = ens.length === 2 ? pesoExo(def, ens) : NaN;
+    const bDim = h('button', { type: 'button', class: 'primario', title: 'Prueba los tubos del catálogo de menor a mayor y agranda solo la clase de barra que falla, con los dos vientos' }, 'Dimensionar: el más liviano que verifica');
+    bDim.addEventListener('click', () => {
+      if (ens.length < 2) return;
+      const r = dimensionarExo(def, ens);
+      const t = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
+      estado.cambiar(() => { if (estado.proyecto.exo) { estado.proyecto.exo.columna = r.def.columna; estado.proyecto.exo.diagonal = r.def.diagonal; estado.proyecto.exo.viga = r.def.viga; } });
+      const msg = document.getElementById('mensaje');
+      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)} mm · ${fmt(r.peso, 0)} t de acero (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
+    });
+    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `Acero de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
   campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
   campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => (x.modulo = Math.round(v))), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
     campo(fo, `${nombre}: lado`, `exo-${k}-b`, s.b * 1000, nu((x, v) => (x[k].b = v / 1000)), { tipo: 'number', unidad: 'mm', ayuda: `tubo cuadrado · A = ${fmt(pr.A * 1e4, 0)} cm² · i = ${fmt(pr.i * 100, 1)} cm` });
@@ -263,10 +284,10 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   };
   graf(gx, 'Viento de cada piso:\nquién lo toma', [{ v: r.Ftab, clase: 'tab', nombre: 'tabiques' }, { v: r.Fexo, clase: 'exo', nombre: 'exoesqueleto' }], 't', true);
   graf(gx + gw + 48, 'Corrimiento\nde cada piso', [{ v: r.uSin.map(x => x * 1000), clase: 'sin', nombre: 'sin exo' }, { v: r.u.map(x => x * 1000), clase: 'con', nombre: 'con exo' }], 'mm');
-  const lim = (d.h / 500) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...r.uSin.map(x => x * 1000), lim);
+  const nLim = d.def.limiteH ?? 500, lim = (d.h / nLim) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...r.uSin.map(x => x * 1000), lim);
   const xl = xs0 + (lim / vmx) * gw;
   svg.append(el('line', { x1: xl, x2: xl, y1: Y(z0), y2: Y(zT), class: 'ex-limite' }));
-  svg.append(el('text', { x: xl - 3, y: Y(zT) + 14, class: 'ex-nota', 'text-anchor': 'end' }, `h/500 = ${fmt(lim, 0)} mm`));
+  svg.append(el('text', { x: xl - 3, y: Y(zT) + 14, class: 'ex-nota', 'text-anchor': 'end' }, `h/${nLim} = ${fmt(lim, 0)} mm`));
   return svg;
 }
 

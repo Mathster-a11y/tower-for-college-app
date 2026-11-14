@@ -39,6 +39,8 @@ export interface ExoDef {
   columna: Seccion; diagonal: Seccion; viga: Seccion;
   /** acero: módulo de elasticidad (t/m²) y tensión admisible (t/m²) */
   E: number; sigmaAdm: number;
+  /** flecha objetivo en la azotea: δ ≤ h / limiteH (por defecto 500, el límite del curso; se puede pedir más) */
+  limiteH?: number;
 }
 export const EXO_POR_DEFECTO: ExoDef = {
   tipo: 'D', separacion: 1, modulo: 4,
@@ -306,4 +308,55 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     controles.push({ cara: c.nombre, id: e.id, clase: e.clase, N: e.N, M, sigma, lambda, Ncr, estado: sigma <= def.sigmaAdm && !pandeo ? 'verifica' : 'no verifica' });
   }));
   return { zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res, controles };
+}
+
+// ------------------------------------------------------------------ dimensionado: el exo más liviano que verifica
+/** catálogo de tubos cuadrados (b × e, m), ordenado por área */
+export const CATALOGO_TUBOS: Seccion[] = ([
+  [0.15, 0.008], [0.2, 0.008], [0.2, 0.0125], [0.25, 0.0125], [0.3, 0.0125], [0.3, 0.016], [0.35, 0.016], [0.4, 0.016],
+  [0.4, 0.02], [0.45, 0.02], [0.5, 0.02], [0.5, 0.025], [0.55, 0.025], [0.6, 0.025], [0.6, 0.03], [0.7, 0.03], [0.8, 0.03],
+  [0.8, 0.04], [0.9, 0.04], [1.0, 0.04], [1.0, 0.05], [1.2, 0.05],
+] as [number, number][]).map(([b, e]) => ({ b, e })).sort((u, v) => propsSeccion(u).A - propsSeccion(v).A);
+
+/** lo que necesita calcularExo para un viento */
+export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number }
+
+/** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
+export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
+  // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
+  return entradas.reduce((s, en, i) => {
+    const c = armarCara(def, en.ancho, en.zs);
+    const esquina = (b: Barra) => b.clase === 'columna' && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s) - en.ancho / 2) < 1e-6);
+    return s + en.tCaras.length * c.barras.reduce((q, b) => { if (i > 0 && esquina(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * 7.85; }, 0);
+  }, 0);
+}
+
+export interface Dimensionado { def: ExoDef; verifica: boolean; peso: number; pasos: number; motivo: string }
+
+/**
+ * Busca el exo más liviano que verifica con los dos vientos: arranca con el tubo más chico del catálogo en las tres
+ * clases y agranda, de a un paso, la clase de barra que falla (tensión, pandeo o esbeltez); si falla la flecha
+ * (δ azotea > h / limiteH, h/500 si no se pide otra), agranda columnas y diagonales, que son las que dan la rigidez de la cara.
+ */
+export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 80): Dimensionado {
+  const idx = { columna: 0, diagonal: 0, viga: 0 };
+  const armar = (): ExoDef => ({ ...base, columna: CATALOGO_TUBOS[idx.columna], diagonal: CATALOGO_TUBOS[idx.diagonal], viga: CATALOGO_TUBOS[idx.viga] });
+  const ult = CATALOGO_TUBOS.length - 1;
+  for (let paso = 1; paso <= maxPasos; paso++) {
+    const def = armar();
+    const falla = { columna: false, diagonal: false, viga: false };
+    let flecha = false;
+    entradas.forEach(en => {
+      const r = calcularExo(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh);
+      r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
+      if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
+    });
+    if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
+    let movio = false;
+    (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
+    if (flecha && !falla.columna && !falla.diagonal) (['columna', 'diagonal'] as const).forEach(k => { if (idx[k] < ult) { idx[k]++; movio = true; } });
+    if (!movio) return { def, verifica: false, peso: pesoExo(def, entradas), pasos: paso, motivo: 'ni el tubo más grande del catálogo alcanza: probá otra ficha, otro módulo o más separación' };
+  }
+  const def = armar();
+  return { def, verifica: false, peso: pesoExo(def, entradas), pasos: maxPasos, motivo: 'no se encontró en los pasos previstos' };
 }

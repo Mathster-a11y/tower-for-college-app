@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armarCara, calcularExo, condensarCara, EXO_POR_DEFECTO, propsSeccion, rigidezTabiques, type ExoDef } from './exo';
+import { armarCara, calcularExo, CATALOGO_TUBOS, condensarCara, dimensionarExo, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
 const resolver1 = (K: number[][], W: number[]) => {        // Gauss simple para las pruebas
@@ -107,5 +107,46 @@ describe('exoesqueleto · signos de los esfuerzos de cada barra', () => {
       });
       suma.forEach((v, k) => { if (!k.endsWith(',0.000')) expect(Math.abs(v)).toBeLessThan(1e-5); });
     }
+  });
+});
+
+describe('exoesqueleto · dimensionado (el más liviano que verifica)', () => {
+  const zs = [0, ...Array.from({ length: 21 }, (_, i) => 1 + i * 3)], W = zs.slice(1).map(z => 4 + 2.6 * (z / 64) ** 0.3);
+  const entradas: EntradaExo[] = [
+    { zs, W, EJ: () => 3.4e6 * 22.08, ancho: 18, tCaras: [-11, 11], Eh: 3.4e6, h: 64 },
+    { zs, W: W.map(w => w * 0.8), EJ: () => 3.4e6 * 14.45, ancho: 22, tCaras: [-9, 9], Eh: 3.4e6, h: 64 },
+  ];
+  it('las cuatro fichas: todo verifica con los dos vientos y no hay un tubo más chico que alcance en cada clase', () => {
+    for (const tipo of ['A', 'B', 'C', 'D'] as const) {
+      const r = dimensionarExo({ ...EXO_POR_DEFECTO, tipo }, entradas);
+      expect(r.verifica).toBe(true);
+      entradas.forEach(en => {
+        const c = calcularExo(r.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh);
+        expect(c.controles.every(x => x.estado === 'verifica')).toBe(true);
+        expect(c.u[c.u.length - 1]).toBeLessThanOrEqual(en.h / 500 + 1e-9);
+      });
+      expect(r.peso).toBeGreaterThan(0);
+      // un paso menos en la clase que quedó más grande ya no alcanza (el resultado es el borde)
+      const k = (['columna', 'diagonal', 'viga'] as const).map(c => ({ c, i: CATALOGO_TUBOS.findIndex(s => s.b === r.def[c].b && s.e === r.def[c].e) })).sort((a, b) => b.i - a.i)[0];
+      if (k.i > 0) {
+        const menor = { ...r.def, [k.c]: CATALOGO_TUBOS[k.i - 1] };
+        const ok = entradas.every(en => { const c = calcularExo(menor, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh); return c.controles.every(x => x.estado === 'verifica') && c.u[c.u.length - 1] <= en.h / 500; });
+        expect(ok).toBe(false);
+      }
+    }
+  });
+  it('con una flecha objetivo más exigente (h/2000) sale más pesado y la cumple', () => {
+    const suelto = dimensionarExo({ ...EXO_POR_DEFECTO, tipo: 'D' }, entradas);
+    const exigente = dimensionarExo({ ...EXO_POR_DEFECTO, tipo: 'D', limiteH: 2000 }, entradas);
+    expect(exigente.verifica).toBe(true);
+    expect(exigente.peso).toBeGreaterThan(suelto.peso);
+    entradas.forEach(en => { const c = calcularExo(exigente.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh); expect(c.u[c.u.length - 1]).toBeLessThanOrEqual(en.h / 2000 + 1e-9); });
+  });
+  it('el peso cuenta una vez las columnas de las esquinas', () => {
+    const def = { ...EXO_POR_DEFECTO, tipo: 'D' as const };
+    const solo = pesoExo(def, [entradas[0]]), ambos = pesoExo(def, entradas);
+    const colsB = 2 * (61 * propsSeccion(def.columna).A * 7.85) * 2;   // dos columnas por cara, dos caras
+    const otro = pesoExo(def, [entradas[1]]);
+    expect(ambos).toBeCloseTo(solo + otro - colsB, 6);
   });
 });

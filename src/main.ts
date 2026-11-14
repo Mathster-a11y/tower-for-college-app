@@ -25,7 +25,7 @@ import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
 import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
-import { TIPOS_EXO, propsSeccion } from './engine/exo';
+import { TIPOS_EXO, propsSeccion, pesoExo, type EntradaExo } from './engine/exo';
 import { imprimirCartaPdf } from './ui/cartaPdf';
 import { figurasDesdeMeta, type MetaFigura } from './xlsx/figuras';
 import metaFiguras from './assets/figuras/figuras.json';
@@ -135,7 +135,7 @@ function dibujarAvance() {
 }
 function dibujarCapas() {
   const c = $('capas');
-  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [keyof typeof estado.capas, string, string]] : [])];
+  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [keyof typeof estado.capas, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [keyof typeof estado.capas, string, string]] : [])];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
     b.style.setProperty('--c', col);
@@ -175,7 +175,11 @@ function dibujarTodo() {
   $<HTMLButtonElement>('b-rehacer').disabled = !estado.puedeRehacer;
   $('nombre-proyecto').textContent = estado.proyecto.nombre;
   dibujarRiel(); dibujarPanel(); dibujarCentro(); dibujarAvance(); dibujarEstadoCalculo();
+  // la capa del exoesqueleto aparece o se va con él
+  const conExo = !!estado.proyecto.exo;
+  if (conExo !== capasConExo) { capasConExo = conExo; dibujarCapas(); }
 }
+let capasConExo = false;
 export function mensaje(t: string) { $('mensaje').textContent = t; }
 
 function descargar(nombre: string, datos: BlobPart, tipo: string) {
@@ -232,7 +236,7 @@ async function exportar() {
         if (estado.proyecto.exo) {
           const hoja = (dir: 'A' | 'B') => { const d = datosExo(dir); if (!d) return null; return {
             ficha: `${d.def.tipo} · ${TIPOS_EXO[d.def.tipo].nombre}`, ancho: d.ancho, t: d.tCaras[1], Eh: d.Eh, Eacero: d.def.E, colA: propsSeccion(d.def.columna).A,
-            fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin,
+            fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, limiteH: d.def.limiteH ?? 500, peso: pesoExo(d.def, (['A', 'B'] as const).map(x => datosExo(x)?.entrada).filter(Boolean) as EntradaExo[]), niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin,
             barras: d.r.controles.map(c => { const e = d.r.caras.find(x => x.nombre === c.cara)!.esfuerzos.find(x => x.id === c.id)!; return [`${c.cara} · ${c.id}`, c.clase, e.L, c.N, c.M, c.sigma / 10, c.lambda, c.estado]; }) }; };
           g.exo = { A: hoja('A'), B: hoja('B') };
         }

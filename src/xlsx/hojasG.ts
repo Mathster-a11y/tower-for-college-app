@@ -26,7 +26,7 @@ export interface OpcionesG {
   exo?: { A: ExoHoja | null; B: ExoHoja | null } | null;
 }
 export interface ExoHoja {
-  ficha: string; ancho: number; t: number; Eh: number; Eacero: number; colA: number; fraccion: number; Jeq: number;
+  ficha: string; ancho: number; t: number; Eh: number; Eacero: number; colA: number; fraccion: number; Jeq: number; limiteH?: number; peso?: number;
   niveles: string[]; zs: number[]; W: number[]; Ftab: number[]; Fexo: number[]; u: number[]; uSin: number[];
   barras: (string | number)[][];
 }
@@ -404,6 +404,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
         ['n = E acero / E hormigón', `=${C(1)}8/${C(1)}7`, 'r3'], ['A columna (m²)', e.colA, 'n4'],
         ['J columnas = n·2·A·(ancho/2)² (m⁴)', `=${C(1)}9*2*${C(1)}10*(${C(1)}5/2)^2`, 'r3'],
         ['J equivalente de la cara (app, m⁴)', e.Jeq, 'n3'], ['momento que toma el exo', e.fraccion, 'pc'],
+        ['flecha objetivo: h /', e.limiteH ?? 500, 'n3'], ['acero de las cuatro caras (t)', e.peso ?? null, 'n3'],
       ];
       filasDato.forEach(([t, v, st], k) => { ex.p(`${C(0)}${5 + k}`, t, 't'); ex.p(`${C(1)}${5 + k}`, v, st); });
       const r0e = 16;

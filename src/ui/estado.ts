@@ -30,7 +30,7 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true };
+  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true };
   /** grilla de discretización de 0,05 m en la planta: se ve y los puntos se ajustan a ella (apagada: ajuste a 0,01 m) */
   grillaFina = false;
   /** rototraslación en 3D: exageración de la traslación y extra del giro (null = automáticas), torre sin deformar, animación y rótulos */

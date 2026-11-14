@@ -12,6 +12,7 @@ import { entraEnCalculo, huecoEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { datosExo } from './exo';
 
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
@@ -233,6 +234,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const dirV = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);
     const origen = estado.dir === 'A' ? new THREE.Vector3(0, top * 0.6, L / 2 + largo + 3) : new THREE.Vector3(-B / 2 - largo - 3, top * 0.6, 0);
     if (estado.capas.viento) grupo.add(new THREE.ArrowHelper(dirV, origen, largo, new THREE.Color(css('--carga', '#e07b00')).getHex(), 2.5, 1.6));
+    if (estado.proyecto.exo && estado.capas.exo && !roto) agregarExo();
     if (roto) agregarRoto(roto, B, L, top, fondoCota, cotas);
     if (roto && op.etiquetas && estado.roto3d.rotulos) agregarRotulos(roto, B, L, top, fondoCota);
     mover(fMax);
@@ -241,6 +243,35 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     medidas = { B, L, h, top, fondoCota };
     if (clave !== encuadre) { encuadrar(); encuadre = clave; }
     rotular();
+  }
+
+  /**
+   * Exoesqueleto: las cuatro caras como tubos de acero. Las dos caras paralelas al viento elegido se pintan con su
+   * esfuerzo normal (tracción o compresión, más intenso cuanto mayor |N|); las otras dos, en gris acero.
+   */
+  function agregarExo() {
+    const caras = (['A', 'B'] as const).map(dir => ({ dir, d: datosExo(dir) }));
+    const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--compresion', '#2b6cb0')), cC = new THREE.Color(css('--traccion', '#c53030'));
+    const radio = { columna: 0.32, diagonal: 0.2, viga: 0.24 } as const;
+    const eje = new THREE.Vector3(0, 1, 0);
+    caras.forEach(({ dir, d }) => {
+      if (!d) return;
+      const activa = dir === estado.dir;
+      const Nmax = Math.max(...d.r.caras[0].esfuerzos.map(e => Math.abs(e.N)), 1e-9);
+      // viento A: las caras van en x = ±t y la cara corre a lo largo de y; viento B: en y = ±t, a lo largo de x
+      const aPlanta = (s2: number, t: number) => (dir === 'A' ? { x: t, y: s2 } : { x: s2, y: t });
+      d.r.caras.forEach(c => c.esfuerzos.forEach(e => {
+        const pa = aPlanta(e.a.s, c.t), pb = aPlanta(e.b.s, c.t);
+        const A = new THREE.Vector3(pa.x, e.a.z, -pa.y), Bv = new THREE.Vector3(pb.x, e.b.z, -pb.y);
+        const L = A.distanceTo(Bv);
+        if (L < 1e-6) return;
+        const col = activa ? acero.clone().lerp(e.N >= 0 ? cT : cC, 0.35 + 0.65 * Math.min(1, Math.abs(e.N) / Nmax)) : acero;
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(radio[e.clase], radio[e.clase], L, 8), new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.3, transparent: !activa, opacity: activa ? 1 : 0.55 }));
+        m.position.copy(A.clone().add(Bv).multiplyScalar(0.5));
+        m.quaternion.setFromUnitVectors(eje, Bv.clone().sub(A).normalize());
+        grupo.add(m);
+      }));
+    });
   }
 
   /** torre sin deformar (trazos), eje del CR deformado y flecha curva del giro en la azotea */
