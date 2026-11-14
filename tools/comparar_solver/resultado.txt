@@ -1,0 +1,2 @@
+mayor diferencia en N: 0.000 %
+corrimiento de la azotea: app 2.770 mm · solver 2.770 mm

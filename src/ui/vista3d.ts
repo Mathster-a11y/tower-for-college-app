@@ -315,7 +315,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
    */
   function agregarExo() {
     const caras = (['A', 'B'] as const).map(dir => ({ dir, d: datosExo(dir) }));
-    const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--compresion', '#2b6cb0')), cC = new THREE.Color(css('--traccion', '#c53030'));
+    // N > 0 tracción (rojo, --traccion) y N < 0 compresión (azul, --compresion), como en el alzado de la etapa 08
+    const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
     const radio = { columna: 0.32, diagonal: 0.2, viga: 0.24 } as const;
     const eje = new THREE.Vector3(0, 1, 0);
     caras.forEach(({ dir, d }) => {

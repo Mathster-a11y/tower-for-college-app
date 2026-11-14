@@ -119,3 +119,19 @@ describe('CIRSOC 301 (LRFD)', () => {
     expect(Math.abs(x.Pu)).toBeGreaterThanOrEqual(1.2 * Math.abs(c.N) - 1e-9);
   });
 });
+
+import { deformada, type PuntoAltura } from './diagramas';
+describe('controles cruzados entre motores', () => {
+  it('la flecha «sin exo» del motor del exo es la deformada de la etapa 05 (mismo E·J; trapecios contra vigas exactas)', () => {
+    const n = 40, h = 2, zs = Array.from({ length: n + 1 }, (_, i) => i * h), W = zs.slice(1).map((_, i) => (i === n - 1 ? 1 : 2));
+    const E = 2.5e6, J = 30;
+    const r = calcularExo({ ...EXO_POR_DEFECTO, tipo: 'D', modulo: 4, pesoPropio: false }, zs, W, () => E * J, 18, [-10, 10], E);
+    // momentos de la ménsula en cada nivel con las mismas fuerzas (como M,NyQ)
+    const alt: PuntoAltura[] = zs.map((z, k) => {
+      let M = 0; for (let i = k + 1; i <= n; i++) M += W[i - 1] * (zs[i] - z);
+      return { nivel: String(k), z, pBarlo: 0, pSota: 0, F: k ? W[k - 1] : 0, V: 0, M };
+    });
+    const dfm = deformada(alt, W.reduce((a, b) => a + b, 0), E, J);
+    expect(Math.abs(r.uSin[n - 1] / dfm.dTop - 1)).toBeLessThan(0.005);
+  });
+});
