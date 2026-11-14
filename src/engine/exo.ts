@@ -80,6 +80,8 @@ export interface Barra {
   /** barra de borde (sus dos nudos en las esquinas): ahí se cuelga la fachada */
   borde: boolean;
   carga?: CargaBarra;
+  /** parte de la sección que representa (ala: la mitad del mástil de una cara perpendicular, compartido por dos caras) */
+  fraccion?: number;
 }
 export interface Cara { nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean }
 
@@ -140,11 +142,29 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   } else if (def.tipo === 'E') {
     // mástil central de la base a la azotea; esquinas desde el primer módulo (abajo vuelan); V por módulo y viga en cada borde
     for (let k = 0; k < n; k++) barra('columna', nudo(0, k), nudo(0, k + 1), def.mastil ?? def.columna);
-    for (const s of [s0, s1]) for (let k = mods[1] ?? n; k < n; k++) barra('columna', nudo(s, k), nudo(s, k + 1));
+    // esquinas desde el primer piso del exo (el primer tramo cuelga del chevron de arriba)
+    for (const s of [s0, s1]) for (let k = mods[0]; k < n; k++) barra('columna', nudo(s, k), nudo(s, k + 1));
     for (let j = 0; j + 1 < mods.length; j++) {
       const a0 = mods[j], a1 = mods[j + 1];
       barra('diagonal', nudo(s0, a1), nudo(0, a0)); barra('diagonal', nudo(s1, a1), nudo(0, a0));
       barra('viga', nudo(s0, a1), nudo(0, a1)); barra('viga', nudo(0, a1), nudo(s1, a1));
+    }
+    // alas del tubo: los mástiles de las dos caras perpendiculares quedan en s = ±ancho/2 (en el sentido del viento) y
+    // reciben de sus chevrones lo que bajan las esquinas; cada uno lo comparten dos caras paralelas → la mitad acá
+    // (el ala se ata a la esquina solo en los niveles de los chevrones: por ahí le llega la carga; en los otros pisos
+    //  tiene sus propios nudos, que comparten con la losa solo el corrimiento horizontal)
+    const sm = def.mastil ?? def.columna, pm = propsSeccion(sm), atadas = new Set(mods.slice(1));
+    const nudoAla = (s: number, k: number) => {
+      if (atadas.has(k)) return nudo(s, k);
+      const sa = s * (1 + 1e-7);
+      let q = nudos.find(x => x.piso === k && Math.abs(x.s - sa) < 1e-12);
+      if (!q) { q = { id: nudos.length, s: sa, z: zs[k], piso: k }; nudos.push(q); }
+      return q.id;
+    };
+    let nf = 0;
+    for (const s of [s0, s1]) for (let k = 0; k < n; k++) {
+      const a = nudoAla(s, k), b = nudoAla(s, k + 1), rel = un.columna === 'articulada';
+      barras.push({ id: `F${++nf}`, clase: 'columna', a, b, A: pm.A / 2, I: pm.I / 2, sec: sm, relA: rel, relB: rel, borde: false, fraccion: 0.5 });
     }
   } else {
     // columnas de esquina, de piso a piso
@@ -300,8 +320,13 @@ export interface CaraCondensada {
  * la derecha de a→b). Con carga repartida lineal p (axial) y q (perpendicular) de a a b, entre los extremos:
  *   N(x) = Na − pa·x − (pb − pa)·x²/2L,  V(x) = Va + qa·x + (qb − qa)·x²/2L,  M(x) = Ma + Va·x + qa·x²/2 + (qb − qa)·x³/6L
  */
+/** propiedades de la sección de una barra (las alas valen una fracción de su sección) */
+export const propsBarra = (e: { sec: Seccion; fraccion?: number }) => {
+  const p = propsSeccion(e.sec), f = e.fraccion ?? 1;
+  return { ...p, A: p.A * f, I: p.I * f, W: p.W * f };
+};
 export interface EsfuerzoBarra {
-  id: string; clase: ClaseBarra; a: { s: number; z: number }; b: { s: number; z: number }; L: number;
+  id: string; clase: ClaseBarra; fraccion?: number; a: { s: number; z: number }; b: { s: number; z: number }; L: number;
   /** en el extremo a (Q = V(0)) y en el b */
   N: number; Q: number; Ma: number; Mb: number; Nb: number; Qb: number;
   relA: boolean; relB: boolean; sec: Seccion;
@@ -383,7 +408,7 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     recuperar: u => fuerzasLocales(u).map(({ b, A, B, r, f }) => ({
       id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: r.L,
       N: -f[0], Q: f[1], Ma: -f[2], Mb: f[5], Nb: f[3], Qb: -f[4],
-      relA: b.relA, relB: b.relB, sec: b.sec, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb,
+      relA: b.relA, relB: b.relB, sec: b.sec, fraccion: b.fraccion, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb,
     })),
     reacciones: u => {
       const out = new Map<number, { s: number; V: number; H: number }>();
@@ -467,7 +492,7 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
   });
   const controles: ControlBarra[] = [];
   res.forEach(c => c.esfuerzos.forEach(e => {
-    const p = propsSeccion(e.sec);
+    const p = propsBarra(e);
     // a lo largo de la barra (con carga repartida, el máximo puede estar adentro)
     let sigma = 0, M = 0, Nc = 0;
     for (let i = 0; i <= 20; i++) { const f = esfuerzosEn(e, i / 20); sigma = Math.max(sigma, Math.abs(f.N) / p.A + Math.abs(f.M) / p.W); M = Math.max(M, Math.abs(f.M)); Nc = Math.min(Nc, f.N); }
@@ -495,7 +520,7 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   return entradas.reduce((s, en, i) => {
     const c = armarCara(def, en.ancho, en.zs);
     const esquina = (b: Barra) => b.clase === 'columna' && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s) - en.ancho / 2) < 1e-6);
-    return s + en.tCaras.length * c.barras.reduce((q, b) => { if (i > 0 && esquina(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * 7.85; }, 0);
+    return s + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && esquina(b)) || (b.fraccion ?? 1) < 1) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * 7.85; }, 0);
   }, 0);
 }
 

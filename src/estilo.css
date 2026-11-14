@@ -1227,3 +1227,6 @@ button.peligro { color: var(--mal); }
 .barra-transformar.angosta button { min-width: 30px; height: 40px; padding: 1px 2px; }
 .barra-transformar.angosta button .tx { display: none; }
 .colocar-panel.compacto { max-width: min(520px, calc(100% - 80px)); }
+
+.exo-dibujo .ex-g-barra.ala .ex-barra, .exo-dibujo .ex-g-barra.ala .ex-liston-borde { stroke-dasharray: 6 4; }
+.exo-dibujo .ex-g-barra.ala .ex-liston { opacity: .55; }

@@ -217,8 +217,15 @@ describe('exoesqueleto · articulaciones y cargas repartidas (casos cerrados)', 
     const zs = pisos(25), W = zs.slice(1).map(() => 4);
     const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'E', modulo: 8, pisoInicio: 1, pesoPropio: false };
     const c = armarCara(def, 18, zs);
-    expect(c.nudos.filter(q => q.piso === 0).map(q => q.s)).toEqual([0]);
-    const r = calcularExo(def, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+    // a la base llegan el mástil y las alas (la mitad de los mástiles de las caras perpendiculares); las columnas de esquina no
+    const enBase = c.barras.filter(b => c.nudos[b.a].piso === 0 || c.nudos[b.b].piso === 0);
+    expect(enBase.filter(b => b.clase === 'columna' && (b.fraccion ?? 1) === 1).map(b => c.nudos[b.a].s)).toEqual([0]);
+    expect(enBase.filter(b => (b.fraccion ?? 1) < 1).length).toBe(2);
+    expect(c.barras.filter(b => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && c.nudos[b.a].s !== 0).every(b => c.nudos[b.a].piso >= 1)).toBe(true);
+    // con las alas, el exo toma parte del momento de vuelco (el par lo hacen los mástiles de barlovento y sotavento)
+    const r0 = calcularExo(def, zs, W, () => 3.4e6 * 20, 18, [-10, 10], 3.4e6);
+    expect(r0.fraccionExo).toBeGreaterThan(0.1);
+    const r = r0;
     r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 6));
     expect(r.u[24]).toBeLessThan(r.uSin[24]);
   });

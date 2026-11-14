@@ -262,9 +262,15 @@ export function ejemploAsimetrico(): Proyecto {
  * Modelo para empezar a calcular, con supuestos (marcados): 48 pisos de oficinas de 4,064 m (13'-4", pisos 8 a 56,
  * seis módulos de 8, leídos del plano de elevación) más la corona: 49 niveles sobre PB, el máximo de la planilla. El núcleo central es de hormigón y llega
  * al suelo (así lo muestran los dibujos de la obra); sus medidas (21 × 21 m, pared de 0,90 m) son supuestas. Las
- * supercolumnas son reticuladas de acero; acá van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de
- * 0,60 m), también supuestos. Los chevrones del perímetro todavía no suman rigidez: entran cuando esté la
- * herramienta de exoesqueleto.
+ * supercolumnas van como cajones de hormigón equivalentes (7,30 × 7,30 m, pared de 0,60 m, supuestos) solo en la
+ * base abierta, hasta el piso 8 (34,75 m); de ahí para arriba las sigue el mástil de acero del exoesqueleto.
+ *
+ * Exoesqueleto (ficha E): en cada cara, el mástil en el medio y seis módulos de chevrones de 8 pisos (pisos 8 a 56)
+ * que bajan de las esquinas al mástil; las esquinas no llegan al suelo. Fachada en el plano del exo (separación 0).
+ * Las secciones son supuestas (para empezar a dimensionar con el botón de la etapa 08). Para pensar: en 1978,
+ * revisando los vientos a 45° (que el cálculo original no había mirado), se vio que las uniones de los chevrones
+ * eran abulonadas y no soldadas, y no alcanzaban; se reforzaron soldando chapas en unas 200 uniones. En la app se
+ * puede probar qué pasa con las uniones de las diagonales rígidas o articuladas.
  */
 export function ejemploCiticorp(): Proyecto {
   const lado = 47.85, base = 34.75, paso = 4.064;
@@ -287,10 +293,15 @@ export function ejemploCiticorp(): Proyecto {
     niveles,
     fundacion: { b1: lado, a1: lado },
     hormigon: 'H40',
-    muros: [
+    muros: ([
       { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 21, ladoY: 21, espesor: 0.9, tipo: 'tubo-rect', llega: true, areaInf: 1130, piezaA: 'Núcleo', pegadoA: '', piezaB: 'Núcleo B', pegadoB: '' },
       col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
-    ],
+    ] as Muro[]).map((m): Muro => (m.id.startsWith('S') ? { ...m, zHasta: base } : m)),
+    exo: {
+      tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1,
+      columna: { b: 0.6, e: 0.03 }, diagonal: { b: 1.0, e: 0.04 }, viga: { b: 0.8, e: 0.03 }, mastil: { b: 2.0, e: 0.1 },
+      E: 2.1e7, sigmaAdm: 14000, uniones: { diagonal: 'articulada', viga: 'rigida', columna: 'rigida', base: 'empotrada' },
+    },
   };
 }
 

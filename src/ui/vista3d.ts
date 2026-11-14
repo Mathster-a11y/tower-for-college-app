@@ -261,6 +261,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       // viento A: las caras van en x = ±t y la cara corre a lo largo de y; viento B: en y = ±t, a lo largo de x
       const aPlanta = (s2: number, t: number) => (dir === 'A' ? { x: t, y: s2 } : { x: s2, y: t });
       d.r.caras.forEach(c => c.esfuerzos.forEach(e => {
+        if ((e.fraccion ?? 1) < 1) return;                 // las alas son los mástiles de las otras caras: se dibujan con ellas
         const pa = aPlanta(e.a.s, c.t), pb = aPlanta(e.b.s, c.t);
         const A = new THREE.Vector3(pa.x, e.a.z, -pa.y), Bv = new THREE.Vector3(pb.x, e.b.z, -pb.y);
         const L = A.distanceTo(Bv);

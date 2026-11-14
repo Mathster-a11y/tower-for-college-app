@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, CATALOGO_TUBOS, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -200,12 +200,19 @@ export function panelExo(c: H) {
     const bDim = h('button', { type: 'button', class: 'primario', title: 'Prueba los tubos del catálogo de menor a mayor y agranda solo la clase de barra que falla, con los dos vientos' }, 'Dimensionar: el más liviano que verifica');
     bDim.addEventListener('click', () => {
       if (ens.length < 2) return;
+      const msg0 = document.getElementById('mensaje');
+      if (msg0) msg0.textContent = 'Dimensionando: probando tubos del catálogo con los dos vientos…';
+      bDim.disabled = true; document.body.style.cursor = 'progress';
+      // se deja pintar el aviso antes de la cuenta (en torres grandes tarda unos segundos)
+      setTimeout(() => { try { dimensionar(); } finally { bDim.disabled = false; document.body.style.cursor = ''; } }, 30);
+    });
+    const dimensionar = () => {
       const r = dimensionarExo(def, ens);
       const t = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
       estado.cambiar(() => { if (estado.proyecto.exo) { estado.proyecto.exo.columna = r.def.columna; estado.proyecto.exo.diagonal = r.def.diagonal; estado.proyecto.exo.viga = r.def.viga; } });
       const msg = document.getElementById('mensaje');
       if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)} mm · ${fmt(r.peso, 0)} t de acero (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
-    });
+    };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `Acero de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
@@ -267,7 +274,7 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   zs.forEach(z => svg.append(el('line', { x1: X(-sTorre), x2: X(sTorre), y1: Y(z), y2: Y(z), class: 'ex-losa' })));
   const Nmax = Math.max(...cara.esfuerzos.map(e => Math.abs(e.N)), 1e-9);
   const P = { X, Y, k };
-  const propsDe = (e: EsfuerzoBarra) => propsSeccion(e.sec);
+  const propsDe = (e: EsfuerzoBarra) => propsBarra(e);
   // escala de las tensiones: la máxima de la cara (en las dos fibras, a lo largo de cada barra), sin pasar la admisible
   const sMax = Math.max(...cara.esfuerzos.flatMap(e => [0, 0.25, 0.5, 0.75, 1].flatMap(t => { const f = sigmaFibras(e, propsDe(e), t); return [Math.abs(f.sup), Math.abs(f.inf)]; })), 1e-9);
   const escalaS = Math.min(sMax, d.def.sigmaAdm);
@@ -279,7 +286,7 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
     const props = propsDe(e);
     const mMax = maxBarra(t => esfuerzosEn(e, t).M).v;
     const tit = `${e.id} · ${e.clase} · N = ${fmt(e.N, 1)} t (${e.N >= 0 ? 'tracción' : 'compresión'}) · M máx = ${fmt(mMax, 2)} tm · uniones ${e.relA ? 'articulada' : 'rígida'} / ${e.relB ? 'articulada' : 'rígida'} · L = ${fmt(e.L)} m · tocá para ver el detalle`;
-    const g = el('g', { class: `ex-g-barra${barraSel === e.id ? ' elegida' : ''}`, 'data-id': e.id });
+    const g = el('g', { class: `ex-g-barra${barraSel === e.id ? ' elegida' : ''}${(e.fraccion ?? 1) < 1 ? ' ala' : ''}`, 'data-id': e.id });
     if (modo === 'sigma') capaFibras(g, e, props, d.def.sigmaAdm, escalaS, P, defsF);
     else {
       const w = modo === 'N' ? 1.2 + 6 * Math.abs(e.N) / Nmax : 1.6;
@@ -297,11 +304,12 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   enNudo.forEach(v => { if (v.libres >= 2 && v.libres === v.total) svg.append(el('circle', { cx: v.x, cy: v.y, r: 3.6, class: 'ex-pin' })); });
   cara.esfuerzos.forEach(e => pines(svg, e, P, q => { const v = enNudo.get(`${q.s.toFixed(3)},${q.z.toFixed(3)}`)!; return v.libres >= 2 && v.libres === v.total; }));
   // base: empotramientos y reacciones verticales
+  const xsR = cara.reacciones.map(q => X(q.s)).sort((u, v) => u - v);
   cara.reacciones.forEach(q => {
-    const x = X(q.s), y = Y(z0);
+    const x = X(q.s), y = Y(z0), dy = xsR.indexOf(x) % 2 && xsR.some(o => o !== x && Math.abs(o - x) < 70) ? 14 : 0;
     if ((d.def.uniones?.base ?? 'empotrada') === 'articulada') { svg.append(el('path', { d: `M${x - 9},${y + 11} h18 l-9,-10 z`, class: 'ex-apoyo' })); svg.append(el('circle', { cx: x, cy: y, r: 3, class: 'ex-pin' })); }
     else svg.append(el('rect', { x: x - 11, y: y + 1, width: 22, height: 6, class: 'ex-apoyo' }));
-    svg.append(el('text', { x, y: y + 24, class: `ex-valor ${q.V >= 0 ? 'compresion' : 'traccion'}`, 'text-anchor': 'middle' }, `${q.V >= 0 ? '↑' : '↓'} ${fmt(Math.abs(q.V), 0)} t`));
+    svg.append(el('text', { x, y: y + 24 + dy, class: `ex-valor ${q.V >= 0 ? 'compresion' : 'traccion'}`, 'text-anchor': 'middle' }, `${q.V >= 0 ? '↑' : '↓'} ${fmt(Math.abs(q.V), 0)} t`));
   });
   // viento de cada piso que va al exo (flechas a la izquierda, sobre la losa)
   const Fm = Math.max(...r.Fexo.map(Math.abs), ...r.Ftab.map(Math.abs), 1e-9);
@@ -364,7 +372,7 @@ export function centroExo(c: H, tam: Tam) {
     const cerrar = h('button', { type: 'button' }, 'Cerrar');
     cerrar.addEventListener('click', () => { barraSel = null; estado.avisarPanel(); });
     c.append(h('section', { class: 'tarjeta exo-detalle' }, h('div', { class: 'fila-acciones' }, h('b', {}, `Barra ${e.id} · ${e.clase} · ${cara.nombre}`), ctl ? chip(ctl.estado === 'verifica' ? 'verifica' : 'no verifica') : '', cerrar),
-      editorBarra(e), detalleBarra(e, propsSeccion(sec), sec, d.def)));
+      editorBarra(e), detalleBarra(e, propsBarra(e), sec, d.def)));
   }
   const n = d.r.u.length;
   c.append(seccion('Piso por piso', tablaValores(['Nivel', 'viento (t)', 'tabiques (t)', 'exo (t)', 'M tabiques (tm)', 'M sin exo (tm)', 'δ con exo (mm)', 'δ sin exo (mm)'],
