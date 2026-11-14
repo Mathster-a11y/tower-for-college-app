@@ -17,6 +17,7 @@ import { proyectoDesdeTablas, tablasProyecto, type Tabla } from './proyectoTabla
 import { leerLibro } from './tablas';
 import { agregarHojasG, type OpcionesG } from './hojasG';
 import { opcionesG } from './opcionesG';
+import { agregarFiguras, type FiguraPlanilla } from './figuras';
 
 export const HOJAS = {
   viento: 'viento', mnyq: 'M,NyQ', jpar: 'J Tabiques paralelos', jort: 'J Tabiques ortogonales',
@@ -136,8 +137,10 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
 /**
  * @param g hojas «G ·» con los motores de la app, gráficos y dibujos (si no se pasa, se arman con lo que sale del
  *          proyecto, sin las imágenes)
+ * @param figuras dibujos explicativos rediseñados para poner sobre las hojas originales (lista vacía: vuelve a
+ *          dejar los dibujos originales; sin pasar: no toca los dibujos)
  */
-export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG): Promise<Uint8Array> {
+export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[]): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
   const celdas = celdasAEscribir(d, r);
@@ -155,6 +158,7 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
   for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);
+  if (figuras) await agregarFiguras(zip, rutas, figuras);
   await agregarHojasG(zip, p, g ?? opcionesG(p), (nombre, xml) => agregarHoja(zip, nombre, xml, rutas));
   // recalcular todo al abrir y descartar la cadena de cálculo vieja
   let wb = await zip.file('xl/workbook.xml')!.async('string');

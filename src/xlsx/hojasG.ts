@@ -146,7 +146,8 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     'G · Planta: los muros de «T3D Muros» dibujados (se actualiza al cambiar la tabla).',
     'G · Perfiles y áreas (app): perfiles irregulares y áreas de influencia, calculados por la app.',
     'G · Dibujos de la app: la carta de la torre y los dibujos de cada etapa, como imágenes.',
-    'T3D …: la torre completa (proyecto, niveles, muros, contornos, grupos, losa, caminos, cotas y guías). Con estas hojas la app vuelve a armar la torre; se pueden editar.', '',
+    'T3D …: la torre completa (proyecto, niveles, muros, contornos, grupos, losa, caminos, cotas y guías). Con estas hojas la app vuelve a armar la torre; se pueden editar.',
+    'Dibujos explicativos de las hojas originales (viento, M,NyQ y las hojas J): rediseñados como tarjetas con «paso a paso». Son imágenes puestas sobre la hoja; los dibujos originales siguen en el archivo, ocultos (Excel: Inicio → Buscar y seleccionar → Panel de selección).', '',
     'Google Sheets: subí este archivo a Drive y abrilo con Google Sheets. Las fórmulas y los gráficos siguen andando.',
   ].forEach((t, i) => le.p(`A${i + 1}`, t, i === 0 ? 'tit' : 'txt'));
   hojas.push(le);

@@ -23,6 +23,10 @@ import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { opcionesG } from './xlsx/opcionesG';
+import { figurasDesdeMeta, type MetaFigura } from './xlsx/figuras';
+import metaFiguras from './assets/figuras/figuras.json';
+// los PNG de los dibujos rediseñados (tools/figuras), por nombre
+const urlFiguras = import.meta.glob('./assets/figuras/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 import { dibujosPorHoja } from './ui/dibujosDesglose';
 import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
@@ -212,6 +216,7 @@ async function exportar() {
   dialogo(`<h2>Escribir la planilla</h2>
     <p>La app escribe solo celdas de datos de la planilla ${plantillaAbierta ? 'que abriste' : 'virgen del curso'}. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla.</p>
     <ul>${filas}<li><b>Hojas «G ·»</b> (nuevas, al lado de cada hoja original): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b> (nuevas): la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
+    <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
     <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo.</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
@@ -224,7 +229,14 @@ async function exportar() {
           const dib = (await dibujosPorHoja()).flat();
           g.imagenes = dib.map(d => ({ titulo: d.titulo, ancho: d.ancho, alto: d.alto, png: Uint8Array.from(atob(d.png.split(',')[1] ?? ''), c => c.charCodeAt(0)) })).filter(d => d.png.length);
         } catch (e) { console.warn('dibujos para la planilla', e); }
-        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g);
+        // dibujos explicativos rediseñados sobre las hojas originales (sin tildar: quedan los del Excel)
+        let figuras: ReturnType<typeof figurasDesdeMeta> = [];
+        if ($<HTMLInputElement>('exp-figuras').checked) {
+          const png: Record<string, Uint8Array> = {};
+          await Promise.all(Object.entries(urlFiguras).map(async ([ruta, url]) => { png[ruta.replace(/^.*\//, '').replace('.png', '')] = new Uint8Array(await (await fetch(url)).arrayBuffer()); }));
+          figuras = figurasDesdeMeta(metaFiguras as Record<string, MetaFigura>, n => png[n]);
+        }
+        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras);
         descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $<HTMLDialogElement>('dialogo').close();
       } catch (e) { fallo('No se pudo escribir la planilla', e); }

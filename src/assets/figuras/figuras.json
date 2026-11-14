@@ -1,0 +1,82 @@
+{
+ "simetrica": {
+  "W": 384,
+  "H": 736,
+  "ancla": "A26",
+  "hojas": [
+   "J Tabiques paralelos",
+   "J Tabiques ortogonales"
+  ]
+ },
+ "tubo": {
+  "W": 414,
+  "H": 575,
+  "ancla": "S25",
+  "hojas": [
+   "J Tabiques paralelos",
+   "J Tabiques ortogonales"
+  ]
+ },
+ "asimetrica": {
+  "W": 1019,
+  "H": 447,
+  "ancla": "Y25",
+  "hojas": [
+   "J Tabiques paralelos",
+   "J Tabiques ortogonales"
+  ]
+ },
+ "portico": {
+  "W": 414,
+  "H": 702,
+  "ancla": "AP25",
+  "hojas": [
+   "J Tabiques paralelos",
+   "J Tabiques ortogonales"
+  ]
+ },
+ "torre": {
+  "W": 586,
+  "H": 1051,
+  "ancla": "A72",
+  "hojas": [
+   "M,NyQ"
+  ]
+ },
+ "npt": {
+  "W": 330,
+  "H": 74,
+  "ancla": "A59",
+  "hojas": [
+   "viento"
+  ]
+ },
+ "flecha1": {
+  "W": 81,
+  "H": 63,
+  "ancla": null,
+  "pos": {
+   "col": 9,
+   "fila": 61,
+   "dx": 9,
+   "dy": 10
+  },
+  "hojas": [
+   "M,NyQ"
+  ]
+ },
+ "flecha2": {
+  "W": 126,
+  "H": 64,
+  "ancla": null,
+  "pos": {
+   "col": 6,
+   "fila": 61,
+   "dx": 47,
+   "dy": 14
+  },
+  "hojas": [
+   "M,NyQ"
+  ]
+ }
+}
