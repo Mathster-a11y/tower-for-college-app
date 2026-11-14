@@ -382,14 +382,59 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   d.niveles.filter(n => n.z > 0 && n.z < H).forEach(n => {
     g.append(el('polyline', { points: pts([P(-T / 2, -S / 2, n.z), P(T / 2, -S / 2, n.z), P(T / 2, S / 2, n.z)]), class: 'ct-losa' }));
   });
-  // viento de cada piso sobre la cara de barlovento (en el medio de la cara), largo ∝ Wi
+  // prisma deformado (exagerado): cada piso se traslada δ en el sentido del viento y gira θ alrededor de su CR,
+  // con el mismo factor de exageración para los dos (así la forma es la de la torre real, agrandada)
   const sobre = d.niveles.filter(n => n.z > 0);
-  const wMax = Math.max(...sobre.map(n => n.Wi), 1e-9);
-  sobre.forEach((n, i) => {
-    if (sobre.length > 14 && i % 2) return;
-    const a = P(0, -S / 2 - 2 - (n.Wi / wMax) * 9, n.z), b = P(0, -S / 2 - 0.3, n.z);
-    flecha(g, a.x, a.y, b.x, b.y, 'carga', 1.3);
-  });
+  if (d.roto && d.roto.niveles.length > 1) {
+    const rn = [...d.roto.niveles].filter(n => n.z >= 0).sort((a, b) => a.z - b.z);
+    const dMaxP = Math.max(...rn.map(n => Math.abs(n.d)), 1e-12), kx = (S * 0.26) / dMaxP;
+    const crT = d.plano.Xr, crS = d.plano.Yr;
+    const def = (t: number, s2: number, n: { d: number; th: number }) => {
+      const a = n.th * kx, c = Math.cos(a), sn = Math.sin(a), u = t - crT, v = s2 - crS;
+      return { t: crT + u * c - v * sn, s: crS + u * sn + v * c + n.d * kx };
+    };
+    const esquinas: [number, number][] = [[-T / 2, -S / 2], [T / 2, -S / 2], [T / 2, S / 2], [-T / 2, S / 2]];
+    const arista = (k: number) => rn.map(n => { const q = def(esquinas[k][0], esquinas[k][1], n); return P(q.t, q.s, n.z); });
+    const A0 = arista(0), A1 = arista(1), A2 = arista(2), A3 = arista(3);
+    // sombra en el terreno: la planta de la azotea deformada bajada al suelo
+    const top = rn[rn.length - 1];
+    g.append(el('polygon', { points: pts(esquinas.map(([t, s2]) => { const q = def(t, s2, top); return P(q.t, q.s, 0); })), class: 'ct-sombra-def' }));
+    // caras del prisma deformado (translúcidas): barlovento y costado cercano, y la azotea
+    g.append(el('polygon', { points: pts([...A0, ...[...A1].reverse()]), class: 'ct-prisma-def' }));
+    g.append(el('polygon', { points: pts([...A1, ...[...A2].reverse()]), class: 'ct-prisma-def cerca' }));
+    g.append(el('polygon', { points: pts([A0[A0.length - 1], A1[A1.length - 1], A2[A2.length - 1], A3[A3.length - 1]]), class: 'ct-prisma-def techo' }));
+    [A0, A1, A2, A3].forEach((ar, k) => g.append(el('polyline', { points: pts(ar), class: `ct-arista-def${k === 3 ? ' lejos' : ''}` })));
+    rn.forEach((n, i) => { if (i % 3 || n.z <= 0) return; const q = [0, 1, 2].map(k => { const w = def(esquinas[k][0], esquinas[k][1], n); return P(w.t, w.s, n.z); }); g.append(el('polyline', { points: pts(q), class: 'ct-losa-def' })); });
+    // Mt alrededor del CR en la azotea y los valores de la azotea
+    const cTop = P(crT, crS + top.d * kx, H);
+    if (Math.abs(d.plano.Mt) > 1e-6) {
+      const hor = d.plano.Mt < 0;
+      g.append(arcoMomento(cTop.x, cTop.y - 4, 16, hor ? Math.PI * 1.1 : -Math.PI * 0.1, hor ? -Math.PI * 0.3 : Math.PI * 1.3, 'ct-arco mt', 2.4));
+      txt(g, cTop.x + 22, cTop.y - 18, `Mt = ${fmt(Math.abs(d.plano.Mt), 0)} tm`, 'd-valor ct-violeta');
+    }
+    const lim = H / 500, xl2 = ancho - 330;
+    txt(g, xl2 + 20, 65 + 4 * 18, `δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm · θ = ${fmt(Math.abs(d.roto.thTop) * 1000, 2)}·10⁻³ rad`, 'd-eje ct-verde');
+    txt(g, xl2 + 20, 65 + 5 * 18, `límite h/500 = ${fmt(lim * 1000, 0)} mm ${d.roto.dTop <= lim ? '· verifica' : '· no verifica'}`, 'd-eje');
+    txt(g, xl2 + 20, 65 + 6 * 18, 'deformación exagerada para que se vea', 'd-eje');
+  }
+  // viento: volumen translúcido sobre la cara de barlovento, con el perfil de presiones (se curva con Kz), y Wi
+  if (sobre.length) {
+    const pMax = Math.max(...sobre.map(n => Math.abs(n.pB)), 1e-9), kv = (S * 1.1) / pMax;
+    const orden = [...sobre].sort((a, b) => a.z - b.z);
+    const fuera = (t: number) => orden.map(n => P(t, -S / 2 - 0.4 - Math.abs(n.pB) * kv, n.z));
+    const pie = (t: number) => P(t, -S / 2 - 0.4, orden[0].z), cab = (t: number) => P(t, -S / 2 - 0.4, orden[orden.length - 1].z);
+    const Fi = fuera(-T / 2), Fd = fuera(T / 2);
+    g.append(el('polygon', { points: pts([pie(-T / 2), ...Fi, cab(-T / 2)]), class: 'ct-volumen-viento lado' }));
+    g.append(el('polygon', { points: pts([...Fi, ...[...Fd].reverse()]), class: 'ct-volumen-viento' }));
+    g.append(el('polygon', { points: pts([pie(T / 2), ...Fd, cab(T / 2)]), class: 'ct-volumen-viento lado' }));
+    g.append(el('polygon', { points: pts([Fi[Fi.length - 1], Fd[Fd.length - 1], cab(T / 2), cab(-T / 2)]), class: 'ct-volumen-viento techo' }));
+    const wMax = Math.max(...sobre.map(n => n.Wi), 1e-9);
+    sobre.forEach((n, i) => {
+      if (sobre.length > 14 && i % 2) return;
+      const a = P(0, -S / 2 - 0.4 - Math.abs(n.pB) * kv, n.z), b = P(0, -S / 2 - 0.3, n.z);
+      flecha(g, a.x, a.y, b.x, b.y, 'carga', 0.8 + (n.Wi / wMax) * 1.2);
+    });
+  }
   // resultante W en hw
   let yW = NaN;
   if (isFinite(d.hw)) {
@@ -452,12 +497,11 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   const rot = nivelesRotulados(d, Yfake, 14);
   d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0 && !(Math.abs(Yfake(n.z) - yW) < 22)) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
   // leyenda de lectura
-  const xl = ancho - 300;
-  [['carga', 'viento de cada piso Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'deformada exagerada del eje (por el CR)']].forEach(([c, t], i) => {
+  const xl = ancho - 330;
+  [['carga', 'viento: volumen de presiones, Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'torre deformada exagerada (δ y θ) y su sombra']].forEach(([c, t], i) => {
     g.append(el('rect', { x: xl, y: 60 + i * 18, width: 14, height: 4, rx: 2, class: `ct-ley ${c}` }));
     txt(g, xl + 20, 65 + i * 18, t, 'd-eje');
   });
-  if (d.roto) txt(g, xl + 20, 65 + 4 * 18, `δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm`, 'd-eje');
 }
 
 // ------------------------------------------------------------------ D · Vuelco y tensiones en el suelo
