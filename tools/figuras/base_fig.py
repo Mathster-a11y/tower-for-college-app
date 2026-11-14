@@ -1,3 +1,4 @@
+import math
 """Figuras de la planilla rediseñadas (tarjeta de la app + rótulos en el dibujo + paso a paso).
 Cada figura: SVG en píxeles de la hoja (se exporta a PNG 2×). Salida: fig_<nombre>.svg y figuras.html (vista)."""
 import json, html as _h
@@ -63,6 +64,21 @@ def pasos(x, y, items, lh=15):
 def notas(x, y, ls, lh=15, fill=INK2):
     return ''.join(T(x, y + k * lh, e(l), 11.5, 400, fill) for k, l in enumerate(ls)), y + len(ls) * lh
 def duda(n, x, y): return f'<circle cx="{x}" cy="{y}" r="9" fill="#fff" stroke="#b8401a" stroke-width="2"/>' + T(x, y + 4, n, 11, 700, '#b8401a', 'middle')
+
+def arco_momento(cx, cy, r, a0, a1, color, ancho=3.0):
+    """flecha curva de un momento (misma geometría que geometriaArcoMomento en src/ui/comp.ts)"""
+    p = lambda a: (cx + r * math.cos(a), cy - r * math.sin(a))
+    s = 1 if a1 >= a0 else -1
+    L, W_ = max(8, ancho * 3.2), max(5, ancho * 2.2)
+    a_fin = a1 - s * min(abs(a1 - a0) * 0.6, L / r)
+    A, B, T_ = p(a0), p(a_fin), p(a1)
+    grande = 1 if abs(a_fin - a0) > math.pi else 0
+    barrido = 0 if s > 0 else 1
+    d = f'M{A[0]:.1f},{A[1]:.1f} A{r},{r} 0 {grande} {barrido} {B[0]:.1f},{B[1]:.1f}'
+    tx, ty = T_[0] - B[0], T_[1] - B[1]; Lt = math.hypot(tx, ty) or 1; tx /= Lt; ty /= Lt
+    nx, ny = -ty, tx
+    punta = f'{T_[0]:.1f},{T_[1]:.1f} {B[0] + nx * W_ / 2:.1f},{B[1] + ny * W_ / 2:.1f} {B[0] - nx * W_ / 2:.1f},{B[1] - ny * W_ / 2:.1f}'
+    return f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{ancho}"/><polygon points="{punta}" fill="{color}"/>'
 
 def svg(W, H, cuerpo): return f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">{DEFS}{cuerpo}</svg>'
 

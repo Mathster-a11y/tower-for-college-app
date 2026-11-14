@@ -605,9 +605,9 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .carta .ct-nucleo.ok { fill: color-mix(in srgb, var(--ok) 45%, transparent); }
 .carta .ct-nucleo.mal { fill: color-mix(in srgb, var(--mal) 45%, transparent); }
 .carta .ct-giro { fill: var(--ink); stroke: var(--lienzo); stroke-width: 1.5; }
-.carta .ct-arco { fill: none; stroke-width: 3.5; }
-.carta .ct-arco.volcador { stroke: var(--mal); } .carta .ct-arco-punta.volcador { fill: var(--mal); }
-.carta .ct-arco.equilibrante { stroke: var(--revisar); } .carta .ct-arco-punta.equilibrante { fill: var(--revisar); }
+.arco-momento .arco-trazo { fill: none; }
+.carta .ct-arco.volcador .arco-trazo { stroke: var(--mal); } .carta .ct-arco.volcador .arco-punta { fill: var(--mal); }
+.carta .ct-arco.equilibrante .arco-trazo { stroke: var(--revisar); } .carta .ct-arco.equilibrante .arco-punta { fill: var(--revisar); }
 .carta .ct-suelo-t { fill: color-mix(in srgb, var(--compresion) 22%, transparent); stroke: var(--compresion); stroke-width: 1.4; }
 .carta .ct-suelo-t.traccion { fill: color-mix(in srgb, var(--traccion) 22%, transparent); stroke: var(--traccion); }
 .et3d.giro { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }

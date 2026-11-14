@@ -167,3 +167,36 @@ export function aplicarMat(raiz: ParentNode) {
     e.innerHTML = mat(t); e.dataset.mat = '1';
   });
 }
+
+// ------------------------------------------------------------------ flecha curva de momento (SVG)
+const NS_SVG = 'http://www.w3.org/2000/svg';
+/**
+ * Geometría de la flecha curva de un momento alrededor de (cx, cy): arco de radio r desde el ángulo a0 hasta a1
+ * (radianes, antihorario positivo, con el eje y hacia arriba en la pantalla) y punta triangular tangente al final.
+ * Sin DOM, para poder probarla; la usan la carta, la rototraslación y los dibujos del Excel (tools/figuras, en Python).
+ */
+export function geometriaArcoMomento(cx: number, cy: number, r: number, a0: number, a1: number, ancho = 3): { d: string; punta: string } {
+  const p = (a: number) => ({ x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) });
+  const s = a1 >= a0 ? 1 : -1;                                   // s = 1: antihorario en pantalla
+  const L = Math.max(8, ancho * 3.2), W = Math.max(5, ancho * 2.2);
+  const aFin = a1 - s * Math.min(Math.abs(a1 - a0) * 0.6, L / r);   // el arco termina donde empieza la punta
+  const A = p(a0), B = p(aFin), T = p(a1);
+  const grande = Math.abs(aFin - a0) > Math.PI ? 1 : 0, barrido = s > 0 ? 0 : 1;
+  const d = `M${A.x.toFixed(1)},${A.y.toFixed(1)} A${r},${r} 0 ${grande} ${barrido} ${B.x.toFixed(1)},${B.y.toFixed(1)}`;
+  const t = { x: T.x - B.x, y: T.y - B.y }, Lt = Math.hypot(t.x, t.y) || 1; t.x /= Lt; t.y /= Lt;
+  const n = { x: -t.y, y: t.x };
+  const punta = `${T.x.toFixed(1)},${T.y.toFixed(1)} ${(B.x + n.x * W / 2).toFixed(1)},${(B.y + n.y * W / 2).toFixed(1)} ${(B.x - n.x * W / 2).toFixed(1)},${(B.y - n.y * W / 2).toFixed(1)}`;
+  return { d, punta };
+}
+/** la flecha curva como grupo SVG: <path class="arco-trazo"> y <polygon class="arco-punta"> */
+export function arcoMomento(cx: number, cy: number, r: number, a0: number, a1: number, clase: string, ancho = 3): SVGGElement {
+  const { d, punta } = geometriaArcoMomento(cx, cy, r, a0, a1, ancho);
+  const g = document.createElementNS(NS_SVG, 'g');
+  g.setAttribute('class', `arco-momento ${clase}`);
+  const arco = document.createElementNS(NS_SVG, 'path');
+  arco.setAttribute('d', d); arco.setAttribute('fill', 'none'); arco.setAttribute('stroke-width', String(ancho)); arco.setAttribute('class', 'arco-trazo');
+  const pol = document.createElementNS(NS_SVG, 'polygon');
+  pol.setAttribute('points', punta); pol.setAttribute('stroke', 'none'); pol.setAttribute('class', 'arco-punta');
+  g.append(arco, pol);
+  return g;
+}

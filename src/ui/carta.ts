@@ -8,6 +8,7 @@
  *      momentos en un plano al costado y las reacciones en PB, como en los esquemas de la clase.
  */
 import { fmt } from './estado';
+import { arcoMomento } from './comp';
 import type { DatosRotoPlano } from './rototraslacion';
 import type { Rototraslacion3D } from '../engine/diagramas';
 import { rectangulos, tipoDe, type Muro } from '../engine/modelo';
@@ -460,15 +461,9 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
 }
 
 // ------------------------------------------------------------------ D · Vuelco y tensiones en el suelo
-/** flecha curva (arco de círculo) con punta, para los momentos */
+/** flecha curva de momento (la misma de comp.ts): el arco termina en una punta tangente */
 function arco(g: SVGElement, cx: number, cy: number, r: number, a0: number, a1: number, clase: string) {
-  const p = (a: number) => ({ x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) });
-  const A = p(a0), B = p(a1), grande = Math.abs(a1 - a0) > Math.PI ? 1 : 0, horario = a1 < a0 ? 1 : 0;
-  g.append(el('path', { d: `M${A.x.toFixed(1)},${A.y.toFixed(1)} A${r},${r} 0 ${grande} ${horario} ${B.x.toFixed(1)},${B.y.toFixed(1)}`, class: `ct-arco ${clase}` }));
-  // punta tangente al final del arco
-  const t = { x: -Math.sin(a1) * (a1 > a0 ? 1 : -1), y: -Math.cos(a1) * (a1 > a0 ? 1 : -1) };
-  const n = { x: -t.y, y: t.x }, L = 10, W = 5;
-  g.append(el('polygon', { points: `${B.x + t.x * 4},${B.y + t.y * 4} ${B.x - t.x * L + n.x * W},${B.y - t.y * L + n.y * W} ${B.x - t.x * L - n.x * W},${B.y - t.y * L - n.y * W}`, class: `ct-arco-punta ${clase}` }));
+  g.append(arcoMomento(cx, cy, r, a0, a1, `ct-arco ${clase}`, 3.5));
 }
 
 function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
@@ -522,8 +517,8 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   cota(g, X(-v.bB / 2), Y(zF) + 70, X(v.bB / 2), Y(zF) + 70, `b' = ${fmt(v.bB, 2)} m`, 1);
   txt(g, X(-v.bB / 2) - 6, Y(zF) + 16, `núcleo central ±b'/6 = ±${fmt(v.nucleo, 2)}`, ok ? 'd-eje' : 'd-valor ct-rojo', 'end');
   // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
-  arco(g, giro.x, giro.y, 40, Math.PI * 0.95, Math.PI * 0.45, 'volcador');
-  arco(g, giro.x, giro.y, 62, Math.PI * 0.5, Math.PI * 0.92, 'equilibrante');
+  arco(g, giro.x, giro.y, 44, Math.PI * 0.97, Math.PI * 0.42, 'volcador');
+  arco(g, giro.x, giro.y, 70, Math.PI * 0.46, Math.PI * 0.95, 'equilibrante');
   txt(g, X(S / 2) + 8, Y(0) - 34, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-rojo');
   txt(g, X(S / 2) + 8, Y(0) - 20, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-amarillo');
   // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx

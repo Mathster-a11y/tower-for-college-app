@@ -156,74 +156,99 @@ def portico(H):
 
 # =================================================================== 5 · Torre: vuelco y base (M,NyQ, A72)
 def torre(H):
+    """Corte de la torre como el de la carta D: viento a barlovento como volumen, deformada exagerada, W en hW,
+    peso P, resultante, y los dos momentos alrededor del punto de giro. Planta y «cómo leerlo» debajo."""
     WC = 586                               # tarjeta de 586 px (columnas A a G): los textos de las columnas H a J quedan a la vista
     m, y0 = marco(WC, H, 'Vuelco de la torre y base', 'filas 61 a 99')
     o = [m]
-    cx = 352; yaz = y0 + 40; ycalle = yaz + 290; yfund = ycalle + 66
-    bt, bb = 110, 176
-    AZ = '#3366ff'
-    n = 14; ybase = ycalle - 26; dh = (ybase - yaz) / n
-    for i in range(n + 1): o.append(L(cx - bt / 2, yaz + i * dh, cx + bt / 2, yaz + i * dh, INK, .7))
-    for yy in (ybase + 30, ybase + 60): o.append(L(cx - bb / 2, yy, cx + bb / 2, yy, INK, .7))
-    o.append(f'<path d="M{cx - bt / 2 - 14},{yaz} H{cx + bt / 2 + 14} M{cx - bt / 2},{yaz} V{ybase} H{cx - bb / 2} V{yfund} H{cx + bb / 2} V{ybase} H{cx + bt / 2} V{yaz}" fill="none" stroke="{AZ}" stroke-width="2.4"/>')
-    o.append(L(cx, ybase, cx, yfund, INK, .8))
-    o.append(L(cx + bt / 2 + 18, yaz, cx + bt / 2 + 36, yaz, INK, .8) + T(cx + bt / 2 + 40, yaz + 4, 'nivel azotea', 11.5))
-    o.append(L(110, ycalle, cx - bb / 2, ycalle, '#ff6600', 2) + L(cx + bb / 2, ycalle, WC - 82, ycalle, '#ff6600', 2) + T(WC - 14, ycalle + 4, 'nivel calle', 11.5, 400, INK, 'end'))
+    AZ, NAR, VERDE_D = '#3366ff', '#d85a30', '#1d9e75'
+    cx = 330; yaz = y0 + 46; ycalle = yaz + 300; yfund = ycalle + 62
+    bt, bb = 104, 168
+    xa, xb = cx - bt / 2, cx + bt / 2
+    n = 14; ybase = ycalle - 22; dh = (ybase - yaz) / n
+    # --- viento a barlovento: volumen translúcido con el perfil de presiones (crece con la altura) y flechas Wi
+    perfil = lambda z: 0.45 + 0.55 * (z ** 0.29)          # z de 0 (PB) a 1 (azotea), como Kz
+    ancho_v = 96
+    pts = [(xa - 4, ybase)] + [(xa - 4 - ancho_v * perfil(k / 40), ybase - (ybase - yaz) * k / 40) for k in range(41)] + [(xa - 4, yaz)]
+    o.append(f'<polygon points="{" ".join(f"{x:.1f},{y:.1f}" for x, y in pts)}" fill="{NAR}" fill-opacity=".13" stroke="{NAR}" stroke-opacity=".55" stroke-width="1"/>')
+    for i in range(n):
+        yy = yaz + (i + .5) * dh; zrel = 1 - (i + .5) / n
+        x0w = xa - 4 - ancho_v * perfil(zrel)
+        o.append(f'<line x1="{x0w + 2:.1f}" y1="{yy:.1f}" x2="{xa - 6:.1f}" y2="{yy:.1f}" stroke="{NAR}" stroke-width="1.1" marker-end="url(#pg)"/>')
+    o.append(T(24, yaz - 8, 'Wi · viento en cada piso', 11, 600, NAR))
+    o.append(T(24, yaz + 8, 'crece con la altura (Kz)', 10, 400, INK2))
+    # --- torre sin deformar (gris) y deformada exagerada (verde), losas
+    o.append(R(xa, yaz, bt, ybase - yaz, '#f6f8fb', '#aab3bd', 1))
+    flecha_top = 22
+    defo = lambda z: flecha_top * (z ** 2) * (3 - z) / 2       # ménsula con carga repartida (forma)
+    izq = [(xa + defo(1 - k / 30), yaz + (ybase - yaz) * k / 30) for k in range(31)]
+    der = [(xb + defo(1 - k / 30), yaz + (ybase - yaz) * k / 30) for k in range(31)]
+    o.append(f'<polygon points="{" ".join(f"{x:.1f},{y:.1f}" for x, y in izq + der[::-1])}" fill="{VERDE_D}" fill-opacity=".10" stroke="{VERDE_D}" stroke-width="1.6"/>')
+    for i in range(1, n):
+        yy = yaz + i * dh; dz = defo(1 - i / n)
+        o.append(L(xa + dz, yy, xb + dz, yy, VERDE_D, .6))
+    o.append(T(xb + defo(1) + 6, yaz + 30, 'deformada', 10.5, 600, VERDE_D) + T(xb + defo(1) + 6, yaz + 44, '(exagerada)', 10, 400, VERDE_D))
+    o.append(cota(xb, yaz - 10, xb + flecha_top, yaz - 10, VERDE_D) + T(xb + flecha_top + 4, yaz - 6, 'δ', 12, 700, VERDE_D))
+    # subsuelos y base
+    for yy in (ybase + 28, ybase + 56): o.append(L(cx - bb / 2, yy, cx + bb / 2, yy, INK, .7))
+    o.append(f'<path d="M{xa},{ybase} H{cx - bb / 2} V{yfund} H{cx + bb / 2} V{ybase} H{xb}" fill="#eef1f5" stroke="{AZ}" stroke-width="2.2"/>')
+    o.append(f'<path d="M{xa - 12},{yaz} H{xb + 12}" stroke="{AZ}" stroke-width="2.2"/>' + L(xa, yaz, xa, ybase, AZ, 2.2) + L(xb, yaz, xb, ybase, AZ, 2.2))
+    for yy in (ybase + 28, ybase + 56): o.append(L(cx - bb / 2, yy, cx + bb / 2, yy, INK, .7))
+    o.append(L(cx, ybase, cx, yfund, INK, .8, '4 3'))
+    # niveles
+    o.append(L(xb + 16, yaz, xb + 34, yaz, INK, .8) + T(xb + 38, yaz + 4, 'nivel azotea', 11.5))
+    o.append(L(24, ycalle, cx - bb / 2, ycalle, '#ff6600', 2) + T(116, ycalle - 6, 'nivel calle', 11.5))
     o.append(L(110, yfund, cx - bb / 2, yfund, '#808000', 2) + T(116, yfund - 6, 'nivel de fundación', 11.5))
     o.append(L(62, yfund, 100, yfund, INK, .8) + f'<line x1="81" y1="{yfund - 22}" x2="81" y2="{yfund - 1}" stroke="{INK}" stroke-width="1" marker-end="url(#pn)"/>')
-    xw0 = 176
-    for i in range(n):
-        yy = yaz + (i + .5) * dh; largo = 84 - i * 2.6
-        o.append(f'<line x1="{xw0}" y1="{yy:.1f}" x2="{xw0 + largo:.1f}" y2="{yy:.1f}" stroke="{INK}" stroke-width="1" marker-end="url(#pg)"/>')
-    o.append(T(xw0 - 8, yaz + 10, 'Wi', 12.5, 700, INK, 'end') + T(xw0 - 8, yaz + 26, 'viento en', 11, 400, INK2, 'end') + T(xw0 - 8, yaz + 40, 'cada piso', 11, 400, INK2, 'end'))
-    yW = yaz + 5.2 * dh
-    o.append(f'<line x1="46" y1="{yW:.1f}" x2="106" y2="{yW:.1f}" stroke="{INK}" stroke-width="3.5" marker-end="url(#pg)"/>' + T(50, yW + 22, 'W', 14, 700))
-    o.append(T(50, yW + 38, 'carga total', 11, 400, INK2) + T(50, yW + 52, 'del viento', 11, 400, INK2))
-    o.append(f'<line x1="30" y1="{yfund}" x2="30" y2="{yW:.1f}" stroke="{INK2}" stroke-width="1" marker-start="url(#pf)" marker-end="url(#pf)"/>' + V(38, (yfund + yW) / 2 + 40, 'hW') + ext(24, yW, 44, yW) + ext(24, yfund, 60, yfund))
-    xP = cx; yP0 = yW
-    o.append(f'<line x1="{xP}" y1="{yP0:.1f}" x2="{xP}" y2="{ybase - 4}" stroke="{INK}" stroke-width="5" marker-end="url(#pg)"/>' + T(xP - 12, ybase - 44, 'P', 14, 700, INK, 'end'))
-    o.append(f'<line x1="{xP}" y1="{yP0:.1f}" x2="{xP + 30}" y2="{yP0:.1f}" stroke="{INK}" stroke-width="2.5" marker-end="url(#pg)"/>' + T(xP + 34, yP0 - 6, 'W', 11.5, 700))
-    xe = xP + 36
-    yr = ybase - 4; xr = xP + (xe - xP) * (yr - yP0) / (yfund - yP0)
-    o.append(f'<line x1="{xP}" y1="{yP0:.1f}" x2="{xr:.1f}" y2="{yr:.1f}" stroke="{ROJO}" stroke-width="3" marker-end="url(#pr)"/>' + L(xr, yr, xe, yfund, ROJO, 2.2, '3 4'))
-    xres = cx + bt / 2 + 8
-    o.append(T(xres, ybase - 52, 'resultante', 11, 600, ROJO) + T(xres, ybase - 38, 'de W y P', 11, 400, ROJO))
-    def giro(x, y, color, horario, r=16):
-        xa, xb = (x - r, x + r) if horario else (x + r, x - r)
-        d = f'M{xa},{y} A{r},{r} 0 0 {1 if horario else 0} {xb},{y}'
-        cab = f'<polygon points="{xb - 10},{y - 1} {xb + 10},{y - 1} {xb},{y + 12}" fill="{color}" stroke="{INK}" stroke-width="1" stroke-linejoin="round"/>'
-        return f'<path d="{d}" fill="none" stroke="{INK}" stroke-width="9.5"/>' + cab + f'<path d="{d} l0,1.5" fill="none" stroke="{color}" stroke-width="7.5"/>'
-    xm = 512
-    for yy, col, hor, t1, t2, t3 in ((yaz + 44, '#ff0000', True, 'momento volcador', 'por viento', 'Mv = W · hW'), (yaz + 142, '#ffff00', False, 'momento equilibrante', 'por peso propio', 'Me = P · b′/2')):
-        o.append(giro(xm, yy, col, hor) + T(xm, yy + 28, t1, 11.5, 600, INK, 'middle') + T(xm, yy + 42, t2, 11, 400, INK2, 'middle') + T(xm, yy + 56, t3, 11, 400, INK2, 'middle'))
-    o.append(f'<circle cx="{cx + bb / 2}" cy="{yfund}" r="6" fill="{INK}"/>' + T(cx + bb / 2 + 12, yfund + 4, 'punto de giro', 11.5, 600))
-    y1 = yfund + 20
+    # --- W en hW (medida desde la fundación) y su recta de acción hasta el eje
+    yW = yaz + 5.4 * dh
+    o.append(f'<line x1="{xa - 150}" y1="{yW:.1f}" x2="{xa - 108}" y2="{yW:.1f}" stroke="{INK}" stroke-width="3.5" marker-end="url(#pg)"/>' + T(xa - 150, yW - 9, 'W', 14, 700))
+    o.append(T(xa - 150, yW + 18, 'carga total', 11, 400, INK2) + T(xa - 150, yW + 32, 'del viento', 11, 400, INK2))
+    o.append(L(xa - 106, yW, cx, yW, INK, .8, '5 3'))
+    o.append(f'<line x1="30" y1="{yfund}" x2="30" y2="{yW:.1f}" stroke="{INK2}" stroke-width="1" marker-start="url(#pf)" marker-end="url(#pf)"/>' + V(38, (yfund + yW) / 2 + 40, 'hW') + ext(24, yW, xa - 152, yW) + ext(24, yfund, 60, yfund))
+    # --- P en el eje y resultante R = W + P, que llega a la fundación a e del centro
+    o.append(f'<line x1="{cx}" y1="{yW:.1f}" x2="{cx}" y2="{yW + 92:.1f}" stroke="{INK}" stroke-width="4.5" marker-end="url(#pg)"/>' + T(cx - 10, yW + 70, 'P', 14, 700, INK, 'end') + T(cx - 10, yW + 84, 'peso', 10, 400, INK2, 'end'))
+    xe = cx + 34
+    o.append(f'<line x1="{cx}" y1="{yW:.1f}" x2="{xe}" y2="{yfund - 3}" stroke="{ROJO}" stroke-width="2.6" marker-end="url(#pr)"/>')
+    HALO = ' stroke="#fff" stroke-width="3.5" paint-order="stroke"'
+    yR = (yW + ybase) / 2 + 20
+    o.append(T(cx + 22, yR, 'R = W + P', 11.5, 700, ROJO, extra=HALO) + T(cx + 22, yR + 14, 'resultante', 10, 400, ROJO, extra=HALO))
+    # --- punto de giro (borde de sotavento) y los dos momentos alrededor de él
+    xg = cx + bb / 2
+    o.append(f'<circle cx="{xg}" cy="{yfund}" r="6" fill="{INK}"/>' + T(xg + 10, yfund + 18, 'punto de giro', 11.5, 600))
+    o.append(arco_momento(xg, yfund, 34, math.pi * 0.95, math.pi * 0.5, '#e24b4a', 4))
+    o.append(arco_momento(xg, yfund, 54, math.pi * 0.5, math.pi * 0.8, '#d4a100', 4))
+    o.append(T(xg + 22, yfund - 74, 'momento volcador', 11.5, 700, '#c62828') + T(xg + 22, yfund - 60, 'Mv = W · hW', 10.5, 400, INK2))
+    o.append(T(xg + 22, yfund - 36, 'momento equilibrante', 11.5, 700, '#8a5f00') + T(xg + 22, yfund - 22, 'Me = P · b′/2', 10.5, 400, INK2))
+    # cotas e y b'/2
+    y1 = yfund + 30
     o.append(cota(cx, y1, xe, y1, ACC) + V((cx + xe) / 2, y1 + 15, 'e', 'middle', ACC) + ext(cx, yfund, cx, y1 + 28) + ext(xe, yfund, xe, y1 + 6))
-    o.append(cota(cx, y1 + 22, cx + bb / 2, y1 + 22) + V(cx + bb / 4 + 14, y1 + 38, 'b′/2', 'middle') + ext(cx + bb / 2, yfund + 8, cx + bb / 2, y1 + 28))
-    # planta
-    yp = yfund + 84
+    o.append(cota(cx, y1 + 22, xg, y1 + 22) + V(cx + bb / 4 + 14, y1 + 38, 'b′/2', 'middle') + ext(xg, yfund + 8, xg, y1 + 28))
+    # --- planta
+    yp = yfund + 92
     o.append(L(16, yp - 18, WC - 16, yp - 18, HAIR) + titulito(20, yp, 'PLANTA'))
-    pa = 150; ypl = yp + 30
+    pa = 140; ypl = yp + 30
     o.append(R(cx - bb / 2, ypl, bb, pa, '#f4f7ff', AZ, 1.6) + R(cx - bt / 2, ypl, bt, pa, '#fff', AZ, 2.4) + T(cx, ypl + pa / 2 - 2, 'planta tipo', 11.5, 400, INK, 'middle') + T(cx, ypl + pa / 2 + 13, '(torre)', 10.5, 400, INK2, 'middle'))
     o.append(T(cx - bb / 2 + 5, ypl + pa - 6, 'base', 10, 400, INK2))
     o.append(cota(cx - bt / 2, ypl - 10, cx + bt / 2, ypl - 10) + V(cx, ypl - 15, 'b', 'middle'))
     o.append(cota(cx - bb / 2, ypl + pa + 12, cx + bb / 2, ypl + pa + 12) + V(cx, ypl + pa + 28, 'b′', 'middle'))
     o.append(cota(cx - bb / 2 - 22, ypl, cx - bb / 2 - 22, ypl + pa) + V(cx - bb / 2 - 30, ypl + pa / 2 + 4, 'a', 'end'))
-    o.append(T(24, ypl + 4, 'viento', 11, 400, INK2) + f'<line x1="24" y1="{ypl + 16}" x2="84" y2="{ypl + 16}" stroke="{INK}" stroke-width="2.5" marker-end="url(#pg)"/>')
+    o.append(T(24, ypl + 4, 'viento', 11, 400, NAR) + f'<line x1="24" y1="{ypl + 16}" x2="84" y2="{ypl + 16}" stroke="{NAR}" stroke-width="2.5" marker-end="url(#pg)"/>')
     for i, (v, l1, l2) in enumerate((('b', 'lado de la torre,', 'paralelo al viento'), ('b′', 'lado de la base', '(b1 en la tabla)'), ('a', 'lado perpendicular', 'al viento'))):
-        yy = ypl + 52 + i * 36
+        yy = ypl + 52 + i * 34
         o.append(T(24, yy, v, 12.5, 700) + T(46, yy, l1, 11, 400, INK2) + T(46, yy + 14, l2, 11, 400, INK2))
-    xnota = cx + bb / 2 + 20
-    s, _ = notas(xnota, ypl + pa / 2 - 8, ['La base (subsuelos)', 'puede ser más ancha', 'que la torre.'], 14); o.append(s)
+    s_, _ = notas(cx + bb / 2 + 20, ypl + pa / 2 - 8, ['La base (subsuelos)', 'puede ser más ancha', 'que la torre.'], 14); o.append(s_)
+    # --- cómo leerlo
     y = ypl + pa + 52
     o.append(panel(14, y, WC - 28, H - y - 12)); y += 22
     o.append(titulito(26, y, 'CÓMO LEERLO'))
-    s, y = pasos(26, y + 16, [
-        ('El viento empuja: W a la altura hW', ['W es la suma del viento de todos los pisos (Wi). hW = Mv / W, medida desde la', 'fundación. Momento volcador: Mv = W · hW.']),
+    s_, y = pasos(26, y + 16, [
+        ('El viento empuja: W a la altura hW', ['W es la suma del viento de todos los pisos (Wi). hW = Mv / W, medida desde la', 'fundación. Momento volcador alrededor del punto de giro: Mv = W · hW.']),
         ('El peso sostiene: P en el centro', ['P es el peso del edificio descargado. Momento equilibrante: Me = P · b′/2, respecto', 'del punto de giro (borde de la base opuesto al viento). En la fila 68 la planilla', 'llama «e» a esa mitad del ancho de la base.']),
         ('Seguridad al vuelco', ['Tiene que dar Me > 1,5 · Mv.']),
-        ('Dónde cae la resultante: e', ['La resultante de W y P llega a la fundación a la distancia e = Mv / P del centro', '(tabla de la fila 97). Si e ≤ b′/6, toda la base queda comprimida: no hay tracción', 'en la junta entre la base y el suelo.'])]); o.append(s)
-    return o, y, duda(5, xres + 66, ybase - 50) + duda(6, cx + bb / 2 + 10, ypl + pa + 12)
+        ('Dónde cae la resultante: e', ['R = W + P llega a la fundación a la distancia e = Mv / P del centro (tabla de la', 'fila 97). Si e ≤ b′/6, toda la base queda comprimida: no hay tracción en la junta', 'entre la base y el suelo.']),
+        ('La deformada', ['La torre se dobla como una ménsula empotrada en la base: la flecha δ de la azotea', 'se controla en la etapa Rigidez (δ ≤ h/500).'])]); o.append(s_)
+    return o, y, duda(5, xe + 90, (yW + yfund) / 2 + 30) + duda(6, cx + bb / 2 + 10, ypl + pa + 12)
 
 # =================================================================== 6 · Aviso de niveles (viento, A59)
 def npt(H):
