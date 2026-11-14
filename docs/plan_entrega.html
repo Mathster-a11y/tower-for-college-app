@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plan de trabajo hasta la entrega</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;--tint:#dbe8f6;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;--mal:#c62828;--malf:#fbe9e9;--viento:#b8401a;--rig:#8a5f00;--roto:#6a3d9a;--flex:#ad1457;--res:#2e7d32}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.5 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1000px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:17px;margin:34px 0 10px;padding-top:12px;border-top:2px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;flex:none}
+h3{font-size:14px;margin:16px 0 6px;color:var(--ink);break-after:avoid}
+p{margin:6px 0}
+ul,ol{margin:6px 0 6px 20px;padding:0}
+li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;break-inside:avoid}
+.tarjeta.gris{background:var(--panel);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--tint);color:var(--acc)}
+.chip.ok{background:var(--okf);color:var(--ok)}.chip.warn{background:var(--warnf);color:var(--warn)}.chip.mal{background:var(--malf);color:var(--mal)}.chip.gris{background:var(--panel);color:var(--ink2)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+td.c,th.c{text-align:center}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.cols{grid-template-columns:1fr}}
+.paso{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:8px 0;break-inside:avoid}
+.paso .b{width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.paso b{display:block}
+.paso small{color:var(--ink2)}
+code,.f{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+.eq{font-family:'IBM Plex Math','Times New Roman',serif;font-size:16px;text-align:center;margin:10px 0;padding:8px;background:#fafbfc;border:1px solid var(--hair);border-radius:6px}
+.var{font-size:12.5px;color:var(--ink2);margin:0 0 8px}
+.aviso{border-left:4px solid var(--warn);background:var(--warnf);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+.nota{color:var(--ink2);font-size:12.5px}
+.linea{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:start;padding:7px 0;border-bottom:1px solid var(--hair)}
+.linea .d{font-weight:700}
+.pie{margin-top:40px;padding-top:10px;border-top:1px solid var(--hair);color:var(--dim);font-size:11.5px}
+@media print{body{font-size:12px}.pag{max-width:none;padding:0}h2{margin-top:26px}.tarjeta{page-break-inside:avoid}}
+@page{size:A4;margin:16mm 14mm}
+</style>
+</head>
+<body><div class="pag">
+<h1>Plan de trabajo hasta la entrega del lunes</h1>
+<p class="sub">Torre 3D · qué se va a hacer, en qué orden, cómo se procede en cada inciso y cómo se verifica antes de dar por hecho. Viernes 14 al lunes 17 de noviembre de 2026.</p>
+
+<div class="tarjeta gris">
+<b>Cómo leer este plan.</b> Cada inciso tiene: <i>qué</i> (lo que pediste), <i>cómo</i> (los pasos y los archivos que se tocan), <i>verificación</i> (qué prueba lo deja cerrado) y una marca de prioridad.
+<div class="chips"><span class="chip mal">Para el lunes · imprescindible</span><span class="chip warn">Para el lunes · si el tiempo alcanza</span><span class="chip gris">Después de la entrega</span></div>
+Regla general: ningún cambio toca las 7 hojas originales de la planilla ni las fórmulas de los motores ya verificados; todo lo nuevo suma hojas, pestañas o capas. Cada inciso se cierra con <code>vitest</code> en verde, una pasada de Playwright y la publicación en GitHub Pages con el link.
+</div>
+
+<h2><span class="n">0</span>Lo que ya está hecho (para no repetirlo)</h2>
+<ul>
+<li>La planilla alcanza sola para rearmar la torre: hojas «T3D …» legibles (proyecto, niveles, muros, contornos, grupos, losa, caminos, cotas, guías). Probado de ida y vuelta.</li>
+<li>Hojas «G ·» con los motores de la app en fórmulas vivas y gráficos que se actualizan (Kz, carta Wi/Q/M/N, sección real, planta, rotación muro por muro, peso por muro). 442 de 442 valores coinciden con la app en 6 torres.</li>
+<li>Los dibujos explicativos de las hojas originales, rediseñados como tarjetas con «paso a paso», puestos sobre la planilla (los originales quedan ocultos, las celdas no cambian).</li>
+<li>La carta de la torre y los dibujos de cada etapa van al Excel como imágenes (hoja «G · Dibujos de la app»).</li>
+</ul>
+
+<h2><span class="n">1</span>Bugs e interacción táctil <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> Revisar la app a fondo con dedo y con lápiz: que nada quede inalcanzable, que los paneles no tapen la planta, que no haya errores en consola.</p>
+<h3>Cómo</h3>
+<div class="paso"><div class="b">1</div><div><b>Recorrido automático con Playwright en tres tamaños</b><small>1366 × 768 (notebook), 1024 × 768 (tablet apaisada) y 820 × 1180 (tablet vertical), emulando <code>pointerType: 'touch'</code>. Se recorren las 7 etapas, la Carta y el Resumen, y se tocan todos los botones de la barra de la planta (<code>botones.js</code> y <code>herr_botones.js</code> ya existen; se agrega el modo táctil).</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Lista de fallas táctiles a buscar</b><small>objetivos menores de 36 px; arrastre de muros con el dedo (umbral de 7 px); zoom con dos dedos contra el arrastre; menús ⋯ que se cierran al tocar; el lazo con el dedo; los tiradores de la grilla; el deslizador de deformación; el doble toque para entrar a un grupo (hoy requiere doble clic).</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Corrección en <code>src/ui/planta.ts</code>, <code>src/estilo.css</code> y <code>src/main.ts</code></b><small>Cada falla se corrige y se agrega al recorrido para que no vuelva. Los errores de consola que aparezcan se arreglan en el mismo inciso.</small></div></div>
+<p><b>Verificación.</b> El recorrido táctil pasa sin errores de consola y sin botones fuera de pantalla en los tres tamaños; captura de cada etapa guardada en <code>docs/capturas/</code>.</p>
+
+<h2><span class="n">2</span>Menos cosas en pantalla: lo secundario, plegado <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> La pantalla de cada etapa muestra todo junto; para el alumno confunde. Lo que no hace falta para entender la etapa va a un desplegable cerrado.</p>
+<h3>Cómo</h3>
+<table>
+<tr><th>Dónde</th><th>Queda a la vista</th><th>Se pliega (desplegable «Más detalle»)</th></tr>
+<tr><td>01 Diseño</td><td>planta, tabla de muros, piezas</td><td>Esquema, piezas agrupadas, importar, calco</td></tr>
+<tr><td>02 Viento</td><td>gráfico de presión y fuerza por piso, 4 números clave</td><td>tabla completa de la hoja «viento», fórmulas con celdas</td></tr>
+<tr><td>03 Fuerzas</td><td>Q y M en altura, W y Mv</td><td>tabla M,NyQ fila por fila</td></tr>
+<tr><td>04 Estabilidad</td><td>vuelco, e ≤ b′/6, tensiones</td><td>funicular gráfico paso a paso</td></tr>
+<tr><td>05 Rigidez</td><td>ΣJ contra J mínimo, flecha contra h/500</td><td>reparto de J por pieza, ΣJ por nivel</td></tr>
+<tr><td>06 Rototraslación</td><td>planta con el reparto (paso 4) y 3 números</td><td>pasos 1 a 3, funicular de los J, tabla por pieza</td></tr>
+<tr><td>07 Flexión</td><td>semáforo por pieza</td><td>tensiones muro por muro, armadura</td></tr>
+<tr><td>Panel lateral</td><td>controles con semáforo</td><td>fórmulas con número de celda</td></tr>
+</table>
+<p>Se usa el mismo componente <code>&lt;details&gt;</code> de la app (ya existe en el Resumen), con el estado recordado por etapa. Nada se borra: solo cambia qué está abierto al entrar.</p>
+<p><b>Verificación.</b> En 1366 × 768 cada etapa entra sin desplazamiento vertical en su parte principal; prueba con dos personas ajenas si es posible (vos y alguien de la cátedra).</p>
+
+<h2><span class="n">3</span>Gráficos: flechas de momento y revisión general <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> Las flechas curvas del momento volcador y del equilibrante salen raras (en la tarjeta del Excel y en la carta D). Revisar todos los gráficos otra vez.</p>
+<h3>Cómo</h3>
+<ul>
+<li><b>Flecha curva única</b>: una sola función <code>arcoMomento(cx, cy, r, desde, hasta, color)</code> en <code>src/ui/comp.ts</code>, con la punta tangente al arco y del mismo grosor del trazo (hoy hay dos versiones: la de <code>carta.ts</code> dibuja la punta con un triángulo suelto, y la del Excel usa un marcador SVG que no gira bien). Se usa en la carta D, en la tarjeta de vuelco del Excel y en la rototraslación.</li>
+<li><b>Sentidos</b>: el volcador gira en el sentido en que empuja el viento (horario si el viento va de izquierda a derecha); el equilibrante, al revés. Las dos giran alrededor del punto de giro, como en tu imagen 4.</li>
+<li><b>Recorrido de todos los gráficos</b> (viento, fuerzas, estabilidad, rigidez, rototraslación 1–4, flexión, cartas A–D, 3D) con la torre de la guía, el ejemplo 34 y una torre con subsuelos anchos: se guardan capturas y se corrigen superposiciones de rótulos y escalas.</li>
+</ul>
+<p><b>Verificación.</b> Capturas antes y después; test de <code>arcoMomento</code> (la punta termina en el extremo del arco y apunta en el sentido del giro).</p>
+
+<h2><span class="n">4</span>Dibujo de vuelco del Excel: el corte de tu referencia <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> La tarjeta «Vuelco de la torre y base» se rehace con la claridad del corte de la imagen 4: la torre con la deformada a un lado, el viento a barlovento como volumen transparente, los dos momentos alrededor del punto de giro y la resultante. Sin perder ningún dato ni referencia (W, hW, P, e, b′/2, b′, a, niveles, punto de giro).</p>
+<h3>Cómo</h3>
+<ul>
+<li>En <code>tools/figuras/figs.py</code>, función <code>torre()</code>: la torre se dibuja dos veces superpuestas, la recta en gris claro y la deformada (exagerada) en línea llena; el viento es un polígono translúcido naranja con el perfil de presiones (más ancho arriba) y flechas finas; el momento volcador (rojo) y el equilibrante (amarillo) como arcos alrededor del punto de giro, con sus fórmulas al lado.</li>
+<li>Planta y «cómo leerlo» quedan como están. La tarjeta sigue ocupando las columnas A a G (586 px) para no tapar las celdas.</li>
+<li>Misma referencia estética para la carta D de la app: el viento como volumen, los momentos en el punto de giro.</li>
+</ul>
+<p><b>Verificación.</b> Render de la planilla con LibreOffice a PDF, revisión visual; prueba <code>figuras.test.ts</code> (celdas idénticas con y sin dibujos).</p>
+
+<h2><span class="n">5</span>Axonometría de la carta: prisma deformado y volumen de viento <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> En la carta C (axonometría) agregar la sombra del prisma deformado (como tus imágenes 2 y 3) y el viento como un volumen transparente que se curva siguiendo el diagrama de presiones.</p>
+<h3>Cómo</h3>
+<div class="paso"><div class="b">1</div><div><b>Prisma deformado</b><small>Cada piso se traslada δ(z) en el sentido del viento y gira θ(z) alrededor del CR (los datos ya están en <code>d.roto.niveles</code>). Se dibujan las aristas verticales como polilíneas por los vértices deformados y las caras visibles con relleno translúcido verde (como la app Truss); la torre sin deformar queda en trazo fino.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Volumen de viento</b><small>Sobre la cara de barlovento, un prisma naranja translúcido cuyo espesor en cada nivel es la presión p(z) (perfil curvo del Kz): caras laterales como polígonos con el borde curvo, flechas Wi dentro. Orden de dibujo: viento → caras lejanas → prisma deformado → caras cercanas → cotas.</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Rótulos</b><small>δ azotea, θ azotea, límite h/500, W y hW, Mt alrededor del CR, Q y N en PB, punto de giro (como la imagen 2). Capa «Deformada» con el deslizador de exageración que ya existe.</small></div></div>
+<p><b>Verificación.</b> Captura con la guía y con el ejemplo 34; comparación con la carta 3D ya existente (misma δ, mismo θ).</p>
+
+<h2><span class="n">6</span>«Carta PDF»: un PDF solo con la carta de la torre <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> Un botón «Carta PDF» en Descargar ▾ que genera un PDF de 4 páginas apaisadas por viento: A (M, N y Q), B (ficha), C (axonometría nueva), D (vuelco y suelo), con rótulo de plano.</p>
+<h3>Cómo</h3>
+<ul>
+<li>Nuevo <code>src/ui/cartaPdf.ts</code>: reutiliza <code>carta()</code> y el flujo de impresión de <code>lamina.ts</code> (A4 apaisado, una carta por hoja, tema claro). Sin tablas largas: solo la carta y una franja con los 6 controles principales.</li>
+<li>La misma carta se exporta a <code>G · Dibujos de la app</code> en el Excel (ya ocurre; se agrega la C nueva).</li>
+</ul>
+<p><b>Verificación.</b> PDF generado con Playwright (<code>page.pdf</code>) para las dos direcciones, sin cortes de dibujo.</p>
+
+<h2><span class="n">7</span>Informe general: reorganizado para estudiantes de arquitectura <span class="chip mal">imprescindible</span></h2>
+<p><b>Qué.</b> Hoy el informe mezcla datos, cartas, rototraslación y controles sin jerarquía. Se reescribe con una estructura fija, lenguaje llano y una página por pregunta.</p>
+<h3>Estructura nueva</h3>
+<table>
+<tr><th>Pág.</th><th>Pregunta que responde</th><th>Qué lleva</th></tr>
+<tr><td class="c">1</td><td>¿Qué torre es?</td><td>portada: nombre, planta chica, 3D chico, 6 números (altura, pisos, B × L, ΣJ A y B, flecha)</td></tr>
+<tr><td class="c">2</td><td>¿Verifica?</td><td>semáforo de los 8 controles con una frase cada uno (sin fórmulas)</td></tr>
+<tr><td class="c">3–4</td><td>¿Cuánto viento recibe? (A y B)</td><td>carta A: presión, Wi, Q, M, N en altura</td></tr>
+<tr><td class="c">5–6</td><td>¿Se vuelca? ¿El suelo aguanta?</td><td>carta D nueva</td></tr>
+<tr><td class="c">7–8</td><td>¿Es rígida? ¿Gira?</td><td>axonometría C nueva + planta de rototraslación paso 4</td></tr>
+<tr><td class="c">9</td><td>¿Los tabiques resisten?</td><td>semáforo por pieza + el peor muro con su tensión</td></tr>
+<tr><td class="c">anexo</td><td>Para el que quiere los números</td><td>tablas completas (niveles, muros, rototraslación, controles con celdas), al final y con título «Anexo»</td></tr>
+</table>
+<p>Archivo: <code>src/ui/informe.ts</code> (se reescribe) y estilos de impresión en <code>estilo.css</code>. Cada página lleva un recuadro «En una frase» arriba.</p>
+<p><b>Verificación.</b> PDF de la guía y del ejemplo 34; lectura en voz alta de cada «En una frase».</p>
+
+<h2><span class="n">8</span>Revisión de las herramientas CAD y de los grupos <span class="chip warn">si el tiempo alcanza</span></h2>
+<p><b>Qué.</b> Pasar botón por botón las herramientas nuevas (colocar, guías, editar, contorno, lazo, grupos, componentes, cotas) y corregir lo que falle, con foco en editar un grupo como conjunto.</p>
+<h3>Cómo</h3>
+<ul>
+<li>Guion de prueba manual escrito en <code>docs/prueba_cad.md</code> (30 pasos: dibujar un núcleo, agruparlo, hacerlo componente, copiarlo espejado, mover el grupo entero, girarlo, entrar y editar un muro, salir, calar, acotar, deshacer).</li>
+<li>Se corre con Playwright (<code>cerrado_ui.js</code>, <code>col_ui.js</code>, <code>f3_ui.js</code>, <code>edc_ui.js</code>) y a mano; cada falla se corrige y se agrega al guion.</li>
+<li>Pendientes conocidos: moviendo un grupo con las flechas del teclado; «Iguales» con perfiles; cotas que siguen al muro al girarlo.</li>
+</ul>
+<p><b>Verificación.</b> Los 30 pasos pasan sin error; 277+ pruebas en verde.</p>
+
+<h2><span class="n">9</span>Exoesqueleto: plan matemáticamente cerrado <span class="chip warn">motor y ficha D para el lunes</span> <span class="chip gris">editor barra por barra después</span></h2>
+<p><b>Qué.</b> Diseñar y calcular un exoesqueleto de acero junto con los tabiques, con los flujos de fuerzas y los diagramas de N, Q y M de cada barra, e integrarlo al Excel sin tocar las hojas originales. Parte de <code>docs/propuesta_exoesqueleto.pdf</code> (caminos 1 a 3 y protocolo).</p>
+
+<h3>9.1 Modelo (cerrado)</h3>
+<div class="tarjeta">
+<p><b>Hipótesis.</b> Las losas son diafragmas rígidos: en cada piso <i>i</i> hay un solo desplazamiento horizontal <i>u<sub>i</sub></i> en el sentido del viento (y un giro de planta <i>θ<sub>i</sub></i>, que se trata aparte en la rototraslación). Los tabiques trabajan como una ménsula con rigidez <i>E·ΣJ(z)</i>; el exoesqueleto, como pórticos planos en las caras paralelas al viento, atados a las losas. Las dos partes comparten <i>u<sub>i</sub></i>: son resortes en paralelo.</p>
+<p><b>Tabiques.</b> Viga ménsula discretizada por pisos (elemento de viga de Euler con <i>EJ</i> de cada tramo, ya calculado nivel por nivel). Se arma <b>K</b><sub>tab</sub> con los grados de libertad (u, φ) de cada piso y se condensa a los <i>u<sub>i</sub></i>:</p>
+<div class="eq">K<sub>tab</sub> = K<sub>uu</sub> − K<sub>uφ</sub> K<sub>φφ</sub><sup>−1</sup> K<sub>φu</sub></div>
+<p><b>Exoesqueleto.</b> Cada cara paralela al viento es un pórtico plano (método directo de la rigidez, el mismo de la app Truss): nodos en los cruces piso × eje de columna; barras de tres clases: <i>columna</i> (viga-columna, EA y EI), <i>diagonal</i> (biela, solo EA), <i>cinturón o viga</i> (viga, EA y EI). Las caras perpendiculares entran por sus columnas de esquina, que ya son nodos de las caras paralelas. Se arma <b>K</b><sub>cara</sub> (3 gdl por nodo), se impone que los nodos de un mismo piso comparten <i>u</i> (diafragma) y se condensa a los <i>u<sub>i</sub></i>:</p>
+<div class="eq">K<sub>exo</sub> = Σ<sub>caras</sub> ( K<sub>uu</sub> − K<sub>ur</sub> K<sub>rr</sub><sup>−1</sup> K<sub>ru</sub> )</div>
+<p class="var">r: los grados de libertad que se condensan (verticales y giros de nudo). El acero entra con su E real (2,1·10<sup>6</sup> kg/cm²); no hace falta la relación n porque se suman rigideces, no inercias.</p>
+<p><b>Sistema combinado y reparto.</b></p>
+<div class="eq">(K<sub>tab</sub> + K<sub>exo</sub>) · <b>u</b> = <b>W</b> &nbsp;&nbsp;→&nbsp;&nbsp; <b>F</b><sub>tab</sub> = K<sub>tab</sub> <b>u</b> , &nbsp; <b>F</b><sub>exo</sub> = K<sub>exo</sub> <b>u</b> , &nbsp; <b>F</b><sub>tab</sub> + <b>F</b><sub>exo</sub> = <b>W</b></div>
+<p class="var"><b>W</b>: Wi de cada piso (hoja M,NyQ, columna H). <b>F</b><sub>tab</sub>: la parte del viento que sigue bajando por los tabiques → con ella se recalculan Q(z) y M(z) de los tabiques y todo lo de las etapas 03 a 07 queda igual que hoy, pero con menos carga. <b>F</b><sub>exo</sub>: lo que toma el exoesqueleto.</p>
+<p><b>Esfuerzos en cada barra.</b> Con <b>u</b> se recuperan los gdl condensados de cada cara (<b>r</b> = −K<sub>rr</sub><sup>−1</sup> K<sub>ru</sub> <b>u</b>) y, barra por barra, los esfuerzos de extremo <b>f</b> = <b>k</b><sub>barra</sub> <b>T</b> <b>d</b>. Como las cargas son nodales: N constante en las bielas; en columnas y vigas N y Q constantes y M lineal entre los dos extremos. Eso da el <b>diagrama de M y de Q de cada miembro</b> y el <b>flujo de fuerzas</b> (barras en tracción y compresión, grosor según |N|), igual que en Truss.</p>
+<p><b>Controles.</b> Flecha total δ<sub>azotea</sub> ≤ h/500; tensión σ = N/A (± M/W) ≤ σ<sub>adm</sub> (F-24: 1 400 kg/cm²); pandeo de las barras comprimidas con esbeltez λ = k·L/i ≤ 200 y N ≤ N<sub>cr</sub>/1,7 con N<sub>cr</sub> = π²EI/(kL)² (método simple del curso; el CIRSOC 301 completo queda anotado como paso siguiente); tracción en la fundación de las columnas de barlovento; reparto tabiques/exo.</p>
+<p><b>Torsión.</b> Cada cara paralela al viento entra a la rototraslación como una «pieza» más, con su J equivalente <i>J<sub>eq</sub> = W h³ / (8 E δ<sub>cara</sub>)</i> (δ<sub>cara</sub>: flecha de la cara sola bajo W) y su posición <i>a</i> (distancia al CR). Así Σ J·a² y el giro usan el mismo motor de siempre.</p>
+</div>
+
+<h3>9.2 Qué se construye y en qué orden</h3>
+<div class="paso"><div class="b">1</div><div><b>Motor <code>src/engine/exo.ts</code></b> <span class="chip warn">lunes</span><small>Tipos <code>Barra</code> {id, cara, nA, nB, clase, perfil (A, I, i), material} y <code>Exo</code> {caras, nodos por piso × eje, barras}; <code>rigidezCara()</code>, <code>condensar()</code>, <code>resolverCombinado(proyecto, exo, W)</code> → u, F_tab, F_exo, esfuerzos por barra, δ, controles. Fichas A–D como generadores de barras (<code>fichas.ts</code>): diagrid, mega-marcos, mega-columnas con cinturones, tubo en X. Pruebas: ménsula de dos columnas (J = 2Ad²) contra la fórmula cerrada; pórtico de un piso contra Truss; equilibrio ΣF = W en cada piso; con exo de rigidez cero, todo coincide con la app actual.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Etapa 08 Exoesqueleto</b> <span class="chip warn">lunes</span><small>En 01 Diseño: elegir ficha, material, perfiles de columnas y diagonales, módulo (pisos por cruz). En 08: alzado de cada cara con el flujo de fuerzas y los diagramas de N, Q, M por barra; reparto tabiques/exo en altura; δ con y sin exo; controles con semáforo. En el 3D: capa «Exoesqueleto».</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Excel, sin molestar las otras partes</b> <span class="chip warn">lunes</span><small>(a) Hoja nueva «G · Exoesqueleto» con la tabla de barras (T3D Exoesqueleto), J<sub>exo</sub>, S, δ<sub>exo</sub>, J<sub>eq</sub> por cara y el reparto, en fórmulas vivas donde la fórmula es cerrada (fichas A–D) y valores de la app donde hace falta la matriz. (b) Camino 1 del PDF para que la planilla del curso dé el resultado: cada cara paralela entra como un pórtico en las columnas AO a AX de la hoja J, con el ancho de los pies elegido para que J<sub>pórtico</sub> = J<sub>eq</sub> (solo celdas de datos; la hoja «G · Exoesqueleto» muestra de dónde sale ese ancho). (c) El reparto reduce los Wi que llegan a los tabiques: en «G · Exoesqueleto» va la columna «Wi tabiques» y una nota de cómo cargarla en M,NyQ si la cátedra lo pide (no se escribe sola, para no cambiar el criterio de la planilla sin permiso).</small></div></div>
+<div class="paso"><div class="b">4</div><div><b>Editor barra por barra</b> <span class="chip gris">después</span><small>Dibujar sobre el alzado de cada cara con la grilla piso × eje (como el editor de contorno), repetir módulo, simetría, catálogo de perfiles. El motor del paso 1 ya lo admite: solo cambia de dónde salen las barras.</small></div></div>
+<div class="paso"><div class="b">5</div><div><b>Dimensionar</b> <span class="chip gris">después</span><small>«El exo más liviano que verifica»: búsqueda sobre el área de columnas y diagonales con los controles del paso 1.</small></div></div>
+<p class="nota">Si hace falta, se toma de <code>mathster-a11y/structural-solver-</code> (la app de estereoestructuras) la rutina de rigidez de barras y el dibujo de flujos de fuerzas, adaptada a 2D; la licencia es la misma.</p>
+<p><b>Verificación del inciso.</b> Pruebas unitarias del motor (equilibrio, casos cerrados); la torre de la guía con el tubo en X reproduce los órdenes del PDF (flecha de 56 a ~16 mm, exo toma ~70 %); el Excel escrito recalcula en LibreOffice y la hoja J suma el J<sub>eq</sub> de las caras.</p>
+
+<h2><span class="n">10</span>Calendario</h2>
+<div class="linea"><div class="d">Viernes 14</div><div>Este plan · incisos 1, 3 y 4 (táctil y bugs; flechas de momento; tarjeta de vuelco nueva) · publicar.</div></div>
+<div class="linea"><div class="d">Sábado 15</div><div>Incisos 5, 6 y 7 (axonometría con prisma deformado y viento; Carta PDF; informe reorganizado) · inciso 2 (plegar lo secundario) · publicar.</div></div>
+<div class="linea"><div class="d">Domingo 16</div><div>Inciso 9, pasos 1 a 3 (motor, etapa 08, Excel) · inciso 8 en lo que quede de tiempo · publicar.</div></div>
+<div class="linea"><div class="d">Lunes 17 (mañana)</div><div>Pasada final: pruebas, recorrido táctil, archivo único <code>torre3d.html</code>, Excel de ejemplo, PDFs de muestra, link.</div></div>
+<div class="aviso">Si el domingo el inciso 9 no cierra con las pruebas en verde, se entrega con el motor y la ficha D solamente (sin etapa 08 completa) y la hoja «G · Exoesqueleto» con los valores de la app; el resto queda para la semana siguiente. Prefiero avisarlo ahora que entregar algo que no verifica.</div>
+
+<h2><span class="n">11</span>Qué necesito de vos</h2>
+<ul>
+<li>Un «dale» a este plan, o los cambios de orden que quieras.</li>
+<li>Confirmar el camino del Excel para el exoesqueleto (9.2, paso 3): hoja «G · Exoesqueleto» + pórticos en AO–AX con el ancho equivalente. Es el único punto donde la app escribe algo que no venía escribiendo (celdas de datos de pórticos en las hojas J).</li>
+<li>Si querés que la app también reduzca los Wi de los tabiques en M,NyQ (hoy la propuesta es mostrarlo en la hoja G y dejar M,NyQ como la planilla del curso).</li>
+</ul>
+
+<div class="pie">Torre 3D · plan de trabajo · 14 de noviembre de 2026 · Este documento se actualiza al cerrar cada inciso (docs/plan_entrega.html).</div>
+</div></body></html>
