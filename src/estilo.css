@@ -558,9 +558,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .informe table { border-collapse: collapse; width: 100%; font-size: 9pt; }
   .informe th, .informe td { border-bottom: .5px solid #bbb; padding: 1mm 2mm; text-align: left; }
   .informe .inf-pie { margin-top: 6mm; color: #555; font-size: 9pt; }
-  body.imprimiendo .informe { page: informe; }
-  @page { size: A4; margin: 14mm; }
-  @page informe { size: A4; margin: 14mm 14mm 18mm;
+  /* sin página con nombre: Chrome manda cada SVG a la hoja siguiente si la página tiene nombre */
+  @page { size: A4; margin: 14mm 14mm 18mm;
     @bottom-left { content: "Torre 3D · Edificios en torre · Taller de Estructuras E4, FAUD-UNMDP"; font: 7.5pt 'IBM Plex Sans', sans-serif; color: #8a949e; }
     @bottom-right { content: "página " counter(page) " de " counter(pages); font: 7.5pt 'IBM Plex Sans', sans-serif; color: #8a949e; } }
   /* marco de reportes del sistema de diseño (8): banda del color del capítulo con el número en un chip blanco,
@@ -572,6 +571,24 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .informe h3 { font: 700 8pt 'IBM Plex Sans', sans-serif; letter-spacing: .07em; text-transform: uppercase; color: #6b7781; margin: 4mm 0 1.5mm; }
   .informe .dg-tabla th, .informe table th { background: #33414e !important; color: #fff !important; }
   .informe .dg-tabla tr:nth-child(even) td { background: #f3f5f7; }
+  /* informe para estudiantes: frase arriba, datos grandes, semáforo */
+  .informe .inf-portada { border-bottom: 0; }
+  .informe .inf-sub { color: #5f6b76; margin: 0 0 4mm; }
+  .informe .inf-frase { background: #dbe8f6 !important; border: 0 !important; border-left: 1.4mm solid #1a6bbd !important; border-radius: 1.6mm; padding: 2.5mm 3.5mm !important; color: #1f2328 !important; font-size: 11pt; line-height: 1.45; margin: 0 0 4mm; }
+  .informe .inf-frase b { color: #1a6bbd; }
+  .informe .inf-datos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5mm; margin: 0 0 4mm; }
+  .informe .inf-dato { border: .5pt solid #c3cad1; border-radius: 1.6mm; padding: 2mm 2.5mm; display: flex; flex-direction: column; break-inside: avoid; }
+  .informe .inf-dato span { font-size: 8pt; color: #5f6b76; }
+  .informe .inf-dato b { font-size: 14pt; color: #1f2328; }
+  .informe .inf-dato small { font-size: 7.5pt; color: #8a949e; }
+  .informe .inf-grupo { border: .5pt solid #c3cad1; border-radius: 1.6mm; padding: 1mm 3mm 2mm; margin: 0 0 3mm; break-inside: avoid; }
+  .informe .inf-grupo h3 { text-transform: none; letter-spacing: 0; font-size: 10.5pt; color: #1f2328; }
+  .informe .inf-ctrl { display: grid; grid-template-columns: 6mm 1fr auto; gap: 2mm; align-items: baseline; padding: 1mm 0; border-top: .4pt solid #e1e5ea; font-size: 9.5pt; }
+  .informe .inf-ctrl small { color: #6b7781; }
+  .informe .inf-ctrl .n { font-family: var(--mono); font-size: 9pt; }
+  .informe .inf-sem { display: inline-flex; width: 4.6mm; height: 4.6mm; border-radius: 50%; align-items: center; justify-content: center; font-weight: 700; font-size: 8pt; color: #fff; background: #8a949e; }
+  .informe .inf-sem.verifica { background: #1a7a3a; } .informe .inf-sem.no-verifica { background: #c62828; } .informe .inf-sem.atención { background: #b8860b; }
+  .informe .inf-nota { color: #5f6b76; }
 }
 /* herramientas de la planta */
 .herr-planta { position: absolute; top: 8px; left: 10px; z-index: 2; display: flex; flex-wrap: nowrap; max-width: calc(100% - 20px); }
