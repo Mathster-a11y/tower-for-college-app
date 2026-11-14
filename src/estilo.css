@@ -1134,7 +1134,9 @@ button.peligro { color: var(--mal); }
 }
 
 /* rótulos de la axonometría legibles sobre el volumen de viento y el prisma deformado */
-.carta-C text { paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; stroke-linejoin: round; }
+.carta text { paint-order: stroke; stroke: var(--lienzo, #fff); stroke-width: 3px; stroke-linejoin: round; }
+.carta .ct-dato-tit, .carta .ct-dato-val, .carta .ct-dato-nota { stroke: none; }
+.carta .ct-guia-nivel { stroke-dasharray: 1 2; opacity: .6; }
 
 /* ---- Carta PDF (A4 apaisado, una carta por hoja) ---- */
 .carta-pdf { display: none; }

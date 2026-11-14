@@ -626,7 +626,8 @@ const cartaE: Etapa = {
     c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, VARIANTES.find(x => x[0] === vr)![2]));
     // la carta necesita 1000 px: nunca se achica a menos del 86 % (si no entra, el centro se desplaza de costado)
     const cv = carta(dc, vr, Math.max(1000, Math.min(1300, tam.ancho ?? 1100)));
-    cv.style.minWidth = '860px';
+    // en pantallas angostas no se achica de más (el centro se desplaza de costado); si entra, se ve entera
+    if ((tam.ancho ?? 1100) < 640) cv.style.minWidth = '860px';
     c.append(cv);
   },
   nombreCentro: () => `Carta de la torre · viento ${estado.dir}`,

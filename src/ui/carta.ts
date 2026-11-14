@@ -110,7 +110,7 @@ function dato(g: SVGElement, x: number, y: number, w: number, tit: string, val: 
 function marcas(max: number, n = 3): number[] {
   if (!(max > 0)) return [0];
   const paso0 = max / n, p = 10 ** Math.floor(Math.log10(paso0));
-  const paso = [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= paso0) ?? p * 10;
+  const paso = [1, 2, 2.5, 3, 4, 5, 10].map(k => k * p).find(v => v >= paso0) ?? p * 10;
   const out: number[] = [];
   for (let v = 0; v < max + paso * 0.999; v += paso) out.push(v);
   return out;
@@ -212,7 +212,10 @@ function columna(g: SVGElement, d: DatosCarta, x0: number, x1: number, Y: (z: nu
   txt(g, x0, 64, unidad, 'd-eje');
   // marcas del eje (abajo)
   const decM = ms.some(m => Math.abs(m - Math.round(m)) > 1e-9) ? 1 : 0;
-  ms.forEach(m => { linea(g, X(m), 70, X(m), yEje, 'ct-grilla'); txt(g, X(m), yEje + 13, fmt(m, decM), 'd-eje', 'middle'); });
+  // si las marcas quedan muy juntas para su número, se rotulan solo el 0 y la última
+  const anchoRot = Math.max(...ms.map(m => fmt(m, decM).length)) * 6.2 + 6;
+  const juntas = ms.length > 2 && (X(ms[1]) - X(ms[0])) < anchoRot;
+  ms.forEach((m, i) => { linea(g, X(m), 70, X(m), yEje, 'ct-grilla'); if (!juntas || i === 0 || i === ms.length - 1) txt(g, X(m), yEje + 13, fmt(m, decM), 'd-eje', i === ms.length - 1 && juntas ? 'end' : 'middle'); });
   linea(g, x0, 70, x0, yEje, 'ct-eje-col');
   if (forma === 'barras') ns.forEach(n => { if (Math.abs(val(n)) > 1e-9) g.append(el('rect', { x: x0, y: Y(n.z) - 2.5, width: Math.abs(val(n)) * k, height: 5, rx: 1.5, class: `ct-barra ${clase}` })); });
   else {
@@ -250,13 +253,13 @@ function laminaA(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // alzado
   const { xa, xb, yTop, yPB } = alzado(g, d, 205, 490, Y);
   cota(g, xa, yTop - 24, xb, yTop - 24, `${d.dir === 'A' ? 'L' : 'B'} = ${fmt(d.S)} m`);
-  cota(g, xb + 58, yPB, xb + 58, yTop, `h = ${fmt(d.zTop)} m`, 1);
+  cota(g, xb + 50, yPB, xb + 50, yTop, `h = ${fmt(d.zTop)} m`, 1);
   txt(g, xb + 8, yPB + 14, 'PB · empotramiento', 'ct-pb');
   // columnas Wi, Q, M, N
   const yEje = y1 + 6;
-  const c0 = 520, wc = (ancho - c0 - 16) / 4;
+  const c0 = Math.max(560, xb + 140), wc = (ancho - c0 - 16) / 4;
   const cB = d.dir === 'B';
-  columna(g, d, c0, c0 + wc - 14, Y, yEje, 'Wi · viento por piso', `t (col. ${cB ? 'D·F·G' : 'H'})`, n => n.Wi, 'barras', 'carga', 2, rot);
+  columna(g, d, c0, c0 + wc - 14, Y, yEje, 'Wi · viento', `t (${cB ? 'D·F·G' : 'col. H'})`, n => n.Wi, 'barras', 'carga', 2, rot);
   columna(g, d, c0 + wc, c0 + 2 * wc - 14, Y, yEje, 'Q · corte', `t (col. ${cB ? 'N' : 'I'})`, n => n.Q, 'escalones', 'corte', 1, rot);
   columna(g, d, c0 + 2 * wc, c0 + 3 * wc - 14, Y, yEje, 'M · momento', `tm (col. ${cB ? 'O' : 'J'})`, n => n.M, 'curva', 'momento', 0, rot);
   columna(g, d, c0 + 3 * wc, c0 + 4 * wc - 14, Y, yEje, 'N · peso', 't (col. M)', n => n.N, 'curva', 'peso', 0, rot);
@@ -280,7 +283,7 @@ function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: nu
   const pl = d.plano;
   const tExt = Math.max(pl.T / 2, ...pl.paralelos.map(p => Math.abs(p.pos))) + 1.5;
   const k = Math.min(w / (2 * tExt), (hh - 100) / (pl.S + 3));   // deja lugar abajo para W y la cota e
-  const cx = x0 + w / 2, cy = y0 + 22 + ((pl.S + 3) / 2) * k;
+  const cx = x0 + w / 2, cy = y0 + 44 + ((pl.S + 3) / 2) * k;
   const X = (t: number) => cx + t * k, Yp = (s: number) => cy - s * k;
   const ts = (m: { x: number; y: number }) => (pl.dir === 'A' ? { t: m.x, s: m.y } : { t: -m.y, s: m.x });
   g.append(el('rect', { x: X(-pl.T / 2), y: Yp(pl.S / 2), width: pl.T * k, height: pl.S * k, class: 'ct-planta' }));
@@ -295,16 +298,21 @@ function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: nu
     });
   });
   // piezas: nombre y J
-  const usados: { x: number; y: number }[] = [];
+  // cajas ocupadas (x0, y0, x1, y1): el CR y su rótulo, y cada rótulo que se pone
+  const crX = X(pl.Xr), crY = Yp(pl.Yr);
+  const ocupadas: [number, number, number, number][] = [[crX - 8, crY - 8, crX + 8, crY + 8], [crX + 4, crY + 6, crX + 4 + 23 * 6.2, crY + 22]];
+  const pisa = (b: [number, number, number, number]) => ocupadas.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   pl.paralelos.forEach(p => {
     const A = p.muros.reduce((s, m) => s + m.largo * m.espesor, 0) || 1;
     const sc = p.muros.reduce((s, m) => s + m.largo * m.espesor * ts(m).s, 0) / A;
-    const derecha = X(p.pos) > cx + w * 0.25;
+    const derecha = X(p.pos) > cx;
     const x = X(p.pos) + (derecha ? -6 : 6);
-    let y = Yp(sc) + 4;
-    while (usados.some(u => Math.abs(u.x - x) < 40 && Math.abs(u.y - y) < 12)) y += 12;
-    usados.push({ x, y });
-    txt(g, x, y, `${p.nombre} · J ${fmt(p.J, 2)}`, 'ct-pieza', derecha ? 'end' : 'start');
+    const t = `${p.nombre} · J ${fmt(p.J, 2)}`, wt = t.length * 6.2;
+    const caja = (y: number): [number, number, number, number] => derecha ? [x - wt, y - 10, x, y + 3] : [x, y - 10, x + wt, y + 3];
+    const y0 = Yp(sc) + 4;
+    const y = [0, 13, -13, 26, -26, 39, -39, 52, -52].map(dy => y0 + dy).find(yy => !pisa(caja(yy))) ?? y0;
+    ocupadas.push(caja(y));
+    txt(g, x, y, t, 'ct-pieza', derecha ? 'end' : 'start');
   });
   // ejes y CR
   linea(g, X(0), Yp(pl.S / 2 + 1.2), X(0), Yp(-pl.S / 2 - 1.2), 'ct-simetria');
@@ -323,7 +331,7 @@ function plantaFicha(g: SVGElement, d: DatosCarta, x0: number, y0: number, w: nu
 }
 function fichaB(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   const xAl = ancho * 0.4, xVal = ancho - 240;
-  plantaFicha(g, d, 16, 44, xAl - 100, alto - 60);
+  plantaFicha(g, d, 16, 44, xAl - 140, alto - 60);
   // alzado con la deformada y W
   const y0 = 92, y1 = alto - 56;
   const Y = escalaZ(d, y0, y1);
@@ -412,7 +420,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
       g.append(arcoMomento(cTop.x, cTop.y - 4, 16, hor ? Math.PI * 1.1 : -Math.PI * 0.1, hor ? -Math.PI * 0.3 : Math.PI * 1.3, 'ct-arco mt', 2.4));
       txt(g, cTop.x + 22, cTop.y - 18, `Mt = ${fmt(Math.abs(d.plano.Mt), 0)} tm`, 'd-valor ct-violeta');
     }
-    const lim = H / 500, xl2 = ancho - 330;
+    const lim = H / 500, xl2 = ancho - 360;
     txt(g, xl2 + 20, 65 + 4 * 18, `δ azotea = ${fmt(d.roto.dTop * 1000, 1)} mm · θ = ${fmt(Math.abs(d.roto.thTop) * 1000, 2)}·10⁻³ rad`, 'd-eje ct-verde');
     txt(g, xl2 + 20, 65 + 5 * 18, `límite h/500 = ${fmt(lim * 1000, 0)} mm ${d.roto.dTop <= lim ? '· verifica' : '· no verifica'}`, 'd-eje');
     txt(g, xl2 + 20, 65 + 6 * 18, 'deformación exagerada para que se vea', 'd-eje');
@@ -493,11 +501,19 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
   const h2 = P(-T / 2, -S / 2, H);
   txt(g, h2.x - 11, h2.y - 16, `h = ${fmt(H)} m sobre PB`, 'd-valor', 'end');
   // niveles rotulados a la izquierda de la arista de barlovento
+  // (a la izquierda del volumen de viento, para que no lo tape: una línea fina lleva del rótulo a la arista)
   const Yfake = (z: number) => P(-T / 2, -S / 2, z).y;
   const rot = nivelesRotulados(d, Yfake, 14);
-  d.niveles.forEach(n => { if (rot.has(n) && n.z >= 0 && !(Math.abs(Yfake(n.z) - yW) < 22)) { const q = P(-T / 2, -S / 2, n.z); linea(g, q.x - 2, q.y, q.x - 8, q.y, 'ct-cota'); txt(g, q.x - 11, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end'); } });
+  const pMaxR = Math.max(...sobre.map(n => Math.abs(n.pB)), 1e-9), kvR = (S * 1.1) / pMaxR;
+  const bordeViento = (z: number) => { const n = sobre.length ? sobre.reduce((a, b) => (Math.abs(b.z - z) < Math.abs(a.z - z) ? b : a)) : null; return n && z > 0 ? P(-T / 2, -S / 2 - 0.4 - Math.abs(n.pB) * kvR, z).x : P(-T / 2, -S / 2, z).x; };
+  d.niveles.forEach(n => {
+    if (!rot.has(n) || n.z < 0 || Math.abs(Yfake(n.z) - yW) < 22) return;
+    const q = P(-T / 2, -S / 2, n.z), xr = Math.min(q.x, bordeViento(n.z)) - 6;
+    linea(g, q.x - 2, q.y, xr, q.y, 'ct-cota ct-guia-nivel');
+    txt(g, xr - 3, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end');
+  });
   // leyenda de lectura
-  const xl = ancho - 330;
+  const xl = ancho - 360;
   [['carga', 'viento: volumen de presiones, Wi y resultante W'], ['momento', 'diagrama de momentos M(z)'], ['reaccion', 'reacciones en PB: Q y N'], ['deformada', 'torre deformada exagerada (δ y θ) y su sombra']].forEach(([c, t], i) => {
     g.append(el('rect', { x: xl, y: 60 + i * 18, width: 14, height: 4, rx: 2, class: `ct-ley ${c}` }));
     txt(g, xl + 20, 65 + i * 18, t, 'd-eje');
@@ -563,8 +579,8 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
   arco(g, giro.x, giro.y, 44, Math.PI * 0.97, Math.PI * 0.42, 'volcador');
   arco(g, giro.x, giro.y, 70, Math.PI * 0.46, Math.PI * 0.95, 'equilibrante');
-  txt(g, X(S / 2) + 8, Y(0) - 34, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-rojo');
-  txt(g, X(S / 2) + 8, Y(0) - 20, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-amarillo');
+  txt(g, giro.x + 10, giro.y + 30, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-rojo');
+  txt(g, giro.x + 10, giro.y + 44, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-amarillo');
   // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx
   const y0 = Y(zF) + 104, Tm = Math.max(Math.abs(v.Tmax), Math.abs(v.Tmin), 1e-9), kt = 44 / Tm;
   const pa = { x: X(-v.bB / 2), y: y0 - v.Tmin * kt }, pb = { x: X(v.bB / 2), y: y0 - v.Tmax * kt };
