@@ -173,15 +173,51 @@ Reglas que siguen valiendo: <b>las 7 hojas originales de la planilla no se tocan
 <tr><td>Lunes mañana</td><td>parte 5 (guía en PDF) con los números finales; archivo único, Excel de ejemplo y link</td></tr>
 </table>
 
-<h2><span class="n">11</span>Preguntas antes de empezar</h2>
-<div class="linea"><div class="d">1 · Núcleo del Citicorp</div><div>Las fuentes no dicen si el núcleo es de hormigón ni si toma viento; dicen que el viento lo toma el tubo arriostrado y que el núcleo lleva la mitad de la gravedad. ¿Lo dejo <b>solo para gravedad</b> (el exo toma casi todo el viento, más fiel), o como tabique de hormigón supuesto (hoy)?</div></div>
-<div class="linea"><div class="d">2 · Niveles del Citicorp</div><div>¿Está bien juntar los pisos 8 y 9 (transición) para que entren el piso 56 en su cota real (229,82 m) y la corona como último nivel?</div></div>
-<div class="linea"><div class="d">3 · Planta del Hancock</div><div>¿Tenés una fuente (plano o libro) con las medidas de la planta en la base y arriba? Si no, uso ≈ 50 × 80 m y 30 × 49 m marcadas como «a verificar».</div></div>
-<div class="linea"><div class="d">4 · Barras de acero y el CIRSOC 301</div><div>Hoy el exo se controla con el método simple del curso (σ ≤ 1 400 kg/cm² y pandeo con N ≤ π²EI / 1,7 L²). El CIRSOC 301 es por estados límite (cargas mayoradas 1,2 D + 1,6 W, resistencia φ·Fcr·A, interacción N–M). ¿Agrego el control del CIRSOC 301 al lado del del curso, o alcanza con mostrarlo en la guía?</div></div>
-<div class="linea"><div class="d">5 · Espesor variable</div><div>¿Por tramos (cambia en pisos que elegís) alcanza, o lo querés también lineal (afinado continuo)?</div></div>
-<div class="linea"><div class="d">6 · Onterie Center</div><div>¿Lo sumo como cuarto ejemplo (exo de hormigón), aunque las medidas de planta haya que suponerlas?</div></div>
+<h2><span class="n">11</span>Respuestas (15 de noviembre)</h2>
+<table>
+<tr><th>Pregunta</th><th>Decisión</th></tr>
+<tr><td>1 · Núcleo del Citicorp</td><td>solo gravedad: el viento lo toma el tubo de chevrones</td></tr>
+<tr><td>2 · Niveles del Citicorp</td><td>se juntan los pisos 8 y 9 (transición); el piso 56 queda en 229,82 m y la corona arriba. Pedido adicional: permitir más pisos que los 49 de la planilla (parte 12)</td></tr>
+<tr><td>3 · Planta del Hancock</td><td>del estudio de Johns Hopkins (500.141, febrero 2005): cara angosta 165 ft abajo, 140 ft a 400 ft, 130 ft a 600 ft, 120 ft a 800 ft y 100 ft arriba; cara ancha 265 ft abajo y 165 ft arriba; módulos de X de 200 ft (5 ½ por cara); 24 columnas perimetrales; 100 pisos, 1 127 ft; núcleo de hormigón; supuesto del estudio: el tubo toma todo el viento y la mitad de la gravedad</td></tr>
+<tr><td>4 · CIRSOC 301</td><td>se agrega el control por estados límite al lado del método del curso</td></tr>
+<tr><td>5 · Espesor variable</td><td>por tramos</td></tr>
+<tr><td>6 · Onterie Center</td><td>se suma como cuarto ejemplo (exo de hormigón), con las medidas que falten marcadas como supuestas</td></tr>
+</table>
 
-<p class="nota" style="margin-top:18px"><b>Fuentes consultadas:</b> Wikipedia (Citigroup Center, John Hancock Center, Hearst Tower, Onterie Center, 30 St Mary Axe, Bank of China Tower); CTBUH Skyscraper Center (875 North Michigan Avenue); Structurae (John Hancock Center, Onterie Center); STRUCTURE magazine, «Evolution of the Braced Tube» (A. Mazeika, 2024); SOM (875 North Michigan Avenue); Chicago Architecture Center; ENR y AISC Modern Steel Construction (Hearst Tower). Los números de cada ejemplo citan la fuente puntual en la nota del ejemplo.</p>
+<h2><span class="n">12</span>Más pisos que los 49 de la planilla <span class="chip warn">propuesta</span></h2>
+<p>Las 7 hojas originales tienen filas fijas: 49 niveles sobre PB. Sin tocarlas, dos caminos:</p>
+<div class="paso"><div class="b">A</div><div><b>Agrupar pisos al escribir la planilla</b> <span class="chip mal">para el lunes</span><small>La app guarda todos los pisos (100 en el Hancock) y calcula con todos en sus motores propios (exo, fibras, deformada, J(z)). Al escribir las hojas originales junta pisos de a 2 (o de a 3) en un nivel: suma sus Wi y sus alturas, como hace hoy la azotea del Citicorp. La hoja «G · Niveles agrupados» dice qué pisos van en cada fila. Aviso visible en la app.</small></div></div>
+<div class="paso"><div class="b">B</div><div><b>Planilla extendida</b> <span class="chip gris">después</span><small>Copias nuevas de «viento» y «M,NyQ» con tantas filas como pisos (las mismas fórmulas, bajadas), y las hojas J y la rototraslación leyendo de ellas. Es una planilla paralela: más trabajo y conviene que la cátedra la vea antes.</small></div></div>
+
+<h2><span class="n">13</span>Encuentros entre muros: convenio para ángulos distintos de 90° y enganche <span class="chip mal">imprescindible</span></h2>
+<h3>Qué tomé de ArchiCAD (solo la idea; el código es propio)</h3>
+<ul>
+<li><b>Línea de referencia.</b> Cada muro tiene una línea (centro, cara exterior o cara interior) y los muros se conectan solo cuando esas líneas se tocan o se cruzan; no alcanza con que los muros se superpongan.</li>
+<li><b>Tres encuentros.</b> L (las dos puntas coinciden), T (la punta de uno cae sobre la línea del otro) y X (las líneas se cruzan).</li>
+<li><b>Prioridad.</b> El muro de mayor prioridad pasa y el otro se corta contra su cara; con prioridades iguales decide un orden de encuentro. Así la superposición se cuenta una sola vez.</li>
+<li><b>Limpieza en planta.</b> En el dibujo, los muros conectados se ven como una sola mancha, sin la línea de la junta; es solo visual y se puede apagar.</li>
+<li><b>Muros en ángulo.</b> El muro inclinado termina contra la cara del otro, con el corte oblicuo; con dos muros inclinados que forman una L, el corte va por la bisectriz (inglete).</li>
+</ul>
+<h3>Cómo queda en Torre 3D</h3>
+<div class="paso"><div class="b">1</div><div><b>Enganche</b><small>Al dibujar o arrastrar, si la punta de un muro queda cerca de la línea de otro (o de su punta), se pega a ella y la app guarda el encuentro (L, T o X) en los campos «pegado a» que ya existen.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Convenio para el cálculo</b><small>Como en los moldes de la planilla: las alas pasan y el alma se corta contra la cara interior del ala. Para ángulos distintos de 90°: pasa el de mayor prioridad (por defecto, el más grueso; si son iguales, el que forma el ala de la pieza) y el otro se corta con el plano de su cara; en una L entre dos muros inclinados, inglete. La parte que se superpone se cuenta una sola vez en el área y en el J (polígono exacto).</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Cambiar quién pasa</b><small>Tocando la junta se elige qué muro pasa (como la prioridad de ArchiCAD, pero por junta).</small></div></div>
+<div class="paso"><div class="b">4</div><div><b>Dibujo</b><small>Cada pieza se dibuja como un solo contorno (unión de sus muros), sin líneas en las juntas; una opción de la planta muestra los muros separados.</small></div></div>
+
+<h2><span class="n">14</span>Sistema de grupos: otra revisión <span class="chip mal">imprescindible</span></h2>
+<p>Recorrido con mouse y con lápiz: crear, anidar, entrar y salir, dibujar adentro, copias vinculadas, bloquear, ocultar, deshacer, lazo y «Elegir todo» adentro, la barra de transformaciones con grupos, el Esquema, y que los grupos no se mezclen con las piezas de la planilla. Cada falla se anota, se corrige y queda una prueba automática.</p>
+
+<h2><span class="n">15</span>Orden de trabajo (actualizado)</h2>
+<table>
+<tr><th>Cuándo</th><th>Qué</th></tr>
+<tr><td>Sábado noche</td><td>partes 7 (espesor variable) y 8 (botón J); empezar 13 (encuentros)</td></tr>
+<tr><td>Domingo mañana</td><td>partes 13 y 14 (encuentros y grupos), 6 (fibras de los tabiques) y 3 (hoja de balance)</td></tr>
+<tr><td>Domingo tarde</td><td>partes 1, 2 y 12-A (motor: caras de ancho variable, diagrid de varios vanos, ficha E completa, exo de hormigón, CIRSOC 301, viento de cuarto; los cuatro ejemplos; agrupar pisos)</td></tr>
+<tr><td>Domingo noche</td><td>parte 4 (revisión matemática con tu app de estereoestructuras)</td></tr>
+<tr><td>Lunes mañana</td><td>parte 5 (guía en PDF) con los números finales; archivo único, Excel de ejemplo y link</td></tr>
+</table>
+
+<p class="nota" style="margin-top:18px"><b>Fuentes consultadas:</b> «Hancock Tower Structural Study», Johns Hopkins University, 500.141, febrero 2005 (documento que mandaste); Graphisoft Help Center y Community (cómo se conectan los muros en ArchiCAD: líneas de referencia, prioridad de intersección, orden de encuentro); Wikipedia (Citigroup Center, John Hancock Center, Hearst Tower, Onterie Center, 30 St Mary Axe, Bank of China Tower); CTBUH Skyscraper Center (875 North Michigan Avenue); Structurae (John Hancock Center, Onterie Center); STRUCTURE magazine, «Evolution of the Braced Tube» (A. Mazeika, 2024); SOM (875 North Michigan Avenue); Chicago Architecture Center; ENR y AISC Modern Steel Construction (Hearst Tower). Los números de cada ejemplo citan la fuente puntual en la nota del ejemplo.</p>
 
 <div class="pie">Torre 3D · plan de trabajo, fase 2 · 14 de noviembre de 2026 · docs/plan_fase2.html</div>
 </div></body></html>
