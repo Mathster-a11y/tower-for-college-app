@@ -291,7 +291,8 @@ export function copiarNodo(p: Proyecto, gid: string, dx: number, dy: number, vin
 
 // ------------------------------------------------------------------ sincronización de las copias vinculadas
 /** campos propios de cada copia (como en un tabique): no pasan de una copia a otra */
-const PROPIOS = new Set(['id', 'gd', 'cref', 'areaInf', 'llega', 'zDesde', 'zHasta', 'grupo', 'piezaA', 'piezaB', 'pegadoA', 'pegadoB', 'vano']);
+// los papeles del molde (rolA, rolB) se recalculan por viento y cambian al girar la copia: no son parte de la forma
+const PROPIOS = new Set(['id', 'gd', 'cref', 'areaInf', 'llega', 'zDesde', 'zHasta', 'grupo', 'piezaA', 'piezaB', 'pegadoA', 'pegadoB', 'vano', 'rolA', 'rolB']);
 /** la definición de una instancia: muros en coordenadas locales, por referencia, sin los campos propios */
 function definicion(p: Proyecto, g: GrupoDib): Map<string, string> {
   const out = new Map<string, string>();
@@ -306,7 +307,9 @@ function definicion(p: Proyecto, g: GrupoDib): Map<string, string> {
     if (m.vano) o._vano = { ...m.vano, con: ref(m.vano.con) };
     o._sub = m.gd === g.id ? '' : grupoPorId(p, m.gd)?.cref ?? '';
     // a qué otros muros de la copia acompaña en la pieza (la partición, no el nombre)
-    o._pieza = murosDe(p, g.id).filter(x => x.piezaA && x.piezaA === m.piezaA).map(x => x.cref).sort().join(',');
+    // (con los dos vientos y sin importar cuál es cuál: una copia girada 90° intercambia A y B)
+    const part = (k: 'piezaA' | 'piezaB') => murosDe(p, g.id).filter(x => x[k] && x[k] === m[k]).map(x => x.cref).sort().join(',');
+    o._pieza = [part('piezaA'), part('piezaB')].sort().join('/');
     out.set(m.cref ?? `nuevo:${m.id}`, JSON.stringify(o));
   });
   return out;

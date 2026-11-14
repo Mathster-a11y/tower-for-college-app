@@ -318,7 +318,7 @@ export function montarPlanta(cont: HTMLElement) {
     const r = { b: 0, s: 0 };
     estado.cambiar(pp => { const x = borrarMuros(pp, ids); r.b = x.borrados; r.s = x.bloqueados; });
     estado.multi = { m: [], g: [] }; estado.grupoSel = null; estado.seleccion = null; estado.limpiarGrupos();
-    mensaje(`${r.b === 1 ? 'Se borró un muro' : `Se borraron ${r.b} muros`}${r.s ? ` (${r.s} bloqueados no se tocaron)` : ''}. Ctrl+Z para deshacer.`);
+    mensaje(r.b === 0 && r.s ? 'Está bloqueado 🔒: desbloquealo en el Esquema para borrarlo.' : `${r.b === 1 ? 'Se borró un muro' : `Se borraron ${r.b} muros`}${r.s ? ` (${r.s} bloqueados no se tocaron)` : ''}. Ctrl+Z para deshacer.`);
     estado.avisarPanel();
   };
   /** elige los muros que no entran al cálculo: no llegan a la fundación o quedan fuera del molde en los dos vientos */
@@ -1738,6 +1738,7 @@ export function montarPlanta(cont: HTMLElement) {
       estado.cambiar(() => {
         const p = estado.proyecto;
         const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
+        if (estado.contexto) nuevos.forEach(m => { m.gd = estado.contexto!; });     // insertada dentro del grupo que se edita
         p.muros = agrupar([...p.muros, ...nuevos], nuevos.map(m => m.id)).muros;
         estado.seleccion = nuevos[0].id;
       });
@@ -1822,7 +1823,7 @@ export function montarPlanta(cont: HTMLElement) {
       const a0 = inicio;
       estado.cambiar(() => {
         const id = nuevoId(), t = `T${id.slice(1)}`;
-        const base: Muro = { id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: ultimoEspesor, llega: true, areaInf: 10, piezaA: t, pegadoA: '', piezaB: `${t}B`, pegadoB: '' };
+        const base: Muro = { id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: ultimoEspesor, llega: true, areaInf: 10, piezaA: t, pegadoA: '', piezaB: `${t}B`, pegadoB: '', ...(estado.contexto ? { gd: estado.contexto } : {}) };
         estado.proyecto.muros = [...estado.proyecto.muros, ponerPerfil(base, { v: rectLibre(a0, q, ultimoEspesor) })];
         estado.seleccion = id;
       });
@@ -1835,7 +1836,8 @@ export function montarPlanta(cont: HTMLElement) {
     const fin = t.dir === 'X' ? { x: t.x + (q.x >= inicio.x ? 1 : -1) * t.largo / 2, y: t.y } : { x: t.x, y: t.y + (q.y >= inicio.y ? 1 : -1) * t.largo / 2 };
     estado.cambiar(() => {
       const id = nuevoId();
-      const m: Muro = { id, ...t, llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' };
+      // dibujado mientras se edita un grupo: queda adentro de ese grupo
+      const m: Muro = { id, ...t, llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', ...(estado.contexto ? { gd: estado.contexto } : {}) };
       estado.proyecto.muros = armarPiezas([...estado.proyecto.muros, m]);
       estado.seleccion = id;
     });

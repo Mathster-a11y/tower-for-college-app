@@ -204,3 +204,19 @@ describe('grupos cerrados', () => {
     expect(motivoNoEditable(p, p.muros.find(m => m.id === 'M1')!, null)).toBeNull();
   });
 });
+
+describe('copias vinculadas: girar o espejar una copia entera', () => {
+  it('no cambia el original ni avisa que hay que actualizar las copias', async () => {
+    const { aplicar, cajaSel } = await import('./colocar');
+    const p = ejemploGuia();
+    const g = agruparNodos(p, ['M8', 'M9', 'M10'], [], null, 'G') as { id: string };
+    const c = copiarNodo(p, g.id, 10, 0, true) as { id: string };
+    for (const op of [{ t: 'girar', q: 1 }, { t: 'espejar', eje: 'x' }, { t: 'girar', q: 3 }] as const) {
+      const prev = clon(p), k = cajaSel(p, { m: [], g: [c.id] }), ctr = { x: k.cx, y: k.cy };
+      aplicar(p, { m: [], g: [c.id] }, op.t === 'girar' ? { t: 'girar', c: ctr, q: op.q } : { t: 'espejar', eje: op.eje, c: ctr });
+      expect(sincronizarComponentes(prev, p)).toEqual([]);
+    }
+    const orig = ejemploGuia().muros.filter(m => ['M8', 'M9', 'M10'].includes(m.id)).map(m => [m.id, m.dir, m.x, m.y]);
+    expect(murosDe(p, g.id).map(m => [m.id, m.dir, m.x, m.y])).toEqual(orig);
+  });
+});
