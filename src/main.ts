@@ -24,6 +24,7 @@ import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
+import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
 import { TIPOS_EXO, propsSeccion } from './engine/exo';
 import { imprimirCartaPdf } from './ui/cartaPdf';
 import { figurasDesdeMeta, type MetaFigura } from './xlsx/figuras';
@@ -357,12 +358,23 @@ document.addEventListener('keydown', ev => {
   const k = ev.key.toLowerCase();
   if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); if (ev.shiftKey) estado.rehacer(); else estado.deshacer(); }
   else if ((ev.ctrlKey || ev.metaKey) && k === 'y') { ev.preventDefault(); estado.rehacer(); }
-  else if ((ev.key === 'Delete' || ev.key === 'Backspace') && estado.seleccion) {
-    ev.preventDefault();
-    const id = estado.seleccion;
-    estado.cambiar(p => { p.muros = p.muros.filter(m => m.id !== id); });
-    estado.seleccion = null; estado.cambiar();
-  }
+});
+// Supr fuera de la planta (o con otra herramienta): borra el muro elegido, o su grupo entero si está en un grupo cerrado.
+// Va en window para correr después de la planta: si ella ya lo borró (defaultPrevented), no se borra dos veces.
+window.addEventListener('keydown', ev => {
+  if ((ev.key !== 'Delete' && ev.key !== 'Backspace') || ev.defaultPrevented || !estado.seleccion) return;
+  const t = ev.target instanceof Element ? ev.target : null;
+  if (t?.closest('input, select, textarea, [contenteditable]') || $<HTMLDialogElement>('dialogo').open) return;
+  const p = estado.proyecto, m = p.muros.find(x => x.id === estado.seleccion);
+  if (!m) return;
+  ev.preventDefault();
+  const g = grupoCerrado(p, m, estado.contexto);
+  const ids = g ? murosDe(p, g.id).map(x => x.id) : [m.id];
+  const r = { b: 0, s: 0 };
+  estado.cambiar(pp => { const x = borrarMuros(pp, ids); r.b = x.borrados; r.s = x.bloqueados; });
+  estado.seleccion = null; estado.grupoSel = null; estado.limpiarGrupos();
+  mensaje(r.b ? `${r.b === 1 ? 'Se borró un muro' : `Se borraron ${r.b} muros${g ? ` (el grupo «${g.nombre}»)` : ''}`}${r.s ? ` · ${r.s} bloqueados no se tocaron` : ''}. Ctrl+Z para deshacer.` : 'Está bloqueado 🔒: desbloquealo en el Esquema para borrarlo.');
+  estado.avisarPanel();
 });
 window.addEventListener('error', e => { if (String(e.message ?? '').includes('ResizeObserver loop')) return; fallo('Error inesperado', e.error ?? e.message); });   // el aviso de ResizeObserver es del navegador y no rompe nada
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));

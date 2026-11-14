@@ -16,7 +16,7 @@ import {
 } from '../engine/colocar';
 import { cotaDesdeCursor, geometria, idCota, puntoCota } from '../engine/cotas';
 import { alargar, desfasar, esquina, partir, unir } from '../engine/editar';
-import { motivoNoEditable } from '../engine/grupos';
+import { ancestros, grupoPorId, motivoNoEditable } from '../engine/grupos';
 
 export interface Vista { X: (x: number) => number; Y: (y: number) => number; escala: number }
 export interface ApiPlanta {
@@ -138,7 +138,13 @@ export function montarColocar(api: ApiPlanta) {
       if (k === 1) { s = { m: [], g: [r.original] }; }
     }
     return null;
-  }, copia ? `Copia${op.vinculada ? ' vinculada' : ''} lista.` : 'Listo.');
+  }, copia ? `Copia${op.vinculada ? ' vinculada' : ''} lista.` : o.t === 'escalar' && esVinculada(sel()) ? 'Escalado. Era una copia vinculada: escalar cambia la forma, así que cambiaron todas sus copias (para escalar solo esta: Esquema → «Hacer único»).' : 'Listo.');
+  /** ¿la selección está dentro de un componente con copias? (escalar cambia su forma en todas) */
+  const esVinculada = (s: Seleccion) => {
+    const p = estado.proyecto;
+    const gs = [...s.g, ...s.m.map(id => p.muros.find(m => m.id === id)?.gd).filter(Boolean) as string[]];
+    return gs.some(g => [grupoPorId(p, g), ...ancestros(p, g)].some(x => x?.comp && (p.grupos ?? []).filter(y => y.comp === x.comp).length > 1));
+  };
 
   const ejeDesdePuntos = (a: Punto, b: Punto): { eje: EjeSimetria; c: Punto } => {
     const ang = ((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 360) % 180;

@@ -149,9 +149,9 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (ev.key === 'Escape') {
       if (lazo) { lazo = null; dibujar(); return; }
-      if (estado.multi.m.length || estado.multi.g.length) { estado.multi = { m: [], g: [] }; estado.avisarPanel(); return; }
+      if (estado.multi.m.length || estado.multi.g.length) { estado.multi = { m: [], g: [] }; estado.seleccion = null; estado.avisarPanel(); return; }
       if (estado.contexto) { salirDeGrupo(); return; }
-      if (estado.grupoSel) { estado.grupoSel = null; estado.avisarPanel(); }
+      if (estado.grupoSel || estado.seleccion) { estado.grupoSel = null; estado.seleccion = null; estado.avisarPanel(); dibujar(); }
       return;
     }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'g' || ev.key === 'G')) {
