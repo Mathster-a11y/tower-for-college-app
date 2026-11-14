@@ -367,6 +367,22 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .menu button { padding: 10px 12px; }
   .zoom-planta button { min-width: 40px; min-height: 40px; }
   input, select { min-height: 36px; }
+  /* objetivos de 36 px para el dedo: barra de arriba, subpasos, herramientas de la planta, barras de selección, capas y avance */
+  .barra button, .barra .boton, .subpasos button, .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button, .menu-mas .lista button,
+  .barra-sel button, .barra-lazo button, .barra-lazo label, .colocar-panel button, .capas button, .capas label, .tira button, .tira .seg button,
+  .avance button, .seg button, .fila-acciones button, .panel button:not(.esq-abrir):not(.esq-icono):not(.tirador), .esquema li { min-height: 36px; }
+  .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { padding: 6px 10px; }
+  .subpasos button { padding: 4px 12px; }
+  .capas label, .capas button { padding: 4px 12px; }
+  .grilla-caja button, .grilla-pasos button { min-height: 32px; }
+  input[type=checkbox], input[type=radio] { width: 20px; height: 20px; min-height: 0; }
+  input[type=range] { min-height: 28px; }
+}
+/* planta angosta (tablet vertical o panel lateral ancho): las herramientas en varias líneas, cada una entera */
+@media (max-width: 1100px) {
+  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
+  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
+  .sel-nivel { top: 84px; right: 10px; }
 }
 @media (max-width: 760px) {
   body { height: auto; }
@@ -1073,3 +1089,17 @@ button.peligro { color: var(--mal); }
 .prec-panel .prec-medidas .prec-campo input { width: 52px; }
 .prec-panel .prec-medidas button { padding: 3px 8px; }
 .prec-panel .prec-sub { font-size: 11px; font-weight: 600; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+
+/* ---- al final para ganar a las reglas de arriba: pantallas angostas y táctiles ---- */
+@media (max-width: 1100px) {
+  .herr-planta { flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
+  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
+  .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { min-height: 30px; }
+}
+@media (pointer: coarse) {
+  .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button, .menu-mas .lista button { min-height: 36px; padding: 6px 10px; }
+  .zoom-dibujo button, .exportar-dibujo button { min-height: 34px; min-width: 36px; }
+  .avance .cab-avance, .plegable > .cab, .bloque3d.plegable > .tira { min-height: 36px; }
+  .b-lat, .divisor-flecha { min-width: 36px; }
+  .barra .deshacer button, .barra button.icono, #b-deshacer, #b-rehacer { min-width: 38px; }
+}
