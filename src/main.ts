@@ -475,6 +475,18 @@ estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'plant
 montarPlanta($('vista-planta'));
 montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
 montarDiagramaJ($('vista-3d'), $<HTMLButtonElement>('b-j3d'));
+{
+  // capa de tensiones del 3D (botón σ)
+  const bT = $<HTMLButtonElement>('b-t3d');
+  try { estado.capas.tensiones = localStorage.getItem('torre3d.tensiones3d') === '1'; } catch { /* sin almacenamiento */ }
+  bT.setAttribute('aria-pressed', String(estado.capas.tensiones));
+  bT.addEventListener('click', () => {
+    estado.capas.tensiones = !estado.capas.tensiones;
+    bT.setAttribute('aria-pressed', String(estado.capas.tensiones));
+    try { localStorage.setItem('torre3d.tensiones3d', estado.capas.tensiones ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    estado.avisarPanel();
+  });
+}
 $('b-encuadrar').addEventListener('click', () => $('vista-3d').querySelector('canvas')?.dispatchEvent(new MouseEvent('dblclick')));
 new ResizeObserver(() => {
   const l = $('lienzo');

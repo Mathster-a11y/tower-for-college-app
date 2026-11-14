@@ -16,6 +16,8 @@ import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta'
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
 import { TENSION_ADM, type Control } from '../engine/verificaciones';
+import { alturaDesde, fibrasDireccion } from '../engine/fibras';
+import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
 import { panelExo, centroExo, estadoExo } from './exo';
 
@@ -510,9 +512,25 @@ function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: num
 }
 
 // ------------------------------------------------------------------ 07 Flexión
-function verifs() {
+function verifsPB() {
   const d = datos();
   return verificarDireccion(d.p, d.asig.piezas, d.corr, d.asig.filaNivel, d.dir, TENSION_ADM(d.p.hormigon || 'H30'));
+}
+/** fibras piso a piso de todas las piezas del viento (las mismas cuentas de PB, en la base de cada piso) */
+function fibras() {
+  const d = datos();
+  return fibrasDireccion(d.p, d.asig.piezas, d.corr, d.asig.filaNivel, d.dir, TENSION_ADM(d.p.hormigon || 'H30'));
+}
+/** cota del nivel que se verifica (PB si no se eligió otro o si ya no existe) */
+function zFlex(): number {
+  const z = estado.nivelFlex, alt = datosAlturaDe(estado.proyecto);
+  return z !== null && alt.cotasSobrePB.concat(alt.zPB).some(c => Math.abs(c - z) < 1e-6) && z < alt.zTop - 1e-6 ? z : alt.zPB;
+}
+/** verificación de cada pieza en el nivel elegido */
+function verifs() {
+  const z = zFlex();
+  if (Math.abs(z - datosAlturaDe(estado.proyecto).zPB) < 1e-6) return verifsPB();
+  return fibras().map(f => f.niveles.find(nv => Math.abs(nv.z - z) < 1e-6)?.v).filter((x): x is NonNullable<typeof x> => !!x);
 }
 const flexion: Etapa = {
   id: 'flexion', nro: '07', nombre: 'Flexión', rol: '--r-flexion', dependeDir: true,
@@ -524,7 +542,19 @@ const flexion: Etapa = {
     const vs = verifs();
     if (!vs.length) { c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.')); return; }
     const elegida = vs.find(x => x.nombre === estado.piezaFlex) ?? vs[0];
-    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), en PB y muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en PB). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
+    const z = zFlex(), altP = datosAlturaDe(d.p), enPB = Math.abs(z - altP.zPB) < 1e-6;
+    const nomNivel = d.p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6)?.nombre ?? 'PB';
+    // nivel que se verifica: PB (la guía) o la base de cualquier piso de arriba
+    const sel = h('select', { 'aria-label': 'Nivel que se verifica' }) as HTMLSelectElement;
+    [...d.p.niveles].filter(nv => nv.cota >= altP.zPB - 1e-6 && nv.cota < altP.zTop - 1e-6).sort((a, b) => a.cota - b.cota).forEach(nv => {
+      const o = h('option', { value: String(nv.cota) }, `${nv.nombre} · ${fmt(nv.cota, 2)} m${Math.abs(nv.cota - altP.zPB) < 1e-6 ? ' (la guía)' : ''}`) as HTMLOptionElement;
+      if (Math.abs(nv.cota - z) < 1e-6) o.selected = true;
+      sel.append(o);
+    });
+    sel.addEventListener('change', () => { estado.nivelFlex = Number(sel.value); estado.avisarPanel(); });
+    c.append(h('label', { class: 'campo-nivel-flex' }, 'Verificar en la base del piso sobre ', sel));
+    if (!enPB) c.append(h('p', { class: 'nota' }, `Fibras en ${nomNivel}: el mismo σ = −N/F ± M/W de PB, con el momento de ${nomNivel} (M,NyQ, la misma fracción de la pieza), lo que pesa de ${nomNivel} para arriba y la sección del muro justo encima de la losa. Los controles de la etapa siguen siendo los de PB.`));
+    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
     const t = h('table', { class: 'tabla' });
     t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'tracción', 'compresión', ''].map(x => h('th', {}, x)))));
     const tb = h('tbody');
@@ -538,12 +568,12 @@ const flexion: Etapa = {
     });
     t.append(tb);
     c.append(seccion('Piezas (kg/cm²)', h('div', { class: 'scroll' }, t), h('p', { class: 'nota chica' }, 'Elegí una pieza para ver sus cuentas y su diagrama.')).el);
-    // cuentas de la pieza elegida
-    const alt = datosAlturaDe(d.p);
+    // cuentas de la pieza elegida (en el nivel elegido)
+    const alt = alturaDesde(datosAlturaDe(d.p), z);
     const cu = seccion(`${elegida.nombre}: cuentas`).cuerpo; c.append(cu.parentElement!);
-    cu.append(formula('Momento que toma la pieza en PB', `${v('M')}${op('=')}${v('M', 'PB')} · ${v('Q', 'j')}/${v('Q')}${op('=')}${r(elegida.M, 1, 'tm')} · ${v('J')}${op('=')}${r(elegida.J, 3, 'm⁴')}`, 'rototraslación (traslación + rotación)'));
+    cu.append(formula(`Momento que toma la pieza en ${nomNivel}`, `${v('M')}${op('=')}${v('M', enPB ? 'PB' : nomNivel)} · ${v('Q', 'j')}/${v('Q')}${op('=')}${r(elegida.M, 1, 'tm')} · ${v('J')}${op('=')}${r(elegida.J, 3, 'm⁴')}`, 'rototraslación (traslación + rotación)'));
     elegida.muros.forEach(m => {
-      const mu = d.p.muros.find(x => x.id === m.id)!;
+      const mu = muroEn(d.p.muros.find(x => x.id === m.id)!, z + 0.01);
       const { altura, losas } = alturaYLosas(mu, alt);
       cu.append(h('div', { class: 'subtit' }, `${m.id} · ${m.papel === 'ala' ? 'ala (hace par)' : m.papel}`));
       cu.append(
@@ -559,7 +589,24 @@ const flexion: Etapa = {
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
     const v0 = vs.find(x => x.nombre === estado.piezaFlex) ?? vs[0];
     if (!v0) { c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.')); return; }
-    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, `${v0.nombre}: tensiones de cada muro en PB · M = ${fmt(v0.M, 1)} tm`), graficoTensiones(v0, adm, { ancho: Math.min(tam.ancho ?? 600, 980), alto: Math.max(300, Math.min(480, (tam.alto ?? 520) - 160)) })));
+    const z = zFlex(), nomNivel = d.p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6)?.nombre ?? 'PB';
+    const anchoT = Math.min(tam.ancho ?? 600, 980);
+    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, `${v0.nombre}: tensiones de cada muro en ${nomNivel} · M = ${fmt(v0.M, 1)} tm`), graficoTensiones(v0, adm, { ancho: anchoT, alto: Math.max(300, Math.min(480, (tam.alto ?? 520) - 160)) })));
+    // fibras en altura: la peor tracción (descargado) y la peor compresión (cargado) de la pieza, piso a piso
+    const f = fibras().find(x => x.nombre === v0.nombre);
+    if (f && f.niveles.length > 1) {
+      const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
+      c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
+        series: [
+          { nombre: 'tracción máxima, descargado (0,7 t/m²)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t') },
+          { nombre: 'compresión máxima, cargado (0,9 t/m²)', color: 'compresion', tipo: 'linea', puntos: pts('c') },
+        ],
+        referencias: Math.min(...pts('c').map(p => p.x)) < -adm * 0.5 ? [{ x: -adm, texto: `σbk −${adm}` }] : [],
+        alturas: Math.abs(z - (f.niveles[0]?.z ?? 0)) > 1e-6 ? [{ z, texto: `se ve: ${nomNivel}` }] : [],
+      }, { ancho: anchoT, alto: Math.max(300, Math.min(520, (tam.alto ?? 520) - 120)) }));
+      const filasF = f.niveles.slice().reverse().map(nv => [nv.nivel, nv.z, nv.v.M, Math.max(...nv.v.muros.map(m => m.traccion)), Math.min(...nv.v.muros.map(m => m.compresion)), nv.v.muros.reduce((s, m) => s + Math.max(m.As, m.AsMin), 0)]);
+      c.append(tablaValores(['Nivel', 'z (m)', 'M pieza (tm)', 'tracción máx.', 'compresión máx.', 'ΣAs (cm²)'], filasF, [0, 2, 1, 1, 1, 1]));
+    }
     const filas = v0.muros.map(m => [`${m.id} (${m.papel})`, m.A, m.Ndesc, m.Ncarg, m.sigM / 10, m.desc[0] / 10, m.desc[1] / 10, m.carg[0] / 10, m.carg[1] / 10, Math.max(m.As, m.AsMin)]);
     const t = tablaValores(['Muro', 'F (m²)', 'Ng (t)', 'Nq (t)', 'M·y/J', 'σ desc. ext.', 'σ desc. int.', 'σ carg. ext.', 'σ carg. int.', 'As (cm²)'], filas, [0, 3, 1, 1, 1, 1, 1, 1, 1, 1]);
     t.setAttribute('open', '');

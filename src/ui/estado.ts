@@ -30,7 +30,7 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true };
+  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true, tensiones: false };
   /** grilla de discretización de 0,05 m en la planta: se ve y los puntos se ajustan a ella (apagada: ajuste a 0,01 m) */
   grillaFina = false;
   /** planta: los muros que se encuentran se dibujan unidos (juntas limpias) o cada uno con su rectángulo */
@@ -53,6 +53,8 @@ class Estado {
   avisoGrupos = '';
   /** pieza elegida en Flexión */
   piezaFlex: string | null = null;
+  /** cota del nivel donde se verifican las fibras (null: PB, como la guía) */
+  nivelFlex: number | null = null;
   /** cota del nivel cuya planta se muestra (null = PB) */
   nivelPlanta: number | null = null;
   calculo!: Calculo;

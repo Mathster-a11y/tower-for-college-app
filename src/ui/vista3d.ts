@@ -13,6 +13,8 @@ import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { datosExo } from './exo';
+import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
+import { TENSION_ADM } from '../engine/verificaciones';
 
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
@@ -139,6 +141,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   info.className = 'info3d';
   info.hidden = true;
   cont.appendChild(info);
+  // leyenda de la capa de tensiones (abajo a la izquierda)
+  const leyT = document.createElement('div');
+  leyT.className = 'leyenda-tensiones3d';
+  leyT.hidden = true;
+  cont.appendChild(leyT);
   const capaEt = new CSS2DRenderer();
   capaEt.domElement.className = 'etiquetas3d';
   if (op.etiquetas) cont.appendChild(capaEt.domElement);
@@ -159,6 +166,36 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   let fMax = 0, kGiro = 1;
 
   function fondo() { escena.background = new THREE.Color(css('--lienzo', '#ffffff')); }
+
+  /** tensiones de la peor fibra de cada muro piso a piso y un material por color (escala simétrica en ± el mayor |σ|) */
+  function mapaTensiones() {
+    const { asig, corr } = estado.calculo, p = estado.proyecto;
+    if (!asig || !corr) return null;
+    const adm = TENSION_ADM(p.hormigon || 'H30');
+    let fs;
+    try { fs = fibrasDireccion(p, asig.piezas, corr, asig.filaNivel, estado.dir, adm); } catch { return null; }
+    const porMuro = peorFibraPorMuro(fs);
+    if (!porMuro.size) return null;
+    const todas = [...porMuro.values()].flat().map(x => x.sigma);
+    // una escala por signo: la compresión llega a su máximo y la tracción al suyo (si no, la tracción casi no se ve)
+    const maxC = Math.max(1, ...todas.map(x => -x)), maxT = Math.max(0, ...todas);
+    const neutro = new THREE.Color(css('--tension-0', '#eceef0')), cTr = new THREE.Color(css('--traccion', '#e24b4a')), cCo = new THREE.Color(css('--compresion', '#378add'));
+    const cache = new Map<string, THREE.MeshStandardMaterial>();
+    const material = (sigma: number | null, sel: boolean) => {
+      // 10 escalones por lado; el primero ya se distingue del gris de los muros que no toman este viento
+      const paso = sigma === null ? 0 : sigma > 0 ? Math.max(1, Math.round((sigma / (maxT || 1)) * 10)) : -Math.max(1, Math.round((-sigma / maxC) * 10));
+      const k = (sigma === null ? 'n' : String(paso)) + (sel ? 's' : '');
+      let m = cache.get(k);
+      if (!m) {
+        const t = sigma === null ? 0 : 0.15 + 0.85 * (Math.abs(paso) / 10);
+        const c = neutro.clone().lerp(paso > 0 ? cTr : cCo, t);
+        m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, flatShading: true, emissive: sel ? new THREE.Color(0x1f6f8b) : new THREE.Color(0), emissiveIntensity: 0.5 });
+        cache.set(k, m);
+      }
+      return m;
+    };
+    return { porMuro, maxC, maxT, material, supera: todas.some(x => x < -adm) };
+  }
 
   function construir() {
     if (!cont.isConnected) return;
@@ -202,8 +239,29 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         resalte.position.set(0, n.cota - 0.1, 0); grupo.add(resalte);
       }
     }
+    // capa de tensiones: cada muro de las piezas del viento, piso por piso, con su peor fibra
+    const tens = estado.capas.tensiones && !roto ? mapaTensiones() : null;
+    leyT.hidden = !tens;
+    if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
+      const porPiso = tens?.porMuro.get(m.id);
+      if (porPiso && porPiso.length) {
+        // un prisma por piso, del color de su tensión (el muro de los subsuelos y el de arriba de la azotea quedan grises)
+        const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
+        const zs = [z0, ...cotas.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6), ...cambiosDeEspesor(m, z0, z1), z1].sort((a, b) => a - b).filter((z, i, a) => i === 0 || z - a[i - 1] > 1e-6);
+        for (let k = 0; k + 1 < zs.length; k++) {
+          const za = zs[k], zb = zs[k + 1], mm = muroEn(m, (za + zb) / 2);
+          const f = [...porPiso].reverse().find(x => x.z <= za + 1e-6);
+          const mat = tens!.material(f ? f.sigma : null, estado.seleccion === m.id);
+          const pols: P2[][] = tipoDe(mm) === 'perfil' ? [polilinea(enPlanta(mm).v, 6, 16)] : tipoDe(mm) === 'tubo-circ'
+            ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+            : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
+          const hs = tipoDe(mm) === 'perfil' ? (enPlanta(mm).huecos ?? []).map(hh => polilinea(hh, 6, 16)) : [];
+          pols.forEach(pol => { const pr = new Prisma(pol, [za, zb], mat, tinta, undefined, hs); pr.conBordes = true; prismas.push(pr); });
+        }
+        return;
+      }
       const color = espectro ? new THREE.Color(0xffffff) : new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
       const entra = entraEnCalculo(m, fondoCota, top);
       if (!entra && !estado.capas.fuera) return;
