@@ -22,6 +22,8 @@ import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Pr
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
+import { opcionesG } from './xlsx/opcionesG';
+import { dibujosPorHoja } from './ui/dibujosDesglose';
 import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
 
@@ -208,15 +210,21 @@ async function exportar() {
   const celdas = celdasAEscribir(asig.datos, res);
   const filas = Object.entries(celdas).map(([hoja, cs]) => `<li><b>${hoja}</b>: ${Object.keys(cs).length} celdas</li>`).join('');
   dialogo(`<h2>Escribir la planilla</h2>
-    <p>La app escribe solo celdas de datos de la planilla ${plantillaAbierta ? 'que abriste' : 'virgen del curso'} y agrega la hoja «T3D» con el proyecto. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla.</p>
-    <ul>${filas}<li><b>T3D</b>: hoja nueva</li></ul>
+    <p>La app escribe solo celdas de datos de la planilla ${plantillaAbierta ? 'que abriste' : 'virgen del curso'}. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla.</p>
+    <ul>${filas}<li><b>Hojas «G ·»</b> (nuevas, al lado de cada hoja original): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b> (nuevas): la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
     <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo.</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
     ['Escribir y descargar', async () => {
       try {
         const base = plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
-        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto);
+        // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
+        const g = opcionesG(estado.proyecto);
+        try {
+          const dib = (await dibujosPorHoja()).flat();
+          g.imagenes = dib.map(d => ({ titulo: d.titulo, ancho: d.ancho, alto: d.alto, png: Uint8Array.from(atob(d.png.split(',')[1] ?? ''), c => c.charCodeAt(0)) })).filter(d => d.png.length);
+        } catch (e) { console.warn('dibujos para la planilla', e); }
+        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g);
         descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $<HTMLDialogElement>('dialogo').close();
       } catch (e) { fallo('No se pudo escribir la planilla', e); }

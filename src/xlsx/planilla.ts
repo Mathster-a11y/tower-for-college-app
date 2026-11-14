@@ -15,6 +15,8 @@ import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, t
 import { ejemploGuia } from '../engine/modelo';
 import { proyectoDesdeTablas, tablasProyecto, type Tabla } from './proyectoTablas';
 import { leerLibro } from './tablas';
+import { agregarHojasG, type OpcionesG } from './hojasG';
+import { opcionesG } from './opcionesG';
 
 export const HOJAS = {
   viento: 'viento', mnyq: 'M,NyQ', jpar: 'J Tabiques paralelos', jort: 'J Tabiques ortogonales',
@@ -108,8 +110,8 @@ function tablaXml(t: Tabla): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${filas}</sheetData></worksheet>`;
 }
 
-async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Record<string, string>) {
-  if (rutas[nombre]) { zip.file(rutas[nombre], xml); return; }
+async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Record<string, string>): Promise<string> {
+  if (rutas[nombre]) { zip.file(rutas[nombre], xml); return rutas[nombre]; }
   let n = 1;
   while (zip.file(`xl/worksheets/sheet${n}.xml`)) n++;
   const path = `xl/worksheets/sheet${n}.xml`;
@@ -122,14 +124,20 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
   zip.file('xl/_rels/workbook.xml.rels', rels);
   let wb = await zip.file('xl/workbook.xml')!.async('string');
   const ids = [...wb.matchAll(/sheetId="(\d+)"/g)].map(m => +m[1]);
-  wb = wb.replace('</sheets>', `<sheet name="${nombre}" sheetId="${Math.max(0, ...ids) + 1}" r:id="${rid}"/></sheets>`);
+  wb = wb.replace('</sheets>', `<sheet name="${nombre.replace(/&/g, '&amp;')}" sheetId="${Math.max(0, ...ids) + 1}" r:id="${rid}"/></sheets>`);
   zip.file('xl/workbook.xml', wb);
   let ct = await zip.file('[Content_Types].xml')!.async('string');
   ct = ct.replace('</Types>', `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
   zip.file('[Content_Types].xml', ct);
+  rutas[nombre] = path;
+  return path;
 }
 
-export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto): Promise<Uint8Array> {
+/**
+ * @param g hojas «G ·» con los motores de la app, gráficos y dibujos (si no se pasa, se arman con lo que sale del
+ *          proyecto, sin las imágenes)
+ */
+export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
   const celdas = celdasAEscribir(d, r);
@@ -147,6 +155,7 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
   for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);
+  await agregarHojasG(zip, p, g ?? opcionesG(p), (nombre, xml) => agregarHoja(zip, nombre, xml, rutas));
   // recalcular todo al abrir y descartar la cadena de cálculo vieja
   let wb = await zip.file('xl/workbook.xml')!.async('string');
   wb = /<calcPr[^>]*\/>/.test(wb) ? wb.replace(/<calcPr([^>]*)\/>/, (_s, a: string) => `<calcPr${a.replace(/\sfullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`) : wb.replace('</workbook>', '<calcPr fullCalcOnLoad="1"/></workbook>');
