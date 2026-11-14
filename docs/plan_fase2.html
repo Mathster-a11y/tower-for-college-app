@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plan de trabajo · fase 2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;--tint:#dbe8f6;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;--mal:#c62828;--malf:#fbe9e9;--viento:#b8401a;--rig:#8a5f00;--roto:#6a3d9a;--flex:#ad1457;--res:#2e7d32}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.5 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1000px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:17px;margin:34px 0 10px;padding-top:12px;border-top:2px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;flex:none}
+h3{font-size:14px;margin:16px 0 6px;color:var(--ink);break-after:avoid}
+p{margin:6px 0}
+ul,ol{margin:6px 0 6px 20px;padding:0}
+li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;break-inside:avoid}
+.tarjeta.gris{background:var(--panel);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--tint);color:var(--acc)}
+.chip.ok{background:var(--okf);color:var(--ok)}.chip.warn{background:var(--warnf);color:var(--warn)}.chip.mal{background:var(--malf);color:var(--mal)}.chip.gris{background:var(--panel);color:var(--ink2)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+td.c,th.c{text-align:center}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.cols{grid-template-columns:1fr}}
+.paso{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:8px 0;break-inside:avoid}
+.paso .b{width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.paso b{display:block}
+.paso small{color:var(--ink2)}
+code,.f{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+.eq{font-family:'IBM Plex Math','Times New Roman',serif;font-size:16px;text-align:center;margin:10px 0;padding:8px;background:#fafbfc;border:1px solid var(--hair);border-radius:6px}
+.var{font-size:12.5px;color:var(--ink2);margin:0 0 8px}
+.aviso{border-left:4px solid var(--warn);background:var(--warnf);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+.nota{color:var(--ink2);font-size:12.5px}
+.linea{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:start;padding:7px 0;border-bottom:1px solid var(--hair)}
+.linea .d{font-weight:700}
+.pie{margin-top:40px;padding-top:10px;border-top:1px solid var(--hair);color:var(--dim);font-size:11.5px}
+@media print{body{font-size:12px}.pag{max-width:none;padding:0}h2{margin-top:26px}.tarjeta{page-break-inside:avoid}}
+@page{size:A4;margin:16mm 14mm}
+</style>
+</head>
+<body><div class="pag">
+<h1>Plan de trabajo · fase 2</h1>
+<p class="sub">Torre 3D · ejemplos de exoesqueleto bien armados, hoja de balance tabiques / exoesqueleto, revisión matemática, guía de la red de cálculo, tensiones en las fibras de los tabiques, espesor variable en altura y diagrama J(z) en el 3D. Sábado 14 de noviembre de 2026 · para revisar antes de empezar.</p>
+
+<div class="tarjeta gris">
+<b>Cómo leer este plan.</b> Cada parte dice <i>qué</i> se hace, <i>cómo</i> (pasos y archivos), <i>cómo se verifica</i> y qué datos faltan. Las marcas de prioridad:
+<div class="chips"><span class="chip mal">imprescindible para el lunes</span><span class="chip warn">para el lunes si alcanza el tiempo</span><span class="chip gris">después</span></div>
+Reglas que siguen valiendo: <b>las 7 hojas originales de la planilla no se tocan</b> (lo decidiste: el balance va en una hoja nueva); todo dato de un edificio real lleva su fuente o la marca <span class="chip warn">supuesto</span>; cada parte se cierra con las pruebas automáticas en verde.
+</div>
+
+<h2><span class="n">0</span>Qué leí y en qué estado está cada cosa</h2>
+<p>Leí completos los dos PDF: <b>Propuesta · Exoesqueleto</b> (16 hojas) y <b>El motor de cálculo de Torre 3D</b> (16 hojas). Estado de cada hoja de la propuesta en la app de hoy:</p>
+<table>
+<tr><th>Hoja</th><th>Tema</th><th>Estado</th><th>Qué falta</th></tr>
+<tr><td class="c">2–4</td><td>Fichas, cómo entra al cálculo, la torre de la guía</td><td><span class="chip ok">hecho</span></td><td>—</td></tr>
+<tr><td class="c">5</td><td>Cómo se integra a la planilla</td><td><span class="chip warn">parcial</span></td><td>la hoja de balance que elegiste (parte 3)</td></tr>
+<tr><td class="c">6</td><td>Modos de uso, controles nuevos</td><td><span class="chip warn">parcial</span></td><td>«reforzar una torre» con comparar versiones; torsión del exo (Σ J·a²) en la rototraslación</td></tr>
+<tr><td class="c">7</td><td>Diseñar tu propio exoesqueleto</td><td><span class="chip warn">parcial</span></td><td>hay editor barra por barra; faltan «repetir módulo», simetría entre caras y catálogo de perfiles W</td></tr>
+<tr><td class="c">8–10</td><td>Citicorp: datos, alzado, base, corona</td><td><span class="chip mal">incompleto</span></td><td>columnas a los cuartos, viga a medio módulo, columna de borde cortada, transición de 2 pisos, mástil que se afina, corona (parte 1)</td></tr>
+<tr><td class="c">11</td><td>Viento de cuarto (45°)</td><td><span class="chip mal">falta</span></td><td>superposición 0,71·A + 0,71·B con los esfuerzos de las barras de las esquinas</td></tr>
+<tr><td class="c">12–14</td><td>Editor del perfil, curvas, protocolo de perfil variable</td><td><span class="chip gris">falta</span></td><td>queda para después; el espesor variable (parte 7) es el primer paso del protocolo (paso 6, rigidez)</td></tr>
+<tr><td class="c">15</td><td>Deformada con espectro y exoesqueleto</td><td><span class="chip warn">parcial</span></td><td>el exo se dibuja en el 3D sin deformar; falta dibujarlo con la deformada</td></tr>
+</table>
+<p class="nota">Del PDF del motor: los tres motores, las correcciones E1–E7 y el paso a paso 1–7 siguen igual. Lo nuevo de esta fase se agrega como pasos 8 (exoesqueleto), 9 (balance) y 10 (fibras de los tabiques), con el mismo formato de cuadros.</p>
+
+<h2><span class="n">1</span>Citicorp Center: ejemplo actualizado con datos verificados <span class="chip mal">imprescindible</span></h2>
+<table>
+<tr><th>Dato</th><th>Valor</th><th>Fuente</th></tr>
+<tr><td>Pisos y altura</td><td>59 pisos; techo a unos 915 ft (279 m)</td><td>Wikipedia «Citigroup Center» · el plano de tu PDF dice 914'-0" (278,6 m)</td></tr>
+<tr><td>Planta tipo</td><td>157 × 157 ft (48 × 48 m)</td><td>Wikipedia (cita 143, 193)</td></tr>
+<tr><td>Supercolumnas</td><td>4, en el medio de cada cara, de unos 112 ft (34 m) de alto y 24 × 24 ft (7,3 × 7,3 m); cada una son 4 montantes, los de afuera más pesados</td><td>Wikipedia · tu plano: 114 ft (34,75 m)</td></tr>
+<tr><td>Voladizo</td><td>las esquinas vuelan 72 ft (22 m) desde el núcleo</td><td>Wikipedia · tu PDF: 20,3 m desde el borde de la supercolumna</td></tr>
+<tr><td>Chevrones</td><td>6 por cara, de 8 pisos; en el tope de cada módulo las diagonales llegan a las esquinas y ahí <b>no hay columna vertical</b></td><td>Wikipedia (cita 149, 198) · coincide con tu plano («columna de borde que no toca el nodo de arriba»)</td></tr>
+<tr><td>Mástil</td><td>60 in (1,52 m) de ancho, 30 in (0,76 m) de profundidad en la base, se afina a 18 in (0,46 m) arriba del piso 40</td><td>Wikipedia (cita 193)</td></tr>
+<tr><td>Diagonales y cordón</td><td>diagonales de 14 in (0,36 m) de alto; cordón (spandrel) de 36 in (0,91 m) en el tope de cada módulo</td><td>Wikipedia (cita 193)</td></tr>
+<tr><td>Transición</td><td>el piso 9, el primero sobre las supercolumnas, es un reticulado que baja el viento a las supercolumnas</td><td>Wikipedia · tu plano: cajón de 2 pisos (8 y 9)</td></tr>
+<tr><td>Núcleo</td><td>octogonal de 63 × 72 ft (19 × 22 m), lleva la mitad de las cargas de gravedad; también se cita 68 × 68 ft (21 × 21 m)</td><td>Wikipedia · <b>no dice el material ni si toma viento</b></td></tr>
+<tr><td>Corona</td><td>techo a 45° mirando al sur, sube 160 ft (49 m) sobre el último piso</td><td>Wikipedia · tu plano mide ≈ 41° por la cota escrita</td></tr>
+<tr><td>Amortiguador</td><td>bloque de 400 t (cortas) en el espacio técnico del techo</td><td>Wikipedia</td></tr>
+<tr><td>1978</td><td>uniones abulonadas en lugar de soldadas; con vientos de cuarto subían las cargas en las uniones; se soldaron chapas de 2 in (51 mm) en más de 200 uniones; NIST (2019) revisó y el viento de cuarto resultó menos severo de lo que se creía</td><td>Wikipedia (citas 80–90)</td></tr>
+<tr><td>Acero total</td><td>24 000 t cortas (≈ 22 000 t)</td><td>Wikipedia</td></tr>
+</table>
+<h3>Qué cambia en el modelo</h3>
+<div class="paso"><div class="b">1</div><div><b>Ficha E completa</b><small>Además del mástil y las V: columnas a los cuartos (desde la transición), viga a medio módulo entre los cuartos, columna de borde que termina un piso abajo del nodo, cordón en el tope de cada módulo y transición de 2 pisos con V y Λ sobre la supercolumna (hoja 9 de tu PDF). Archivo <code>src/engine/exo.ts</code>.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Secciones por tramos de altura</b><small>El mástil se afina arriba del piso 40: cada clase de barra puede cambiar de sección desde una cota. Sirve también para Hancock (las barras cambian en altura).</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Niveles</b><small>Hoy el piso 56 y la corona están juntos en la azotea (278,6 m) por el límite de 49 niveles. Propuesta: pisos 9 a 56 (48 niveles) + corona como último nivel; el piso 8 se junta con el 9 en la transición. Así el sexto módulo termina en 229,82 m, como en el plano (ver pregunta 2).</small></div></div>
+<div class="paso"><div class="b">4</div><div><b>Viento de cuarto</b><small>Superposición 0,71·A + 0,71·B: la app calcula los dos vientos de frente y suma los esfuerzos de las barras que comparten las dos caras (esquinas, uniones). Se muestra la tabla de tu hoja 11 con los números de la app.</small></div></div>
+<div class="paso"><div class="b">5</div><div><b>Núcleo</b><small>Hoy es un tabique de hormigón supuesto (21 × 21 m, pared de 0,90 m), que se lleva el 67 % del momento. Las fuentes dicen que el viento lo toma el tubo arriostrado; el núcleo lleva gravedad. Ver pregunta 1.</small></div></div>
+
+<h2><span class="n">2</span>Ejemplos nuevos de edificios con exoesqueleto <span class="chip mal">imprescindible</span></h2>
+<p>Elegidos para que cada ficha tenga un edificio real y se pueda modelar con plantas rectangulares (la app no hace plantas circulares ni triangulares: 30 St Mary Axe y el Bank of China quedan afuera).</p>
+<table>
+<tr><th>Edificio</th><th>Ficha</th><th>Datos verificados</th><th>Lo que falta o hay que suponer</th></tr>
+<tr><td><b>John Hancock Center</b> (Chicago, 1969, SOM, F. Khan)</td><td>D · tubo arriostrado en X, con caras inclinadas</td><td>100 pisos; 343,7 m (CTBUH); todo acero; 5 X por cara: pisos 2–20, 21–37, 38–55, 56–74, 75–91 y media X 92–97 (Chicago Architecture Center); ≈ 30 lb/ft² de acero (SOM); de 40 000 ft² de planta abajo a 18 000 ft² arriba</td><td><b>medidas de la planta abajo y arriba</b>: lo que circula (≈ 50 × 80 m abajo, 30 × 49 m arriba) no lo encontré en una fuente confiable (pregunta 3)</td></tr>
+<tr><td><b>Hearst Tower</b> (Nueva York, 2006, Foster, WSP Cantor Seinuk)</td><td>A · diagrid</td><td>46 pisos, 597 ft (182 m); base histórica de 6 pisos y diagrid arriba del piso 10; 8 tramos de 4 pisos; triángulos de 52 ft (16 m) de alto, barras de 57 ft (17 m), nodos cada 40 ft (12 m); entrepiso 13'-6" (4,1 m); torre de 160 × 120 ft (49 × 37 m) dentro de una base de 200 × 200 ft; núcleo al oeste (no centrado: hay torsión); 10 480 t cortas de acero (Wikipedia, ENR, AISC)</td><td>secciones de las barras (no publicadas): se dimensionan con la app y se marca</td></tr>
+<tr><td><b>Citicorp Center</b> (parte 1)</td><td>E · chevrones al mástil</td><td>ver parte 1</td><td>núcleo, secciones (W14×194 y W14×145 legibles en tu plano)</td></tr>
+<tr><td><b>Onterie Center</b> (Chicago, 1986, SOM, F. Khan) · opcional</td><td>D en hormigón</td><td>58 pisos sobre el suelo, ≈ 174 m; X de paneles de hormigón que llenan las ventanas y forman un tubo reticulado; el primer edificio de hormigón con diagonales en el perímetro (Structurae, Wikipedia)</td><td>medidas de planta y de las X; requiere exoesqueleto de hormigón (material elegible)</td></tr>
+</table>
+<h3>Qué necesita el motor para armarlos bien</h3>
+<ul>
+<li><b>Caras de ancho variable</b> (Hancock): las columnas de esquina siguen la planta de cada nivel (B y L por nivel, que la app ya tiene) y quedan inclinadas; las X se arman entre esas esquinas.</li>
+<li><b>Diagrid con varios vanos por cara</b> (Hearst): nodos cada 40 ft en horizontal y cada 4 pisos en vertical, en lugar de un rombo por cara.</li>
+<li><b>Material del exo</b>: acero (como hoy) u hormigón (Onterie), con su E y su tensión admisible.</li>
+<li><b>Núcleo excéntrico</b> (Hearst): ya lo calcula la rototraslación; el exo entra a la torsión (hoja 6 de la propuesta) como dos piezas por dirección con su J equivalente y su posición.</li>
+</ul>
+<p class="nota">Cada ejemplo trae una nota «De dónde sale cada número», con fuente o con la marca de supuesto, visible en la app (Ejemplos ▾) y en la hoja «G · Exoesqueleto».</p>
+
+<h2><span class="n">3</span>Hoja nueva «G · Balance tabiques + exoesqueleto» <span class="chip mal">imprescindible</span></h2>
+<p>Decidido: <b>no se toca ninguna hoja original</b>. La hoja nueva lee las originales con fórmulas y muestra cuánto trabaja cada parte.</p>
+<table>
+<tr><th>Bloque</th><th>Qué tiene</th><th>Cómo</th></tr>
+<tr><td>1 · Viento</td><td>Wi de cada piso</td><td>fórmula a <code>'M,NyQ'!H</code> (cara b: D·F·G)</td></tr>
+<tr><td>2 · Reparto</td><td>fracción que toman los tabiques y el exo, piso por piso</td><td>valores del motor (la matriz no entra en Excel); con un control: tabiques + exo = Wi</td></tr>
+<tr><td>3 · Tabiques con exo</td><td>Q y M de los tabiques en altura</td><td>fórmulas: Q = Σ W<sub>tab</sub>, M = Σ Q·h, igual que M,NyQ columnas I y J</td></tr>
+<tr><td>4 · Comparación</td><td>M en PB con y sin exo, y cuánto baja (%)</td><td>fórmulas contra <code>'M,NyQ'!J</code></td></tr>
+<tr><td>5 · Piezas</td><td>momento de cada pieza con el exo</td><td>fórmula: M de la hoja «Rototrasl.» × (1 − fracción del exo); se lee al lado del original</td></tr>
+<tr><td>6 · Exo</td><td>corte y momento que toma el exoesqueleto</td><td>fórmulas: lo que falta para llegar a M,NyQ</td></tr>
+</table>
+<p class="nota">Con gráficos: barras de Wi tabiques / exo por piso y M(z) con y sin exo. Verificación: el balance cierra en cada piso (diferencia 0) y, con exo de rigidez cero, la hoja da lo mismo que M,NyQ.</p>
+
+<h2><span class="n">4</span>Revisión de la matemática, varias veces <span class="chip mal">imprescindible</span></h2>
+<div class="paso"><div class="b">1</div><div><b>Controles cruzados nuevos</b><small>Equilibrio de cada piso (tabiques + exo = W), de cada nudo (fuerzas y momentos) y de cada barra (N, V, M a lo largo); exo de rigidez cero = app sin exo; flecha sin exo del motor del exo = deformada de la etapa 05 (mismo E·J(z)); J equivalente de la cara = ménsula con ese J da la misma flecha; balance de la hoja nueva = motor.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Casos cerrados</b><small>Los que ya pasan (vigas con carga repartida, ménsula, columnas atadas) más: pórtico de un piso a mano, reticulado en X a mano (método de los nudos) y diagrid de un módulo.</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Otro programa</b><small>La misma cara resuelta con tu app de estereoestructuras (<code>structural-solver-</code>, como reticulado 3D plano): los esfuerzos de las barras tienen que coincidir. Es la comparación independiente, como el motor 3 del PDF del motor.</small></div></div>
+<div class="paso"><div class="b">4</div><div><b>Tres pasadas</b><small>Después de cada parte (1, 2, 6 y 7) se corre todo el paquete de controles y se anota el resultado en la guía (tabla de validación como la hoja 16 del PDF del motor).</small></div></div>
+
+<h2><span class="n">5</span>Guía nueva: la red de las matemáticas <span class="chip mal">imprescindible</span></h2>
+<p>Mismo formato que <i>El motor de cálculo de Torre 3D</i> (cuadros con número, celda y ecuación resaltada; flechas llenas, punteadas verdes y rojas). Pensada para leer de corrido.</p>
+<table>
+<tr><th>Cuadro</th><th>Qué muestra</th></tr>
+<tr><td><b>1 · Planilla original</b></td><td>las 7 hojas tal cual, de viento a flexocompresión: qué celda entrega qué a la otra (sin exo, sin correcciones)</td></tr>
+<tr><td><b>2 · Planilla nueva</b></td><td>las hojas «G» y «T3D» agregadas, en especial la de balance: de qué celdas originales leen y qué agregan</td></tr>
+<tr><td><b>3 · Lo que indica el CIRSOC</b></td><td>102 (viento: Kz con z ≥ 5 m, G, Cp, viento de cuarto), 201 (hormigón: tensiones en el tabique, armadura), 301 (acero: tracción, pandeo, flexocompresión de las barras del exo) y lo que la planilla del curso simplifica</td></tr>
+<tr><td><b>4 · Lo que hace la app</b></td><td>los tres motores, el exoesqueleto condensado, el reparto, las fibras y el espesor variable, con la celda o la etapa donde se ve cada cosa</td></tr>
+<tr><td><b>Paso a paso con un ejemplo básico</b></td><td>una torre chica (10 pisos de 3 m, dos tabiques, tubo en X de 2 módulos), con todos los números a mano: viento → Wi → J de cada parte → n, J del exo, rigidez al corte → J equivalente → reparto → M de los tabiques → N de una diagonal y de una columna → tensión en la fibra de un tabique. Cada número con su celda y su etapa de la app, y el mismo resultado que da la app.</td></tr>
+</table>
+
+<h2><span class="n">6</span>Tensiones en las fibras de los tabiques <span class="chip mal">imprescindible</span></h2>
+<div class="eq">σ<sub>fibra</sub>(z) = − N(z) / A(z) ± M<sub>muro</sub>(z) / W(z)</div>
+<p class="var">N(z): peso de las losas que le tocan por su área de influencia (pisos de arriba) más su peso propio · M<sub>muro</sub>(z) = M<sub>pieza</sub>(z) · J<sub>muro</sub> / J<sub>pieza</sub>, con M<sub>pieza</sub> de la rototraslación en cada piso (con el exo, la parte que les queda) · A = e·L, W = e·L²/6 en cada piso (cambian con el espesor de la parte 7).</p>
+<div class="paso"><div class="b">1</div><div><b>Motor</b><small><code>src/engine/fibras.ts</code>: σ de las dos caras de cada muro en cada piso, para los dos vientos y los dos estados (cargado para la compresión, descargado para la tracción, como la hoja de flexocompresión).</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Dibujo</b><small>Alzado de cada pieza con el listón continuo de colores (el mismo del exo), detalle de la sección del piso que se toque y, en el 3D, una capa «Tensiones» que pinta cada muro piso por piso.</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Verificación</b><small>En PB coincide con la flexocompresión de la etapa 07; equilibrio de cada sección (∫σ dA = −N, ∫σ y dA = M).</small></div></div>
+
+<h2><span class="n">7</span>Tabiques que cambian de espesor con la altura <span class="chip mal">imprescindible</span></h2>
+<div class="paso"><div class="b">1</div><div><b>Modelo</b><small>Cada muro guarda tramos «desde la cota z, espesor e» (por ejemplo 0,40 m hasta el piso 10, 0,30 m hasta el 20, 0,20 m arriba). Se carga en el cuadro de medidas del muro y en la tabla «T3D Muros» del Excel (ida y vuelta).</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Qué recalcula</b><small>J de cada pieza en cada piso, deformada y flecha (E·J(z)), reparto con el exo, peso propio, tensiones en las fibras y el 3D (el muro se afina en altura).</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Planilla</b><small>Las hojas J originales calculan con una sola sección por pieza: la app escribe la de PB (como hoy) y avisa que la planilla no ve el cambio de espesor; la hoja de balance y la «G · Sección real» muestran J por piso.</small></div></div>
+
+<h2><span class="n">8</span>Botón «J» en el 3D: momento de inercia piso a piso <span class="chip mal">imprescindible</span></h2>
+<p>Arriba a la derecha del 3D, junto a «Encuadrar», un botón <b>J</b> que muestra al costado de la torre el diagrama de ΣJ(z) del viento elegido, en escalones piso por piso, con el mismo estilo que los diagramas de corte y de momento: valor en cada cambio, la línea de J mínimo (h/500) y, si hay exo, su J equivalente sumado en otro color.</p>
+
+<h2><span class="n">9</span>Lo que queda de la propuesta <span class="chip gris">después</span></h2>
+<ul>
+<li>Exo dibujado sobre la deformada (hoja 15) <span class="chip warn">si alcanza</span>.</li>
+<li>Editor del perfil de la torre, curvas y protocolo de perfil variable (hojas 12 a 14): el espesor variable es el primer paso; el resto, después de la entrega.</li>
+<li>Repetir módulo, simetría entre caras y catálogo de perfiles W en el editor (hoja 7).</li>
+</ul>
+
+<h2><span class="n">10</span>Orden de trabajo</h2>
+<table>
+<tr><th>Cuándo</th><th>Qué</th></tr>
+<tr><td>Sábado noche</td><td>parte 7 (espesor variable: es la base de las fibras y del J(z)) y parte 8 (botón J)</td></tr>
+<tr><td>Domingo mañana</td><td>parte 6 (fibras de los tabiques) y parte 3 (hoja de balance)</td></tr>
+<tr><td>Domingo tarde</td><td>partes 1 y 2 (motor: caras de ancho variable, diagrid de varios vanos, ficha E completa, secciones por tramo, viento de cuarto; ejemplos)</td></tr>
+<tr><td>Domingo noche</td><td>parte 4 (revisión matemática, con la comparación contra tu app de estereoestructuras)</td></tr>
+<tr><td>Lunes mañana</td><td>parte 5 (guía en PDF) con los números finales; archivo único, Excel de ejemplo y link</td></tr>
+</table>
+
+<h2><span class="n">11</span>Preguntas antes de empezar</h2>
+<div class="linea"><div class="d">1 · Núcleo del Citicorp</div><div>Las fuentes no dicen si el núcleo es de hormigón ni si toma viento; dicen que el viento lo toma el tubo arriostrado y que el núcleo lleva la mitad de la gravedad. ¿Lo dejo <b>solo para gravedad</b> (el exo toma casi todo el viento, más fiel), o como tabique de hormigón supuesto (hoy)?</div></div>
+<div class="linea"><div class="d">2 · Niveles del Citicorp</div><div>¿Está bien juntar los pisos 8 y 9 (transición) para que entren el piso 56 en su cota real (229,82 m) y la corona como último nivel?</div></div>
+<div class="linea"><div class="d">3 · Planta del Hancock</div><div>¿Tenés una fuente (plano o libro) con las medidas de la planta en la base y arriba? Si no, uso ≈ 50 × 80 m y 30 × 49 m marcadas como «a verificar».</div></div>
+<div class="linea"><div class="d">4 · Barras de acero y el CIRSOC 301</div><div>Hoy el exo se controla con el método simple del curso (σ ≤ 1 400 kg/cm² y pandeo con N ≤ π²EI / 1,7 L²). El CIRSOC 301 es por estados límite (cargas mayoradas 1,2 D + 1,6 W, resistencia φ·Fcr·A, interacción N–M). ¿Agrego el control del CIRSOC 301 al lado del del curso, o alcanza con mostrarlo en la guía?</div></div>
+<div class="linea"><div class="d">5 · Espesor variable</div><div>¿Por tramos (cambia en pisos que elegís) alcanza, o lo querés también lineal (afinado continuo)?</div></div>
+<div class="linea"><div class="d">6 · Onterie Center</div><div>¿Lo sumo como cuarto ejemplo (exo de hormigón), aunque las medidas de planta haya que suponerlas?</div></div>
+
+<p class="nota" style="margin-top:18px"><b>Fuentes consultadas:</b> Wikipedia (Citigroup Center, John Hancock Center, Hearst Tower, Onterie Center, 30 St Mary Axe, Bank of China Tower); CTBUH Skyscraper Center (875 North Michigan Avenue); Structurae (John Hancock Center, Onterie Center); STRUCTURE magazine, «Evolution of the Braced Tube» (A. Mazeika, 2024); SOM (875 North Michigan Avenue); Chicago Architecture Center; ENR y AISC Modern Steel Construction (Hearst Tower). Los números de cada ejemplo citan la fuente puntual en la nota del ejemplo.</p>
+
+<div class="pie">Torre 3D · plan de trabajo, fase 2 · 14 de noviembre de 2026 · docs/plan_fase2.html</div>
+</div></body></html>
