@@ -6,7 +6,7 @@ import { aPlanilla } from './mapping';
 import { calcularPlanilla } from './planilla';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
-import { calcularExo } from './exo';
+import { calcularExo, cirsoc301 } from './exo';
 
 function exo(p: Proyecto, dir: 'A' | 'B') {
   const asig = aPlanilla(p), R = calcularPlanilla(asig.datos), def = p.exo!;
@@ -20,7 +20,7 @@ function exo(p: Proyecto, dir: 'A' | 'B') {
   const iPB = p.niveles.findIndex(n => n.cota === 0), pl = plantaDeNivel(p, iPB), A = dir === 'A';
   const ancho = (A ? pl.L : pl.B) + 2 * def.separacion, t = (A ? pl.B : pl.L) / 2 + def.separacion;
   const anchos = def.anchoVariable ? zs.map(z => { const q = plantaDeNivel(p, p.niveles.findIndex(n => Math.abs(n.cota - z) < 1e-6)); return (A ? q.L : q.B) + 2 * def.separacion; }) : undefined;
-  return { r: calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos), zs, asig };
+  return { r: calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos), zs, asig, c301: () => cirsoc301(def, zs, W, EJ, ancho, [-t, t], E, anchos) };
 }
 
 describe('edificios reales con exoesqueleto', () => {
@@ -39,6 +39,10 @@ describe('edificios reales con exoesqueleto', () => {
         expect(r.u[r.u.length - 1]).toBeLessThanOrEqual(zs[zs.length - 1] / 500);
         expect(r.controles.filter(c => c.estado !== 'verifica').map(c => c.id)).toEqual([]);
       });
+    });
+    it('acero: todas las barras verifican el CIRSOC 301 (1,2·D + 1,6·W)', () => {
+      if (p.exo!.material === 'hormigon') return;
+      (['A', 'B'] as const).forEach(dir => expect(exo(p, dir).c301().filter(x => !x.verifica).map(x => `${x.cara} ${x.id} ${x.ratio.toFixed(2)}`)).toEqual([]));
     });
   }));
   it('Citicorp y Hancock: el núcleo no toma viento y el exo se lleva todo el momento', () => {

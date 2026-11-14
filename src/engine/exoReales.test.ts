@@ -93,3 +93,29 @@ describe('viento de cuarto', () => {
     f.filter(x => x.NA > 1e-6).forEach(x => expect(x.razon).toBeCloseTo(Math.SQRT2, 9));
   });
 });
+
+import { cirsoc301, FY_F24, propsSeccion } from './exo';
+describe('CIRSOC 301 (LRFD)', () => {
+  it('columna corta en compresión pura: φc·Pn = 0,85·0,658^λc²·Fy·A y la interacción es Pu/φPn', () => {
+    const zs = Array.from({ length: 9 }, (_, i) => i * 3), W = zs.slice(1).map(() => 2);
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'D', modulo: 4 };
+    const v = cirsoc301(def, zs, W, () => 3e6 * 20, 18, [-10, 10], 3e6);
+    expect(v.length).toBeGreaterThan(10);
+    const c = v.find(x => x.clase === 'columna')!;
+    const p = propsSeccion(def.columna), lc = (3 / (p.i * Math.PI)) * Math.sqrt(FY_F24 / def.E);
+    expect(c.lambdaC).toBeCloseTo(lc, 9);
+    expect(c.phiPc).toBeCloseTo(0.85 * 0.658 ** (lc ** 2) * FY_F24 * p.A, 6);
+    expect(c.phiPt).toBeCloseTo(0.9 * FY_F24 * p.A, 6);
+    v.forEach(x => { expect(x.ratio).toBeGreaterThanOrEqual(0); expect(isFinite(x.ratio)).toBe(true); });
+  });
+  it('1,2·D + 1,6·W: sin viento queda solo 1,2 del peso propio', () => {
+    const zs = Array.from({ length: 7 }, (_, i) => i * 3);
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'D', modulo: 3 };
+    const v0 = cirsoc301(def, zs, zs.slice(1).map(() => 0), () => 3e6 * 20, 18, [-10, 10], 3e6);
+    const r = calcularExo({ ...def, pesoPropio: true }, zs, zs.slice(1).map(() => 0), () => 3e6 * 20, 18, [-10, 10], 3e6);
+    const c = r.caras[0].esfuerzos.find(e => e.clase === 'columna')!;
+    const x = v0.find(y => y.id === c.id && y.cara === r.caras[0].nombre)!;
+    // la columna de abajo: compresión máxima (en el pie)
+    expect(Math.abs(x.Pu)).toBeGreaterThanOrEqual(1.2 * Math.abs(c.N) - 1e-9);
+  });
+});

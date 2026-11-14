@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, vientoDeCuarto, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, vientoDeCuarto, cirsoc301, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -271,6 +271,18 @@ export function panelExo(c: H) {
     c.append(seccion('Barras más cargadas', tablaValores(['Barra', 'clase', 'N (t)', 'M (tm)', 'σ (kg/cm²)', 'λ', ''],
       peores.map(x => [`${x.cara} · ${x.id}`, x.clase, x.N, x.M, x.sigma / 10, x.lambda, x.estado === 'verifica' ? '✓' : '✗']), [0, 0, 1, 2, 0, 0, 0])).el);
     c.append(h('p', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'}: E = ${fmt(def.E / 10, 0)} kg/cm², σ adm = ${fmt(def.sigmaAdm / 10, 0)} kg/cm². Pandeo: N ≤ π²·E·I / (1,7·L²) y λ = L / i ≤ 200. Los valores con el viento ${d.dir}.`));
+    // CIRSOC 301 (estados límite): las barras de acero con 1,2·D + 1,6·W
+    if (def.material !== 'hormigon') {
+      const en = d.entrada;
+      const v = cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos);
+      const malas = v.filter(x => !x.verifica);
+      const peores = [...v].sort((a, b) => b.ratio - a.ratio).slice(0, 10);
+      const sec = seccion(`CIRSOC 301 · ${v.length - malas.length} de ${v.length} barras verifican`,
+        h('p', { class: 'nota' }, 'Estados límite (LRFD), acero F-24 (Fy = 2400 kg/cm²): 1,2·D + 1,6·W, con el viento de los dos lados. Tracción φ·Pn = 0,9·Fy·A; compresión φ·Pn = 0,85·Fcr·A con λc = L/(r·π)·√(Fy/E); flexión φ·Mn = 0,9·Z·Fy; interacción H1-1a (Pu/φPn ≥ 0,2: Pu/φPn + 8/9·Mu/φMn ≤ 1) o H1-1b. La columna «σ adm» de arriba es el control simple del curso; este es el del reglamento.'),
+        tablaValores(['Barra', 'Pu (t)', 'Mu (tm)', 'φPn (t)', 'φMn (tm)', 'λc', 'interacción', ''],
+          peores.map(x => [`${x.cara} · ${x.id}`, x.Pu, x.Mu, x.Pu < 0 ? x.phiPc : x.phiPt, x.phiMn, x.lambdaC, x.ratio, `${x.ecuacion} ${x.verifica ? '✓' : '✗'}`]), [0, 1, 1, 0, 0, 2, 2, 0]));
+      c.append(sec.el);
+    }
     // viento de cuarto: 0,71·A + 0,71·B en las columnas de las esquinas (lo que se descubrió en el Citicorp en 1978)
     const dA = datosExo('A', def), dB = datosExo('B', def);
     if (dA && dB) {

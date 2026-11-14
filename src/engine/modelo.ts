@@ -336,7 +336,7 @@ export function ejemploCiticorp(): Proyecto {
       // mástil 60 × 30 in en la base, 18 in de profundidad arriba del piso 40: tubos cuadrados equivalentes (supuesto)
       // secciones dimensionadas con la app (botón «Dimensionar» de la etapa 08); las reales no están publicadas
       mastil: { b: 2.0, e: 0.125 }, tramos: [{ clase: 'mastil', desde: z(40), sec: { b: 1.8, e: 0.08 } }],
-      // debajo del cajón, el mástil es la supercolumna de 24 × 24 ft: cajón de acero equivalente (pared supuesta)
+      // debajo del cajón, el mástil es la supercolumna de 24 × 24 ft (cuatro barras): cajón de acero equivalente (pared supuesta)
       mastilBase: { hasta: base, sec: { b: 7.3, e: 0.05 } },
       diagonal: { b: 1.0, e: 0.05 }, viga: { b: 1.2, e: 0.06 }, columna: { b: 2.0, e: 0.125 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { diagonal: 'articulada', viga: 'rigida', columna: 'rigida', base: 'empotrada' },
@@ -346,7 +346,7 @@ export function ejemploCiticorp(): Proyecto {
         'Cuatro supercolumnas de 24 × 24 ft (7,3 m) a media cara, de 112 ft (Wikipedia; el plano: 114 ft = 34,75 m). Acá son tubos de hormigón equivalentes (pared de 0,60 m, supuesta) y son las piezas de la planilla en la base abierta.',
         'Seis módulos de chevrones de 8 pisos por cara, sin columna en las esquinas en el tope de cada módulo (Wikipedia). Pisos de 13′-4″ (4,064 m) leídos del plano: el sexto módulo termina en el piso 56, a 229,82 m.',
         'Los pisos 8 y 9 son el cajón de transición (Wikipedia: el piso 9 es un reticulado; el plano: cajón de 2 pisos): acá un solo nivel a 34,75 m, para que entren los 49 niveles de la planilla.',
-        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
+        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (control del curso y CIRSOC 301) (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
         'Debajo del cajón, el mástil es la supercolumna (24 × 24 ft): un cajón de acero equivalente de 7,30 m con pared de 5 cm (supuesto).',
         'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app pesa unas 19 900 t.',
         'Núcleo octogonal de 63 × 72 ft que lleva la mitad del peso (Wikipedia; no dice el material): acá un tubo de hormigón sin pieza (no toma viento).',

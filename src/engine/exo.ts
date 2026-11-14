@@ -648,6 +648,9 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
       r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
+    // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
+    if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
+      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
     (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
@@ -687,4 +690,64 @@ export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo): FilaCuarto[]
     const NA = a.get(z)!, NB = b.get(z)!, N45 = c45 * (NA + NB);
     return { z, NA, NB, N45, razon: Math.max(NA, NB) > 1e-9 ? N45 / Math.max(NA, NB) : 0 };
   });
+}
+
+// ------------------------------------------------------------------ CIRSOC 301 (estados límite, barras de acero)
+/** acero F-24 del CIRSOC 301: Fy = 235 MPa ≈ 24 000 t/m² (la tensión admisible de la app, 14 000 t/m², es ≈ 0,6·Fy) */
+export const FY_F24 = 24000;
+export interface Cirsoc301Barra {
+  cara: string; id: string; clase: ClaseBarra;
+  /** esfuerzos mayorados (t, tm): 1,2·D + 1,6·W con el viento en los dos sentidos (el peor) */
+  Pu: number; Mu: number;
+  /** resistencias de diseño: φc·Pn (compresión), φt·Pn (tracción), φb·Mn */
+  phiPc: number; phiPt: number; phiMn: number;
+  /** esbeltez reducida λc = (k·L / r π)·√(Fy/E) y relación ancho-espesor de la pared */
+  lambdaC: number; bt: number;
+  /** interacción (H1-1a o H1-1b): ≤ 1 verifica */
+  ratio: number; ecuacion: 'H1-1a' | 'H1-1b';
+  verifica: boolean;
+}
+/**
+ * Verificación de las barras de acero con el CIRSOC 301 (2005, método LRFD, el de la AISC):
+ *  - combinación 1,2·D + 1,6·W (D: peso propio del exo; W: el viento de la planilla). Se calculan aparte, con el mismo
+ *    modelo, y se superponen barra por barra con el viento en los dos sentidos.
+ *  - tracción: φt·Pn = 0,9·Fy·Ag;  compresión: λc = k·L/(r·π)·√(Fy/E), Fcr = 0,658^(λc²)·Fy si λc ≤ 1,5 y
+ *    0,877/λc²·Fy si no; φc·Pn = 0,85·Fcr·Ag (k = 1: las barras van de nudo a nudo);
+ *  - flexión: tubo compacto, φb·Mn = 0,9·Z·Fy (Z = (b³ − bi³)/4);
+ *  - interacción (capítulo H): Pu/φPn ≥ 0,2 → Pu/φPn + 8/9·Mu/φbMn ≤ 1; si no, Pu/(2φPn) + Mu/φbMn ≤ 1.
+ *  - pared del tubo: b/t ≤ 1,40·√(E/Fy) (si no, la pared abolla antes: se avisa como que no verifica).
+ */
+export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24): Cirsoc301Barra[] {
+  const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos);
+  const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos);
+  const out: Cirsoc301Barra[] = [];
+  rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
+    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id);
+    if (!eD) return;
+    // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
+    let Pc = 0, Pt = 0, Mu = 0, MuC = 0, MuT = 0;
+    for (let i = 0; i <= 20; i++) {
+      const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20);
+      for (const sg of [1, -1]) {
+        const N = 1.2 * fd.N + 1.6 * sg * fw.N, M = Math.abs(1.2 * fd.M + 1.6 * sg * fw.M);
+        if (-N > Pc) { Pc = -N; MuC = M; } else if (-N === Pc) MuC = Math.max(MuC, M);
+        if (N > Pt) { Pt = N; MuT = M; } else if (N === Pt) MuT = Math.max(MuT, M);
+        Mu = Math.max(Mu, M);
+      }
+    }
+    const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
+    const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f;
+    const lambdaC = (eW.L / (r * Math.PI)) * Math.sqrt(Fy / def.E);
+    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
+    const phiPc = 0.85 * Fcr * A, phiPt = 0.9 * Fy * A, phiMn = 0.9 * Z * Fy;
+    const inter = (P: number, phiP: number, M: number) => { const q = phiP > 0 ? P / phiP : Infinity; return q >= 0.2 ? { v: q + (8 / 9) * (M / phiMn), e: 'H1-1a' as const } : { v: q / 2 + M / phiMn, e: 'H1-1b' as const }; };
+    const ic1 = inter(Pc, phiPc, MuC), it1 = inter(Pt, phiPt, MuT), soloM = Mu / phiMn;
+    const peor = [ic1, it1, { v: soloM, e: 'H1-1b' as const }].reduce((m, x) => (x.v > m.v ? x : m));
+    // la pieza equivalente de la base (Citicorp: la supercolumna son cuatro barras en las esquinas de un cuadrado de 7,3 m)
+    // no es un tubo de pared delgada: no se le mira la abolladura de la pared
+    const equivalente = !!def.mastilBase && s === def.mastilBase.sec;
+    const bt = s.e > 0 ? bi / s.e : Infinity, compacta = equivalente || bt <= 1.4 * Math.sqrt(def.E / Fy) || s.e >= s.b / 2 - 1e-9;
+    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: Pc >= Pt ? -Pc : Pt, Mu, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, verifica: peor.v <= 1 && compacta });
+  }));
+  return out;
 }

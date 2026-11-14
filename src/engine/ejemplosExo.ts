@@ -57,7 +57,7 @@ export function ejemploHancock(): Proyecto {
     exo: {
       tipo: 'D', separacion: 0, modulo: 8, anchoVariable: true, cortes, alas: 5,
       // secciones dimensionadas con la app (botón «Dimensionar»): las reales no están en las fuentes
-      columna: { b: 1.2, e: 0.06 }, diagonal: { b: 1.0, e: 0.05 }, viga: { b: 0.9, e: 0.04 },
+      columna: { b: 1.2, e: 0.06 }, diagonal: { b: 1.2, e: 0.05 }, viga: { b: 0.9, e: 0.04 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
         '100 pisos, techo a 1127 ft (343,5 m): estudio de la Johns Hopkins University (JHU, wk05). CTBUH: 343,7 m.',
@@ -66,8 +66,8 @@ export function ejemploHancock(): Proyecto {
         'X de 200 ft, cinco y media por cara (JHU; Chicago Architecture Center: pisos 2–20, 21–37, 38–55, 56–74, 75–91 y media X 92–97). Acá arrancan en PB y la media X de arriba es una X de 100 ft (supuesto).',
         'Un nivel de la app cada 25 ft (≈ 2,2 pisos reales; la planilla admite 49 niveles): el nombre dice qué pisos junta.',
         '24 columnas en el perímetro, 7 por cara (estudio JHU): las 5 intermedias de cada cara perpendicular al viento trabajan con las esquinas como alas del tubo (alas = 5; cota superior, sin «shear lag»). Las intermedias de las caras paralelas no se modelan.',
-        'Secciones: las del botón «Dimensionar» (columnas de 1,20 m, diagonales de 1,00 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
-        'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app pesa unas 24 500 t.',
+        'Secciones: las del botón «Dimensionar», con el control del curso y el CIRSOC 301 (columnas y diagonales de 1,20 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
+        'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app pesa unas 25 700 t.',
       ],
     },
   };
