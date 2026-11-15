@@ -14,6 +14,7 @@ import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagra
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
+import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
 
 type P2 = { x: number; y: number };
@@ -273,6 +274,18 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (tipoDe(m) === 'perfil') {
         const pp = enPlanta(m), ext = polilinea(pp.v, 6, 16), hs = (pp.huecos ?? []).map(hh => polilinea(hh, 6, 16));
         const pr = new Prisma(ext, zs, mat, tinta, undefined, hs); pr.conBordes = def; prismas.push(pr);
+        return;
+      }
+      // con puertas o ventanas: piso por piso, el elemento con sus huecos, el antepecho abajo y el dintel arriba
+      if (m.aberturas?.length) {
+        const pisos = [z0, ...zs.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6), z1];
+        for (let k = 0; k + 1 < pisos.length; k++) {
+          const za = pisos[k], zb = pisos[k + 1], mm = muroEn(m, (za + zb) / 2);
+          // debajo de PB (subsuelos) el elemento va entero
+          const trozos = za >= 0 ? prismasCalados(mm, za, zb) : [];
+          if (trozos.length) trozos.forEach(t => { const pr = new Prisma(t.pol, [t.za, t.zb], mat, tinta); pr.conBordes = true; prismas.push(pr); });
+          else solidosEnAltura({ ...mm, aberturas: null }, 0).forEach(pol => { const pr = new Prisma(pol, [za, zb], mat, tinta); pr.conBordes = def; prismas.push(pr); });
+        }
         return;
       }
       // con espesor por tramos, un prisma por tramo (el muro se afina en altura)

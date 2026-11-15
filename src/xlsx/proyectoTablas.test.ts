@@ -111,3 +111,14 @@ describe('niveles agrupados', () => {
     expect(r.proyecto.niveles.filter(n => n.cota > 0).reduce((a, n) => a + (n.pisos ?? 1), 0)).toBe(99);
   });
 });
+
+describe('aberturas en T3D Muros', () => {
+  it('puertas y ventanas van y vuelven (con la cara del núcleo)', async () => {
+    const p = ejemploGuia();
+    p.muros[0].aberturas = [{ s: 0.5, ancho: 0.9, desde: 0, alto: 2.1 }, { s: -1.2, ancho: 1.2, desde: 0.9, alto: 1.2 }];
+    p.muros[1].refLado = -1;
+    const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(p))), ejemploGuia())!;
+    expect(r.proyecto.muros[0].aberturas).toEqual(p.muros[0].aberturas);
+    expect(r.proyecto.muros[1].refLado).toBe(-1);
+  });
+});

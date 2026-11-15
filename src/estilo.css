@@ -1290,3 +1290,7 @@ svg .linea-ref-punta { fill: var(--panel, #fff); stroke: var(--accent); stroke-w
 .barra-sel .chip-sel { font: 12px var(--mono); padding: 2px 8px; border-radius: 12px; }
 @media (pointer: coarse) { .barra-sel .chip-sel { padding: 6px 10px; } }
 .barra-sel:has(.lista-sel:not([hidden])) { flex-wrap: wrap; max-width: min(92%, 640px); white-space: normal; }
+
+/* aberturas (puertas y ventanas) en elementos enteros */
+.planta .abertura { fill: var(--lienzo, #fff); stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.planta .abertura.ventana { fill: color-mix(in srgb, var(--accent) 18%, var(--lienzo, #fff)); stroke-dasharray: none; }

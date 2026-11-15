@@ -1,9 +1,10 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
+import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/aberturas';
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto, type TipoVano } from '../engine/dibujo';
+import { agrupar, armarPiezas, calarMuro, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto } from '../engine/dibujo';
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
@@ -547,7 +548,42 @@ export function montarPlanta(cont: HTMLElement) {
   panelCal.className = 'calco-panel piezas-panel calar-panel';
   panelCal.hidden = true;
   cont.appendChild(panelCal);
-  let calAncho = 0.9, calTipo: TipoVano = 'dintel';
+  let calAncho = 0.9, calTipo: 'puerta' | 'ventana' | 'hueco' = 'puerta', calAlto = 2.1, calAntepecho = 0.9;
+  /** entrepiso más chico donde está el elemento (para que la abertura deje dintel en todos los pisos) */
+  const entrepisoMin = (m: Muro) => {
+    const p = estado.proyecto, zF = p.niveles.at(-1)?.cota ?? 0, zT = p.niveles[0]?.cota ?? 0;
+    const zs = p.niveles.map(n => n.cota).filter(z => z >= Math.max(0, m.zDesde ?? zF) - 1e-6 && z <= (m.zHasta ?? zT) + 1e-6).sort((a, b) => a - b);
+    let h = Infinity; for (let i = 0; i + 1 < zs.length; i++) h = Math.min(h, zs[i + 1] - zs[i]);
+    return isFinite(h) ? h : 3;
+  };
+  /** polígono de la abertura en planta (el hueco en el espesor del elemento), para marcarla */
+  const marcasAbertura = (m: Muro, a: Abertura): Punto[][] => {
+    const t = tipoDe(m);
+    if (t === 'tubo-circ') {
+      const R = m.largo / 2, r = dInterior(m) / 2, rm = (R + r) / 2 || R / 2, c = (a.s * Math.PI) / 180, w = a.ancho / rm;
+      const n = 10, ext = Array.from({ length: n + 1 }, (_, i) => { const th = c - w / 2 + (w * i) / n; return { x: m.x + R * Math.cos(th), y: m.y + R * Math.sin(th) }; });
+      const int = Array.from({ length: n + 1 }, (_, i) => { const th = c + w / 2 - (w * i) / n; return { x: m.x + r * Math.cos(th), y: m.y + r * Math.sin(th) }; });
+      return [[...ext, ...int]];
+    }
+    const e = t === 'tubo-rect' ? Math.min(m.espesor, m.largo / 2, (m.ladoY ?? m.largo) / 2) : m.espesor;
+    const caja = (cx: number, cy: number, ax: number, ay: number) => [{ x: cx - ax / 2, y: cy - ay / 2 }, { x: cx + ax / 2, y: cy - ay / 2 }, { x: cx + ax / 2, y: cy + ay / 2 }, { x: cx - ax / 2, y: cy + ay / 2 }];
+    if (t === 'tabique') return [m.dir === 'X' ? caja(m.x + a.s, m.y, a.ancho, e) : caja(m.x, m.y + a.s, e, a.ancho)];
+    if (t === 'tubo-rect') {
+      const B = m.largo, H = m.ladoY ?? m.largo;
+      switch (a.cara ?? 'y-') {
+        case 'y+': return [caja(m.x + a.s, m.y + H / 2 - e / 2, a.ancho, e)];
+        case 'y-': return [caja(m.x + a.s, m.y - H / 2 + e / 2, a.ancho, e)];
+        case 'x+': return [caja(m.x + B / 2 - e / 2, m.y + a.s, e, a.ancho)];
+        case 'x-': return [caja(m.x - B / 2 + e / 2, m.y + a.s, e, a.ancho)];
+      }
+    }
+    return [];
+  };
+  /** la abertura que se pondría tocando el elemento en q (null si el elemento no se puede calar así) */
+  const aberturaEn = (m: Muro, q: Punto): Abertura | null => {
+    const u = ubicarAbertura(m, q); if (!u) return null;
+    return { s: +u.s.toFixed(3), ancho: calAncho, desde: calTipo === 'ventana' ? calAntepecho : 0, alto: calAlto, ...(u.cara ? { cara: u.cara } : {}) };
+  };
   /** calar un muro o la losa (huecos de ascensor, escalera); hueco de losa en dibujo y elegido */
   let calQue: 'muro' | 'losa' = 'muro', losaIni: Punto | null = null, cursorLosa: Punto | null = null, huecoSel: string | null = null;
   const rectHueco = (a: Punto, b: Punto) => [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }].map(q => ({ x: +q.x.toFixed(3), y: +q.y.toFixed(3) }));
@@ -562,20 +598,29 @@ export function montarPlanta(cont: HTMLElement) {
     if (calQue === 'losa') { armarPanelHueco(que); return; }
     const tit = document.createElement('b'); tit.textContent = 'Calar un vano';
     const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group');
-    ([['dintel', 'Puerta con dintel'], ['hueco', 'Hueco a toda altura']] as const).forEach(([k, t]) => {
+    ([['puerta', 'Puerta'], ['ventana', 'Ventana'], ['hueco', 'Hueco a toda altura']] as const).forEach(([k, t]) => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', String(calTipo === k));
-      b.addEventListener('click', () => { calTipo = k; armarPanelCal(); dibujar(); }); seg.append(b);
+      b.addEventListener('click', () => { if (k !== calTipo) calAlto = k === 'ventana' ? 1.2 : 2.1; calTipo = k; armarPanelCal(); dibujar(); }); seg.append(b);
     });
-    const fila = document.createElement('label'); fila.className = 'fila-vertices';
-    const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.05'; inp.min = '0.1'; inp.value = String(calAncho); inp.className = 'campo-vertice';
-    inp.addEventListener('change', () => { const v = parseFloat(inp.value.replace(',', '.')); if (v > 0) { calAncho = +v.toFixed(2); dibujar(); } });
-    fila.append('ancho del vano ', inp, ' m');
+    const campoC = (etq: string, v: number, f: (x: number) => void) => {
+      const l = document.createElement('label'); l.className = 'fila-vertices';
+      const i = document.createElement('input'); i.type = 'number'; i.step = '0.05'; i.min = '0'; i.value = String(v); i.className = 'campo-vertice';
+      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (x >= 0) { f(+x.toFixed(2)); dibujar(); } });
+      l.append(etq, ' ', i, ' m'); return l;
+    };
+    const filas: HTMLElement[] = [campoC('ancho', calAncho, x => { if (x > 0) calAncho = x; })];
+    if (calTipo !== 'hueco') filas.push(campoC('alto', calAlto, x => { if (x > 0) calAlto = x; }));
+    if (calTipo === 'ventana') filas.push(campoC('antepecho', calAntepecho, x => { calAntepecho = x; }));
     const ayuda = document.createElement('span');
-    ayuda.textContent = calTipo === 'dintel'
-      ? 'Puertas en cada piso: el dintel une los dos tramos y la hoja J lleva el muro entero, como la guía (que verifica el corte en el dintel).'
-      : 'Abertura de toda la altura: en un tabique suelto, cada tramo pasa a ser una pieza que trabaja sola. En un núcleo, la sección queda abierta (C).';
-    const como = document.createElement('span'); como.textContent = 'Tocá el muro donde va el vano. Un núcleo se pasa a sus cuatro tabiques y se cala la cara tocada. Deshacer: Ctrl+Z.';
-    panelCal.append(tit, que, seg, fila, ayuda, como);
+    ayuda.textContent = calTipo === 'puerta'
+      ? 'Puerta en cada piso, desde el piso hasta el alto elegido. El elemento sigue entero (se ve completo en la planta) y arriba queda el dintel; el cálculo usa el J de la sección más débil, el corte por la puerta.'
+      : calTipo === 'ventana'
+        ? 'Ventana en cada piso, con antepecho abajo y dintel arriba. El elemento sigue entero; el cálculo usa el J del corte por la ventana.'
+        : 'Abertura de toda la altura (sin dintel): en un tabique suelto, cada tramo pasa a ser una pieza que trabaja sola; en un núcleo, la sección queda abierta (C).';
+    const como = document.createElement('span'); como.textContent = calTipo === 'hueco'
+      ? 'Tocá el muro donde va el vano. Un núcleo se pasa a sus cuatro tabiques y se cala la cara tocada. Deshacer: Ctrl+Z.'
+      : 'Tocá el tabique, la cara del núcleo o el tubo circular donde va la abertura. Para cambiarla o sacarla: elegí el elemento (sus aberturas están en su cuadro). Deshacer: Ctrl+Z.';
+    panelCal.append(tit, que, seg, ...filas, ayuda, como);
   }
   /** panel de los huecos de la losa: cómo se dibujan y las medidas del elegido */
   function armarPanelHueco(que: HTMLElement) {
@@ -1077,6 +1122,32 @@ export function montarPlanta(cont: HTMLElement) {
         caja.append(mas);
         panelPrec.append(caja);
       }
+      // aberturas (puertas y ventanas): medidas y quitar; el elemento sigue entero
+      if (!mot && m.aberturas?.length) {
+        const ca = mk('div', '', 'prec-espesores');
+        ca.append(mk('span', `Aberturas (${m.aberturas.length}) · en todos los pisos`, 'prec-sub'));
+        m.aberturas.forEach((a, i) => {
+          const fila = mk('div', '', 'prec-fila');
+          const num = (etq: string, v: number, poner: (o: Abertura, x: number) => void) => {
+            const l = mk('label', '', 'prec-campo'); l.append(etq); const inp = mk('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.value = f2(v); inp.style.width = '44px';
+            inp.addEventListener('change', () => {
+              const x = Number(inp.value.replace(',', '.')); if (!(x >= 0)) { inp.value = f2(v); return; }
+              const nueva = { ...a }; poner(nueva, +x.toFixed(3));
+              const resto = (m.aberturas ?? []).filter((_, k) => k !== i);
+              const err = problemaAbertura({ ...m, aberturas: [...resto, nueva] }, nueva, entrepisoMin(m));
+              if (err) { mensaje(`${m.id}: ${err}.`); inp.value = f2(v); return; }
+              clavePrec = ''; estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (w?.aberturas) w.aberturas[i] = nueva; });
+            });
+            l.append(inp); return l;
+          };
+          const quitar = mk('button', '✕'); quitar.type = 'button'; quitar.title = 'Quitar esta abertura';
+          quitar.addEventListener('click', () => { clavePrec = ''; estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (w) { w.aberturas = (w.aberturas ?? []).filter((_, k) => k !== i); if (!w.aberturas.length) delete w.aberturas; } }); mensaje(`${m.id}: abertura quitada.`); });
+          fila.append(mk('span', `${a.desde > 1e-6 ? 'ventana' : 'puerta'}${a.cara ? ` ${a.cara}` : ''}`), num('ancho', a.ancho, (o, x) => { o.ancho = x; }), num('alto', a.alto, (o, x) => { o.alto = x; }), num('desde', a.desde, (o, x) => { o.desde = x; }), quitar);
+          ca.append(fila);
+        });
+        ca.append(mk('span', 'El cálculo usa la sección más débil: el corte por las aberturas (J de los pedazos que quedan, con su Steiner).', 'prec-nota'));
+        panelPrec.append(ca);
+      }
       // juntas de este muro con los otros: qué pasa en cada una (L: inglete o pasa uno; X: pasa uno; T: el que llega se corta)
       const js = detectarJuntas(p.muros.filter(o => !muroOculto(p, o))).filter(j => j.a === m.id || j.b === m.id);
       if (js.length) {
@@ -1559,6 +1630,13 @@ export function montarPlanta(cont: HTMLElement) {
     });
     armarPanelPrec();
     if (medGrupo) { panelPrec.hidden = true; if (!panelMed.contains(document.activeElement)) armarPanelMed(); }
+    // aberturas (puertas y ventanas) de los elementos enteros: el hueco marcado sobre el elemento, que se sigue viendo completo
+    p.muros.forEach(m => {
+      if (!m.aberturas?.length || !presenteEn(m, zN, zFund, zTop) || muroOculto(p, m)) return;
+      m.aberturas.forEach(a => marcasAbertura(m, a).forEach(pg => {
+        svg.appendChild(el('polygon', { points: pg.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `abertura ${a.desde > 1e-6 ? 'ventana' : 'puerta'}` }));
+      }));
+    });
     // vanos calados: el dintel (puertas) en trazos entre los dos tramos
     p.muros.forEach(m => {
       if (!m.vano || !presenteEn(m, zN, zFund, zTop)) return;
@@ -1569,7 +1647,14 @@ export function montarPlanta(cont: HTMLElement) {
       const cl = m.vano.tipo === 'dintel' ? 'dintel' : 'hueco-vano';
       svg.appendChild(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b.x), y2: Y(b.y), class: cl }));
     });
-    if (modo === 'calar' && previaCalar) {
+    if (modo === 'calar' && previaCalar && calTipo !== 'hueco') {
+      const w = p.muros.find(x => x.id === previaCalar!.id);
+      const ab = w ? aberturaEn(w, previaCalar.q) : null;
+      if (w && ab) {
+        const ok = !problemaAbertura({ ...w, aberturas: [...(w.aberturas ?? []), ab] }, ab, entrepisoMin(w));
+        marcasAbertura(w, ab).forEach(pg => svg.appendChild(el('polygon', { points: pg.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `previa-vano${ok ? '' : ' no-entra'}` })));
+      }
+    } else if (modo === 'calar' && previaCalar) {
       const w = p.muros.find(x => x.id === previaCalar!.id);
       if (w && tipoDe(w) !== 'tubo-circ') {
         // dónde quedaría el vano (en un núcleo, sobre la cara más cercana)
@@ -1838,11 +1923,23 @@ export function montarPlanta(cont: HTMLElement) {
       const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id;
       if (!idM) { mensaje('Calar: tocá un tabique o un núcleo, en el lugar del vano.'); return; }
       { const mm = estado.proyecto.muros.find(x => x.id === idM), mot = mm && motivoNoEditable(estado.proyecto, mm, estado.contexto); if (mot) { mensaje(mot); return; } }
-      const r = calarMuro(estado.proyecto.muros, idM, aMundo(ev), calAncho, calTipo);
+      if (calTipo !== 'hueco') {
+        // puerta o ventana: el elemento no se parte; se le agrega la abertura (en todos sus pisos)
+        const mm = estado.proyecto.muros.find(x => x.id === idM)!;
+        const ab = aberturaEn(mm, aMundo(ev));
+        if (!ab) { mensaje(`${idM}: este elemento no se cala con puertas o ventanas (los perfiles irregulares se editan con su contorno).`); return; }
+        const err = problemaAbertura({ ...mm, aberturas: [...(mm.aberturas ?? []), ab] }, ab, entrepisoMin(mm));
+        if (err) { mensaje(`No se puede calar ${idM}: ${err}.`); return; }
+        estado.cambiar(pp => { const w = pp.muros.find(x => x.id === idM); if (w) w.aberturas = [...(w.aberturas ?? []), ab]; });
+        previaCalar = null;
+        mensaje(`${calTipo === 'puerta' ? 'Puerta' : 'Ventana'} de ${String(calAncho).replace('.', ',')} × ${String(calAlto).replace('.', ',')} m en ${idM}${ab.cara ? ` (cara ${ab.cara})` : ''}, en todos sus pisos. El elemento sigue entero; el cálculo usa la sección más débil.`);
+        return;
+      }
+      const r = calarMuro(estado.proyecto.muros, idM, aMundo(ev), calAncho, 'hueco');
       if ('error' in r) { mensaje(`No se puede calar ${idM}: ${r.error}.`); return; }
       estado.cambiar(() => { estado.proyecto.muros = r.muros; });
       previaCalar = null;
-      mensaje(`Vano de ${String(calAncho).replace('.', ',')} m en ${idM} (${calTipo === 'dintel' ? 'puerta con dintel' : 'hueco a toda altura'}).`);
+      mensaje(`Hueco de ${String(calAncho).replace('.', ',')} m a toda altura en ${idM}.`);
       return;
     }
     if (modo === 'calibrar' && ev.button === 0 && estado.calco) {

@@ -18,6 +18,7 @@ import type { PiezaEquivalente } from './mapping';
 import type { ResultadoCorregido } from './correcciones';
 import { areaMuro, dInterior, factorPesoEspesor, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { propiedades } from './perfil';
+import { propsPoligonos, seccionDebil } from './aberturas';
 
 export const PE_HORMIGON = 2.4;       // t/m³
 export const Q_DESCARGADO = 0.7;      // t/m²
@@ -86,6 +87,16 @@ export function partesDePieza(muros: Muro[], dir: 'A' | 'B'): { partes: ParteMur
       // perfil: una parte con su J exacto; h = 2·c (la fibra real más alejada) para las tensiones de borde
       const k = propiedades(m.perfil!), c = dir === 'A' ? k.cA : k.cB;
       lista.push({ id: m.id, papel: 'alma', A: k.A, b: k.A / (2 * c), h: 2 * c, s: dir === 'A' ? m.y : m.x, Jp: dir === 'A' ? k.JA : k.JB });
+      continue;
+    }
+    if (m.aberturas?.length) {
+      // calado: en la sección más débil, cada pedazo que queda (con su J propio y su Steiner)
+      for (const pg of seccionDebil(m) ?? []) {
+        const k = propsPoligonos([pg]);
+        if (!(k.A > 0)) continue;
+        const ss = pg.map(q => (dir === 'A' ? q.y : q.x)), h = Math.max(...ss) - Math.min(...ss);
+        lista.push({ id: m.id, papel: 'alma', A: k.A, b: k.A / (h || 1), h, s: dir === 'A' ? k.yg : k.xg, Jp: dir === 'A' ? k.Jx : k.Jy });
+      }
       continue;
     }
     for (const r of rectangulos(m)) {

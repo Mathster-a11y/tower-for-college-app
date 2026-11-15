@@ -99,6 +99,11 @@ export interface Muro {
    */
   vano?: { con: string; ancho: number; tipo: 'dintel' | 'hueco' };
   /**
+   * calados que no parten el elemento (puertas y ventanas, en cada piso): el elemento sigue entero, con dintel y antepecho;
+   * el cálculo usa el J de la sección más débil (ver aberturas.ts)
+   */
+  aberturas?: import('./aberturas').Abertura[] | null;
+  /**
    * perfil irregular (tipo «perfil»): contorno cerrado con rectas, arcos y Bézier, y sus huecos, con los vértices
    * respecto del baricentro (x, y). largo, espesor y dir son los de su caja (para las tablas).
    */

@@ -19,6 +19,7 @@ import { N_FILAS, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
 import { detectarJuntas, huellasLimpias, propiedadesPoligonos } from './juntas';
+import { propsPoligonos, seccionDebil } from './aberturas';
 
 export type Direccion = 'A' | 'B';
 export type Papel = 'alma' | 'alma der.' | 'ala sup.' | 'ala inf.' | 'columna' | 'tubo' | 'perfil' | 'fuera del cálculo' | 'sin pieza';
@@ -259,6 +260,23 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
  * medio casi no suma J (está sobre el baricentro); subirlo al ala superior del molde lo puede multiplicar.
  */
 function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
+  // pieza con calados (puertas y ventanas que no la parten): el molde para los papeles y los colores, pero en la hoja J va
+  // el rectángulo equivalente de su sección más débil (mismo J y misma área que el corte por las aberturas)
+  if (muros.some(m => m.aberturas?.length)) {
+    const base = elegirPerfilSinCalados(nombre, dir, muros.map(m => ({ ...m, aberturas: null })), papeles);
+    if (base.molde === 'pórtico' || !Object.keys(base.fila).length) return base;
+    const J = Jreal(muros, dir);
+    const A = muros.reduce((q, m) => q + (m.aberturas?.length ? propsPoligonos(seccionDebil(m) ?? []).A : areaMuro(m)), 0);
+    if (!(J > 0 && A > 0)) return base;
+    const { b, h } = rectanguloEquivalente(J, A);
+    const f3 = (v: number) => v.toFixed(3).replace('.', ',');
+    const cal = muros.filter(m => m.aberturas?.length);
+    return { ...base, molde: 'simétrico', fila: { B: b, C: h }, Jreal: J, area: A,
+      avisos: [...base.avisos, `Calada (${cal.map(m => `${m.id}: ${m.aberturas!.length} abertura${m.aberturas!.length > 1 ? 's' : ''}`).join(', ')}): sigue entera, pero en la hoja J va su sección más débil (el corte por las aberturas): rectángulo equivalente de ${f3(b)} × ${f3(h)} m, J = ${f3(J)} m⁴.`] };
+  }
+  return elegirPerfilSinCalados(nombre, dir, muros, papeles);
+}
+function elegirPerfilSinCalados(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
   const pz = perfilEquivalente(nombre, dir, muros, papeles);
   if (!Object.keys(pz.fila).length || pz.molde === 'tubo' || pz.molde === 'pórtico') return pz;
   const clave = dir === 'A' ? 'rolA' : 'rolB';
@@ -304,6 +322,24 @@ function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: As
 export function Jreal(muros: Muro[], dir: Direccion): number {
   // perfiles: con sus propiedades exactas (como un círculo: A, J propio y posición)
   // muros que se encuentran (L, T, X): con su huella limpia (sin superposición ni hueco en la esquina)
+  const conCalados = muros.filter(m => m.aberturas?.length);
+  if (conCalados.length) {
+    // elementos calados: en su sección más débil (los pedazos que quedan, como polígonos), los demás como siempre
+    const deb = conCalados.flatMap(m => seccionDebil(m) ?? []).filter(pg => pg.length >= 3).map(pg => { const k = propsPoligonos([pg]); return { A: k.A, I: dir === 'A' ? k.Jx : k.Jy, s: dir === 'A' ? k.yg : k.xg }; });
+    const resto = muros.filter(m => !m.aberturas?.length);
+    const As = deb.reduce((q, c) => q + c.A, 0);
+    let Ar = 0, Sr = 0, Jr = 0, sgR = 0;
+    if (resto.length) {
+      // el resto, con su propio J y Steiner: se calcula con la misma función y se combina
+      Jr = Jreal(resto, dir);
+      resto.forEach(m => { const a = areaMuro(m); Ar += a; Sr += a * (dir === 'A' ? m.y : m.x); });
+      sgR = Ar > 0 ? Sr / Ar : 0;
+    }
+    const A = As + Ar;
+    if (!(A > 0)) return 0;
+    const sg = (deb.reduce((q, c) => q + c.A * c.s, 0) + Ar * sgR) / A;
+    return deb.reduce((q, c) => q + c.I + c.A * (c.s - sg) ** 2, 0) + (Ar > 0 ? Jr + Ar * (sgR - sg) ** 2 : 0);
+  }
   const limpias = huellasLimpias(muros, detectarJuntas(muros), {}, dir === 'A' ? 'A' : 'B');
   const deLimpias = [...limpias.values()].flat().filter(pg => pg.length >= 3).map(pg => { const k = propiedadesPoligonos([pg]); return { A: k.A, I: dir === 'A' ? k.Jx : k.Jy, s: dir === 'A' ? k.yg : k.xg }; });
   const perf = muros.filter(m => tipoDe(m) === 'perfil' && !limpias.has(m.id)).map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });
