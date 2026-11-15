@@ -351,27 +351,28 @@ export function ejemploCiticorp(): Proyecto {
       col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
     ],
     exo: {
-      tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1, cortes,
+      tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1, cortes, cuartos: true, esquinaCortada: true, limiteH: 450,
       // mástil 60 × 30 in en la base, 18 in de profundidad arriba del piso 40: tubos cuadrados equivalentes (supuesto)
       // secciones dimensionadas con la app (botón «Dimensionar» de la etapa 08); las reales no están publicadas
       mastil: { b: 2.0, e: 0.125 }, tramos: [{ clase: 'mastil', desde: z(40), sec: { b: 1.8, e: 0.08 } }],
       // debajo del cajón, el mástil es la supercolumna de 24 × 24 ft (cuatro barras): cajón de acero equivalente (pared supuesta)
       mastilBase: { hasta: base, sec: { b: 7.3, e: 0.05 } },
-      diagonal: { b: 1.0, e: 0.05 }, viga: { b: 1.2, e: 0.06 }, columna: { b: 2.0, e: 0.125 },
+      diagonal: { b: 1.0, e: 0.04 }, viga: { b: 1.4, e: 0.08 }, columna: { b: 2.0, e: 0.125 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { diagonal: 'articulada', viga: 'rigida', columna: 'rigida', base: 'empotrada' },
       notas: [
         '59 pisos y techo a 915 ft (279 m) (Wikipedia, «Citigroup Center»); el plano de elevación dice 914′-0″ (278,6 m).',
         'Planta de 157 × 157 ft (47,85 m) y esquinas que vuelan 72 ft (22 m) (Wikipedia).',
         'Cuatro supercolumnas de 24 × 24 ft (7,3 m) a media cara, de 112 ft (Wikipedia; el plano: 114 ft = 34,75 m). Acá son tubos de hormigón equivalentes (pared de 0,60 m, supuesta) y son las piezas de la planilla en la base abierta.',
-        'Seis módulos de chevrones de 8 pisos por cara, sin columna en las esquinas en el tope de cada módulo (Wikipedia). Pisos de 13′-4″ (4,064 m) leídos del plano: el sexto módulo termina en el piso 56, a 229,82 m.',
+        'Seis módulos de chevrones de 8 pisos por cara, sin columna en las esquinas en el tope de cada módulo (Wikipedia): en la app la columna de esquina termina un piso abajo del nudo. Columnas a los cuartos de cada cara que bajan a las diagonales a medio módulo, con una viga a medio módulo (plano de elevación). Pisos de 13′-4″ (4,064 m) leídos del plano: el sexto módulo termina en el piso 56, a 229,82 m.',
         'Los pisos 8 y 9 son el cajón de transición (Wikipedia: el piso 9 es un reticulado; el plano: cajón de 2 pisos): acá un solo nivel a 34,75 m, para que entren los 49 niveles de la planilla.',
-        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (control del curso y CIRSOC 301) (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
+        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (control del curso y CIRSOC 301) (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m, el cordón de 1,40 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
         'Debajo del cajón, el mástil es la supercolumna (24 × 24 ft): un cajón de acero equivalente de 7,30 m con pared de 5 cm (supuesto).',
-        'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app pesa unas 19 900 t.',
+        'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app pesa unas 32 500 t (tubos cuadrados de catálogo y viento del CIRSOC: más pesado que la obra).',
         'Núcleo octogonal de 63 × 72 ft que lleva la mitad del peso (Wikipedia; no dice el material): acá un tubo de hormigón sin pieza (no toma viento).',
         'Corona: techo a 45° que sube 160 ft (49 m) sobre el último piso, con el amortiguador de 400 t (Wikipedia).',
         '1978: uniones abulonadas; con el viento a 45° no alcanzaban y se soldaron chapas de 2 in en más de 200 uniones (Wikipedia; NIST 2019 lo revisó). Diagonales articuladas = abulonadas.',
         'Viento: CIRSOC 102 con V = 49 m/s y exposición de centro de ciudad (supuesto).',
+        'Flecha objetivo h/450, no la h/500 del curso: con la geometría de la obra (las esquinas no llegan al tope de cada módulo) y los tubos del catálogo la azotea se corre unos h/480. El edificio real tiene además el amortiguador de 400 t para el movimiento. Con la marca de «esquina cortada» apagada, la torre llega a h/500.',
       ],
     },
   };

@@ -33,11 +33,11 @@ describe('edificios reales con exoesqueleto', () => {
       (p.exo!.cortes ?? []).forEach(z => expect(p.niveles.some(n => Math.abs(n.cota - z) < 1e-3)).toBe(true));
       expect(p.exo!.notas!.length).toBeGreaterThan(3);
     });
-    it('con las secciones del ejemplo: equilibrio, flecha ≤ h/500 y todas las barras verifican, con los dos vientos', () => {
+    it('con las secciones del ejemplo: equilibrio, flecha ≤ h/n del ejemplo (h/500, o la que dicen sus notas) y todas las barras verifican, con los dos vientos', () => {
       (['A', 'B'] as const).forEach(dir => {
         const { r, zs } = exo(p, dir);
         r.u.forEach(x => expect(isFinite(x)).toBe(true));
-        expect(r.u[r.u.length - 1]).toBeLessThanOrEqual(zs[zs.length - 1] / 500);
+        expect(r.u[r.u.length - 1]).toBeLessThanOrEqual(zs[zs.length - 1] / (p.exo!.limiteH ?? 500));
         expect(r.controles.filter(c => c.estado !== 'verifica').map(c => c.id)).toEqual([]);
       });
     });

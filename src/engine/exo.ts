@@ -60,6 +60,13 @@ export interface ExoDef {
   pisoInicio?: number; mastil?: Seccion;
   /** ficha E: debajo del primer módulo el mástil es otra pieza (Citicorp: la supercolumna de 7,3 m), hasta la cota «hasta» */
   mastilBase?: { hasta: number; sec: Seccion };
+  /**
+   * ficha E, como el Citicorp: columnas a los cuartos de la cara que bajan a las diagonales a medio módulo (ahí la
+   * diagonal tiene un nudo) y una viga a medio módulo de cuarto a cuarto pasando por el mástil
+   */
+  cuartos?: boolean;
+  /** ficha E: la columna de esquina termina un piso abajo del nudo del tope de cada módulo (no llega a la esquina) */
+  esquinaCortada?: boolean;
   /** cambios barra por barra, por el id de la barra (se borran si cambia la ficha o el módulo) */
   barras?: Record<string, CambioBarra>;
   /** barras agregadas a mano entre dos nudos de la cara (s, z en m); su id es N1, N2… */
@@ -203,11 +210,52 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     // mástil central de la base a la azotea; esquinas desde el primer módulo (abajo vuelan); V por módulo y viga en cada borde
     for (let k = 0; k < n; k++) barra('columna', nudo(0, k), nudo(0, k + 1), def.mastil ?? def.columna, 'mastil');
     // esquinas desde el primer piso del exo (el primer tramo cuelga del chevron de arriba)
-    for (const lado of [S0, S1]) for (let k = mods[0]; k < n; k++) barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
+    // columna de esquina cortada: no llega al nudo del tope de cada módulo (el último piso de cada módulo no la tiene);
+    // cada tramo se apoya abajo en el nudo del tope del módulo de abajo. En el primer módulo no hay nudo abajo (ahí está
+    // la transición sobre las supercolumnas): su columna sigue hasta el nudo de arriba y cuelga de él.
+    const topes = new Set(mods.slice(2));
+    for (const lado of [S0, S1]) for (let k = mods[0]; k < n; k++) {
+      if (def.esquinaCortada && topes.has(k + 1)) continue;
+      barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
+    }
+    const kMedio = (a0: number, a1: number) => { const zm = (zs[a0] + zs[a1]) / 2; let mejor = a0; zs.forEach((z, k) => { if (k > a0 && k < a1 && Math.abs(z - zm) < Math.abs(zs[mejor] - zm)) mejor = k; }); return mejor; };
     for (let j = 0; j + 1 < mods.length; j++) {
       const a0 = mods[j], a1 = mods[j + 1];
-      barra('diagonal', nudo(S0(a1), a1), nudo(0, a0)); barra('diagonal', nudo(S1(a1), a1), nudo(0, a0));
+      if (def.cuartos && a1 - a0 >= 2) {
+        // la diagonal pasa por el cuarto de la cara a medio módulo: ahí tiene un nudo (en un piso, si cae en uno)
+        const km = kMedio(a0, a1), zm = zs[km], t = (zm - zs[a0]) / (zs[a1] - zs[a0]);
+        for (const lado of [S0, S1]) {
+          const sq = lado(a1) * t, q = nudo(sq, km);
+          barra('diagonal', nudo(lado(a1), a1), q); barra('diagonal', q, nudo(0, a0));
+        }
+        // viga a medio módulo de cuarto a cuarto, pasando por el mástil
+        barra('viga', nudo(S0(a1) * t, km), nudo(0, km)); barra('viga', nudo(0, km), nudo(S1(a1) * t, km));
+      } else {
+        barra('diagonal', nudo(S0(a1), a1), nudo(0, a0)); barra('diagonal', nudo(S1(a1), a1), nudo(0, a0));
+      }
       barra('viga', nudo(S0(a1), a1), nudo(0, a1)); barra('viga', nudo(0, a1), nudo(S1(a1), a1));
+    }
+    // columnas a los cuartos: del nudo a medio módulo del primer módulo hasta arriba, piso por piso (llevan las losas a
+    // las diagonales); se cruzan con las vigas del tope de cada módulo
+    if (def.cuartos && mods.length >= 2 && mods[1] - mods[0] >= 2) {
+      const k1 = kMedio(mods[0], mods[1]), t = (zs[k1] - zs[mods[0]]) / (zs[mods[1]] - zs[mods[0]]);
+      for (const lado of [S0, S1]) {
+        const s = lado(mods[1]) * t;
+        for (let k = k1; k < kTope; k++) {
+          // en el tope de cada módulo la columna toca la viga de borde en el cuarto: nudo propio sobre la viga
+          barra('columna', nudo(s, k), nudo(s, k + 1));
+        }
+      }
+      // las vigas del tope de cada módulo pasan por los nudos de los cuartos (se parten ahí)
+      for (let i = barras.length - 1; i >= 0; i--) {
+        const b = barras[i];
+        if (b.clase !== 'viga') continue;
+        const A = nudos[b.a], B = nudos[b.b];
+        if (A.piso < 0 || A.piso !== B.piso) continue;
+        const enCuarto = nudos.find(q => q.piso === A.piso && q.id !== A.id && q.id !== B.id && Math.min(A.s, B.s) < q.s - 1e-9 && q.s < Math.max(A.s, B.s) - 1e-9 && barras.some(c => c.clase === 'columna' && (c.a === q.id || c.b === q.id)));
+        if (!enCuarto) continue;
+        barras.splice(i, 1, { ...b, id: b.id, b: enCuarto.id }, { ...b, id: `${b.id}b`, a: enCuarto.id });
+      }
     }
     // alas del tubo: los mástiles de las dos caras perpendiculares quedan en s = ±ancho/2 (en el sentido del viento) y
     // reciben de sus chevrones lo que bajan las esquinas; cada uno lo comparten dos caras paralelas → la mitad acá
@@ -316,10 +364,12 @@ const ceros = (r: number, c: number): Mat => Array.from({ length: r }, () => new
 /** resuelve A·X = B (B con varias columnas) por eliminación de Gauss con pivoteo parcial; A y B se copian */
 function resolver(A0: Mat, B0: Mat): Mat {
   const n = A0.length, A = A0.map(f => [...f]), B = B0.map(f => [...f]), m = B[0]?.length ?? 0;
+  // pivote nulo respecto de la escala de la matriz (un mecanismo deja un resto de redondeo, no un cero exacto)
+  const escala = A0.reduce((mx, f, i) => Math.max(mx, Math.abs(f[i])), 0), cero = Math.max(1e-14, escala * 1e-13);
   for (let c = 0; c < n; c++) {
     let p = c;
     for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
-    if (Math.abs(A[p][c]) < 1e-14) throw new Error('El exoesqueleto es un mecanismo (falta una barra para que sea estable).');
+    if (Math.abs(A[p][c]) < cero) throw new Error('El exoesqueleto es un mecanismo (falta una barra para que sea estable).');
     [A[c], A[p]] = [A[p], A[c]]; [B[c], B[p]] = [B[p], B[c]];
     for (let r = c + 1; r < n; r++) {
       const f = A[r][c] / A[c][c];
@@ -457,7 +507,10 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     return { b, A, B, r, g };
   });
   // giros sin rigidez (nudos donde todas las barras llegan articuladas): se fijan (no cambia nada)
-  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < 1e-12) { Kg[i][i] = 1; Fg[i] = 0; }
+  // (con las articulaciones condensadas, ese giro puede quedar con un resto de redondeo: se compara con la rigidez típica)
+  const maxDiag = Kg.reduce((m, f, i) => (i >= nPisos ? Math.max(m, Math.abs(f[i])) : m), 0);
+  const umbral = Math.max(1e-12, maxDiag * 1e-11);
+  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < umbral && Kg[i].every((v, j) => j === i || Math.abs(v) < umbral)) { Kg[i].fill(0); Kg.forEach(f => { f[i] = 0; }); Kg[i][i] = 1; Fg[i] = 0; }
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
   const c = condensar(Kg, master, esc);
   const Fs = esc.map(i => [Fg[i]]);
@@ -657,6 +710,8 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
     // en la ficha E las columnas que fallan pueden ser el mástil (es una columna): crece con ellas
     if (conMastil && (falla.columna || flecha) && idx.mastil < ult) { idx.mastil++; movio = true; }
     if (flecha && !falla.columna && !falla.diagonal) (['columna', 'diagonal'] as const).forEach(k => { if (idx[k] < ult) { idx[k]++; movio = true; } });
+    // la clase que falla ya está en el tubo más grande: se agrandan las otras (las diagonales y las vigas le sacan carga)
+    if (!movio && (falla.columna || falla.diagonal || falla.viga || flecha)) (['diagonal', 'viga', 'columna'] as const).forEach(k => { if (!movio && idx[k] < ult) { idx[k]++; movio = true; } });
     if (!movio) return { def, verifica: false, peso: pesoExo(def, entradas), pasos: paso, motivo: 'ni el tubo más grande del catálogo alcanza: probá otra ficha, otro módulo o más separación' };
   }
   const def = armar();

@@ -263,6 +263,12 @@ export function panelExo(c: H) {
   const pp = h('label', { class: 'campo-linea' }); const cbp = h('input', { type: 'checkbox' }) as HTMLInputElement; cbp.checked = def.pesoPropio !== false;
   cbp.addEventListener('change', () => set(x => { x.pesoPropio = cbp.checked; })); pp.append(cbp, ' Peso propio del acero (carga repartida en cada barra)');
   fu.append(pp);
+  // ficha E como el Citicorp: columnas a los cuartos y columna de esquina que no llega al tope de cada módulo
+  if (def.tipo === 'E') {
+    const tilde = (txt: string, titulo: string, on: boolean, f: (x: ExoDef, v: boolean) => void) => { const l = h('label', { class: 'campo-linea', title: titulo }); const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = on; cb.addEventListener('change', () => set(x => { f(x, cb.checked); delete x.barras; })); l.append(cb, ' ', txt); return l; };
+    fu.append(tilde('Columnas a los cuartos de la cara', 'Bajan a las diagonales a medio módulo (ahí la diagonal tiene un nudo), con una viga a medio módulo de cuarto a cuarto (Citicorp)', !!def.cuartos, (x, v) => { x.cuartos = v || undefined; }),
+      tilde('La columna de esquina no llega al tope de cada módulo', 'Termina un piso abajo del nudo del chevron, como en el Citicorp (en el primer módulo cuelga del nudo de arriba)', !!def.esquinaCortada, (x, v) => { x.esquinaCortada = v || undefined; }));
+  }
   const nCamb = Object.keys(def.barras ?? {}).length;
   if (nCamb) { const bl = h('button', { type: 'button' }, `Borrar los cambios de ${nCamb} barra${nCamb > 1 ? 's' : ''}`); bl.addEventListener('click', () => set(x => { delete x.barras; })); fu.append(bl); }
   c.append(seccion('Uniones y cargas', fu).el);

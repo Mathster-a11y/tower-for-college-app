@@ -135,3 +135,23 @@ describe('controles cruzados entre motores', () => {
     expect(Math.abs(r.uSin[n - 1] / dfm.dTop - 1)).toBeLessThan(0.005);
   });
 });
+
+describe('ficha E como el Citicorp', () => {
+  it('columnas a los cuartos, viga a medio módulo y esquina cortada: estable, en equilibrio y con la geometría del plano', () => {
+    const zs = Array.from({ length: 25 }, (_, i) => i * 4), W = zs.slice(1).map(() => 6);
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'E', modulo: 8, pisoInicio: 0, pesoPropio: false, cuartos: true, esquinaCortada: true, mastil: { b: 2, e: 0.1 }, columna: { b: 1, e: 0.05 }, diagonal: { b: 0.8, e: 0.04 }, viga: { b: 0.9, e: 0.04 } };
+    const c = armarCara(def, 48, zs);
+    // en el tope de cada módulo (pisos 8, 16 y 24) no llega la columna de esquina
+    const esq = c.barras.filter(b => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && Math.abs(Math.abs(c.nudos[b.a].s) - 24) < 1e-6);
+    [16, 24].forEach(k => expect(esq.some(b => c.nudos[b.b].piso === k)).toBe(false));
+    expect(esq.some(b => c.nudos[b.b].piso === 8)).toBe(true);      // el primer módulo cuelga del nudo de arriba
+    // columnas a los cuartos (s = ±12) desde el medio del primer módulo
+    const cu = c.barras.filter(b => b.clase === 'columna' && Math.abs(Math.abs(c.nudos[b.a].s) - 12) < 1e-6);
+    expect(cu.length).toBe(2 * (24 - 4));
+    // la diagonal tiene nudo en el cuarto a medio módulo
+    expect(c.barras.filter(b => b.clase === 'diagonal').length).toBe(3 * 4);
+    const r = calcularExo(def, zs, W, () => 3e6 * 40, 48, [-24, 24], 3e6);
+    r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 6));
+    r.u.forEach(x => expect(isFinite(x)).toBe(true));
+  });
+});
