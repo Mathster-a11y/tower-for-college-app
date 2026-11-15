@@ -38,7 +38,8 @@ export interface FibrasPieza {
 
 /** datos de altura como si la «PB» fuera el nivel z (para reutilizar la cuenta de PB) */
 export function alturaDesde(alt: DatosAltura, z: number): DatosAltura {
-  return { ...alt, zPB: z, cotasSobrePB: alt.cotasSobrePB.filter(c => c > z + 1e-6) };
+  const keep = alt.cotasSobrePB.map(c => c > z + 1e-6);
+  return { ...alt, zPB: z, cotasSobrePB: alt.cotasSobrePB.filter((_, i) => keep[i]), pisosSobrePB: alt.pisosSobrePB?.filter((_, i) => keep[i]) };
 }
 
 /**

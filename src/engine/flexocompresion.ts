@@ -67,7 +67,9 @@ export interface VerifPieza {
   avisos: string[];
 }
 
-export interface DatosAltura { zPB: number; zTop: number; zFund: number; cotasSobrePB: number[]; }
+export interface DatosAltura { zPB: number; zTop: number; zFund: number; cotasSobrePB: number[];
+  /** pisos reales de cada cota de cotasSobrePB (niveles que juntan varios pisos: una losa por piso real) */
+  pisosSobrePB?: number[]; }
 
 /** Partes de una pieza en el sentido del viento (s = y para el viento A, x para el B), con su baricentro y J. */
 export function partesDePieza(muros: Muro[], dir: 'A' | 'B'): { partes: ParteMuro[]; J: number; circular: { D: number; d: number } | null } {
@@ -104,7 +106,8 @@ export function alturaYLosas(m: Muro, alt: DatosAltura): { altura: number; losas
   const top = Math.min(m.zHasta ?? alt.zTop, alt.zTop);
   // con espesor por tramos, la «altura» del peso propio es la equivalente a la sección de PB: Σ A(z)·Δz / A_PB
   const altura = Math.max(0, top - alt.zPB) * factorPesoEspesor(m, alt.zPB, top);
-  const losas = alt.cotasSobrePB.filter(z => z <= top + 1e-6 && presenteEnOLlega(m, z, alt)).length;
+  // una losa por piso real: un nivel que junta varios pisos carga sus losas
+  const losas = alt.cotasSobrePB.reduce((n, z, i) => n + (z <= top + 1e-6 && presenteEnOLlega(m, z, alt) ? alt.pisosSobrePB?.[i] ?? 1 : 0), 0);
   return { altura, losas };
 }
 const presenteEnOLlega = (m: Muro, z: number, alt: DatosAltura) => presenteEn(m, z, alt.zFund, alt.zTop) || Math.abs((m.zHasta ?? alt.zTop) - z) < 1e-6;
@@ -170,7 +173,8 @@ export function datosAlturaDe(p: Proyecto): DatosAltura {
   const niv = p.niveles;
   const iPB = niv.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const zPB = iPB >= 0 ? niv[iPB].cota : 0;
-  return { zPB, zTop: niv[0]?.cota ?? 0, zFund: niv[niv.length - 1]?.cota ?? 0, cotasSobrePB: niv.filter(n => n.cota > zPB + 1e-6).map(n => n.cota) };
+  const sobre = niv.filter(n => n.cota > zPB + 1e-6);
+  return { zPB, zTop: niv[0]?.cota ?? 0, zFund: niv[niv.length - 1]?.cota ?? 0, cotasSobrePB: sobre.map(n => n.cota), pisosSobrePB: sobre.map(n => Math.max(1, Math.round(n.pisos ?? 1))) };
 }
 
 /**

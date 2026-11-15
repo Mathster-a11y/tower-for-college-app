@@ -86,3 +86,15 @@ describe('fibras con exoesqueleto', () => {
     }));
   });
 });
+
+describe('niveles que juntan pisos', () => {
+  it('una losa por piso real: un nivel de 2 pisos carga el doble de losa', () => {
+    const p = ejemploGuia();
+    const { asig, corr } = base(p);
+    const a = verificarDireccion(p, asig.piezas, corr, asig.filaNivel, 'A', 300)[0].muros[0];
+    p.niveles.forEach(n => { if (n.cota > 0) n.pisos = 2; });
+    const b = verificarDireccion(p, asig.piezas, corr, asig.filaNivel, 'A', 300)[0].muros[0];
+    expect(b.losaDesc).toBeCloseTo(2 * a.losaDesc, 9);
+    expect(b.Pp).toBeCloseTo(a.Pp, 9);
+  });
+});

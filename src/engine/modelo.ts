@@ -16,6 +16,11 @@ export interface Nivel {
   nombre: string;
   /** cota del NPT (m) */
   cota: number;
+  /**
+   * pisos reales que junta este nivel (vacío = 1). La planilla admite 49 niveles sobre PB: en una torre más alta cada
+   * nivel puede representar varios pisos (su losa carga como esos pisos; el viento es el de su faja, igual que siempre)
+   */
+  pisos?: number | null;
   /** medida de la planta perpendicular al viento A (m); vacío = igual a la del nivel de arriba */
   B?: number | null;
   /** medida de la planta paralela al viento A (m); vacío = igual a la del nivel de arriba */
@@ -311,7 +316,7 @@ export function ejemploCiticorp(): Proyecto {
   const z = (piso: number) => +(base + paso * (piso - 8)).toFixed(2);
   const niveles: Nivel[] = [{ nombre: 'Corona (pisos técnicos y amortiguador)', cota: 278.6, B: lado, L: lado }];
   for (let piso = 56; piso >= 10; piso--) niveles.push({ nombre: piso === 56 ? '56º (último piso de oficinas)' : `${piso}º`, cota: z(piso) });
-  niveles.push({ nombre: '8º–9º (cajón de transición sobre las supercolumnas)', cota: base });
+  niveles.push({ nombre: '8º–9º (cajón de transición sobre las supercolumnas)', cota: base, pisos: 2 });
   niveles.push({ nombre: 'PB (plaza)', cota: 0 }, { nombre: 'Subsuelo', cota: -9, B: lado, L: lado });
   const d = lado / 2 - 3.65;     // centro de cada supercolumna: a 3,65 m de la cara
   // la mitad del peso de cada losa (47,85² = 2290 m²) baja por el núcleo y la otra mitad por las cuatro supercolumnas

@@ -3,7 +3,7 @@
  *
  * Hojas (todas con encabezados en la fila 1; el orden de las columnas no importa al leer):
  *  - «T3D Proyecto»: nombre, alumno, hormigón, fundación y datos del viento.
- *  - «T3D Niveles»: nombre, cota, B y L de cada nivel.
+ *  - «T3D Niveles»: nombre, cota, B y L de cada nivel y los pisos reales que junta (torres de más de 49 pisos).
  *  - «T3D Muros»: todos los datos de cada muro (los de siempre y los de grupos, piezas tipo, vanos y moldes).
  *  - «T3D Contornos»: vértices de perfiles irregulares, siluetas y carpinterías de los niveles, huecos de losa y caminos.
  *  - «T3D Grupos», «T3D Huecos de losa», «T3D Caminos», «T3D Cotas», «T3D Guías».
@@ -97,7 +97,7 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   const out: Tabla[] = [];
   out.push({ nombre: T.proyecto, anchos: [26, 16, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS.map(([k, q, g]) => [k, g(p) ?? null, q] as Valor[]),
     [], ['Estas hojas «T3D …» guardan la torre completa: con ellas la app vuelve a armar el proyecto. Se pueden editar; la app las lee al abrir la planilla.']] });
-  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null])] });
+  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null])] });
   out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30], filas: [CAB_MUROS, ...p.muros.map(m => [
     m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? SI : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
     TIPO_TXT[m.tipo ?? 'tabique'], m.tipo === 'tubo-rect' ? m.ladoY ?? null : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta),
@@ -153,6 +153,8 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
     const B = num(g('B (m)')), L = num(g('L (m)'));
     if (B !== null) n.B = B;
     if (L !== null) n.L = L;
+    const ps = num(g('Pisos reales'));
+    if (ps !== null && ps > 1) n.pisos = Math.round(ps);
     return n;
   });
   const cotaDe = (v: Valor, quien: string): number | null => {

@@ -96,7 +96,7 @@ export function panelNiveles(c: H) {
   }));
   gen.append(h('span', {}, 'Generar:'), nP, h('span', {}, 'pisos de'), hT, h('span', {}, 'm, PB de'), hPB, h('span', {}, 'm y'), nS, h('span', {}, 'subsuelos'), bGen);
   c.append(gen);
-  c.append(h('p', { class: 'nota' }, 'Como en Excel: elegí celdas con el mouse o Mayús + flechas, escribí encima, arrastrá el cuadradito de la esquina para copiar o seguir la serie (cotas: elegí dos y arrastrá), Ctrl+C / Ctrl+V para copiar y pegar desde Excel, Supr para borrar.'));
+  c.append(h('p', { class: 'nota' }, 'Como en Excel: elegí celdas con el mouse o Mayús + flechas, escribí encima, arrastrá el cuadradito de la esquina para copiar o seguir la serie (cotas: elegí dos y arrastrá), Ctrl+C / Ctrl+V para copiar y pegar desde Excel, Supr para borrar. «Pisos»: en torres de más de 49 pisos, cuántos pisos reales junta el nivel (cada uno suma su losa al peso).'));
   const numCol = (titulo: string, clave: 'cota' | 'B' | 'L', opcional: boolean): Columna<Nivel> => ({
     titulo, clave, tipo: 'numero',
     leer: n => n[clave] ?? null,
@@ -105,6 +105,8 @@ export function panelNiveles(c: H) {
   c.append(grilla<Nivel>([
     { titulo: 'Nivel', clave: 'nombre', leer: n => n.nombre, escribir: (n, v) => { n.nombre = v.trim(); } },
     numCol('Cota (m)', 'cota', false), numCol('B (m)', 'B', true), numCol('L (m)', 'L', true),
+    { titulo: 'Pisos', clave: 'pisos', tipo: 'numero', leer: n => (n.pisos && n.pisos > 1 ? n.pisos : null),
+      escribir: (n, v) => { const x = aNumero(v); if (x === null || x <= 1) { delete n.pisos; return; } if (Number.isNaN(x)) return false; n.pisos = Math.round(x); } },
   ], { id: 'niveles', filas: () => estado.proyecto.niveles, nueva: () => { const u = estado.proyecto.niveles.at(-1); return { nombre: '', cota: +((u?.cota ?? 0) - 3).toFixed(2) }; } }));
   const acc = h('div', { class: 'fila-acciones' });
   const ins = h('button', { type: 'button' }, 'Insertar fila');

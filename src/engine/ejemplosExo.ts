@@ -37,10 +37,10 @@ export function ejemploHancock(): Proyecto {
   const paso = 25;                                    // ft: un nivel de la app cada 25 ft ≈ 2,2 pisos reales
   const niveles: Nivel[] = [];
   const piso = (zft: number) => Math.max(1, Math.round(zft / (1100 / 97)) + 1);   // piso real aproximado
-  niveles.push({ nombre: 'Azotea (piso 100)', cota: r2(1127 * FT), B: r2(ancha(1100) * FT), L: r2(angosta(1100) * FT) });
+  niveles.push({ nombre: 'Azotea (pisos 99–100)', cota: r2(1127 * FT), B: r2(ancha(1100) * FT), L: r2(angosta(1100) * FT), pisos: 100 - piso(1100) });
   for (let zft = 1100; zft >= paso; zft -= paso) {
     const p0 = piso(zft - paso) + 1, p1 = piso(zft);
-    niveles.push({ nombre: p1 > p0 ? `${p0}º–${p1}º` : `${p1}º`, cota: r2(zft * FT), B: r2(ancha(zft) * FT), L: r2(angosta(zft) * FT) });
+    niveles.push({ nombre: p1 > p0 ? `${p0}º–${p1}º` : `${p1}º`, cota: r2(zft * FT), B: r2(ancha(zft) * FT), L: r2(angosta(zft) * FT), pisos: Math.max(1, p1 - p0 + 1) });
   }
   niveles.push({ nombre: 'PB', cota: 0, B: r2(ancha(0) * FT), L: r2(angosta(0) * FT) }, { nombre: 'Subsuelo', cota: -6 });
   const cortes = [0, 200, 400, 600, 800, 1000, 1100].map(z => r2(z * FT));
@@ -122,7 +122,7 @@ export function ejemploHearst(): Proyecto {
 export function ejemploOnterie(): Proyecto {
   const B = 48, L = 26, h = 174, n = 30, dz = h / n;                         // un nivel cada 2 pisos
   const niveles: Nivel[] = [];
-  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea (pisos 59–60)' : `${2 * k - 1}º–${2 * k}º`, cota: r2(k * dz), ...(k === n ? { B, L } : {}) });
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea (pisos 59–60)' : `${2 * k - 1}º–${2 * k}º`, cota: r2(k * dz), pisos: 2, ...(k === n ? { B, L } : {}) });
   niveles.push({ nombre: 'PB', cota: 0, B, L }, { nombre: 'Subsuelo', cota: -5 });
   return {
     version: 1,

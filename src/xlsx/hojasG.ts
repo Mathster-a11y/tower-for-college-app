@@ -152,6 +152,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     'G · Sección real: área, baricentro y J de cada pieza con todos sus muros y su Steiner (lo que la hoja J aproxima con el molde).',
     'G · Rotación muro por muro: eje de inercia, e, Mt y Σ J·a² con las piezas y los muros perpendiculares (criterio de la guía).',
     'G · Peso por muro: peso propio y losas que bajan por cada muro en PB.',
+    'G · Niveles agrupados (torres de más de 49 pisos): qué pisos reales junta cada nivel y el peso de las losas con una losa por piso real.',
     'G · Exoesqueleto y G · Balance tabiques + exo (si la torre tiene exo): reparto del viento entre tabiques y exoesqueleto, piso por piso, y el momento que les queda a los tabiques y a cada pieza.',
     'G · Planta: los muros de «T3D Muros» dibujados (se actualiza al cambiar la tabla).',
     'G · Perfiles y áreas (app): perfiles irregulares y áreas de influencia, calculados por la app.',
@@ -501,6 +502,44 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     hojas.push(ba);
   }
 
+  // --- G · Niveles agrupados: torres de más de 49 pisos (cada nivel de la planilla junta varios pisos reales)
+  if (p.niveles.some(nv => (nv.pisos ?? 1) > 1)) {
+    const NA = 'G · Niveles agrupados';
+    const na = new Hoja(NA, [24, 8, 8, 9, 10, 10, 10, 11, 11, 12, 12]);
+    na.p('A1', 'Niveles agrupados: qué pisos reales junta cada nivel de la planilla', 'tit');
+    na.p('A2', 'La planilla admite 49 niveles sobre PB. En una torre más alta, cada nivel de la app junta varios pisos reales (lo dice su nombre y la columna «pisos»). Esta hoja lee «M,NyQ» sin cambiarla y muestra qué cambia y qué no.', 'nota');
+    na.p('A3', 'El viento no cambia: la faja de cada nivel (h) cubre los pisos que junta y Wi = h·B·p, igual que antes. El corte y el momento en la cota de cada nivel son exactos (entre dos niveles no se ven). Lo que la planilla cuenta de menos es el peso de las losas: pone una por nivel. Las columnas verdes lo corrigen con una losa por piso real (la app ya lo hace en la flexocompresión y en las fibras).', 'nota');
+    ['Nivel', 'z (m)', 'pisos', 'h (m)', 'h de cada piso (m)', 'Wi (t)', 'Wi por piso (t)', 'Q (t)', 'M (tm)', 'peso del nivel, planilla (t)', 'peso con los pisos reales (t)'].forEach((t, j) => na.p(`${col(j + 1)}5`, t, 'h'));
+    const zPB = p.niveles.reduce((k, nv) => (nv.cota >= 0 ? nv.cota : k), 0);
+    const filas = p.niveles.map((nv, j) => ({ nv, fm: nivRows[j] })).filter(x => x.fm !== undefined && x.nv.cota >= zPB - 1e-6);
+    const r0 = 6, r1 = r0 + filas.length - 1;
+    filas.forEach(({ nv, fm }, i) => {
+      const r = r0 + i, m = (c: string, f = fm) => `'M,NyQ'!${c}${f}`;
+      const pisos = nv.cota > zPB + 1e-6 ? Math.max(1, Math.round(nv.pisos ?? 1)) : 0;
+      na.p(`A${r}`, nv.nombre); na.p(`B${r}`, `=${m('B')}`, 'n3'); na.p(`C${r}`, pisos, 'n3');
+      na.p(`D${r}`, `=${m('C')}`, 'n3'); na.p(`E${r}`, `=IF(C${r}>0,D${r}/C${r},"")`, 'r3');
+      na.p(`F${r}`, `=${m('H')}`, 'n3'); na.p(`G${r}`, `=IF(C${r}>0,F${r}/C${r},"")`, 'r3');
+      na.p(`H${r}`, `=${m('I')}`, 'n3'); na.p(`I${r}`, `=${m('J')}`, 'n3');
+      // peso de la losa del nivel: lo que suma N (columna M) entre este nivel y el de arriba
+      na.p(`J${r}`, i === 0 ? `=${m('M')}` : `=${m('M')}-${m('M', filas[i - 1].fm)}`, 'r3');
+      na.p(`K${r}`, `=J${r}*MAX(1,C${r})`, 'r3');
+    });
+    const rr = r1 + 2;
+    na.p(`A${rr}`, 'Resumen', 'sub');
+    const res: [string, string, Estilo][] = [
+      ['niveles sobre PB', `=COUNTIF(C${r0}:C${r1},">0")`, 'r3'],
+      ['pisos reales sobre PB', `=SUM(C${r0}:C${r1})`, 'r3'],
+      ['altura de PB a la azotea (m)', `=B${r0}-B${r1}`, 'r3'],
+      ['peso P de la planilla (M,NyQ, t)', `=SUM(J${r0}:J${r1})`, 'r3'],
+      ['peso P con una losa por piso real (t)', `=SUM(K${r0}:K${r1})`, 'r3'],
+      ['la planilla cuenta de menos', `=IF(D${rr + 5}=0,"",1-D${rr + 4}/D${rr + 5})`, 'pc'],
+    ];
+    res.forEach(([t, v, st], j) => { na.p(`A${rr + 1 + j}`, t, 't'); na.p(`D${rr + 1 + j}`, v, st); });
+    na.p(`A${rr + 8}`, 'El peso que falta estabiliza: el vuelco de la planilla queda del lado de la seguridad, pero la compresión en el suelo y en la base de los muros queda subestimada. La app usa el peso con los pisos reales (flexocompresión y fibras).', 'nota');
+    na.graficos.push({ tipo: 'barras', titulo: 'Pisos reales que junta cada nivel', ejeX: 'nivel', ejeY: 'pisos', desde: [12, 4], hasta: [22, 24], series: [{ nombre: 'pisos', x: ref(NA, 'A', r0, r1), y: ref(NA, 'C', r0, r1), color: '1A6BBD' }] });
+    hojas.push(na);
+  }
+
   // --- G · Dibujos de la app (carta y dibujos de cada etapa, como imágenes)
   if (o.imagenes?.length) {
     const di = new Hoja('G · Dibujos de la app', [100]);
@@ -521,7 +560,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
 /** orden final: cada hoja «G ·» al lado de la original con la que trabaja; las «T3D …» al final */
 const ORDEN = ['Léame', 'viento', 'G · Viento corregido', 'M,NyQ', 'G · Carta de la torre', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'G · Sección real',
   'G · Planta', 'G · Perfiles y áreas (app)', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'G · Rotación muro por muro', 'Flex comp PB paralelos', 'G · Peso por muro',
-  'G · Exoesqueleto', 'G · Balance tabiques + exo', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
+  'G · Exoesqueleto', 'G · Balance tabiques + exo', 'G · Niveles agrupados', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
 
 /** agrega las hojas «G ·» (o las reemplaza si la planilla ya las tenía) con sus gráficos e imágenes, y ordena el libro */
 export async function agregarHojasG(zip: JSZip, p: Proyecto, o: OpcionesG, agregarHoja: (nombre: string, xml: string) => Promise<string>): Promise<void> {

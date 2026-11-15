@@ -99,3 +99,15 @@ describe('escribir la planilla del curso y volver a abrirla', () => {
     void sinJson;
   });
 });
+
+import { ejemploHancock } from '../engine/ejemplosExo';
+describe('niveles agrupados', () => {
+  it('los pisos reales de cada nivel van y vuelven por «T3D Niveles»', async () => {
+    const p = ejemploHancock();
+    const t = tablasProyecto(p).find(x => x.nombre === 'T3D Niveles')!;
+    expect(t.filas[0]).toContain('Pisos reales');
+    const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(p))), ejemploGuia())!;
+    expect(r.proyecto.niveles.map(n => n.pisos ?? 1)).toEqual(p.niveles.map(n => n.pisos ?? 1));
+    expect(r.proyecto.niveles.filter(n => n.cota > 0).reduce((a, n) => a + (n.pisos ?? 1), 0)).toBe(99);
+  });
+});
