@@ -1,9 +1,10 @@
+import { envolverPiezas } from '../engine/grupos';
 import { ejemploGuia, normalizarProyecto, type Proyecto } from '../engine/modelo';
 import { aPlanilla, type Asignacion } from '../engine/mapping';
 import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
 import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
 import { controles, type Control } from '../engine/verificaciones';
-import { protegerBloqueados, sincronizarComponentes } from '../engine/grupos';
+import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
 
 export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
@@ -20,6 +21,8 @@ export function calcularProyecto(proyecto: Proyecto): Calculo {
 }
 type Oyente = () => void;
 
+/** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
+const nombrePieza = (g: string, ms: import('../engine/modelo').Muro[]) => `${ms[0].pieza?.tipo ? `${ms[0].pieza.tipo[0].toUpperCase()}${ms[0].pieza.tipo.slice(1)} ` : 'Pieza '}${g}`;
 class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
@@ -95,8 +98,11 @@ class Estado {
     if (this.proyecto.grupos?.length) {
       const previo = this.ultimo ? JSON.parse(this.ultimo) as Proyecto : null;
       const n = protegerBloqueados(previo, this.proyecto);
+      const nf = protegerFijos(previo, this.proyecto);
       const hechos = sincronizarComponentes(previo, this.proyecto);
-      this.avisoGrupos = n ? `${n === 1 ? 'Un muro está bloqueado' : `${n} muros están bloqueados`}: no se modificó. Desbloquealo en el Esquema.` : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
+      this.avisoGrupos = n ? `${n === 1 ? 'Un muro está bloqueado' : `${n} muros están bloqueados`}: no se modificó. Desbloquealo en el Esquema.`
+        : nf ? `${nf === 1 ? 'Un muro está' : `${nf} muros están`} en un grupo fijo en su lugar 📌: no se movió. Soltalo en el Esquema para moverlo.`
+        : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
       if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
     }
     // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
@@ -133,7 +139,7 @@ class Estado {
     this.limpiarGrupos();
     this.actualizar();
   }
-  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); }
+  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); envolverPiezas(this.proyecto, nombrePieza); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); }
   /** saca de la selección y del contexto los grupos que ya no existen */
   limpiarGrupos() {
     const ids = new Set((this.proyecto.grupos ?? []).map(g => g.id));

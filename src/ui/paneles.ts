@@ -11,7 +11,7 @@ import { cotasDesdeCorte, factorUnidad, leerDXFCompleto, nombrarNiveles } from '
 import { grilla, filasElegidas, elegirFila, aNumero, type Columna } from './grilla';
 import { h, seccion, type H } from './comp';
 import { seccionEsquema } from './esquema';
-import { borrarMuros, copiarNodo, grupoCerrado, grupoPorId, motivoNoEditable, muroBloqueado, murosDe } from '../engine/grupos';
+import { borrarMuros, copiarNodo, envolverPiezas, grupoCerrado, grupoPorId, motivoNoEditable, motivoNoTransformable, muroBloqueado, murosDe } from '../engine/grupos';
 import { cajaMuro } from '../engine/modelo';
 
 const num = (v: string) => { const x = parseFloat(v.replace(',', '.')); return isFinite(x) ? x : null; };
@@ -238,7 +238,8 @@ function seccionGrupos(c: H) {
     });
     t.append(tb);
     const acc = h('div', { class: 'fila-acciones' });
-    const cerrado = ms.map(m => motivoNoEditable(p, m, estado.contexto)).find(Boolean);
+    // girar o espejar la pieza entera se puede desde afuera de su grupo; solo frenan el bloqueo o estar fuera del grupo que se edita
+    const cerrado = ms.map(m => motivoNoTransformable(p, m, estado.contexto)).find(Boolean);
     const b = (txt: string, titulo: string, f: () => void) => { const x = h('button', { type: 'button', class: 'mini', title: titulo }, txt); x.addEventListener('click', () => { if (cerrado) { avisoPanel(cerrado); return; } estado.cambiar(f); }); return x; };
     acc.append(
       b('Girar 90°', 'Gira el grupo alrededor de su baricentro (los papeles elegidos a mano se borran: un alma pasa a ser ala)', () => { p.muros = girarGrupo(p.muros, g); }),
@@ -316,6 +317,7 @@ export function panelMuros(c: H) {
       ids = [...set];
     }
     p.muros = agrupar(p.muros, ids).muros;
+    envolverPiezas(p);           // y es un grupo cerrado del Esquema (se entra con doble clic)
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
   c.append(seccionEsquema(), acc);

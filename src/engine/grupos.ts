@@ -74,6 +74,37 @@ export function motivoNoEditable(p: Proyecto, m: Muro, contexto: string | null):
   return g ? `${m.id} está dentro de «${g.nombre}»: para editarlo, entrá al grupo con doble clic en la planta (o «Entrar» en el Esquema). Desde afuera el grupo se mueve, copia, gira y espeja entero.` : null;
 }
 
+/** se puede mover, girar o espejar entero desde afuera (no está bloqueado ni fuera del grupo que se edita) */
+export function motivoNoTransformable(p: Proyecto, m: Muro, contexto: string | null): string | null {
+  if (muroBloqueado(p, m)) return `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.`;
+  if (contexto !== null && !dentroDe(p, m, contexto)) return `${m.id} está fuera del grupo que estás editando: salí con Esc.`;
+  return null;
+}
+
+/**
+ * Las piezas armadas (insertadas de la biblioteca o agrupadas en el panel de piezas, m.grupo) pasan a ser también
+ * grupos del Esquema: cerrados, se mueven enteros y para tocar un muro suelto hay que entrar con doble clic. Envuelve en
+ * un grupo cada pieza que todavía no tiene el suyo (todos sus muros en el mismo grupo del Esquema, sin nada más).
+ * Devuelve cuántas piezas envolvió.
+ */
+export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`): number {
+  const porPieza = new Map<string, Muro[]>();
+  p.muros.forEach(m => { if (m.grupo) porPieza.set(m.grupo, [...(porPieza.get(m.grupo) ?? []), m]); });
+  let n = 0;
+  porPieza.forEach((ms, g) => {
+    const gd = ms[0].gd ?? null;
+    if (ms.some(m => (m.gd ?? null) !== gd)) return;                       // repartida en grupos distintos: se deja
+    if (gd !== null) {
+      const ya = p.muros.filter(m => m.gd === gd).length === ms.length && !(p.grupos ?? []).some(x => x.padre === gd);
+      if (ya) return;                                                          // ya tiene su grupo
+    }
+    if (ms.some(m => muroBloqueado(p, m))) return;
+    const r = agruparNodos(p, ms.map(m => m.id), [], gd, nombres(g, ms));
+    if (!('error' in r)) n++;
+  });
+  return n;
+}
+
 /** nombre libre: «Grupo 1», «Grupo 2»… */
 function nombreLibre(p: Proyecto, base: string) {
   const usados = new Set((p.grupos ?? []).map(g => g.nombre));
@@ -424,6 +455,34 @@ export function protegerBloqueados(previo: Proyecto | null, p: Proyecto): number
     if (!sigue) return;
     if (!cur) { p.muros.push(o); n++; return; }
     if (GEOM.some(k => JSON.stringify(cur[k]) !== JSON.stringify(o[k]))) { p.muros[i] = { ...cur, ...Object.fromEntries(GEOM.map(k => [k, o[k]])) } as Muro; GEOM.forEach(k => { if (o[k] === undefined) delete (p.muros[i] as unknown as Record<string, unknown>)[k]; }); n++; }
+  });
+  return n;
+}
+
+/** el grupo (o uno de los que lo contienen) está fijo en su lugar 📌 */
+export function grupoFijo(p: Proyecto, gid: string | null | undefined): GrupoDib | null {
+  return gid ? ancestros(p, gid).find(g => g.fijo) ?? null : null;
+}
+/** el muro está en un grupo fijo en su lugar (no se puede mover, girar ni espejar) */
+export function muroFijo(p: Proyecto, m: Muro): GrupoDib | null { return grupoFijo(p, m.gd); }
+/**
+ * Lo fijo en su lugar no cambia de posición: si un cambio movió, giró o espejó muros de un grupo fijo, se les vuelve a
+ * poner la posición (x, y, dirección y forma del perfil). Las medidas (largo, espesor, alturas) sí pueden cambiar.
+ * Devuelve cuántos muros se volvieron a su lugar.
+ */
+export function protegerFijos(previo: Proyecto | null, p: Proyecto): number {
+  if (!previo || !(previo.grupos ?? []).some(g => g.fijo)) return 0;
+  let n = 0;
+  previo.muros.forEach(o => {
+    if (!muroFijo(previo, o)) return;
+    const i = p.muros.findIndex(m => m.id === o.id);
+    if (i < 0) return;
+    const cur = p.muros[i];
+    if (!muroFijo(p, cur)) return;                                     // se soltó en este mismo cambio
+    const mismoLargo = cur.largo === o.largo && cur.espesor === o.espesor;
+    const movido = (mismoLargo && (Math.abs(cur.x - o.x) > 1e-9 || Math.abs(cur.y - o.y) > 1e-9)) || cur.dir !== o.dir
+      || (!!o.perfil && JSON.stringify(cur.perfil) !== JSON.stringify(o.perfil) && mismoLargo);
+    if (movido) { p.muros[i] = { ...cur, x: o.x, y: o.y, dir: o.dir, ...(o.perfil ? { perfil: o.perfil } : {}) }; n++; }
   });
   return n;
 }

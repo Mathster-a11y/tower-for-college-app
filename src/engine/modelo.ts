@@ -122,6 +122,8 @@ export interface GrupoDib {
   bloq?: boolean;
   /** oculto en la planta (se sigue calculando) */
   oculto?: boolean;
+  /** fijo en su lugar 📌: no se mueve, gira ni espeja (ni sus muros), pero se puede entrar y cambiar medidas */
+  fijo?: boolean;
   /** componente al que pertenece esta copia, y su ubicación */
   comp?: string; T?: Ubicacion;
   /** subgrupo dentro de una copia de componente: referencia en la definición */

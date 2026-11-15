@@ -116,8 +116,8 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   (p.huecosLosa ?? []).forEach(h => vert(h.id, 'hueco de losa', 0, h.v));
   (p.caminos ?? []).forEach(c => vert(c.id, 'camino', 0, c.v));
   out.push({ nombre: T.contornos, anchos: [12, 14, 8, 6, 10, 10, 10, 9, 9, 9, 9], filas: cont });
-  out.push({ nombre: T.grupos, anchos: [10, 18, 10, 10, 8, 12, 9, 9, 10, 8, 14], filas: [['Grupo', 'Nombre', 'Dentro de', 'Bloqueado', 'Oculto', 'Componente', 'Ubic. x (m)', 'Ubic. y (m)', 'Giro (× 90°)', 'Espejo', 'Ref. componente'],
-    ...(p.grupos ?? []).map(g => [g.id, g.nombre, g.padre ?? null, b2s(g.bloq), b2s(g.oculto), g.comp ?? null, g.T?.x ?? null, g.T?.y ?? null, g.T ? g.T.g : null, g.T ? (g.T.e ? SI : 'no') : null, g.cref ?? null] as Valor[])] });
+  out.push({ nombre: T.grupos, anchos: [10, 18, 10, 10, 8, 12, 9, 9, 10, 8, 14, 8], filas: [['Grupo', 'Nombre', 'Dentro de', 'Bloqueado', 'Oculto', 'Componente', 'Ubic. x (m)', 'Ubic. y (m)', 'Giro (× 90°)', 'Espejo', 'Ref. componente', 'Fijo'],
+    ...(p.grupos ?? []).map(g => [g.id, g.nombre, g.padre ?? null, b2s(g.bloq), b2s(g.oculto), g.comp ?? null, g.T?.x ?? null, g.T?.y ?? null, g.T ? g.T.g : null, g.T ? (g.T.e ? SI : 'no') : null, g.cref ?? null, b2s(g.fijo)] as Valor[])] });
   out.push({ nombre: T.huecos, anchos: [10, 18, 12, 12], filas: [['Hueco', 'Nombre', 'Desde (m)', 'Hasta (m)'], ...(p.huecosLosa ?? []).map(h => [h.id, h.nombre, h.zDesde ?? null, h.zHasta ?? null] as Valor[])] });
   out.push({ nombre: T.caminos, anchos: [10, 18, 9], filas: [['Camino', 'Nombre', 'Cerrado'], ...(p.caminos ?? []).map(c => [c.id, c.nombre, c.cerrado ? SI : 'no'] as Valor[])] });
   out.push({ nombre: T.cotas, anchos: [8, 10, 9, 9, 9, 10, 8, 9, 9, 10, 8], filas: [['Cota', 'Tipo', 'Desfase (m)', 'A x (m)', 'A y (m)', 'A muro', 'A punto', 'B x (m)', 'B y (m)', 'B muro', 'B punto'],
@@ -233,6 +233,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
     const o: GrupoDib = { id: txt(g('Grupo')), nombre: txt(g('Nombre')) };
     if (txt(g('Dentro de'))) o.padre = txt(g('Dentro de'));
     if (sino(g('Bloqueado'))) o.bloq = true;
+    if (sino(g('Fijo'))) o.fijo = true;
     if (sino(g('Oculto'))) o.oculto = true;
     if (txt(g('Componente'))) o.comp = txt(g('Componente'));
     const ux = num(g('Ubic. x (m)')), uy = num(g('Ubic. y (m)'));

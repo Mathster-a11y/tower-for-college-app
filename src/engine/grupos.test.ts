@@ -220,3 +220,40 @@ describe('copias vinculadas: girar o espejar una copia entera', () => {
     expect(murosDe(p, g.id).map(m => [m.id, m.dir, m.x, m.y])).toEqual(orig);
   });
 });
+
+import { envolverPiezas, motivoNoEditable as _mne } from './grupos';
+import { piezaTipo as _pt } from './piezasTipo';
+describe('piezas armadas como grupos cerrados', () => {
+  it('una pieza insertada (m.grupo) queda en su grupo del Esquema: no se edita un muro suelto sin entrar', () => {
+    const p = ejemploGuia();
+    p.muros = [];
+    const ms = _pt('C', { h: 4, b: 2, e: 0.2, giro: 0 }, 0, 0, new Set());
+    ms.forEach(m => { m.grupo = 'P1'; });
+    p.muros = ms;
+    expect(_mne(p, p.muros[0], null)).toBeNull();          // antes: se podía editar suelto
+    expect(envolverPiezas(p)).toBe(1);
+    expect(_mne(p, p.muros[0], null)).toMatch(/entrá al grupo/);
+    const g = p.muros[0].gd!;
+    expect(_mne(p, p.muros[0], g)).toBeNull();             // adentro sí
+    expect(envolverPiezas(p)).toBe(0);                      // no lo envuelve dos veces
+  });
+});
+
+import { protegerFijos, muroFijo } from './grupos';
+describe('grupo fijo en su lugar 📌', () => {
+  it('no se mueve ni gira, pero sí cambia de medidas', () => {
+    const p = ejemploGuia();
+    const r = agruparNodos(p, ['M1', 'M2'], [], null, 'Fijo');
+    if ('error' in r) throw new Error(r.error);
+    grupoPorId(p, r.id)!.fijo = true;
+    expect(muroFijo(p, p.muros.find(m => m.id === 'M1')!)).not.toBeNull();
+    const previo = JSON.parse(JSON.stringify(p));
+    moverNodo(p, r.id, 3, 0);
+    expect(protegerFijos(previo, p)).toBe(2);
+    expect(p.muros.find(m => m.id === 'M1')!.x).toBe(previo.muros.find((m: { id: string }) => m.id === 'M1').x);
+    const prev2 = JSON.parse(JSON.stringify(p));
+    p.muros.find(m => m.id === 'M1')!.espesor = 0.3;
+    expect(protegerFijos(prev2, p)).toBe(0);
+    expect(p.muros.find(m => m.id === 'M1')!.espesor).toBe(0.3);
+  });
+});

@@ -67,6 +67,7 @@ export function seccionEsquema(): H {
     const li = h('li', { class: 'esq-grupo' + (estado.grupoSel === g.id ? ' sel' : '') + (estado.contexto === g.id ? ' ctx' : '') + (estado.multi.g.includes(g.id) ? ' multi' : '') + (g.comp ? ' comp' : ''), role: 'treeitem', style: `--n:${nivel}`, title: 'Clic: elegir · doble clic: entrar a editarlo' },
       tog, h('span', { class: 'esq-nombre' }, g.nombre), h('span', { class: 'esq-tipo' }, `${tipo} · ${ms.length} muros`),
       icono(!!g.bloq, '🔒', '🔓', g.bloq ? 'Desbloquear' : 'Bloquear: no se mueve ni se edita (se sigue calculando)', () => hacer(() => { g.bloq = !g.bloq || undefined; if (!g.bloq) delete g.bloq; }, () => (grupoPorId(estado.proyecto, g.id)?.bloq ? `«${g.nombre}» bloqueado 🔒: no se mueve ni se edita; se sigue calculando.` : `«${g.nombre}» desbloqueado.`))),
+      icono(!!g.fijo, '📌', '⌖', g.fijo ? 'Soltar: se vuelve a poder mover' : 'Fijar en su lugar: no se mueve, gira ni espeja, pero se puede entrar y cambiar medidas', () => hacer(() => { g.fijo = !g.fijo || undefined; if (!g.fijo) delete g.fijo; }, () => (grupoPorId(estado.proyecto, g.id)?.fijo ? `«${g.nombre}» fijo en su lugar 📌: no se mueve, gira ni espeja; se puede entrar a cambiar medidas.` : `«${g.nombre}» suelto: se puede mover.`))),
       icono(!!g.oculto, '🙈', '👁', g.oculto ? 'Mostrar en la planta' : 'Ocultar en la planta (se sigue calculando)', () => hacer(() => { g.oculto = !g.oculto || undefined; if (!g.oculto) delete g.oculto; }, () => (grupoPorId(estado.proyecto, g.id)?.oculto ? `«${g.nombre}» oculto en la planta: se sigue calculando.` : `«${g.nombre}» visible.`))));
     li.addEventListener('click', ev => {
       if (ev.shiftKey || ev.ctrlKey || ev.metaKey || estado.eligeVarios) { const i = estado.multi.g.indexOf(g.id); if (i >= 0) estado.multi.g.splice(i, 1); else estado.multi.g.push(g.id); estado.avisarPanel(); return; }
@@ -120,9 +121,9 @@ export function seccionEsquema(): H {
     const ms = murosDe(p2, selG.id);
     const caja = ms.reduce((a, m) => { const { ax } = huella(m); return { x0: Math.min(a.x0, m.x - ax / 2), x1: Math.max(a.x1, m.x + ax / 2) }; }, { x0: Infinity, x1: -Infinity });
     const ancho = isFinite(caja.x1) ? +(caja.x1 - caja.x0 + 1).toFixed(2) : 2;
-    const bloq = ancestros(p2, selG.id).some(g => g.bloq);
+    const bloq = ancestros(p2, selG.id).some(g => g.bloq), fijo = ancestros(p2, selG.id).some(g => g.fijo);
     const det = h('div', { class: 'esq-detalle' });
-    det.append(h('h4', {}, `${selG.bloq ? '🔒 ' : ''}${selG.nombre}`, h('span', { class: 'esq-tipo' }, selG.comp ? ` · componente ${selG.comp}: ${copiasDe(p2, selG.comp).length} copias vinculadas (editar una cambia todas)` : ' · grupo')));
+    det.append(h('h4', {}, `${selG.bloq ? '🔒 ' : ''}${selG.fijo ? '📌 ' : ''}${selG.nombre}`, h('span', { class: 'esq-tipo' }, selG.comp ? ` · componente ${selG.comp}: ${copiasDe(p2, selG.comp).length} copias vinculadas (editar una cambia todas)` : ' · grupo')));
     const nom = h('input', { type: 'text', value: selG.nombre, 'aria-label': 'Nombre del grupo', class: 'esq-input' }) as HTMLInputElement;
     nom.addEventListener('change', () => hacer(() => { const g = grupoPorId(estado.proyecto, selG.id); if (g && nom.value.trim()) g.nombre = nom.value.trim(); }));
     det.append(h('label', { class: 'esq-campo' }, 'Nombre ', nom));
@@ -135,9 +136,9 @@ export function seccionEsquema(): H {
       b('Copia vinculada', `Otra copia del mismo componente, ${fmt(ancho)} m a la derecha: si se edita una, cambian todas`, () => { const r: { v: { id: string } | { error: string } | null } = { v: null }; hacer(() => { r.v = copiarNodo(estado.proyecto, id, ancho, 0, true); return 'error' in r.v ? r.v.error : null; }, 'Copia vinculada lista: si editás una, cambian todas. Arrastrala a su lugar.'); if (r.v && !('error' in r.v)) { estado.grupoSel = r.v.id; estado.avisarPanel(); } }),
       selG.comp ? b('Hacer único', 'Separa esta copia: deja de estar vinculada', () => hacer(() => { hacerUnico(estado.proyecto, id); }, 'La copia ya no está vinculada.'), !bloq)
         : b('Hacer componente', 'Convierte el grupo en componente (para hacer copias vinculadas)', () => hacer(() => hacerComponente(estado.proyecto, id), 'Ahora es un componente: «Copia vinculada» para repetirlo.'), !bloq),
-      b('Girar 90°', 'Gira el grupo alrededor del centro de su caja', () => hacer(() => { girarNodo(estado.proyecto, id); }), !bloq),
-      b('Espejar ↔', 'Espeja respecto de un eje vertical por el centro de su caja', () => hacer(() => { espejarNodo(estado.proyecto, id, 'x'); }), !bloq),
-      b('Espejar ↕', 'Espeja respecto de un eje horizontal por el centro de su caja', () => hacer(() => { espejarNodo(estado.proyecto, id, 'y'); }), !bloq),
+      b('Girar 90°', 'Gira el grupo alrededor del centro de su caja', () => hacer(() => { girarNodo(estado.proyecto, id); }), !bloq && !fijo),
+      b('Espejar ↔', 'Espeja respecto de un eje vertical por el centro de su caja', () => hacer(() => { espejarNodo(estado.proyecto, id, 'x'); }), !bloq && !fijo),
+      b('Espejar ↕', 'Espeja respecto de un eje horizontal por el centro de su caja', () => hacer(() => { espejarNodo(estado.proyecto, id, 'y'); }), !bloq && !fijo),
       b('Borrar', 'Borra el grupo con sus muros', () => { if (!confirm(`¿Borrar «${selG.nombre}» con sus ${ms.length} muros?`)) return; hacer(() => borrarGrupo(estado.proyecto, id), 'Grupo borrado.'); estado.grupoSel = null; estado.avisarPanel(); }, !bloq, 'mini peligro'),
     );
     det.append(a2);
@@ -164,6 +165,7 @@ export function seccionEsquema(): H {
       h('label', {}, 'Desde ', selNivel(zD, 'fundación', z => hacer(() => { usoDeGrupo(estado.proyecto, id, { zDesde: z }); }))),
       h('label', {}, 'Hasta ', selNivel(zH, 'azotea', z => hacer(() => { usoDeGrupo(estado.proyecto, id, { zHasta: z }); })))));
     if (bloq) det.append(h('p', { class: 'nota chica' }, 'Bloqueado: no se mueve ni se edita, pero se sigue calculando. Desbloquealo con el candado del Esquema.'));
+    else if (fijo) det.append(h('p', { class: 'nota chica' }, 'Fijo en su lugar 📌: no se mueve, gira ni espeja; se puede entrar y cambiar medidas. Soltalo con la chinche del Esquema.'));
     c.append(det);
   } else if (selMuro && muroBloqueado(p, selMuro)) c.append(h('p', { class: 'nota chica' }, `${selMuro.id} está bloqueado.`));
   return sec.el;

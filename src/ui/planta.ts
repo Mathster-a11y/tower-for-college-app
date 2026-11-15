@@ -14,7 +14,7 @@ import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias } from './guias';
 import { montarEditorContorno } from './editorContorno';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo } from '../engine/grupos';
-import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
+import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparNodo, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -1403,6 +1403,7 @@ export function montarPlanta(cont: HTMLElement) {
         if (!enMultiM(m) && (estado.multi.m.length || estado.multi.g.length)) estado.multi = { m: [], g: [] };   // tocar otra cosa suelta la selección (como en CAD)
         if (muroBloqueado(estado.proyecto, m)) { const g = ancestros(estado.proyecto, m.gd).find(x => x.bloq); mensaje(`${m.id} está en «${g?.nombre ?? 'un grupo'}», que está bloqueado 🔒: desbloquealo en el Esquema para moverlo o editarlo.`); estado.grupoSel = g?.id ?? null; estado.avisarPanel(); return; }
         ultimoEspesor = m.espesor;
+        const fijoG = muroFijo(estado.proyecto, m);
         const ahoraG = performance.now();
         if (nodo.t === 'g' && ultimoToque && ultimoToque.id === m.id && ahoraG - ultimoToque.t < 450) {
           // doble clic en un grupo: se entra a editarlo
@@ -1419,7 +1420,7 @@ export function montarPlanta(cont: HTMLElement) {
         const q = aMundo(ev);
         // cerca de una esquina (o de otro nodo) del elemento: se agarra desde ese nodo, con imán a los nodos de los demás
         const nd = nodosDe(m).map(n => ({ n, d: Math.hypot(n.x - q.x, n.y - q.y) * escala })).sort((a, b) => a.d - b.d || (a.n.t === 'esquina' ? -1 : 1))[0];
-        if (nd && nd.d <= 10 && nd.n.t !== 'centro') {
+        if (nd && nd.d <= 10 && nd.n.t !== 'centro' && !fijoG) {
           const ids = compas(m);
           umbral = { x: ev.clientX, y: ev.clientY };
           arrastreNodo = { p: { x: nd.n.x, y: nd.n.y }, orig: estado.proyecto.muros.filter(o => ids.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
@@ -1428,6 +1429,8 @@ export function montarPlanta(cont: HTMLElement) {
           estado.cambiar();
           return;
         }
+        // fijo en su lugar 📌: se elige (y se entra con doble clic) pero no se arrastra
+        if (fijoG) { mensaje(`${m.id} está en «${fijoG.nombre}», fijo en su lugar 📌: no se mueve. Soltalo en el Esquema para moverlo.`); estado.avisarSeleccion(); return; }
         umbral = { x: ev.clientX, y: ev.clientY };
         const compasSel = compas(m);
         arrastre = { id: m.id, x0: m.x, y0: m.y, mx: q.x, my: q.y, otros: estado.proyecto.muros.filter(o => o.id !== m.id && compasSel.includes(o.id)).map(o => ({ id: o.id, x: o.x, y: o.y })) };
@@ -1782,7 +1785,11 @@ export function montarPlanta(cont: HTMLElement) {
         const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
         if (estado.contexto) nuevos.forEach(m => { m.gd = estado.contexto!; });     // insertada dentro del grupo que se edita
         p.muros = agrupar([...p.muros, ...nuevos], nuevos.map(m => m.id)).muros;
+        // la pieza insertada es un grupo cerrado del Esquema: se mueve entera y se entra con doble clic
+        const g = p.muros.find(m => m.id === nuevos[0].id)?.grupo;
+        const r = g ? agruparNodos(p, nuevos.map(m => m.id), [], estado.contexto, `${insTipo[0].toUpperCase()}${insTipo.slice(1)} ${g}`) : null;
         estado.seleccion = nuevos[0].id;
+        if (r && !('error' in r)) estado.grupoSel = r.id;
       });
       ponerModo('mover');
       return;
@@ -1964,7 +1971,7 @@ export function montarPlanta(cont: HTMLElement) {
     if (!m) return;
     const paso = ev.shiftKey ? 1 : 0.05;
     const mov: Record<string, [number, number]> = { ArrowLeft: [-paso, 0], ArrowRight: [paso, 0], ArrowUp: [0, paso], ArrowDown: [0, -paso] };
-    if (mov[ev.key]) { ev.preventDefault(); if (muroBloqueado(estado.proyecto, m)) { mensaje(`${m.id} está bloqueado 🔒.`); return; } const ids = compas(m); estado.cambiar(() => { estado.proyecto.muros.forEach(w => { if (ids.includes(w.id)) { w.x = +(w.x + mov[ev.key][0]).toFixed(2); w.y = +(w.y + mov[ev.key][1]).toFixed(2); } }); }); }
+    if (mov[ev.key]) { ev.preventDefault(); if (muroBloqueado(estado.proyecto, m)) { mensaje(`${m.id} está bloqueado 🔒.`); return; } if (muroFijo(estado.proyecto, m)) { mensaje(`${m.id} está en un grupo fijo en su lugar 📌.`); return; } const ids = compas(m); estado.cambiar(() => { estado.proyecto.muros.forEach(w => { if (ids.includes(w.id)) { w.x = +(w.x + mov[ev.key][0]).toFixed(2); w.y = +(w.y + mov[ev.key][1]).toFixed(2); } }); }); }
   });
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);
