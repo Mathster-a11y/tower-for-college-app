@@ -18,7 +18,7 @@ import { datosAlturaDe, verificarPieza, type DatosAltura, type VerifPieza } from
 export interface FibraNivel {
   nivel: string;
   z: number;
-  /** momento total del nivel (tm) y el que toma la pieza */
+  /** momento del nivel que toman todos los tabiques (tm; sin exo, el de M,NyQ) */
   Mtotal: number;
   v: VerifPieza;
 }
@@ -41,7 +41,11 @@ export function alturaDesde(alt: DatosAltura, z: number): DatosAltura {
   return { ...alt, zPB: z, cotasSobrePB: alt.cotasSobrePB.filter(c => c > z + 1e-6) };
 }
 
-export function fibrasDireccion(p: Proyecto, piezas: PiezaEquivalente[], corr: ResultadoCorregido, filaNivel: number[], dir: 'A' | 'B', adm: number): FibrasPieza[] {
+/**
+ * @param Mtabiques con exoesqueleto: el momento que les queda a los tabiques en la cota z (tm, del motor del exo); si no
+ *   está, el momento total de M,NyQ (sin exo, como la planilla del curso)
+ */
+export function fibrasDireccion(p: Proyecto, piezas: PiezaEquivalente[], corr: ResultadoCorregido, filaNivel: number[], dir: 'A' | 'B', adm: number, Mtabiques?: (z: number) => number): FibrasPieza[] {
   const alt = datosAlturaDe(p);
   const mn = corr.guia.mnyq;
   const rot = dir === 'A' ? corr.guia.rotA : corr.guia.rotB, rep = dir === 'A' ? corr.rotA : corr.rotB;
@@ -58,7 +62,7 @@ export function fibrasDireccion(p: Proyecto, piezas: PiezaEquivalente[], corr: R
       const z = n.cota;
       const ms = muros.filter(m => presenteEn(m, z, alt.zFund, alt.zTop) && (m.zHasta ?? alt.zTop) > z + 1e-6).map(m => muroEn(m, z + 0.01));
       if (!ms.length) return;
-      const Mtotal = (dir === 'A' ? mn.J[k] : mn.O[k]) || 0;
+      const Mtotal = Mtabiques ? Mtabiques(z) : (dir === 'A' ? mn.J[k] : mn.O[k]) || 0;
       const v = verificarPieza(pz.nombre, dir, ms, Mtotal * frac, alturaDesde(alt, z), adm);
       out.push({ nivel: n.nombre, z, Mtotal, v });
     });

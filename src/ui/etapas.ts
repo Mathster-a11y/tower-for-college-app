@@ -10,7 +10,7 @@ import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelPr
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
-import { datosAltura, deformada, E_DE_DIVISOR, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
+import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
@@ -19,7 +19,7 @@ import { TENSION_ADM, type Control } from '../engine/verificaciones';
 import { alturaDesde, fibrasDireccion } from '../engine/fibras';
 import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
-import { panelExo, centroExo, estadoExo } from './exo';
+import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -279,7 +279,7 @@ const rigidezE: Etapa = {
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
-    const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+    const E = moduloHormigon(d.p.hormigon || 'H30');
     const Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     c.append(h('div', { class: 'kpis' },
@@ -303,7 +303,7 @@ const rigidezE: Etapa = {
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
-    const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+    const E = moduloHormigon(d.p.hormigon || 'H30');
     const Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
     const varia = Jniv.some(x => Math.abs(x.J - rg.J) > 1e-6 * rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
@@ -411,7 +411,7 @@ export function datosRoto3D(): Rototraslacion3D | null {
     if (!d.asig?.piezas.length) return null;
     const dp = datosRotoPlano(d);
     const rg = rigidez(d.R, d.p.hormigon || 'H30').find(x => x.dir === d.dir)!;
-    const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+    const E = moduloHormigon(d.p.hormigon || 'H30');
     const Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     // CR y giro de cada nivel: si un muro no llega arriba, los pisos de arriba giran sin él
@@ -519,7 +519,7 @@ function verifsPB() {
 /** fibras piso a piso de todas las piezas del viento (las mismas cuentas de PB, en la base de cada piso) */
 function fibras() {
   const d = datos();
-  return fibrasDireccion(d.p, d.asig.piezas, d.corr, d.asig.filaNivel, d.dir, TENSION_ADM(d.p.hormigon || 'H30'));
+  return fibrasDireccion(d.p, d.asig.piezas, d.corr, d.asig.filaNivel, d.dir, TENSION_ADM(d.p.hormigon || 'H30'), momentoTabiques(d.dir));
 }
 /** cota del nivel que se verifica (PB si no se eligió otro o si ya no existe) */
 function zFlex(): number {
@@ -529,7 +529,7 @@ function zFlex(): number {
 /** verificación de cada pieza en el nivel elegido */
 function verifs() {
   const z = zFlex();
-  if (Math.abs(z - datosAlturaDe(estado.proyecto).zPB) < 1e-6) return verifsPB();
+  if (Math.abs(z - datosAlturaDe(estado.proyecto).zPB) < 1e-6 && !momentoTabiques(estado.dir)) return verifsPB();
   return fibras().map(f => f.niveles.find(nv => Math.abs(nv.z - z) < 1e-6)?.v).filter((x): x is NonNullable<typeof x> => !!x);
 }
 const flexion: Etapa = {
@@ -553,6 +553,13 @@ const flexion: Etapa = {
     });
     sel.addEventListener('change', () => { estado.nivelFlex = Number(sel.value); estado.avisarPanel(); });
     c.append(h('label', { class: 'campo-nivel-flex' }, 'Verificar en la base del piso sobre ', sel));
+    if (d.p.exo) {
+      const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = estado.flexConExo;
+      cb.addEventListener('change', () => { estado.flexConExo = cb.checked; estado.avisarPanel(); });
+      const Mx = momentoTabiques(d.dir);
+      c.append(h('label', { class: 'campo-linea' }, cb, ' Con el exoesqueleto: los tabiques con el momento que les queda (etapa 08)'),
+        h('p', { class: 'nota' }, Mx ? `Con exo, el momento de los tabiques en PB es ${fmt(Mx(altP.zPB), 1)} tm (sin exo, ${fmt(d.p.niveles.length ? (d.dir === 'A' ? d.corr.guia.mnyq.J : d.corr.guia.mnyq.O)[d.filaPB] : 0, 1)} tm). Cada pieza toma su fracción de la rototraslación. Sin la marca, las cuentas son las de la planilla del curso (sin exo).` : 'Sin la marca: las cuentas de la planilla del curso, sin el exoesqueleto.'));
+    }
     if (!enPB) c.append(h('p', { class: 'nota' }, `Fibras en ${nomNivel}: el mismo σ = −N/F ± M/W de PB, con el momento de ${nomNivel} (M,NyQ, la misma fracción de la pieza), lo que pesa de ${nomNivel} para arriba y la sección del muro justo encima de la losa. Los controles de la etapa siguen siendo los de PB.`));
     c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
     const t = h('table', { class: 'tabla' });

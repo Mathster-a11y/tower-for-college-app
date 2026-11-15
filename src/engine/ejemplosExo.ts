@@ -149,3 +149,31 @@ export function ejemploOnterie(): Proyecto {
     },
   };
 }
+
+/**
+ * Torre chica para el paso a paso de la guía: 10 pisos de 3 m, planta de 16 × 12 m, dos tabiques de 4,00 × 0,25 m
+ * paralelos al viento A y un tubo arriostrado en X de dos módulos de 5 pisos (ficha D), sin peso propio del acero
+ * para que las cuentas a mano sean cortas. Solo el viento A tiene piezas (el ejemplo sigue ese viento).
+ */
+export function ejemploBasicoExo(): Proyecto {
+  const niveles: Nivel[] = [{ nombre: 'Azotea', cota: 30, B: 16, L: 12 }];
+  for (let k = 9; k >= 1; k--) niveles.push({ nombre: `${k + 1}º`, cota: 3 * k });
+  niveles.push({ nombre: 'PB', cota: 0 }, { nombre: 'Subsuelo', cota: -3 });
+  const t = (id: string, x: number): Muro => ({ id, dir: 'Y', x, y: 0, largo: 4, espesor: 0.25, llega: true, areaInf: 40, piezaA: id, pegadoA: '', piezaB: '', pegadoB: '' });
+  return {
+    version: 1,
+    nombre: 'Torre chica con tubo en X (ejemplo de la guía)',
+    alumno: '',
+    sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: 16, a1: 12 },
+    hormigon: 'H30',
+    muros: [t('T1', -4), t('T2', 4)],
+    exo: {
+      tipo: 'D', separacion: 0, modulo: 5, pesoPropio: false,
+      columna: { b: 0.3, e: 0.016 }, diagonal: { b: 0.2, e: 0.0125 }, viga: { b: 0.25, e: 0.0125 },
+      E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'articulada', viga: 'rigida', base: 'empotrada' },
+      notas: ['Ejemplo para aprender: medidas elegidas para que las cuentas a mano sean cortas (no es un edificio real).'],
+    },
+  };
+}

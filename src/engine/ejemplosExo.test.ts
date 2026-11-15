@@ -1,10 +1,11 @@
 /** Los cuatro edificios reales: entran en la planilla, los módulos caen en niveles y el exo dimensionado verifica. */
 import { describe, expect, it } from 'vitest';
 import { ejemploCiticorp, type Proyecto } from './modelo';
-import { ejemploHancock, ejemploHearst, ejemploOnterie } from './ejemplosExo';
+import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './ejemplosExo';
+import { ejemploGuia } from './modelo';
 import { aPlanilla } from './mapping';
 import { calcularPlanilla } from './planilla';
-import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from './diagramas';
+import { datosAltura, E_DE_DIVISOR, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { calcularExo, cirsoc301 } from './exo';
 
@@ -14,7 +15,7 @@ function exo(p: Proyecto, dir: 'A' | 'B') {
   const sobre = alt.filter(x => x.z > 1e-6).sort((a, b) => a.z - b.z);
   const zs = [0, ...sobre.map(x => x.z)], W = sobre.map(x => x.F);
   const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
-  const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+  const E = moduloHormigon(p.hormigon || 'H30');
   const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
   const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
   const iPB = p.niveles.findIndex(n => n.cota === 0), pl = plantaDeNivel(p, iPB), A = dir === 'A';
@@ -50,5 +51,18 @@ describe('edificios reales con exoesqueleto', () => {
       expect(p.muros.find(m => m.id === 'N1')!.piezaA).toBe('');
       expect(exo(p, 'A').r.fraccionExo).toBeCloseTo(1, 3);
     });
+  });
+});
+
+describe('E del hormigón', () => {
+  it('sale de la tabla de la planilla y coincide con W·h²/J mín cuando h está bien (y no depende de h)', () => {
+    expect(moduloHormigon('H30')).toBe(3.4e6);
+    const p = ejemploGuia(), R = calcularPlanilla(aPlanilla(p).datos), rg = rigidez(R, 'H30')[0];
+    expect(E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500)).toBeCloseTo(moduloHormigon('H30'), 3);
+    // torre de 10 niveles: la planilla original da h = 0 (E2), pero el exo igual se calcula
+    const q = ejemploBasicoExo();
+    expect(rigidez(calcularPlanilla(aPlanilla(q).datos), 'H30')[0].h).toBe(0);
+    const { r } = exo(q, 'A');
+    r.u.forEach(x => expect(isFinite(x)).toBe(true));
   });
 });

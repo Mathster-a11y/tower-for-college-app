@@ -12,7 +12,7 @@ import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe 
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
-import { datosExo } from './exo';
+import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { TENSION_ADM } from '../engine/verificaciones';
 
@@ -173,7 +173,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     if (!asig || !corr) return null;
     const adm = TENSION_ADM(p.hormigon || 'H30');
     let fs;
-    try { fs = fibrasDireccion(p, asig.piezas, corr, asig.filaNivel, estado.dir, adm); } catch { return null; }
+    try { fs = fibrasDireccion(p, asig.piezas, corr, asig.filaNivel, estado.dir, adm, momentoTabiques(estado.dir)); } catch { return null; }
     const porMuro = peorFibraPorMuro(fs);
     if (!porMuro.size) return null;
     const todas = [...porMuro.values()].flat().map(x => x.sigma);

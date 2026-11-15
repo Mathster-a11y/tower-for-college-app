@@ -8,7 +8,7 @@ import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './c
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
 import { calcularExo, vientoDeCuarto, cirsoc301, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
-import { datosAltura, E_DE_DIVISOR, rigidez, rigidezPorNivel } from '../engine/diagramas';
+import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
 
@@ -161,7 +161,7 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     if (sobre.length < 2) return null;
     const zs = [zPB, ...sobre.map(x => x.z)], W = sobre.map(x => x.F);
     const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
-    const E = E_DE_DIVISOR((rg.W * rg.h * rg.h) / rg.minimos.h500);
+    const E = moduloHormigon(p.hormigon || 'H30');
     const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
     // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
     const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
@@ -555,4 +555,16 @@ function editorBarra(e: EsfuerzoBarra) {
     sel('Sección', iSec >= 0 ? String(iSec) : '', tubos, v => poner(c => { if (v === '') delete c.sec; else c.sec = CATALOGO_TUBOS[+v]; })),
     quitar, ...(Object.keys(cam).length ? [volver] : []),
     h('span', { class: 'nota chica' }, 'Vale para esta barra en las dos caras y con los dos vientos. Si queda un mecanismo, la app avisa.'));
+}
+
+/**
+ * Momento que les queda a los tabiques en cada cota con el exoesqueleto (para las fibras de la etapa 07 y la capa σ),
+ * o undefined si no hay exo o se eligió ver los tabiques solos (como la planilla del curso).
+ */
+export function momentoTabiques(dir: 'A' | 'B'): ((z: number) => number) | undefined {
+  if (!estado.proyecto.exo || !estado.flexConExo) return undefined;
+  const d = datosExo(dir);
+  if (!d) return undefined;
+  const zs = d.r.zs, M = d.r.Mtab;
+  return (z: number) => { const k = zs.findIndex(q => Math.abs(q - z) < 1e-6); return k >= 0 ? M[k] : 0; };
 }

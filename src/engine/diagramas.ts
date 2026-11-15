@@ -4,6 +4,7 @@
  * que integra M / (E·ΣJ) desde PB, con el E que usa la propia planilla para el J mínimo.
  */
 import type { MNyQRes, PlanillaRes, RotoRes, VientoRes, JMinimo } from './planilla';
+import { DIVISORES } from './planilla';
 import type { Proyecto } from './modelo';
 import type { PiezaEquivalente } from './mapping';
 import { muroEn, presenteEn } from './modelo';
@@ -32,6 +33,16 @@ export function datosAltura(p: Proyecto, v: VientoRes, m: MNyQRes, filaNivel: nu
 
 /** E (t/m²) que usa la planilla: J mín = W·h² / divisor y el divisor de h/500 vale 8·E/500 (ménsula con carga uniforme). */
 export const E_DE_DIVISOR = (divisorH500: number) => (divisorH500 * 500) / 8;
+/**
+ * E del hormigón (t/m²) que usa la planilla, directo de su tabla de divisores (la fila del hormigón más cercano por
+ * debajo). Es lo mismo que E_DE_DIVISOR(W·h² / J mín) pero no depende de h: con 10 niveles o menos la planilla original
+ * calcula h = 0 (error E2) y ese cociente da 0/0.
+ */
+export function moduloHormigon(hormigon: string): number {
+  const nro = parseFloat(hormigon.replace(/[^\d.]/g, '')) || 30;
+  const fila = [...DIVISORES].reverse().find(f => (parseFloat(f[0].replace(/[^\d.]/g, '')) || 0) <= nro) ?? DIVISORES[0];
+  return E_DE_DIVISOR(fila[2]);
+}
 
 export interface Deformada { puntos: { nivel: string; z: number; d: number; /** curvatura M / (E·J) */ k: number }[]; dTop: number; h: number; limite: number; E: number; J: number; dUniforme: number; }
 

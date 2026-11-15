@@ -55,6 +55,8 @@ class Estado {
   piezaFlex: string | null = null;
   /** cota del nivel donde se verifican las fibras (null: PB, como la guía) */
   nivelFlex: number | null = null;
+  /** con exoesqueleto: las fibras de los tabiques con el momento que les queda (true) o sin el exo, como la planilla */
+  flexConExo = true;
   /** cota del nivel cuya planta se muestra (null = PB) */
   nivelPlanta: number | null = null;
   calculo!: Calculo;

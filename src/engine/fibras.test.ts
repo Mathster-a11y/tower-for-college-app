@@ -71,3 +71,18 @@ describe('fibras de los tabiques en altura', () => {
     expect(mapa.get(m.id)!.length).toBe(f.niveles.length);
   });
 });
+
+describe('fibras con exoesqueleto', () => {
+  it('con el momento que les queda a los tabiques: cada pieza toma su misma fracción de ese momento', () => {
+    const p = ejemploGuia();
+    const { asig, corr } = base(p);
+    const sin = fibrasDireccion(p, asig.piezas, corr, asig.filaNivel, 'A', 300);
+    const mitad = (z: number) => { const j = p.niveles.findIndex(n => Math.abs(n.cota - z) < 1e-6); return 0.4 * corr.guia.mnyq.J[asig.filaNivel[j]]; };
+    const con = fibrasDireccion(p, asig.piezas, corr, asig.filaNivel, 'A', 300, mitad);
+    con.forEach((f, i) => f.niveles.forEach((nv, k) => {
+      expect(nv.v.M).toBeCloseTo(0.4 * sin[i].niveles[k].v.M, 6);
+      // el peso no cambia: la compresión pura −N/A es la misma
+      nv.v.muros.forEach((m, j) => expect(m.Ndesc).toBeCloseTo(sin[i].niveles[k].v.muros[j].Ndesc, 9));
+    }));
+  });
+});
