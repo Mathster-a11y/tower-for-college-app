@@ -7,6 +7,7 @@
  *   4 · ¿Se vuelca? ¿Y el suelo?  carta D de cada viento
  *   5 · ¿Es rígida? ¿Gira?        carta C (torre deformada) y rototraslación (paso 4) de cada viento
  *   6 · ¿Los tabiques resisten?   semáforo por pieza
+ *   7 · Vistas, plantas y cortes  dibujos del modelo (plantas, cortes, alzados) y capturas del 3D
  *   Anexo                         niveles, muros, reparto por pieza y todos los controles con sus celdas
  */
 import { estado, fmt } from './estado';
@@ -17,6 +18,7 @@ import { datosCarta, datosRotoPlanoActual, tablaControles } from './etapas';
 import { dibujoRototraslacion } from './rototraslacion';
 import { tablaValores } from './diagramas';
 import type { Control } from '../engine/verificaciones';
+import { capturar3D, vistas3D, vistasParaInforme } from './vistas';
 
 const ICONO: Record<string, string> = { verifica: '✓', 'no verifica': '✗', atención: '!', informativo: 'i' };
 const sem = (e: string) => h('span', { class: `inf-sem ${e.replace(' ', '-')}` }, ICONO[e] ?? '·');
@@ -121,6 +123,16 @@ export function armarInforme(): HTMLElement {
   flex.forEach(c => tf.append(h('div', { class: 'inf-ctrl' }, sem(c.estado), h('span', {}, h('b', {}, c.nombre), h('small', {}, ` · ${c.grupo.replace('Flexocompresión, ', '')} · ${c.criterio}`)), h('span', { class: 'n' }, c.guia !== null ? `${fmt(c.guia, 1)} ${c.unidad}` : ''))));
   p6.append(tf);
   doc.append(p6);
+
+  // ---- 7 · Vistas, plantas y cortes (del modelo; las capturas del 3D, con el botón 📷 del visor)
+  if (!vistas3D.length) capturar3D('Axonometría (vista del visor 3D)');
+  const vs = vistasParaInforme(p);
+  vs.forEach((v, i) => {
+    const s = hoja(`7${String.fromCharCode(97 + i)}`, `Vistas, plantas y cortes · ${v.titulo}`);
+    if (i === 0) s.append(frase('Dibujos sacados del mismo modelo que calcula la app: la planta cortada a 1,20 m (con las puertas y ventanas), cortes verticales con los elementos cortados piso por piso (con sus dinteles y antepechos) y alzados con el exoesqueleto, si hay. Las vistas del 3D se agregan con el botón 📷 del visor.'));
+    s.append(h('div', { class: 'inf-vista' }, v.nodo));
+    doc.append(s);
+  });
 
   // ---- Anexo
   const an = hoja('A', 'Anexo · los números');

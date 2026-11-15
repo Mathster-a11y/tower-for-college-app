@@ -1294,3 +1294,7 @@ svg .linea-ref-punta { fill: var(--panel, #fff); stroke: var(--accent); stroke-w
 /* aberturas (puertas y ventanas) en elementos enteros */
 .planta .abertura { fill: var(--lienzo, #fff); stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .planta .abertura.ventana { fill: color-mix(in srgb, var(--accent) 18%, var(--lienzo, #fff)); stroke-dasharray: none; }
+
+/* vistas del informe */
+.informe .inf-vista svg, .informe .inf-vista img { display: block; width: 100%; height: auto; max-height: 230mm; object-fit: contain; border: 1px solid #ccc; }
+.vista-dib { background: #fff; }

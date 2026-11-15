@@ -19,6 +19,7 @@ import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from '
 import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
+import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
@@ -480,6 +481,11 @@ estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'plant
 montarPlanta($('vista-planta'));
 montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
 montarDiagramaJ($('vista-3d'), $<HTMLButtonElement>('b-j3d'));
+$('b-foto3d').addEventListener('click', () => {
+  const n = vistas3D.length + 1;
+  const ok = capturar3D(`Vista del 3D ${n} · viento ${estado.dir}${estado.capas.tensiones ? ' · tensiones' : ''}${estado.capas.deformada ? ' · deformada' : ''}`);
+  mensaje(ok ? `Vista del 3D guardada para el informe (${n}). Exportar → Informe la pone en la sección «Vistas, plantas y cortes».` : 'No se pudo guardar la vista del 3D.');
+});
 {
   // capa de tensiones del 3D (botón σ)
   const bT = $<HTMLButtonElement>('b-t3d');
