@@ -1,4 +1,5 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
+import { conEspesor } from '../engine/juntas';
 import { dibujoPerfil } from './perfil';
 import { AUTOR, ANIO, HASTA, LICENCIA_NOMBRE, LICENCIA_URL, vigente } from '../autoria';
 import { estado, fmt, COLORES } from './estado';
@@ -321,7 +322,9 @@ export function panelMuros(c: H) {
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],
-    escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; if (tipoDe(m) === 'perfil' && (clave === 'largo' || clave === 'espesor')) { avisoPanel(`${m.id} es un perfil irregular: su forma se edita con doble clic en la planta.`); return false; } m[clave] = x; },
+    escribir: (m, v) => { const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false; if (tipoDe(m) === 'perfil' && (clave === 'largo' || clave === 'espesor')) { avisoPanel(`${m.id} es un perfil irregular: su forma se edita con doble clic en la planta.`); return false; }
+      // dibujado por una cara: al cambiar el espesor la cara de referencia queda quieta
+      if (clave === 'espesor' && m.refLado) { const k = conEspesor(m, x); m.x = k.x; m.y = k.y; } m[clave] = x; },
   });
   const txt = (titulo: string, clave: 'piezaA' | 'pegadoA' | 'piezaB' | 'pegadoB'): Columna<Muro> => ({ titulo, clave, leer: m => m[clave], escribir: (m, v) => { m[clave] = v.trim(); } });
   const alt = datosAlturaDe(p);

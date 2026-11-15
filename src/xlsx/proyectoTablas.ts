@@ -88,7 +88,7 @@ function medLeer(s: string): MedidasPieza {
 }
 
 const CAB_MUROS = ['Muro', 'Dir.', 'x (m)', 'y (m)', 'Largo (m)', 'Espesor (m)', 'Llega', 'Área inf. (m²)', 'Pieza A', 'Pegado a (A)', 'Pieza B', 'Pegado a (B)', 'Tipo', 'Lado y',
-  'Desde', 'Hasta', 'Rol A', 'Rol B', 'Pórtico', 'Grupo', 'Pieza tipo', 'Medidas de la pieza', 'Vano con', 'Vano ancho (m)', 'Vano tipo', 'Grupo de dibujo', 'Ref. componente', 'Espesor en altura'];
+  'Desde', 'Hasta', 'Rol A', 'Rol B', 'Pórtico', 'Grupo', 'Pieza tipo', 'Medidas de la pieza', 'Vano con', 'Vano ancho (m)', 'Vano tipo', 'Grupo de dibujo', 'Ref. componente', 'Espesor en altura', 'Línea de referencia'];
 const CAB_CONT = ['Elemento', 'Clase', 'Anillo', 'Nº', 'x (m)', 'y (m)', 'b (arco)', 'c1 x', 'c1 y', 'c2 x', 'c2 y'];
 
 /** las tablas del proyecto, listas para escribir en la planilla o en Google Sheets */
@@ -98,13 +98,15 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   out.push({ nombre: T.proyecto, anchos: [26, 16, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS.map(([k, q, g]) => [k, g(p) ?? null, q] as Valor[]),
     [], ['Estas hojas «T3D …» guardan la torre completa: con ellas la app vuelve a armar el proyecto. Se pueden editar; la app las lee al abrir la planilla.']] });
   out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null])] });
-  out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30], filas: [CAB_MUROS, ...p.muros.map(m => [
+  out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30, 12], filas: [CAB_MUROS, ...p.muros.map(m => [
     m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? SI : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
     TIPO_TXT[m.tipo ?? 'tabique'], m.tipo === 'tubo-rect' ? m.ladoY ?? null : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta),
     m.rolA || null, m.rolB || null, b2s(m.portico), m.grupo ?? null, m.pieza?.tipo ?? null, m.pieza ? medTxt(m.pieza.med) : null,
     m.vano?.con ?? null, m.vano?.ancho ?? null, m.vano?.tipo ?? null, m.gd ?? null, m.cref ?? null,
     // «nivel=espesor; …»: desde ese nivel hacia arriba, ese espesor
     m.espesores?.length ? [...m.espesores].sort((a, b) => a.desde - b.desde).map(t => `${nombreNivel(t.desde)}=${String(t.e).replace('.', ',')}`).join('; ') : null,
+    // línea de referencia: eje (vacío), cara + (izquierda del eje) o cara − (derecha)
+    m.refLado === 1 ? 'cara +' : m.refLado === -1 ? 'cara −' : null,
   ] as Valor[])] });
   const cont: Valor[][] = [CAB_CONT];
   const vert = (el: string, clase: string, anillo: number, v: { x: number; y: number; b?: number; c1?: { x: number; y: number }; c2?: { x: number; y: number } }[]) =>
@@ -194,6 +196,8 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
       }).filter(Boolean) as { desde: number; e: number }[];
       if (tramos.length) m.espesores = tramos;
     }
+    const rf = txt(g('Línea de referencia')).replace(/\s+/g, '');
+    if (rf === 'cara+') m.refLado = 1; else if (rf === 'cara−' || rf === 'cara-') m.refLado = -1;
     return m;
   });
   // contornos

@@ -92,10 +92,33 @@ describe('quién pasa, como las hojas J', () => {
     expect(largo(hB, 'B')).toBeCloseTo(4.1 + 0.2, 6); expect(largo(hB, 'A')).toBeCloseTo(3.9 + 0.2, 6);
   });
   it('en otro ángulo pasa el más grueso; iguales, la L queda a inglete', () => {
-    const e = (id: string, ang: number, e2: number) => ({ id, a: { x: 0, y: 0 }, b: { x: Math.cos(ang), y: Math.sin(ang) }, e: e2, u: { x: Math.cos(ang), y: Math.sin(ang) }, n: { x: -Math.sin(ang), y: Math.cos(ang) }, L: 1 });
+    const e = (id: string, ang: number, e2: number) => ({ id, a: { x: 0, y: 0 }, b: { x: Math.cos(ang), y: Math.sin(ang) }, e: e2, u: { x: Math.cos(ang), y: Math.sin(ang) }, n: { x: -Math.sin(ang), y: Math.cos(ang) }, L: 1, ra: { x: 0, y: 0 }, rb: { x: Math.cos(ang), y: Math.sin(ang) } });
     const A = e('A', Math.PI / 6, 0.3), B = e('B', (2 * Math.PI) / 3, 0.2);
     expect(quienPasa(A, B, 'A')!.id).toBe('A');
     expect(quienPasa(A, e('C', (2 * Math.PI) / 3, 0.3), 'A', true)).toBeNull();
     expect(ejeDeMuro(t('Z', 'X', 0, 0, 2) as never)).not.toBeNull();
+  });
+});
+
+import { conEspesor, lineaReferencia } from './juntas';
+describe('línea de referencia (como ArchiCAD)', () => {
+  const t = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number, refLado?: 1 | -1) => ({ id, dir, x, y, largo, espesor: 0.2, llega: true, areaInf: 0, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', ...(refLado ? { refLado } : {}) });
+  it('dos muros dibujados por su cara de afuera se enlazan en la esquina de afuera aunque sus ejes no se toquen', () => {
+    // A: cara de abajo en y = 0 (cuerpo arriba: centro y = 0,1); B: cara izquierda en x = 0 (centro x = 0,1)
+    const A = t('A', 'X', 2, 0.1, 4, -1), B = t('B', 'Y', 0.1, 2, 4, 1);
+    expect(lineaReferencia(A as never)![0]).toEqual({ x: 0, y: 0 });
+    expect(lineaReferencia(B as never)![0]).toEqual({ x: 0, y: 0 });
+    const js = detectarJuntas([A, B] as never);
+    expect(js.map(j => j.tipo)).toEqual(['L']);
+    const h = huellasLimpias([A, B] as never, js, { 'A|B': 'inglete' });
+    const area = [...h.values()].flat().reduce((s, pg) => s + Math.abs(pg.reduce((q, p, i) => q + p.x * pg[(i + 1) % pg.length].y - pg[(i + 1) % pg.length].x * p.y, 0)) / 2, 0);
+    expect(area).toBeCloseTo(4 * 0.2 + (4 - 0.2) * 0.2, 9);       // la L sin doble conteo
+  });
+  it('al cambiar el espesor, la cara de referencia queda quieta', () => {
+    const A = t('A', 'X', 2, 0.1, 4, -1);
+    const B = conEspesor(A as never, 0.5);
+    expect(lineaReferencia(B)![0].y).toBeCloseTo(0, 9);
+    expect(B.y).toBeCloseTo(0.25, 9);
+    expect(conEspesor(t('C', 'Y', 0, 0, 3) as never, 0.4).x).toBe(0);  // centrado: no se mueve
   });
 });

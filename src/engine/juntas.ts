@@ -18,7 +18,9 @@ import { tipoDe } from './modelo';
 import { enPlanta } from './perfil';
 
 export type P = { x: number; y: number };
-export interface Eje { id: string; a: P; b: P; e: number; u: P; n: P; L: number }
+export interface Eje { id: string; a: P; b: P; e: number; u: P; n: P; L: number;
+  /** línea de referencia (el eje corrido hacia una cara si el muro se dibujó por su cara) */
+  ra: P; rb: P }
 export type TipoJunta = 'L' | 'T' | 'X';
 export type EleccionJunta = 'inglete' | 'pasaA' | 'pasaB';
 /** viento con el que se decide quién pasa: A sopla en y (el ala es el muro en x), B sopla en x */
@@ -66,8 +68,26 @@ export function ejeDeMuro(m: Muro): Eje | null {
   } else return null;
   const L = dist(a, b);
   if (L < 1e-6) return null;
-  const u = mul(sub(b, a), 1 / L);
-  return { id: m.id, a, b, e, u, n: { x: -u.y, y: u.x }, L };
+  const u = mul(sub(b, a), 1 / L), n = { x: -u.y, y: u.x };
+  const off = m.refLado ? (m.refLado * e) / 2 : 0;
+  return { id: m.id, a, b, e, u, n, L, ra: add(a, mul(n, off)), rb: add(b, mul(n, off)) };
+}
+
+/** línea de referencia de un muro recto (sus dos puntas), o null si no es recto */
+export function lineaReferencia(m: Muro): [P, P] | null {
+  const E = ejeDeMuro(m);
+  return E ? [E.ra, E.rb] : null;
+}
+
+/**
+ * El mismo muro con otro espesor, dejando quieta su línea de referencia (si se dibujó por una cara, esa cara no se
+ * mueve y el muro crece o se afina hacia el otro lado, como en ArchiCAD). Solo tabiques; los demás cambian centrados.
+ */
+export function conEspesor(m: Muro, e: number): Muro {
+  if (!m.refLado || tipoDe(m) !== 'tabique') return { ...m, espesor: e };
+  const E = ejeDeMuro(m)!;
+  const d = ((e - m.espesor) / 2) * -m.refLado;            // el centro se corre hacia el lado del cuerpo
+  return { ...m, espesor: e, x: +(m.x + E.n.x * d).toFixed(4), y: +(m.y + E.n.y * d).toFixed(4) };
 }
 
 /** proyección de q sobre el eje: parámetro (0 = a, L = b) y distancia al eje */
@@ -82,14 +102,21 @@ export function detectarJuntas(muros: Muro[], tol = 0.02): Junta[] {
     const ang = (Math.acos(Math.min(1, Math.abs(dot(A.u, B.u)))) * 180) / Math.PI;
     if (ang < 1) continue;                                        // paralelos: no hay junta (se tocan de costado o en línea)
     const pa = [A.a, A.b], pb = [B.a, B.b];
-    // L: puntas que coinciden
+    // L: puntas que coinciden, de los ejes o de las líneas de referencia (dos muros dibujados por su cara de afuera se
+    // enlazan en la esquina de afuera, como en ArchiCAD)
     let hecho = false;
-    for (let ka = 0; ka < 2 && !hecho; ka++) for (let kb = 0; kb < 2 && !hecho; kb++) if (dist(pa[ka], pb[kb]) <= tol + 1e-9) { out.push({ tipo: 'L', a: A.id, b: B.id, ka, kb, p: pa[ka], angulo: ang }); hecho = true; }
+    const ra = [A.ra, A.rb], rb = [B.ra, B.rb];
+    for (let ka = 0; ka < 2 && !hecho; ka++) for (let kb = 0; kb < 2 && !hecho; kb++) {
+      if (dist(pa[ka], pb[kb]) <= tol + 1e-9) { out.push({ tipo: 'L', a: A.id, b: B.id, ka, kb, p: pa[ka], angulo: ang }); hecho = true; }
+      else if (dist(ra[ka], rb[kb]) <= tol + 1e-9) { out.push({ tipo: 'L', a: A.id, b: B.id, ka, kb, p: ra[ka], angulo: ang }); hecho = true; }
+    }
     if (hecho) continue;
     // T: una punta sobre el eje del otro (adentro, lejos de sus puntas)
     const enEje = (E: Eje, q: P) => { const r = proy(E, q); return r.d <= Math.max(tol, 1e-9) && r.t > tol && r.t < E.L - tol; };
-    for (let ka = 0; ka < 2 && !hecho; ka++) if (enEje(B, pa[ka])) { out.push({ tipo: 'T', a: A.id, b: B.id, ka, kb: -1, p: pa[ka], angulo: ang }); hecho = true; }
-    for (let kb = 0; kb < 2 && !hecho; kb++) if (enEje(A, pb[kb])) { out.push({ tipo: 'T', a: B.id, b: A.id, ka: kb, kb: -1, p: pb[kb], angulo: ang }); hecho = true; }
+    // (o la punta de la línea de referencia sobre la línea de referencia del otro)
+    const enRef = (E: Eje, q: P) => { const r = proy({ ...E, a: E.ra }, q); return r.d <= Math.max(tol, 1e-9) && r.t > tol && r.t < E.L - tol; };
+    for (let ka = 0; ka < 2 && !hecho; ka++) if (enEje(B, pa[ka]) || enRef(B, ra[ka])) { out.push({ tipo: 'T', a: A.id, b: B.id, ka, kb: -1, p: pa[ka], angulo: ang }); hecho = true; }
+    for (let kb = 0; kb < 2 && !hecho; kb++) if (enEje(A, pb[kb]) || enRef(A, rb[kb])) { out.push({ tipo: 'T', a: B.id, b: A.id, ka: kb, kb: -1, p: pb[kb], angulo: ang }); hecho = true; }
     if (hecho) continue;
     // X: los ejes se cruzan por dentro de los dos
     const den = cruz(A.u, B.u);

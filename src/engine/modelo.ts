@@ -67,6 +67,13 @@ export interface Muro {
    * (por debajo del primer tramo vale «espesor», que es el de PB y el que va a la hoja J de la planilla)
    */
   espesores?: TramoEspesor[] | null;
+  /**
+   * línea de referencia (como en ArchiCAD): la línea con la que se dibujó el muro. Vacío = el eje (centrado); +1 / −1 =
+   * una de las caras: el eje del muro corrido e/2 hacia su normal izquierda (+1) o derecha (−1), con el eje orientado de
+   * la punta de menor x (o menor y) a la otra. Los muros se enlazan por esa línea y, si cambia el espesor, la cara de
+   * referencia queda quieta y el muro crece hacia el otro lado.
+   */
+  refLado?: 1 | -1 | null;
   /** cota donde arranca el muro (vacío = en la fundación) y donde termina (vacío = en la azotea) */
   zDesde?: number | null;
   zHasta?: number | null;

@@ -1279,3 +1279,7 @@ button.peligro { color: var(--mal); }
 .campo-nivel-flex select { max-width: 100%; }
 .notas-fuentes { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
 .notas-fuentes li { margin: 0 0 4px; }
+
+/* línea de referencia del muro (como ArchiCAD) */
+.planta .linea-ref, svg .linea-ref { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 7 3 1.5 3; fill: none; pointer-events: none; }
+svg .linea-ref-punta { fill: var(--panel, #fff); stroke: var(--accent); stroke-width: 1.4; pointer-events: none; }

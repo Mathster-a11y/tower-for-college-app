@@ -1,5 +1,5 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
-import { claveJunta, detectarJuntas, ejeDeMuro, huellasLimpias, quienPasa } from '../engine/juntas';
+import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
@@ -87,6 +87,22 @@ export function montarPlanta(cont: HTMLElement) {
   let bMasRef: HTMLButtonElement | null = null;
   /** dibujo de muros: ortogonal (lo normal) o en cualquier ángulo (F8 o el botón «Orto»); los diagonales son perfiles */
   let orto = true;
+  /** línea de referencia del muro que se dibuja: el muro a la izquierda de la línea, centrado o a la derecha */
+  let refDib: 'izq' | 'eje' | 'der' = (() => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })();
+  /** corrimiento del centro del muro respecto de la línea dibujada a→b (el cuerpo queda del lado elegido) */
+  const corrimientoRef = (a: Punto, b: Punto, e: number): Punto => {
+    if (refDib === 'eje') return { x: 0, y: 0 };
+    const L = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / L, ny = (b.x - a.x) / L, k = (refDib === 'izq' ? 1 : -1) * e / 2;
+    return { x: nx * k, y: ny * k };
+  };
+  /** lado de la referencia de un muro ya armado (para guardarla): de qué lado de su eje quedó la línea dibujada */
+  const ladoRef = (m: Muro, linea: [Punto, Punto]): 1 | -1 | null => {
+    if (refDib === 'eje') return null;
+    const E = ejeDeMuro(m); if (!E) return null;
+    const mx = (linea[0].x + linea[1].x) / 2 - (E.a.x + E.b.x) / 2, my = (linea[0].y + linea[1].y) / 2 - (E.a.y + E.b.y) / 2;
+    const d = mx * E.n.x + my * E.n.y;
+    return Math.abs(d) < 1e-6 ? null : d > 0 ? 1 : -1;
+  };
   const opLazo = { forma: 'libre' as 'libre' | 'rect', criterio: 'auto' as 'auto' | 'centro' | 'entero' | 'tocando' };
   const barraLazo = document.createElement('div'); barraLazo.className = 'barra-lazo'; barraLazo.hidden = true;
   const segL = (etq: string, ops: [string, string, string][], get: () => string, set: (v: string) => void) => {
@@ -110,8 +126,16 @@ export function montarPlanta(cont: HTMLElement) {
   iEsp.addEventListener('change', () => { const v = Number(iEsp.value.replace(',', '.')); if (v > 0 && v < 5) ultimoEspesor = v; iEsp.value = String(ultimoEspesor).replace('.', ','); });
   lEsp.append(iEsp, ' m');
   const sOrto = document.createElement('span'); sOrto.className = 'seg chico'; sOrto.append(bOrto);
-  barraDib.append(sOrto, lEsp);
+  // línea de referencia (como ArchiCAD): la línea que se dibuja es una cara o el eje del muro; R la cambia
+  const segRef = segL('Línea de referencia', [
+    ['izq', '◧ cara', 'La línea que dibujás es la cara derecha del muro: el muro queda a la izquierda (mirando hacia donde dibujás). Así se dibuja una planta por su borde exterior.'],
+    ['eje', '▭ eje', 'La línea que dibujás es el eje del muro (centrado).'],
+    ['der', 'cara ◨', 'La línea que dibujás es la cara izquierda del muro: el muro queda a la derecha.'],
+  ], () => refDib, v => { refDib = v as typeof refDib; try { localStorage.setItem('torre3d.refDib', refDib); } catch { /* sin almacenamiento */ } pedirDibujo(); });
+  segRef.title = 'Línea de referencia (R): cara, eje o la otra cara. Los muros se enganchan por esa línea y, si cambiás el espesor, esa cara queda quieta.';
+  barraDib.append(sOrto, segRef, lEsp);
   cont.appendChild(barraDib);
+  document.addEventListener('keydown', ev => { if ((ev.key === 'r' || ev.key === 'R') && modo === 'dibujar' && !ev.ctrlKey && !ev.metaKey && !(ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) { ev.preventDefault(); refDib = refDib === 'izq' ? 'eje' : refDib === 'eje' ? 'der' : 'izq'; segRef.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === refDib))); mensaje(refDib === 'eje' ? 'Línea de referencia: el eje del muro.' : `Línea de referencia: una cara; el muro queda a la ${refDib === 'izq' ? 'izquierda' : 'derecha'} de la línea que dibujás.`); pedirDibujo(); } });
   document.addEventListener('keydown', ev => { if (ev.key === 'F8' && modo === 'dibujar') { ev.preventDefault(); orto = !orto; pintarOrto(); mensaje(orto ? 'Ortogonal: los muros salen en x o en y.' : 'Libre: los muros pueden ir en diagonal (de a 15° con la grilla); quedan como perfiles.'); pedirDibujo(); } });
   /** elige los muros iguales al elegido (mismo tipo, largo y espesor), sueltos en el grupo que se edita */
   const elegirIguales = () => {
@@ -989,7 +1013,7 @@ export function montarPlanta(cont: HTMLElement) {
         };
         if (t === 'tabique') {
           med.append(campoM('largo', m.largo, 'Largo del tabique (crece desde su centro)', (w, x) => { w.largo = x; return null; }),
-            campoM('espesor', m.espesor, 'Espesor del tabique', (w, x) => { if (x > w.largo) return 'El espesor no puede pasar el largo (girá el tabique si es eso lo que querés).'; w.espesor = x; return null; }));
+            campoM('espesor', m.espesor, m.refLado ? 'Espesor del tabique (la cara de referencia queda quieta)' : 'Espesor del tabique', (w, x) => { if (x > w.largo) return 'El espesor no puede pasar el largo (girá el tabique si es eso lo que querés).'; const k = conEspesor(w, x); w.x = k.x; w.y = k.y; w.espesor = x; return null; }));
           const gir = mk('button', m.dir === 'Y' ? '↻ a X' : '↻ a Y'); gir.type = 'button'; gir.title = `Girar el tabique 90° sobre su centro (pasa a dirección ${m.dir === 'Y' ? 'X' : 'Y'})`;
           gir.addEventListener('click', () => { estado.cambiar(pp => { const w = pp.muros.find(o => o.id === m.id); if (w) { w.dir = w.dir === 'Y' ? 'X' : 'Y'; w.rolA = ''; w.rolB = ''; } }); });
           med.append(gir);
@@ -1548,8 +1572,9 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'dibujar' && cursor) {
       const pr = el('g', { class: 'previa' });
       if (inicio && !orto && esDiagonal(inicio, finLibre(inicio, cursor))) {
-        const fb = finLibre(inicio, cursor), pol = rectLibre(inicio, fb, ultimoEspesor);
+        const fb = finLibre(inicio, cursor), off = corrimientoRef(inicio, fb, ultimoEspesor), pol = rectLibre(inicio, fb, ultimoEspesor).map(q => ({ x: q.x + off.x, y: q.y + off.y }));
         pr.appendChild(el('polygon', { points: pol.map(q => `${X(q.x)},${Y(q.y)}`).join(' ') }));
+        pr.appendChild(el('line', { x1: X(inicio.x), y1: Y(inicio.y), x2: X(fb.x), y2: Y(fb.y), class: 'linea-ref' }));
         const L = Math.hypot(fb.x - inicio.x, fb.y - inicio.y), ang = ((Math.atan2(fb.y - inicio.y, fb.x - inicio.x) * 180) / Math.PI + 360) % 360;
         pr.appendChild(el('text', { x: X((inicio.x + fb.x) / 2) + 10, y: Y((inicio.y + fb.y) / 2) - 8, class: 'etiqueta' }, largoTipeado ? `${largoTipeado}▌ m` : `${L.toFixed(2).replace('.', ',')} m · ${ang.toFixed(0)}°`));
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
@@ -1557,7 +1582,10 @@ export function montarPlanta(cont: HTMLElement) {
         const t = muroDesdeTramo(inicio, cursor, ultimoEspesor);
         if (t) {
           const ax = t.dir === 'X' ? t.largo : t.espesor, ay = t.dir === 'X' ? t.espesor : t.largo;
-          pr.appendChild(el('rect', { x: X(t.x - ax / 2), y: Y(t.y + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala) }));
+          const fin0 = t.dir === 'X' ? { x: t.x + (cursor.x >= inicio.x ? 1 : -1) * t.largo / 2, y: t.y } : { x: t.x, y: t.y + (cursor.y >= inicio.y ? 1 : -1) * t.largo / 2 };
+          const off = corrimientoRef(inicio, fin0, ultimoEspesor);
+          pr.appendChild(el('rect', { x: X(t.x + off.x - ax / 2), y: Y(t.y + off.y + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala) }));
+          pr.appendChild(el('line', { x1: X(inicio.x), y1: Y(t.dir === 'X' ? t.y : inicio.y), x2: X(t.dir === 'X' ? fin0.x : t.x), y2: Y(fin0.y), class: 'linea-ref' }));
           pr.appendChild(el('text', { x: X(t.x) + (t.dir === 'Y' ? 8 : 0), y: Y(t.y) + (t.dir === 'X' ? -8 : 4), class: 'etiqueta', 'text-anchor': t.dir === 'X' ? 'middle' : 'start' }, largoTipeado ? `${largoTipeado}▌ m` : `${t.largo.toFixed(2).replace('.', ',')} m`));
         }
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
@@ -1565,6 +1593,16 @@ export function montarPlanta(cont: HTMLElement) {
       pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 2 : 3.5, class: `iman ${iman}` }));
       if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
       svg.appendChild(pr);
+    }
+    // línea de referencia de los muros elegidos que se dibujaron por una cara (como ArchiCAD: se ve al elegirlos)
+    {
+      const ids = new Set([estado.seleccion, ...estado.multi.m].filter(Boolean) as string[]);
+      p.muros.filter(m => ids.has(m.id) && m.refLado).forEach(m => {
+        const lr = lineaReferencia(m); if (!lr) return;
+        const [a, b] = lr;
+        svg.appendChild(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b.x), y2: Y(b.y), class: 'linea-ref' }));
+        [a, b].forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 3, class: 'linea-ref-punta' })));
+      });
     }
     if (verAreas) acomodarAreas();
     manijasSil.forEach(m => svg.appendChild(m));
@@ -1828,7 +1866,10 @@ export function montarPlanta(cont: HTMLElement) {
       estado.cambiar(() => {
         const id = nuevoId(), t = `T${id.slice(1)}`;
         const base: Muro = { id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: ultimoEspesor, llega: true, areaInf: 10, piezaA: t, pegadoA: '', piezaB: `${t}B`, pegadoB: '', ...(estado.contexto ? { gd: estado.contexto } : {}) };
-        estado.proyecto.muros = [...estado.proyecto.muros, ponerPerfil(base, { v: rectLibre(a0, q, ultimoEspesor) })];
+        const off = corrimientoRef(a0, q, ultimoEspesor);
+        const nuevo = ponerPerfil(base, { v: rectLibre(a0, q, ultimoEspesor).map(v => ({ x: +(v.x + off.x).toFixed(4), y: +(v.y + off.y).toFixed(4) })) });
+        const lr = ladoRef(nuevo, [a0, q]); if (lr) nuevo.refLado = lr;
+        estado.proyecto.muros = [...estado.proyecto.muros, nuevo];
         estado.seleccion = id;
       });
       inicio = { x: +q.x.toFixed(3), y: +q.y.toFixed(3) };
@@ -1841,7 +1882,9 @@ export function montarPlanta(cont: HTMLElement) {
     estado.cambiar(() => {
       const id = nuevoId();
       // dibujado mientras se edita un grupo: queda adentro de ese grupo
-      const m: Muro = { id, ...t, llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', ...(estado.contexto ? { gd: estado.contexto } : {}) };
+      const a0 = inicio!, off = corrimientoRef(a0, fin, ultimoEspesor);
+      const m: Muro = { id, ...t, x: +(t.x + off.x).toFixed(4), y: +(t.y + off.y).toFixed(4), llega: true, areaInf: 10, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', ...(estado.contexto ? { gd: estado.contexto } : {}) };
+      const lr = ladoRef(m, [a0, fin]); if (lr) m.refLado = lr;
       estado.proyecto.muros = armarPiezas([...estado.proyecto.muros, m]);
       estado.seleccion = id;
     });
