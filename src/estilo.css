@@ -1282,3 +1282,11 @@ button.peligro { color: var(--mal); }
 /* línea de referencia del muro (como ArchiCAD) */
 .planta .linea-ref, svg .linea-ref { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 7 3 1.5 3; fill: none; pointer-events: none; }
 svg .linea-ref-punta { fill: var(--panel, #fff); stroke: var(--accent); stroke-width: 1.4; pointer-events: none; }
+
+/* lista de lo elegido (sacar uno con ✕) */
+.barra-sel .b-lista-sel { min-width: 28px; }
+.barra-sel .lista-sel { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow: auto; padding-top: 4px; }
+.barra-sel .lista-sel[hidden] { display: none; }
+.barra-sel .chip-sel { font: 12px var(--mono); padding: 2px 8px; border-radius: 12px; }
+@media (pointer: coarse) { .barra-sel .chip-sel { padding: 6px 10px; } }
+.barra-sel:has(.lista-sel:not([hidden])) { flex-wrap: wrap; max-width: min(92%, 640px); white-space: normal; }

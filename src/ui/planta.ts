@@ -52,10 +52,23 @@ export function montarPlanta(cont: HTMLElement) {
   const barraSel = document.createElement('div'); barraSel.className = 'barra-sel'; barraSel.hidden = true;
   const cuentaSel = document.createElement('span');
   const bSel = (t: string, titulo: string, f: () => void, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = titulo; if (cls) b.className = cls; b.addEventListener('click', f); return b; };
-  barraSel.append(cuentaSel,
+  // lista de lo elegido: cada uno con ✕ para sacarlo del conjunto (sin teclado: lápiz o dedo)
+  const listaSel = document.createElement('div'); listaSel.className = 'lista-sel'; listaSel.hidden = true;
+  const bLista = document.createElement('button'); bLista.type = 'button'; bLista.className = 'b-lista-sel'; bLista.title = 'Ver lo elegido y sacar uno (también: Mayúsculas + clic sobre el muro)'; bLista.textContent = '▾';
+  bLista.addEventListener('click', () => { listaSel.hidden = !listaSel.hidden; armarListaSel(); });
+  const armarListaSel = () => {
+    listaSel.textContent = '';
+    if (listaSel.hidden) return;
+    const p = estado.proyecto;
+    const item = (txt: string, sacar: () => void) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip-sel'; b.title = `Sacar ${txt} de la selección`; b.textContent = `${txt} ✕`; b.addEventListener('click', () => { sacar(); mensaje(`${txt} fuera de la selección.`); estado.avisarPanel(); }); return b; };
+    estado.multi.g.forEach(g => listaSel.append(item(`«${grupoPorId(p, g)?.nombre ?? g}»`, () => { estado.multi.g = estado.multi.g.filter(x => x !== g); })));
+    estado.multi.m.forEach(id => listaSel.append(item(id, () => { estado.multi.m = estado.multi.m.filter(x => x !== id); if (estado.seleccion === id) estado.seleccion = estado.multi.m[0] ?? null; })));
+  };
+  barraSel.append(cuentaSel, bLista,
     bSel('Borrar', 'Borra lo elegido (Supr). Ctrl+Z deshace.', () => borrarElegidos(), 'peligro'),
     bSel('Agrupar', 'Junta lo elegido en un grupo (Ctrl+G)', () => agruparElegidos()),
     bSel('Soltar', 'Vacía la selección (Esc)', () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); }));
+  barraSel.append(listaSel);
   cont.appendChild(barraSel);
   // barra del grupo elegido: el grupo es un elemento cerrado; se copia, gira y espeja entero
   const barraGrupo = document.createElement('div'); barraGrupo.className = 'barra-sel barra-grupo'; barraGrupo.hidden = true;
@@ -361,9 +374,15 @@ export function montarPlanta(cont: HTMLElement) {
     if (!nodo) return;
     const lista = nodo.t === 'g' ? estado.multi.g : estado.multi.m;
     const i = lista.indexOf(nodo.id);
-    if (i >= 0) lista.splice(i, 1); else lista.push(nodo.id);
+    // si había un muro elegido con un clic (sin estar en el conjunto), entra primero al conjunto
+    const s0 = estado.seleccion && estado.seleccion !== m.id ? estado.proyecto.muros.find(x => x.id === estado.seleccion) : undefined;
+    const n0 = s0 && nodoAlTocar(estado.proyecto, s0, estado.contexto);
+    if (n0 && !estado.multi.m.length && !estado.multi.g.length) (n0.t === 'g' ? estado.multi.g : estado.multi.m).push(n0.id);
+    const saca = i >= 0;
+    if (saca) lista.splice(i, 1); else lista.push(nodo.id);
+    if (saca && estado.seleccion === m.id) estado.seleccion = estado.multi.m[0] ?? null;
     const n = estado.multi.g.length + estado.multi.m.length;
-    mensaje(n ? `${n} elegidos para agrupar: Ctrl+G o «Agrupar» en el Esquema.` : 'Selección vacía.');
+    mensaje(n ? `${saca ? 'Sacado' : 'Sumado'} ${nodo.t === 'g' ? `«${grupoPorId(estado.proyecto, nodo.id)?.nombre}»` : nodo.id}: ${n} elegido${n > 1 ? 's' : ''}. Mayús + clic suma o saca; Esc suelta todo.` : 'Selección vacía.');
     estado.avisarPanel();
   };
   async function cargarPDF(f: File) {
@@ -1417,6 +1436,8 @@ export function montarPlanta(cont: HTMLElement) {
         if (ultimoToque && ultimoToque.id === m.id && ahora - ultimoToque.t < 450) { ultimoToque = null; abrirMedidas(m); return; }
         ultimoToque = { id: m.id, t: ahora };
         estado.seleccion = m.id;
+        // un clic elige (como en ArchiCAD): el muro queda en el conjunto de selección («1 elegido»); Mayús + clic suma o saca
+        if (nodo.t === 'm' && !enMultiM(m)) estado.multi = { m: [m.id], g: [] };
         const q = aMundo(ev);
         // cerca de una esquina (o de otro nodo) del elemento: se agarra desde ese nodo, con imán a los nodos de los demás
         const nd = nodosDe(m).map(n => ({ n, d: Math.hypot(n.x - q.x, n.y - q.y) * escala })).sort((a, b) => a.d - b.d || (a.n.t === 'esquina' ? -1 : 1))[0];
@@ -1470,7 +1491,7 @@ export function montarPlanta(cont: HTMLElement) {
     const gB = !nSel && estado.grupoSel && estado.grupoSel !== estado.contexto ? grupoPorId(p, estado.grupoSel) : undefined;
     barraGrupo.hidden = !gB || modo !== 'mover';
     if (gB) { nombreGrupo.textContent = `${gB.bloq ? '🔒 ' : ''}${gB.nombre}${gB.comp ? ' ◆' : ''}`; barraGrupo.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = !!gB.bloq && b.textContent !== 'Duplicar' && b.textContent !== 'Copia vinculada'; }); }
-    if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; }
+    if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; armarListaSel(); } else listaSel.hidden = true;
     barraCtx.hidden = !estado.contexto;
     if (estado.contexto) {
       const cad = ancestros(p, estado.contexto).reverse();
@@ -1509,6 +1530,8 @@ export function montarPlanta(cont: HTMLElement) {
         forma.addEventListener('pointerdown', e0 => {
           const ev = e0 as PointerEvent;
           ev.preventDefault(); ev.stopPropagation();
+          // Mayús + clic sobre los nodos del elegido también suma o saca de la selección (como sobre el muro)
+          if (ev.shiftKey || ev.ctrlKey || ev.metaKey || estado.eligeVarios) { alternarMulti(elegido); return; }
           // en muros finos los círculos de agarre se superponen: vale el nodo visible más cercano al puntero
           const qq = aMundo(ev);
           const nd = [...visibles].sort((u, v) => Math.hypot(u.x - qq.x, u.y - qq.y) - Math.hypot(v.x - qq.x, v.y - qq.y))[0] ?? ndDibujado;
