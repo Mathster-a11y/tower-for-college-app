@@ -10,6 +10,7 @@
  * En todos los pasos la flecha está sobre su tabique: su grosor es proporcional a J y su largo a la fuerza.
  * El dibujo va en el «marco del viento»: el viento siempre sube en el dibujo (en el viento B la planta se gira 90°).
  */
+import { estado } from './estado';
 import type { Muro } from '../engine/modelo';
 import { rectangulos, tipoDe } from '../engine/modelo';
 import { fmt } from './estado';
@@ -86,6 +87,12 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     defs.append(m);
   });
   svg.append(defs);
+  // sin piezas que tomen este viento (núcleo solo de gravedad, o un viento sin tabiques): no hay reparto que dibujar
+  if (!d.paralelos.length) {
+    svg.append(el('text', { x: ancho / 2, y: alto / 2 - 8, class: 'd-valor', 'text-anchor': 'middle' }, `No hay piezas que tomen el viento ${d.dir}: no hay reparto entre tabiques.`));
+    svg.append(el('text', { x: ancho / 2, y: alto / 2 + 14, class: 'd-eje', 'text-anchor': 'middle' }, estado.proyecto.exo ? 'Con exoesqueleto, el viento lo toma él (etapa 08 · Exoesqueleto).' : 'Asigná muros a piezas de este viento en Diseño → Piezas.'));
+    return svg;
+  }
 
   // ---------------------------------------------------------------- zonas del dibujo
   const conPoligono = paso === 1;
