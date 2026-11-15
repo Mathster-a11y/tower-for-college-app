@@ -304,7 +304,7 @@ function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: As
 export function Jreal(muros: Muro[], dir: Direccion): number {
   // perfiles: con sus propiedades exactas (como un círculo: A, J propio y posición)
   // muros que se encuentran (L, T, X): con su huella limpia (sin superposición ni hueco en la esquina)
-  const limpias = huellasLimpias(muros, detectarJuntas(muros));
+  const limpias = huellasLimpias(muros, detectarJuntas(muros), {}, dir === 'A' ? 'A' : 'B');
   const deLimpias = [...limpias.values()].flat().filter(pg => pg.length >= 3).map(pg => { const k = propiedadesPoligonos([pg]); return { A: k.A, I: dir === 'A' ? k.Jx : k.Jy, s: dir === 'A' ? k.yg : k.xg }; });
   const perf = muros.filter(m => tipoDe(m) === 'perfil' && !limpias.has(m.id)).map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });
   const rs = muros.filter(m => tipoDe(m) !== 'tubo-circ' && tipoDe(m) !== 'perfil' && !limpias.has(m.id)).flatMap(m => rectangulos(m).map(r => ({ b: dir === 'A' ? r.ax : r.ay, h: dir === 'A' ? r.ay : r.ax, s: dir === 'A' ? r.y : r.x })));

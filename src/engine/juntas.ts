@@ -1,11 +1,15 @@
 /**
  * Encuentros entre muros (juntas), con la idea de las «líneas de referencia» de los programas de dibujo: cada muro
  * recto tiene un eje (de punta a punta, por el medio del espesor) y dos muros se conectan cuando sus ejes se tocan.
- *  - L: las dos puntas coinciden. Por defecto, inglete (el corte va por la bisectriz: de la esquina de afuera a la de
- *    adentro); se puede elegir que pase uno de los dos (el que pasa llega a la cara de afuera del otro y el otro se
- *    corta contra su cara de adentro).
+ *  - L: las dos puntas coinciden. Por defecto pasa el que dicen las hojas J (abajo); se puede elegir inglete (el corte
+ *    va por la bisectriz) o que pase el otro (el que pasa llega a la cara de afuera del otro y el otro se corta contra
+ *    su cara de adentro).
  *  - T: la punta de uno cae sobre el eje del otro (no en una punta). El que llega se corta contra la cara del que pasa.
- *  - X: los ejes se cruzan. Pasa el más grueso (o el elegido); el otro se corta en dos contra las dos caras.
+ *  - X: los ejes se cruzan. Pasa el que dicen las hojas J (o el elegido); el otro se corta en dos contra las dos caras.
+ * Quién pasa, como en los dibujos de las hojas J de la planilla: en la pieza simétrica las alas (bm, bn) van de punta a
+ * punta y el alma (h) se corta en sus caras; en la asimétrica el ala superior (b1) cruza entera y las almas cuelgan
+ * debajo. Es decir: pasa el muro perpendicular al viento (el ala) y se corta el paralelo (el alma). Con encuentros en
+ * otro ángulo (ninguno de los dos es perpendicular al viento) pasa el más grueso.
  * Con cualquier ángulo: los cortes siguen la cara del otro muro (corte oblicuo), así la huella no tiene huecos ni
  * partes contadas dos veces. Todo es geometría de la planta: la usan el dibujo y la sección exacta (área y J).
  */
@@ -17,6 +21,8 @@ export type P = { x: number; y: number };
 export interface Eje { id: string; a: P; b: P; e: number; u: P; n: P; L: number }
 export type TipoJunta = 'L' | 'T' | 'X';
 export type EleccionJunta = 'inglete' | 'pasaA' | 'pasaB';
+/** viento con el que se decide quién pasa: A sopla en y (el ala es el muro en x), B sopla en x */
+export type VientoJunta = 'A' | 'B';
 export interface Junta { tipo: TipoJunta; a: string; b: string; /** punta de a (y de b) que participa: 0 = a, 1 = b, −1 = ninguna (pasa entero) */ ka: number; kb: number; p: P; angulo: number }
 
 const sub = (p: P, q: P): P => ({ x: p.x - q.x, y: p.y - q.y });
@@ -25,6 +31,20 @@ const mul = (p: P, k: number): P => ({ x: p.x * k, y: p.y * k });
 const dot = (p: P, q: P) => p.x * q.x + p.y * q.y;
 const cruz = (p: P, q: P) => p.x * q.y - p.y * q.x;
 const dist = (p: P, q: P) => Math.hypot(p.x - q.x, p.y - q.y);
+
+/**
+ * Quién pasa en un encuentro, según los dibujos de las hojas J: el muro perpendicular al viento (el ala) pasa y el
+ * paralelo (el alma) se corta. Si ninguno de los dos es perpendicular al viento (encuentro en otro ángulo) pasa el más
+ * grueso; si son igual de gruesos, el de id menor (o null con «empate», para que una L quede a inglete).
+ */
+export function quienPasa(A: Eje, B: Eje, viento: VientoJunta = 'A', empate = false): Eje | null {
+  // viento A: sopla en y → el ala va en x (|u.x| ≈ 1); viento B: sopla en x → el ala va en y
+  const perp = (E: Eje) => (viento === 'A' ? Math.abs(E.u.x) : Math.abs(E.u.y)) > Math.cos((5 * Math.PI) / 180);
+  const pa = perp(A), pb = perp(B);
+  if (pa !== pb) return pa ? A : B;
+  if (Math.abs(A.e - B.e) > 1e-6) return A.e > B.e ? A : B;
+  return empate ? null : A.id < B.id ? A : B;
+}
 
 /** eje de un muro recto: un tabique, o un perfil de 4 vértices que es un rectángulo (muro dibujado en diagonal) */
 export function ejeDeMuro(m: Muro): Eje | null {
@@ -95,9 +115,8 @@ function corte(p: P, d: P, q: P, f: P): P | null {
  * Huella limpia de cada muro con juntas: uno o más polígonos (el que se corta en una X queda en dos).
  * Los muros sin juntas no aparecen (se dibujan como siempre).
  */
-export function huellasLimpias(muros: Muro[], juntas: Junta[], elecciones: Record<string, EleccionJunta> = {}): Map<string, P[][]> {
+export function huellasLimpias(muros: Muro[], juntas: Junta[], elecciones: Record<string, EleccionJunta> = {}, viento: VientoJunta = 'A'): Map<string, P[][]> {
   const ejes = new Map(muros.map(m => [m.id, ejeDeMuro(m)]).filter(([, e]) => e) as [string, Eje][]);
-  const grueso = (id: string) => ejes.get(id)!.e;
   // cada punta de cada muro: la recta que la corta (punto y dirección) y de qué lado queda el cuerpo del muro
   type Fin = { q: P; f: P } | null;
   const fines = new Map<string, [Fin, Fin]>();
@@ -112,14 +131,16 @@ export function huellasLimpias(muros: Muro[], juntas: Junta[], elecciones: Recor
     const el = elecciones[claveJunta(j.a, j.b)];
     if (j.tipo === 'T') { fin(A.id)[j.ka] = cara(B, centroA, 1); return; }
     if (j.tipo === 'X') {
-      const pasa = el === 'pasaA' ? (A.id < B.id ? A : B) : el === 'pasaB' ? (A.id < B.id ? B : A) : grueso(A.id) >= grueso(B.id) ? A : B;
+      const pasa = el === 'pasaA' ? (A.id < B.id ? A : B) : el === 'pasaB' ? (A.id < B.id ? B : A) : quienPasa(A, B, viento)!;
       const otro = pasa === A ? B : A;
       const q1 = add(pasa.a, mul(pasa.n, pasa.e / 2)), q2 = add(pasa.a, mul(pasa.n, -pasa.e / 2));
       const lista = cortes.get(otro.id) ?? []; lista.push([{ q: q1, f: pasa.u }, { q: q2, f: pasa.u }]); cortes.set(otro.id, lista);
       return;
     }
     // L
-    const eleccion: EleccionJunta = el ?? 'inglete';
+    // sin elección: el de las hojas J (o inglete si son iguales y en ángulo: ninguno es más fuerte)
+    const auto = quienPasa(A, B, viento, true);
+    const eleccion: EleccionJunta = el ?? (auto ? ((auto === A) === (A.id < B.id) ? 'pasaA' : 'pasaB') : 'inglete');
     if (eleccion === 'inglete') {
       // las caras de afuera se cortan en la esquina de afuera; las de adentro en la de adentro: el corte une las dos
       const ladoA = Math.sign(dot(sub(centroB, A.a), A.n)) || 1, ladoB = Math.sign(dot(sub(centroA, B.a), B.n)) || 1;

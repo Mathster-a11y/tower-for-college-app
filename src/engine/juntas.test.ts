@@ -77,3 +77,25 @@ describe('juntas entre muros', () => {
     expect(r.A).toBeCloseTo(1, 12); expect(r.Jx).toBeCloseTo((2 * 0.5 ** 3) / 12, 12); expect(r.Jy).toBeCloseTo((0.5 * 2 ** 3) / 12, 12);
   });
 });
+
+import { quienPasa, ejeDeMuro } from './juntas';
+describe('quién pasa, como las hojas J', () => {
+  const t = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number, espesor = 0.2) => ({ id, dir, x, y, largo, espesor, llega: true, areaInf: 0, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' });
+  it('L a 90°: con el viento A pasa el muro en x (el ala); con el B, el muro en y', () => {
+    const ms = [t('A', 'X', 0, 0, 4), t('B', 'Y', -2, -2, 4)];
+    const js = detectarJuntas(ms as never);
+    expect(js[0].tipo).toBe('L');
+    const largo = (h: Map<string, { x: number; y: number }[][]>, id: string) => { const pg = h.get(id)![0]; return Math.max(...pg.map(p => p.x)) - Math.min(...pg.map(p => p.x)) + Math.max(...pg.map(p => p.y)) - Math.min(...pg.map(p => p.y)); };
+    const hA = huellasLimpias(ms as never, js, {}, 'A'), hB = huellasLimpias(ms as never, js, {}, 'B');
+    // el que pasa llega a la cara de afuera del otro: 4 + 0,1 (+ su espesor 0,2 en la otra medida)
+    expect(largo(hA, 'A')).toBeCloseTo(4.1 + 0.2, 6); expect(largo(hA, 'B')).toBeCloseTo(3.9 + 0.2, 6);
+    expect(largo(hB, 'B')).toBeCloseTo(4.1 + 0.2, 6); expect(largo(hB, 'A')).toBeCloseTo(3.9 + 0.2, 6);
+  });
+  it('en otro ángulo pasa el más grueso; iguales, la L queda a inglete', () => {
+    const e = (id: string, ang: number, e2: number) => ({ id, a: { x: 0, y: 0 }, b: { x: Math.cos(ang), y: Math.sin(ang) }, e: e2, u: { x: Math.cos(ang), y: Math.sin(ang) }, n: { x: -Math.sin(ang), y: Math.cos(ang) }, L: 1 });
+    const A = e('A', Math.PI / 6, 0.3), B = e('B', (2 * Math.PI) / 3, 0.2);
+    expect(quienPasa(A, B, 'A')!.id).toBe('A');
+    expect(quienPasa(A, e('C', (2 * Math.PI) / 3, 0.3), 'A', true)).toBeNull();
+    expect(ejeDeMuro(t('Z', 'X', 0, 0, 2) as never)).not.toBeNull();
+  });
+});

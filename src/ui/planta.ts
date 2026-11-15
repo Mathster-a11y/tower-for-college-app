@@ -1,5 +1,5 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
-import { claveJunta, detectarJuntas, huellasLimpias } from '../engine/juntas';
+import { claveJunta, detectarJuntas, ejeDeMuro, huellasLimpias, quienPasa } from '../engine/juntas';
 import { avisar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
@@ -1045,9 +1045,12 @@ export function montarPlanta(cont: HTMLElement) {
           fila.append(mk('span', `${j.tipo} con ${otro}${Math.abs(j.angulo - 90) > 0.5 ? ` · ${j.angulo.toFixed(0)}°` : ''}`));
           if (j.tipo === 'T') { fila.append(mk('span', j.a === m.id ? 'este llega y se corta' : 'pasa este', 'prec-nota')); cj.append(fila); return; }
           const sel = mk('select');
-          const ops: [string, string][] = j.tipo === 'L' ? [['inglete', 'inglete'], [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]] : [['', 'pasa el más grueso'], [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]];
+          // por defecto, como las hojas J: pasa el ala (perpendicular al viento elegido); en otro ángulo, el más grueso
+          const ea = ejeDeMuro(m), eb = ejeDeMuro(p.muros.find(o => o.id === otro)!);
+          const auto = ea && eb ? quienPasa(ea, eb, estado.dir, j.tipo === 'L') : null;
+          const ops: [string, string][] = [['', `como las hojas J: ${auto ? `pasa ${auto.id}` : 'inglete'} (viento ${estado.dir})`], ...(j.tipo === 'L' ? [['inglete', 'inglete'] as [string, string]] : []), [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]];
           ops.forEach(([v, t]) => { const o = mk('option', t); o.value = v; sel.append(o); });
-          sel.value = p.juntas?.[clave] ?? (j.tipo === 'L' ? 'inglete' : '');
+          sel.value = p.juntas?.[clave] ?? '';
           sel.addEventListener('change', () => { clavePrec = ''; estado.cambiar(pp => { pp.juntas = { ...(pp.juntas ?? {}) }; if (sel.value) pp.juntas[clave] = sel.value as 'inglete' | 'pasaA' | 'pasaB'; else delete pp.juntas[clave]; if (!Object.keys(pp.juntas).length) delete pp.juntas; }); mensaje(`Junta ${m.id}–${otro}: ${sel.selectedOptions[0]?.textContent}.`); });
           fila.append(sel); cj.append(fila);
         });
@@ -1323,7 +1326,8 @@ export function montarPlanta(cont: HTMLElement) {
     // juntas entre los muros de este nivel: se dibujan unidos (debajo, el contorno de todos; arriba, el relleno sin borde)
     const msNivel = p.muros.filter(m => !muroOculto(p, m) && presenteEn(m, zN, zFund, zTop));
     const juntasN = estado.juntasLimpias ? detectarJuntas(msNivel) : [];
-    const limpias = estado.juntasLimpias ? huellasLimpias(msNivel, juntasN, p.juntas ?? {}) : new Map<string, { x: number; y: number }[][]>();
+    // quién pasa: el de las hojas J para el viento elegido (el ala, perpendicular al viento), salvo que se elija otro
+    const limpias = estado.juntasLimpias ? huellasLimpias(msNivel, juntasN, p.juntas ?? {}, estado.dir) : new Map<string, { x: number; y: number }[][]>();
     const ptsPg = (pg: { x: number; y: number }[]) => pg.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ');
     if (limpias.size) {
       const gc = el('g', { class: 'juntas-contorno' });
