@@ -1884,6 +1884,69 @@ export function montarPlanta(cont: HTMLElement) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = `${a} (también: rueda del mouse o pellizcar; arrastrar el fondo para desplazar)`; b.setAttribute('aria-label', a); b.addEventListener('click', f); zoomBar.append(b);
   });
   cont.appendChild(zoomBar);
+
+  // ---- que nada se pise en la planta: las barras de abajo se apilan, el zoom queda arriba de la leyenda, el cuadro de
+  // precisión debajo del selector de planta y los rótulos de los muros se corren si se tocan
+  const solapan = (a: DOMRect, b: DOMRect, m = 1) => a.left < b.right - m && a.right > b.left + m && a.top < b.bottom - m && a.bottom > b.top + m;
+  const visible = (e: Element | null): e is HTMLElement => !!e && !(e as HTMLElement).hidden && getComputedStyle(e).display !== 'none' && (e as HTMLElement).getBoundingClientRect().width > 2;
+  function separarRotulos() {
+    const puestos: DOMRect[] = [];
+    svg.querySelectorAll<SVGTextElement>('text.etiqueta').forEach(t => {
+      if (t.closest('[transform]') || !t.textContent?.trim()) return;
+      // posición original (si ya se corrió en un dibujo anterior del mismo elemento)
+      if (t.dataset.y0 === undefined) t.dataset.y0 = t.getAttribute('y') ?? '0';
+      const y0 = +t.dataset.y0;
+      t.setAttribute('y', String(y0));
+      let r = t.getBoundingClientRect();
+      if (!r.width) return;
+      const h = r.height + 1;
+      for (const k of [1, -1, 2, -2, 3, -3]) {
+        if (!puestos.some(p => solapan(r, p))) break;
+        t.setAttribute('y', String(y0 + k * h));
+        r = t.getBoundingClientRect();
+      }
+      puestos.push(r);
+    });
+  }
+  function acomodar() {
+    const R = cont.getBoundingClientRect();
+    if (!R.width) return;
+    // abajo, de abajo hacia arriba: leyenda, herramientas, barras de selección y de grupo, barra del grupo que se edita
+    const pila = [ley, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
+    const puestos: DOMRect[] = [];
+    pila.forEach(e => {
+      if (!visible(e)) return;
+      e.style.bottom = '';
+      let r = e.getBoundingClientRect();
+      for (let i = 0; i < 8; i++) {
+        const choca = puestos.find(p => solapan(r, p));
+        if (!choca) break;
+        e.style.bottom = `${Math.ceil(R.bottom - choca.top + 6)}px`;
+        r = e.getBoundingClientRect();
+      }
+      puestos.push(r);
+    });
+    // botones de zoom (a la derecha): arriba de lo que tengan abajo
+    if (visible(zoomBar)) {
+      zoomBar.style.bottom = '';
+      let r = zoomBar.getBoundingClientRect();
+      for (let i = 0; i < 8; i++) { const choca = puestos.find(p => solapan(r, p)); if (!choca) break; zoomBar.style.bottom = `${Math.ceil(R.bottom - choca.top + 6)}px`; r = zoomBar.getBoundingClientRect(); }
+      puestos.push(r);
+    }
+    // cuadro de precisión (arriba a la derecha): debajo del selector de planta y sin llegar a los botones de zoom
+    if (visible(panelPrec) && getComputedStyle(panelPrec).position === 'absolute') {
+      panelPrec.style.top = ''; panelPrec.style.maxHeight = '';
+      let r = panelPrec.getBoundingClientRect();
+      if (visible(selNivel)) { const s = selNivel.getBoundingClientRect(); if (solapan(r, s)) { panelPrec.style.top = `${Math.ceil(s.bottom - R.top + 6)}px`; r = panelPrec.getBoundingClientRect(); } }
+      const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top).reduce((m, p) => Math.min(m, p.top), R.bottom);
+      if (r.bottom > abajo - 6) { panelPrec.style.maxHeight = `${Math.max(80, Math.floor(abajo - 6 - r.top))}px`; panelPrec.style.overflowY = 'auto'; }
+    }
+    separarRotulos();
+  }
+  let cuadroAcomodar = 0;
+  const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
+  new ResizeObserver(pedirAcomodar).observe(cont);
+  new MutationObserver(pedirAcomodar).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
