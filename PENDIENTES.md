@@ -54,7 +54,8 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Botón «Cambiar a método planilla»: armado de piezas con el método simplificado de la cátedra (especificación, sección 7)
 - [x] Valores «Guía/CIRSOC» apagados por defecto (se siguen pudiendo elegir)
 - [x] Exportar: planilla 2025 o anterior, y contenido virgen (solo datos + tablas T3D) o renovada (con hojas «G ·» y dibujos)
-- [ ] Planilla 2025: «Flex comp PB paralelos» desde la fila 10 lee área y módulo de otra fila de la hoja J que la que lee Rototrasl. (B10 = O14 pero J10 → AY10): se reproduce tal cual; consultar a la cátedra
+- [x] Planilla 2025: «Flex comp PB paralelos» desde la fila 10 lee área y módulo de otra fila de la hoja J que la que lee Rototrasl. (B10 = O14 pero J10 → AY10). Decisión: se deja así (la app lo reproduce y avisa en cada pieza)
+- [x] Ejemplo de EDIFICIO_TORRE_1: B22:B54 de M,NyQ escritos a mano y corridos una fila respecto de «viento». Confirmado: error del ejemplo; al exportar se vuelve a poner el vínculo con «viento»
 - [ ] Agregar filas de piezas a la planilla sin cambiar sus relaciones (más de 20 piezas)
 
 ## En curso
@@ -78,6 +79,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Exoesqueletos (diagrid, tubo arriostrado, megapórtico, torre inclinada): propuesta 5b, esperando qué tipos van primero
 
 ## Esperando a la cátedra
+- [ ] Rototraslación con exactamente dos piezas perpendiculares: ¿se usa el bloque «USAR SOLAMENTE PARA DOS TABIQUES» (filas 28–29, Yr = promedio de las dos posiciones, sin pesar por J) o el general (filas 31–50, Yr pesado por J, como el Anexo de la guía)? Por ahora la app usa siempre el general
 - [ ] Filas de las piezas 8 y 9 de «J Tabiques paralelos»: faltan fórmulas en la planilla virgen
 - [ ] «Flex comp PB paralelos» D13:D20 = 0,01 fijo: las piezas 10 a 17 no suman su peso propio
 - [ ] Edificios flexibles (F < 1 Hz): ¿Gf o 0,85?
