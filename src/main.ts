@@ -88,6 +88,12 @@ function dibujarPanel() {
   const y = p.scrollTop;
   p.replaceChildren();
   if (estado.calculo.error) p.append(h('p', { class: 'error' }, `Error en el cálculo: ${estado.calculo.error}`));
+  // modo con botón: los resultados de las etapas son los del último cálculo
+  if (estado.pendiente && e.id !== 'diseno' && e.id !== 'ayuda') {
+    const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
+    b.addEventListener('click', () => estado.calcularAhora());
+    p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
+  }
   try { e.panel(p, sub); } catch (err) { console.error(err); p.append(h('p', { class: 'error' }, `No se pudo armar el panel: ${String(err)}`)); }
   p.scrollTop = y;
 }
@@ -183,6 +189,15 @@ function dibujarCapas() {
   }
 }
 function dibujarEstadoCalculo() {
+  dibujarModoCalculo();
+  if (estado.pendiente) {
+    const el = $('estado-calculo');
+    el.className = 'chip-estado revisar';
+    el.textContent = `Sin calcular · ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'}`;
+    el.setAttribute('data-globo', 'Cálculo pendiente|Modo «Con botón»: los cambios se guardan pero los resultados, el 3D y los diagramas son los del último cálculo. Tocá «Calcular» o F9.');
+    el.onclick = () => estado.calcularAhora();
+    return;
+  }
   const cs = estado.calculo.controles ?? [];
   const malos = cs.filter(c => c.estado === 'no verifica').length, revisar = cs.filter(c => c.estado === 'atención').length;
   const el = $('estado-calculo');
@@ -192,16 +207,55 @@ function dibujarEstadoCalculo() {
   el.style.cursor = 'pointer';
   el.onclick = () => irA('resumen');
 }
-function dibujarTodo() {
+/**
+ * @param porCambio la llamada viene de un cambio de datos: en el modo con botón y con cambios sin calcular, no se
+ *                  redibujan los diagramas del centro ni el avance (son lo que cuesta), solo la planta y los paneles
+ */
+function dibujarTodo(porCambio = false) {
   $<HTMLButtonElement>('b-deshacer').disabled = !estado.puedeDeshacer;
   $<HTMLButtonElement>('b-rehacer').disabled = !estado.puedeRehacer;
   $('nombre-proyecto').textContent = estado.proyecto.nombre;
-  dibujarRiel(); dibujarPanel(); dibujarCentro(); dibujarAvance(); dibujarEstadoCalculo();
+  const ahorrar = porCambio && estado.pendiente;
+  dibujarRiel(); dibujarPanel();
+  if (!ahorrar || etapaPorId(estado.etapa).centro === 'planta') dibujarCentro();
+  else marcarCentroViejo();
+  if (!ahorrar) dibujarAvance();
+  dibujarEstadoCalculo();
   // la capa del exoesqueleto aparece o se va con él
   const conExo = !!estado.proyecto.exo;
   if (conExo !== capasConExo) { capasConExo = conExo; dibujarCapas(); }
 }
 let capasConExo = false;
+
+// ------------------------------------------------------------------ modo de cálculo: en vivo o con botón
+const zonaModo = h('span', { class: 'modo-calculo' });
+$('estado-calculo').before(zonaModo);
+function dibujarModoCalculo() {
+  const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Modo de cálculo', 'data-globo': 'Modo de cálculo|«En vivo»: cada cambio recalcula todo y redibuja todas las vistas, como el Excel (ideal para presentar y para la sincronía con la planilla). «Con botón»: los cambios se guardan sin calcular; el cálculo, el 3D y los diagramas se actualizan con «Calcular» (o F9). Usa muchos menos recursos de la máquina.' });
+  ([['vivo', 'En vivo'], ['boton', 'Con botón']] as const).forEach(([k, txt]) => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(estado.modo === k) }, txt);
+    b.addEventListener('click', () => { if (estado.modo !== k) estado.cambiarModo(k); });
+    seg.append(b);
+  });
+  const partes: HTMLElement[] = [h('span', { class: 'nota chica' }, 'Cálculo'), seg];
+  if (estado.modo === 'boton') {
+    const bc = h('button', { type: 'button', class: 'chico' + (estado.pendiente ? ' primario' : ''), id: 'b-calcular', 'data-globo': 'Calcular (F9)|Calcula todo con los datos actuales y actualiza resultados, 3D y diagramas.' }, estado.pendiente ? `Calcular (${estado.cambiosPendientes})` : 'Calcular');
+    bc.addEventListener('click', () => estado.calcularAhora());
+    partes.push(bc);
+  }
+  zonaModo.replaceChildren(...partes);
+}
+/** aviso sobre los diagramas del centro cuando quedaron del cálculo anterior */
+function marcarCentroViejo() {
+  const dib = $('centro-dibujos');
+  if (dib.querySelector('.aviso-viejo')) return;
+  const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
+  b.addEventListener('click', () => estado.calcularAhora());
+  dib.prepend(h('div', { class: 'aviso-viejo' }, h('span', {}, 'Diagramas del último cálculo: hay cambios sin calcular.'), b));
+}
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'F9') { ev.preventDefault(); estado.calcularAhora(); }
+});
 export function mensaje(t: string) { $('mensaje').textContent = t; }
 
 function descargar(nombre: string, datos: BlobPart, tipo: string) {
@@ -239,6 +293,7 @@ function fallo(titulo: string, e: unknown) {
 }
 
 async function exportar() {
+  estado.asegurarCalculo();
   if (estado.calculo.error) { fallo('No se puede escribir la planilla', `El cálculo tiene un error: ${estado.calculo.error}`); return; }
   const { asig, res } = estado.calculo;
   const celdas = celdasAEscribir(asig.datos, res);
@@ -447,13 +502,13 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
-$('b-informe').addEventListener('click', () => { cerrarMenus(); imprimirInforme(); });
-$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); imprimirCartaPdf(); });
-$('b-desglose').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
-$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
+$('b-informe').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirInforme(); });
+$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirCartaPdf(); });
+$('b-desglose').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
+$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
-$('b-lamina').addEventListener('click', () => { cerrarMenus(); imprimirLaminas(); });
+$('b-lamina').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirLaminas(); });
 
 // «Mis proyectos»: versiones en el navegador
 function armarMis() {
@@ -517,7 +572,7 @@ document.addEventListener('keydown', ev => {
 $('b-exportar').addEventListener('click', () => { void exportar(); });
 $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void abrir(f); (e.target as HTMLInputElement).value = ''; });
 
-estado.suscribir(dibujarTodo);
+estado.suscribir(() => dibujarTodo(true));
 estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'planta') dibujarCentro(); });
 montarPlanta($('vista-planta'));
 montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
@@ -581,7 +636,7 @@ function desconectarSheets() {
   pistaSheets('Editar el edificio desde la planilla o desde la app');
   mensaje('Desconectado de Google Sheets.');
 }
-estado.suscribir(() => { if (sincro && !aplicandoRemoto && !estado.calculo.error) sincro.programar(paqueteActual); });
+estado.suscribir(() => { if (sincro && !aplicandoRemoto && !estado.pendiente && !estado.calculo.error) sincro.programar(paqueteActual); });
 $('b-sheets').addEventListener('click', () => {
   cerrarMenus();
   const actual = sincro?.url ?? '';

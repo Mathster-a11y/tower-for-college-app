@@ -153,6 +153,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   const escena = new THREE.Scene();
   const camara = new THREE.PerspectiveCamera(40, 1, 0.5, 2000);
   const controles = new OrbitControls(camara, renderer.domElement);
+  let hayQueDibujar = true;
+  function pedirCuadro() { hayQueDibujar = true; }
   controles.enableDamping = true;
   escena.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -198,8 +200,16 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     return { porMuro, maxC, maxT, material, supera: todas.some(x => x < -adm) };
   }
 
+  let construido = false, viejo = false;
   function construir() {
     if (!cont.isConnected) return;
+    // modo con botón: con cambios sin calcular el 3D espera al botón «Calcular» (es lo que más recursos usa)
+    if (estado.pendiente && construido) {
+      if (!viejo) { viejo = true; cont.classList.add('vista-vieja'); }
+      return;
+    }
+    construido = true; viejo = false; cont.classList.remove('vista-vieja');
+    pedirCuadro();
     fondo();
     grupo.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); if (o instanceof CSS2DObject) o.element.remove(); });
     grupo.clear();
@@ -514,6 +524,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   }
 
   function mover(f: number) {
+    pedirCuadro();
     prismas.forEach(pr => pr.mover(roto, f, f * kGiro));
     extras.forEach(x => x.mover(f));
   }
@@ -533,6 +544,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   let medidas = { B: 20, L: 16, h: 20, top: 20, fondoCota: 0 };
   /** la torre entera entra en el visor, sea ancha o angosta */
   function encuadrar() {
+    pedirCuadro();
     const { B, L, h, top, fondoCota } = medidas;
     const r = 0.5 * Math.sqrt(B * B + L * L + h * h) + (roto ? 9 : 4);
     const fovV = (camara.fov * Math.PI) / 180;
@@ -552,6 +564,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   renderer.domElement.title = 'Arrastrar: girar · rueda: acercar · doble clic: encuadrar la torre';
 
   function tamaño() {
+    pedirCuadro();
     const w = cont.clientWidth || 400, h = cont.clientHeight || 400;
     renderer.setSize(w, h, false);
     capaEt.setSize(w, h);
@@ -583,14 +596,21 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     });
   }
   let animando = false;
+  // se dibuja solo cuando hace falta: la cámara se movió (o sigue frenando), algo pidió un cuadro, hay animación, o
+  // pasó un segundo (refresco de seguridad). Antes se dibujaba 60 veces por segundo aunque nada cambiara.
+  let ultimoCuadro = 0;
+  controles.addEventListener('change', pedirCuadro);
   renderer.setAnimationLoop(() => {
     if (!cont.isConnected) return;
     // ráfaga: la deformada va y vuelve entre la torre quieta y la exageración elegida
     if (roto && estado.roto3d.animar) { animando = true; mover(fMax * (0.5 - 0.5 * Math.cos(((performance.now() - t0) / 2600) * 2 * Math.PI))); }
     else if (animando) { animando = false; mover(fMax); }
-    controles.update();
+    const movio = controles.update();
+    const ahora = performance.now();
+    if (!(movio || hayQueDibujar || animando || ahora - ultimoCuadro > 1000)) return;
+    hayQueDibujar = false; ultimoCuadro = ahora;
     renderer.render(escena, camara);
-    if (op.etiquetas) { capaEt.render(escena, camara); if (++cuadro % 6 === 0) ordenarRotulos(); }
+    if (op.etiquetas) { capaEt.render(escena, camara); if (++cuadro % 6 === 0 || !movio) ordenarRotulos(); }
   });
   return { construir, encuadrar, tamaño };
 }

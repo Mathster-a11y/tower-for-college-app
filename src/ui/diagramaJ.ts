@@ -81,7 +81,7 @@ export function montarDiagramaJ(cont: HTMLElement, boton: HTMLButtonElement) {
     caja.append(ley);
   };
   boton.addEventListener('click', () => { visible = !visible; try { localStorage.setItem('torre3d.diagramaJ', visible ? '1' : '0'); } catch { /* */ } dibujar(); });
-  estado.suscribir(dibujar);
+  estado.suscribir(() => { if (!estado.pendiente) dibujar(); });
   dibujar();
   return { dibujar };
 }

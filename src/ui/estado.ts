@@ -10,6 +10,7 @@ import { config, type Metodo, type Motor } from '../engine/config';
 
 // motor y método elegidos (se recuerdan en el navegador); el motor nuevo es el de la planilla de la cátedra 2025
 const CLAVE_CONFIG = 'torre3d.config.v1';
+const CLAVE_MODO = 'torre3d.modoCalculo';
 try {
   const c = JSON.parse(localStorage.getItem(CLAVE_CONFIG) ?? '{}') as { motor?: Motor; metodo?: Metodo };
   if (c.motor === 'actual' || c.motor === 'nuevo') config.motor = c.motor;
@@ -97,9 +98,32 @@ class Estado {
   cambiarConfig(c: { motor?: Motor; metodo?: Metodo }) {
     Object.assign(config, c);
     try { localStorage.setItem(CLAVE_CONFIG, JSON.stringify(config)); } catch { /* sin almacenamiento */ }
-    this.recalcular();
-    this.avisarPanel();
+    this.calcularAhora();
   }
+  /**
+   * Modo de cálculo: «vivo» recalcula todo y redibuja todas las vistas en cada cambio (como el Excel); «boton» solo
+   * guarda el cambio y redibuja la planta y los paneles de datos: el cálculo, el 3D y los diagramas esperan al botón
+   * «Calcular» (o F9). Se recuerda en el navegador.
+   */
+  modo: 'vivo' | 'boton' = (() => { try { return localStorage.getItem(CLAVE_MODO) === 'boton' ? 'boton' : 'vivo'; } catch { return 'vivo'; } })();
+  /** en el modo con botón: hay cambios que todavía no se calcularon (y cuántos) */
+  pendiente = false;
+  cambiosPendientes = 0;
+  cambiarModo(m: 'vivo' | 'boton') {
+    this.modo = m;
+    try { localStorage.setItem(CLAVE_MODO, m); } catch { /* sin almacenamiento */ }
+    if (m === 'vivo' && this.pendiente) this.calcularAhora();
+    else this.avisarPanel();
+  }
+  /** calcula con los datos actuales y redibuja todo (botón «Calcular», F9, cambio de motor o de método) */
+  calcularAhora() {
+    this.recalcular();
+    this.pendiente = false;
+    this.cambiosPendientes = 0;
+    this.oyentes.forEach(o => o());
+  }
+  /** antes de exportar o imprimir: si hay cambios sin calcular, se calculan */
+  asegurarCalculo() { if (this.pendiente) this.calcularAhora(); }
   recalcular() {
     try {
       this.calculo = calcularProyecto(this.proyecto);
@@ -137,7 +161,8 @@ class Estado {
     this.actualizar();
   }
   private actualizar() {
-    this.recalcular();
+    if (this.modo === 'vivo') { this.recalcular(); this.pendiente = false; this.cambiosPendientes = 0; }
+    else { this.pendiente = true; this.cambiosPendientes++; }
     try { localStorage.setItem(CLAVE, this.ultimo); } catch { /* sin almacenamiento: no pasa nada */ }
     this.oyentes.forEach(o => o());
   }
