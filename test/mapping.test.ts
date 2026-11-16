@@ -18,14 +18,16 @@ describe('del proyecto a la planilla (ejemplo de la guía 2024)', () => {
     expect(a.datos.mnyq.E[51]).toBe(22);
   });
 
-  it('piezas del viento A: tabiques simples simétricos y la U en las columnas asimétricas', () => {
+  it('piezas del viento A: las de más J primero, en las filas que cuentan para el CR del viento B (1 a 8)', () => {
     const t1 = a.piezas.find(p => p.nombre === 'T1')!;
     expect(t1.molde).toBe('simétrico');
-    expect(t1.filaHoja).toBe(0);
     const t5 = a.piezas.find(p => p.nombre === 'T5')!;
     expect(t5.molde).toBe('asimétrico');                             // U: alas hacia un solo lado
     expect(t5.fila).toMatchObject({ W: 5, X: 0.2, Z: 0.2, AB: 3.6, AH: 5, AI: 0.2 });
-    expect([9, 10]).toContain(t5.filaHoja);                          // filas donde flex lee el módulo asimétrico
+    // la U (8 m⁴) va antes que los tabiques (1,5 m⁴); todas en las filas 1 a 8 (B51 de cara menor suma hasta la 38)
+    expect(t5.filaHoja).toBe(0);
+    expect(a.piezas.filter(p => p.dir === 'A').every(p => p.filaHoja! < 8)).toBe(true);
+    expect(t5.avisos.join(' ')).toMatch(/módulo simétrico/);           // Flex lee Q en esa fila: avisa
     expect(r.jpar.filas[t5.filaHoja!].AY).toBeCloseTo(8.0043, 3);   // mismo J que la guía: 8,003 m⁴ (redondeado)
     expect(r.jpar.AY24).toBeCloseTo(4 * 1.51875 + 2 * 8.0043, 3);
     expect(t5.posicion).toBeCloseTo(-4.635, 3);
@@ -48,7 +50,8 @@ describe('del proyecto a la planilla (ejemplo de la guía 2024)', () => {
   });
 
   it('flexocompresión: altura, área de influencia y losas', () => {
-    expect(a.datos.flex[0]).toEqual({ C: 64, F: 10.5, G: 21 });
+    const t1 = a.piezas.find(p => p.nombre === 'T1')!;
+    expect(a.datos.flex[t1.filaHoja!]).toEqual({ C: 64, F: 10.5, G: 21 });
   });
 });
 
@@ -83,8 +86,18 @@ describe('regla de las piezas: simétrica solo el muro suelto y la doble T', () 
     const muros = Array.from({ length: 6 }, (_, k) => [muro(`a${k}`, 'Y', k * 3 - 8, 0, 4, `P${k}`), muro(`s${k}`, 'X', k * 3 - 7, 2.1, 2, `P${k}`, `a${k}`)]).flat();
     const a = aPlanilla({ ...base, muros });
     const filas = a.piezas.filter(p => p.dir === 'A').map(p => p.filaHoja);
-    expect(filas.slice().sort((x, y) => x! - y!)).toEqual([9, 10, 11, 12, 13, 14]);
-    expect(a.piezas.find(p => p.filaHoja === 11)!.avisos.join(' ')).toMatch(/módulo simétrico/);
+    // las seis van a las filas 1 a 7 (cuentan para el CR del viento B); la 8 no: le faltan fórmulas del molde asimétrico
+    expect(filas.slice().sort((x, y) => x! - y!)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(a.piezas.find(p => p.filaHoja === 0)!.avisos.join(' ')).toMatch(/módulo simétrico/);
+  });
+  it('planilla anterior: con más de 8 piezas en el viento A, las de menos J quedan fuera de B51 de cara menor y avisan', () => {
+    const muros = Array.from({ length: 10 }, (_, k) => muro(`t${k}`, 'Y', k * 2 - 9, 0, 1 + k * 0.3, `P${k}`));
+    const a = aPlanilla({ ...base, muros });
+    const ps = a.piezas.filter(p => p.dir === 'A');
+    const fuera = ps.filter(p => p.filaHoja! >= 8).map(p => p.nombre).sort();
+    expect(fuera).toEqual(['P0', 'P1']);                                        // las dos más cortas
+    expect(ps.find(p => p.nombre === 'P0')!.avisos.join(' ')).toMatch(/hasta la fila 38/);
+    expect(ps.find(p => p.nombre === 'P9')!.filaHoja).toBe(0);
   });
 });
 

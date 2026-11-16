@@ -230,8 +230,11 @@ function desdePlanilla(hojas: Hoja[]): Importacion {
   for (let k = 51; k <= 53; k++) if (Z[k] < Z[k - 1]) agregar(k, `${k - 50}º SS`);
   if (kTop >= 1) {
     const C = g(mn, `C${kTop + 4}`), D = g(mn, `D${kTop + 4}`);
-    if (C !== null && D !== null && Math.abs(D - C / 2) > 0.005)
-      avisos.push(`En la planilla, la azotea (M,NyQ fila ${kTop + 4}) tiene D = ${D} m; la guía pide medio entrepiso (${+(C / 2).toFixed(3)} m), que es lo que usa la app. Por eso el viento W puede dar un poco distinto.`);
+    if (C !== null && D !== null && D - C / 2 > 0.005) {
+      sitio.parapeto = +(D - C / 2).toFixed(3);
+      avisos.push(`En la planilla, la azotea (M,NyQ fila ${kTop + 4}) tiene D = ${D} m: medio entrepiso (${+(C / 2).toFixed(3)} m) más ${String(sitio.parapeto).replace('.', ',')} m, que la app cargó como parapeto (Viento → «Parapeto»).`);
+    } else if (C !== null && D !== null && Math.abs(D - C / 2) > 0.005)
+      avisos.push(`En la planilla, la azotea (M,NyQ fila ${kTop + 4}) tiene D = ${D} m, menos que medio entrepiso (${+(C / 2).toFixed(3)} m), que es lo que usa la app. Por eso el viento W puede dar un poco distinto.`);
   }
   const fundacion = { b1: g(mn, 'N80') ?? 0, a1: g(mn, 'N81') ?? 0 };
 

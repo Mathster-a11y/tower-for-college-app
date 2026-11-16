@@ -132,3 +132,38 @@ describe('agregar filas de piezas (planilla 2025)', async () => {
     expect(todo).toContain("<f>'Rototrasl. cara mayor'!O30</f>");                 // Flex de la pieza 26
   });
 });
+
+describe('rototraslación de cara menor en la planilla anterior (B51 e I51 hasta la fila 38)', () => {
+  it('la planilla no cuenta las piezas 9 a 20 del viento A para el CR del viento B; rotBReal sí', async () => {
+    const { calcularPlanilla: calc } = await import('../src/engine/planilla');
+    const { ejemploAsimetrico } = await import('../src/engine/modelo');
+    const a = usarConfig({ motor: 'actual' }, () => aPlanilla(ejemploAsimetrico()));
+    // T6 (la U) a la fila 10, como antes del cambio de orden: queda fuera de B28:B38
+    const d = structuredClone(a.datos);
+    const t6 = a.piezas.find(p => p.nombre === 'T6')!, i = t6.filaHoja!;
+    [d.jpar[i], d.jpar[9]] = [d.jpar[9], d.jpar[i]];
+    const H = d.rotB.H, oO = 26; [H[oO + i], H[oO + 9]] = [H[oO + 9], H[oO + i]];
+    const Ha = d.rotA.H; [Ha[i], Ha[9]] = [Ha[9], Ha[i]];
+    const r = calc(d, { motor: 'actual' });
+    expect(r.rotA.J7).toBeCloseTo(1.999, 3);                      // CR del viento A
+    expect(r.rotB.J38).toBeCloseTo(-0.956, 3);                    // la planilla: sin T6
+    expect(r.rotBReal!.J38).toBeCloseTo(1.999, 3);                // real: el mismo punto que en el viento A
+    expect(calc(d, { motor: 'nuevo' }).rotBReal).toBeUndefined();
+    // con el orden nuevo T6 entra en las filas 1 a 8 y la planilla ya da el CR real
+    const r2 = calc(a.datos, { motor: 'actual' });
+    expect(t6.filaHoja!).toBeLessThan(8);
+    expect(r2.rotB.J38).toBeCloseTo(r2.rotBReal!.J38, 6);                  // los rellenos de 0,01 suman ~1e-9
+  });
+});
+
+describe('parapeto', () => {
+  it('se suma al medio entrepiso de la azotea (M,NyQ D) y el importador lo recupera', () => {
+    const p = ejemploGuia();
+    const sin = aPlanilla(p), con = aPlanilla({ ...p, sitio: { ...p.sitio, parapeto: 0.9 } });
+    const k = sin.filaNivel[0];
+    expect(sin.datos.mnyq.D[k]).toBeCloseTo(1.5, 9);
+    expect(con.datos.mnyq.D[k]).toBeCloseTo(2.4, 9);
+    const W = (x: typeof sin) => calcularPlanilla(x.datos).mnyq.H61;
+    expect(W(con) - W(sin)).toBeGreaterThan(0);
+  });
+});

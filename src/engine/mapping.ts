@@ -15,7 +15,7 @@
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
  *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
-import { FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
+import { FLEX_D_FIJO, FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
 import { config } from './config';
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
@@ -58,6 +58,8 @@ export interface Asignacion {
 
 /** Filas de «paralelos» a las que les faltan las fórmulas Y y AC en la planilla virgen (piezas 8 y 9). */
 export const FILAS_SIN_YAC = [7, 8];
+/** Planilla anterior: «Rototrasl. cara menor» suma ΣJ y ΣJ·x de las perpendiculares en las filas 31 a 38 (B51 = SUM(B28:B38)), que leen las piezas 1 a 8 del viento A. */
+export const FILAS_CR_ACTUAL = 8;
 /** Filas de «paralelos» con O = 0 fijo (piezas 18 a 20). */
 export const FILAS_O0 = [17, 18, 19];
 
@@ -481,18 +483,9 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
   if (extra) avisos.push(`Viento ${paralelos ? 'A' : 'B'}: ${conFila} piezas; la planilla 2025 trae 20 filas, así que al exportar se ${extra === 1 ? 'agrega 1 fila' : `agregan ${extra} filas`} al final de «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}», de los dos bloques de rototraslación${paralelos ? ' y de «Flex comp PB paralelos»' : ''}, con las mismas fórmulas, y las sumas las incluyen.`);
   const masFilas = Array.from({ length: extra }, (_, k) => 20 + k);
   const tipoDe = (p: PiezaEquivalente) => (p.molde === 'asimétrico' ? 'asimétrica' : p.molde === 'tubo' ? 'circular' : 'simétrica') as 'simétrica' | 'asimétrica' | 'circular';
-  // primero los tipos con menos filas propias
-  const prioridad = { asimétrica: 0, circular: 1, simétrica: 2 };
-  const orden = [...piezas].sort((a, b) => prioridad[tipoDe(a)] - prioridad[tipoDe(b)]);
-  for (const p of orden) {
-    if (!Object.keys(p.fila).length) continue;
+  const actual = config.motor === 'actual';
+  const poner = (p: PiezaEquivalente, i: number) => {
     const tipo = tipoDe(p);
-    const i = [...ordenFilas(tipo, paralelos), ...masFilas].find(k => filas[k] === null);
-    if (i === undefined) {
-      avisos.push(`No queda fila libre en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre} (máximo 20 piezas).`);
-      continue;
-    }
-    const actual = config.motor === 'actual';
     if (actual && paralelos && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: en la planilla virgen le faltan las fórmulas del ala superior y del alma izquierda; su J queda incompleto en la planilla.`);
     }
@@ -506,8 +499,40 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
     if (actual && paralelos && FILAS_O0.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: la planilla tiene el área en 0 fijo; la app usa el área real en la flexocompresión.`);
     }
+    if (paralelos && FLEX_D_FIJO.includes(i)) {
+      p.avisos.push(`Fila de la pieza ${i + 1}: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía/CIRSOC»).`);
+    }
+    if (actual && paralelos && i >= FILAS_CR_ACTUAL) {
+      p.avisos.push(`Fila de la pieza ${i + 1}: la planilla anterior suma ΣJ y ΣJ·x de las piezas perpendiculares de «Rototrasl. cara menor» solo hasta la fila 38 (B51, I51), es decir, las piezas 1 a ${FILAS_CR_ACTUAL} del viento A: esta queda afuera y el CR del viento B de la planilla no la cuenta. El dibujo y el 3D usan el CR real.`);
+    }
     filas[i] = p.fila;
     p.filaHoja = i;
+  };
+  // 1) filas «seguras», para las piezas de más J (las que mueven el CR y cargan más):
+  //    · planilla anterior: B51 e I51 de «Rototrasl. cara menor» suman solo las filas 31 a 38, que leen las piezas 1 a 8
+  //      del viento A; fuera de ellas la pieza no cuenta para el CR del viento B. Además, esas filas suman el peso propio
+  //      en Flex (D13:D20 tienen 0,01 fijo). Se prioriza que el CR salga bien sobre el módulo que lee Flex.
+  //    · planilla 2025: Flex lee la misma pieza que Rototrasl. solo en las ranuras 1 a 6.
+  const seguras = !paralelos ? [] : actual ? Array.from({ length: FILAS_CR_ACTUAL }, (_, k) => k) : [0, 1, 2, 3, 4, 5];
+  const porJ = piezas.filter(p => Object.keys(p.fila).length).sort((a, b) => (b.Jhoja ?? 0) - (a.Jhoja ?? 0));
+  for (const p of porJ) {
+    if (!seguras.some(k => filas[k] === null)) break;
+    const tipo = tipoDe(p);
+    // dentro de las seguras, las filas de su tipo primero; una asimétrica no va donde a la hoja le faltan fórmulas
+    const i = ordenFilas(tipo, paralelos).filter(k => seguras.includes(k) && !(actual && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(k))).find(k => filas[k] === null);
+    if (i !== undefined) poner(p, i);
+  }
+  // 2) el resto, como siempre: primero los tipos con menos filas propias
+  const prioridad = { asimétrica: 0, circular: 1, simétrica: 2 };
+  const orden = [...piezas].sort((a, b) => prioridad[tipoDe(a)] - prioridad[tipoDe(b)]);
+  for (const p of orden) {
+    if (!Object.keys(p.fila).length || p.filaHoja !== null) continue;
+    const i = [...ordenFilas(tipoDe(p), paralelos), ...masFilas].find(k => filas[k] === null);
+    if (i === undefined) {
+      avisos.push(`No queda fila libre en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre} (máximo 20 piezas).`);
+      continue;
+    }
+    poner(p, i);
   }
   // rellenos de 0,01 como en la planilla (evitan #DIV/0!)
   return filas.map((f, i) => {
@@ -545,10 +570,10 @@ export function aPlanilla(p: Proyecto): Asignacion {
     if (j < subs.length) { Z[k] = subs[j].cota; filaNivel.push(k); }
     else { Z[k] = j > 0 ? Z[k - 1] : Z[50]; E[k] = 0; F[k] = 0; }
   }
-  // último piso: C y D escritos a mano (medio entrepiso), y D = 0 en la fila de arriba
+  // último piso: C y D escritos a mano (medio entrepiso más el parapeto), y D = 0 en la fila de arriba
   if (kTop >= 1 && kTop <= 50) {
     const ent = arriba.length > 1 ? arriba[0].cota - arriba[1].cota : 0;
-    C[kTop] = ent; D[kTop] = ent / 2; D[kTop - 1] = 0;
+    C[kTop] = ent; D[kTop] = r4(ent / 2 + Math.max(0, p.sitio.parapeto ?? 0)); D[kTop - 1] = 0;
   }
   // anchos: en el último piso y donde cambian
   let Bant: number | null = null, Lant: number | null = null;

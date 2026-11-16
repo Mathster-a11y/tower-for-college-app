@@ -10,6 +10,11 @@ import { propiedades, tiras } from './perfil';
 export interface Sitio {
   V: number; Kd: number; I: number; zg: number; alfa: number; Kzt: number; G: number;
   Cpb: number; Cps: number; GCpi: number;
+  /**
+   * parapeto o baranda por encima de la última losa (m; vacío = 0). En M,NyQ la fila de la azotea lleva como altura
+   * de influencia medio entrepiso más el parapeto (la planilla dice «corregir primer valor según corresponda»).
+   */
+  parapeto?: number | null;
 }
 
 export interface Nivel {

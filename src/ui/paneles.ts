@@ -51,7 +51,7 @@ export function seccionViento(): H {
   const s = estado.proyecto.sitio;
   const expo = Object.entries(EXPO).find(([, v]) => v[0] === s.zg && v[1] === s.alfa)?.[0] ?? '';
   const fo = h('div', { class: 'formulario' });
-  const nu = (k: keyof typeof s) => (v: string) => set(() => { s[k] = num(v) ?? s[k]; });
+  const nu = (k: Exclude<keyof typeof s, 'parapeto'>) => (v: string) => set(() => { s[k] = num(v) ?? s[k]; });
   campo(fo, 'V', 's-V', s.V, nu('V'), { tipo: 'number', unidad: 'm/s', ayuda: 'velocidad básica · CIRSOC 102, Fig. 1A o 1B · viento!C4', globo: 'Velocidad básica|Ráfaga de 3 s a 10 m de altura en terreno abierto, con 50 años de recurrencia. Sale del mapa de la Fig. 1 del CIRSOC 102.' });
   campo(fo, 'Kd', 's-Kd', s.Kd, nu('Kd'), { tipo: 'number', ayuda: 'factor de direccionalidad · Tabla 6 · viento!D4' });
   campo(fo, 'I', 's-I', s.I, nu('I'), { tipo: 'number', ayuda: 'factor de importancia · Tabla 1 · viento!E4' });
@@ -63,6 +63,7 @@ export function seccionViento(): H {
   campo(fo, 'Cp barlovento', 's-Cpb', s.Cpb, nu('Cpb'), { tipo: 'number', ayuda: 'Fig. 3 · viento!K4' });
   campo(fo, 'Cp sotavento', 's-Cps', s.Cps, nu('Cps'), { tipo: 'number', ayuda: 'Fig. 3, según L/B · viento!L4' });
   campo(fo, 'GCpi', 's-GCpi', s.GCpi, nu('GCpi'), { tipo: 'number', ayuda: 'Tabla 7 · viento!O4 · no entra en el cálculo (se anula en el edificio)' });
+  campo(fo, 'Parapeto', 's-parapeto', s.parapeto ?? '', v => set(() => { const x = num(v); if (x && x > 0) s.parapeto = x; else delete s.parapeto; }), { tipo: 'number', unidad: 'm', ayuda: 'sobre la última losa · se suma al medio entrepiso de la azotea (M,NyQ, columna D)', globo: 'Parapeto|Altura del parapeto o la baranda por encima de la última losa. El viento de la azotea se toma sobre medio entrepiso más el parapeto: es la corrección que pide la planilla en la primera fila («corregir primer valor según corresponda»). Vacío = sin parapeto.' });
   return seccion('Datos del viento · CIRSOC 102', fo).el;
 }
 
@@ -520,7 +521,8 @@ export function panelResultados(c: H, completo = true) {
 /** Observaciones sobre la planilla virgen: valen para cualquier proyecto. */
 export const NOTAS_PLANILLA = [
   'A las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para las piezas asimétricas.',
-  'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra).',
+  'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra). La app pone ahí las de menos J y avisa en cada pieza.',
+  'Planilla anterior: en «Rototrasl. cara menor», B51 e I51 suman solo hasta la fila 38, así que las piezas 9 a 20 del viento A no cuentan para el CR del viento B. La app pone en las filas 1 a 8 las de más J, dibuja el CR real y avisa cuánto cambia la rotación.',
   'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía/CIRSOC» usa el área real (pregunta abierta para la cátedra).',
   'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía/CIRSOC» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
 ];

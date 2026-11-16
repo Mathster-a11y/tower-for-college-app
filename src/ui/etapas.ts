@@ -353,6 +353,8 @@ const rototrasl: Etapa = {
     };
     c.append(seccion('Tabiques paralelos al viento (t)', tabla(dp.paralelos, false)).el);
     if (dp.perpendiculares.some(x => Math.abs(x.rot) > 1e-9) || dp.perpendiculares.length) c.append(seccion(guia ? 'Muros perpendiculares: solo rotación (t)' : 'Piezas perpendiculares: solo rotación (t)', tabla(dp.perpendiculares, true)).el);
+    const aviso = avisoCRCaraMenor(d);
+    if (aviso) c.append(h('p', { class: 'aviso-linea' }, aviso));
     c.append(h('p', { class: 'nota' }, guia
       ? 'Valores «Guía/CIRSOC»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
       : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
@@ -483,7 +485,29 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
 
 /** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
 export function datosRotoPlanoActual() { return datosRotoPlano(datos()); }
-function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla' } {
+/**
+ * Planilla anterior, viento B: B51 e I51 de «Rototrasl. cara menor» suman solo hasta la fila 38, así que las piezas 9
+ * a 20 del viento A no cuentan para el CR. Devuelve el aviso (o null si no cambia nada o no corresponde).
+ */
+function avisoCRCaraMenor(d: ReturnType<typeof datos>): string | null {
+  if (d.dir !== 'B' || estado.fuente === 'guia' || !d.R.rotBReal) return null;
+  const pl = d.R.rotB, re = d.R.rotBReal;
+  if (!(Math.abs(pl.J38 - re.J38) > 1e-3) && !(Math.abs(pl.M51 - re.M51) > 1e-6 * Math.max(1, re.M51))) return null;
+  const fuera = d.asig.piezas.filter(z => z.dir === 'A' && z.filaHoja !== null && z.filaHoja >= 8 && z.filaHoja < 20 && Math.abs(pl.B[pl.oO + z.filaHoja]) > 1e-6).map(z => z.nombre);
+  let txt = `La planilla anterior suma ΣJ y ΣJ·x de las piezas perpendiculares solo hasta la fila 38 («Rototrasl. cara menor»!B51 e I51)${fuera.length ? `: ${fuera.length === 1 ? 'queda afuera' : 'quedan afuera'} ${fuera.join(', ')}` : ''}. Su CR queda a ${fmt(pl.J38, 2)} m y el real a ${fmt(re.J38, 2)} m; el dibujo y el 3D usan el real.`;
+  if (Math.abs(re.J15) > 1e-9) {
+    // cuánto cambia la rotación de cada pieza (paralelas y perpendiculares)
+    let peor = { dif: 0, nombre: '', pl: 0, re: 0 };
+    d.asig.piezas.filter(z => z.filaHoja !== null && z.filaHoja < 20).forEach(z => {
+      const i = (z.dir === 'B' ? 0 : pl.oO) + z.filaHoja!;
+      const a = pl.N[i], b = re.N[i];
+      if (isFinite(a) && isFinite(b) && Math.abs(a - b) > peor.dif) peor = { dif: Math.abs(a - b), nombre: z.nombre, pl: a, re: b };
+    });
+    if (peor.dif > 0.005) txt += ` Como la planta gira, la rotación cambia: la que más, ${peor.nombre}, ${fmt(peor.pl, 2)} t en la planilla contra ${fmt(peor.re, 2)} t con el CR real (ΣJt·a² ${fmt(pl.M51, 1)} contra ${fmt(re.M51, 1)}).`;
+  } else txt += ' En este viento la planta no gira (e = 0), así que las fuerzas no cambian.';
+  return txt + ' Con «Planilla 2025» o «Guía/CIRSOC» sale bien.';
+}
+function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla'; YrPlanilla?: number } {
   const A = d.dir === 'A';
   const porId = new Map(d.p.muros.map(m => [m.id, m]));
   const B = d.p.niveles.slice(0, d.iPB + 1).reduce<number | null>((x, y) => y.B ?? x, null) ?? 20;
@@ -508,7 +532,9 @@ function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: num
     const rotF = isFinite(rot.N[i]) ? rot.N[i] : 0, tras = otra ? 0 : rot.E[i];
     return { nombre: pz.nombre, pos: otra ? (H[i] ?? 0) : t(H[i] ?? 0), J: rot.B[i], frac: otra ? 0 : rot.C[i], tras, rot: rotF, total: tras + rotF, a: rot.K[i], muros: muros(pz.muros) } as ElementoPlano;
   });
-  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
+  // planilla anterior, viento B: su CR (J38) no cuenta las piezas 9 a 20 del viento A; el dibujo y el 3D usan el real
+  const real = !A && d.R.rotBReal ? d.R.rotBReal : null;
+  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: (real ?? rot).J38 ?? 0, YrPlanilla: rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
 }
 
 // ------------------------------------------------------------------ 07 Flexión

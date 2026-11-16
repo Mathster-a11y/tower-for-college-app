@@ -110,6 +110,10 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
 
   // ---------------------------------------------------------------- planta
   const g = el('g');
+  // rótulos ya puestos (caja aproximada: 6,6 px por letra), para que los demás no se les encimen
+  const ocupados: { x0: number; x1: number; y: number }[] = [];
+  const caja = (x: number, texto: string, ancla: string) => { const w = texto.length * 6.6; return ancla === 'middle' ? [x - w / 2, x + w / 2] : ancla === 'end' ? [x - w, x] : [x, x + w]; };
+  const ocupar = (x: number, y: number, texto: string, ancla: string) => { const [x0, x1] = caja(x, texto, ancla); ocupados.push({ x0, x1, y }); };
   svg.append(g);
   // Sentido de giro (marco del viento): W actúa en el eje de simetría (t = 0) y el CR está en t = Xr.
   // Si Xr > 0 el viento queda a la izquierda del CR y la planta gira en sentido horario (en pantalla, rotate > 0).
@@ -142,12 +146,12 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   const coinciden = Math.abs(d.Xr) < 0.005;
   // cada rótulo del lado opuesto al otro eje, para que no se pisen
   const derecha = d.Xr >= 0;
-  if (!coinciden) g.append(el('text', { x: X(0) + (derecha ? -4 : 4), y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': derecha ? 'end' : 'start' }, 'eje de simetría (W)'));
+  if (!coinciden) { g.append(el('text', { x: X(0) + (derecha ? -4 : 4), y: Y(sTop) - 4, class: 'd-eje', 'text-anchor': derecha ? 'end' : 'start' }, 'eje de simetría (W)')); ocupar(X(0) + (derecha ? -4 : 4), Y(sTop) - 4, 'eje de simetría (W)', derecha ? 'end' : 'start'); }
   g.append(el('line', { x1: xr, x2: xr, y1: Y(sTop), y2: Y(sBot), class: 'rt-inercia' }));
   // con los dos ejes juntos, el rótulo va debajo de la planta (arriba están los nombres de las piezas)
   // (en el paso 1 va debajo de R, más abajo)
   if (coinciden && paso !== 1) g.append(el('text', { x: xr + 6, y: Y(-d.S / 2) + 16, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
-  else if (!coinciden) g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
+  else if (!coinciden) { const tx = `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`; g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, tx)); ocupar(xr + (derecha ? 4 : -4), Y(sTop) - 4, tx, derecha ? 'start' : 'end'); }
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
   g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, 'data-ancla': `${xr} ${Y(d.Yr)}`, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
@@ -156,6 +160,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     const ye = Y(-d.S / 2) + 18;
     g.append(el('line', { x1: X(0), x2: xr, y1: ye, y2: ye, class: 'rt-cota' }));
     g.append(el('text', { x: (X(0) + xr) / 2, y: ye - 4, class: 'd-valor', 'text-anchor': 'middle' }, `e = ${fmt(Math.abs(d.Xr))} m`));
+    ocupar((X(0) + xr) / 2, ye - 4, `e = ${fmt(Math.abs(d.Xr))} m`, 'middle');
   }
 
   // ---------------------------------------------------------------- flechas por tabique
@@ -169,16 +174,16 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     ? `${p.nombre} (perpendicular al viento: no toma traslación)\nJ = ${fmt(p.J, 3)} m⁴ · a = ${fmt(p.a)} m al eje de inercia de la otra dirección\nrotación: ${fmt(Math.abs(p.rot), 2)} t`
     : `${p.nombre}\nJ = ${fmt(p.J, 3)} m⁴ (${fmt(p.frac * 100, 1)} % de ΣJ)\na = ${fmt(p.a)} m del eje de inercia\ntraslación: ${fmt(p.tras, 2)} t\nrotación: ${fmt(p.rot, 2)} t\ntotal: ${fmt(p.total, 2)} t`;
   // rótulos sin superponerse: se corren hacia arriba si chocan
-  const ocupados: { x: number; y: number }[] = [];
   const rotulo = (x0: number, y: number, texto: string, clase = 'd-valor', ancla = 'middle') => {
-    // que no se salga del dibujo por los costados (ancho aproximado del texto: 6 px por letra)
+    // que no se salga del dibujo por los costados (ancho aproximado del texto: 6,6 px por letra)
     const medio = ancla === 'middle' ? texto.length * 3.7 : 0;
     const x = ancla === 'middle' ? Math.min(ancho - 4 - medio, Math.max(4 + medio, x0)) : x0;
-    const choca = (q: number) => ocupados.some(o => Math.abs(o.x - x) < 46 && Math.abs(o.y - q) < 12);
+    const [a0, a1] = caja(x, texto, ancla);
+    const choca = (q: number) => ocupados.some(o => o.x0 < a1 + 6 && a0 - 6 < o.x1 && Math.abs(o.y - q) < 12);
     let yy = Math.max(14, y);
     while (choca(yy) && yy - 12 >= 14) yy -= 12;               // primero hacia arriba, sin salir del dibujo
     if (choca(yy)) { yy = Math.max(14, y); while (choca(yy) && yy + 12 < alto - 4) yy += 12; }   // si no hay lugar, hacia abajo
-    ocupados.push({ x, y: yy });
+    ocupados.push({ x0: a0, x1: a1, y: yy });
     g.append(el('text', { x, y: yy, class: clase, 'text-anchor': ancla }, texto));
   };
 
@@ -334,7 +339,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       }
       g.append(g2);
     });
-    ocupados.push({ x: X(0), y: base + Lmax + 14 });
+    ocupados.push({ x0: X(0) - 23, x1: X(0) + 23, y: base + Lmax + 14 });
     // rótulos por recta de acción: nombres juntos y el valor (igual para todos o uno por pieza)
     const valor = (p: ElementoPlano) => (paso === 2 ? `${fmt(p.frac * 100, 1)} %` : paso === 3 ? `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(Math.abs(p.rot), 1)} t` : `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(p.total, 1)} t`);
     [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).forEach((ps, gi) => {

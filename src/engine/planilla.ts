@@ -346,6 +346,12 @@ export function calcFlex(jpar: HojaJRes, rot: RotoRes, d: FilaFlex[]): FlexRes {
 export interface PlanillaRes {
   viento: VientoRes; mnyq: MNyQRes; jpar: HojaJRes; jort: HojaJRes; jminA: JMinimo; jminB: JMinimo;
   rotA: RotoRes; rotB: RotoRes; flex: FlexRes;
+  /**
+   * Solo con la planilla anterior: la rototraslación del viento B con B51 e I51 sumando hasta la fila 50 (como la
+   * planilla 2025). La planilla corta en la fila 38 y las piezas 9 a 20 del viento A no cuentan para el CR del viento
+   * B; esto da el CR real, para el dibujo y para avisar cuánto cambia. Los resultados de la planilla no se tocan.
+   */
+  rotBReal?: RotoRes;
 }
 
 export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaRes {
@@ -359,5 +365,7 @@ export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaR
   const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[51], mnyq.J[51], false, nuevo);
   const rotB = calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true, nuevo);
   const flex = calcFlex(jpar, rotA, d.flex);
-  return { viento, mnyq, jpar, jort, jminA: calcJMinimo(mnyq, false), jminB: calcJMinimo(mnyq, true), rotA, rotB, flex };
+  // en la hoja de cara menor, «nuevo» solo cambia el rango de B51 e I51 (truncaL25 es de cara mayor)
+  const rotBReal = nuevo ? undefined : calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true, true);
+  return { viento, mnyq, jpar, jort, jminA: calcJMinimo(mnyq, false), jminB: calcJMinimo(mnyq, true), rotA, rotB, flex, ...(rotBReal ? { rotBReal } : {}) };
 }

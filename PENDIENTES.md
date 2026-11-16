@@ -61,6 +61,14 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Zoom en los funiculares (viento y J) con detalle: trazos, puntos, flechas y letras de tamaño fijo en la pantalla; aparecen las letras que no entraban; los rótulos acompañan a su elemento y se separan si se encima
 - [x] Revisión de bugs: barrido automático de 12 proyectos × 4 combinaciones de motor y método × todas las etapas, subpasos, vientos y valores; arreglados el gráfico de rigidez sin muros (NaN), la importación de la planilla 2025 (vínculos de la rototraslación), el ala inferior colgada del alma correcta en el armado de la app y dos detalles del modo con botón
 
+## Revisión del TP Cueto/Heredia 2025 y de la rototraslación (noviembre 2026)
+- [x] Comparado el TP con la app: M,NyQ, vuelco, tensiones, ΣJ, J mín y Flex dan igual que su planilla (la anterior). Diferencias: errores de carga del TP (1 % fijo en la traslación, momento 0 en Flex, núcleo en filas de asimétricas, núcleo dibujado ≠ calculado)
+- [x] Planilla anterior: «Rototrasl. cara menor»!B51 = SUM(B28:B38) e I51 = SUM(I28:I38) cortan en la fila 38 (L51, M51 y la 2025 llegan a la 50). Las piezas 9 a 20 del viento A no cuentan para el CR del viento B. La app sigue dando los números de la planilla, pero dibuja el CR real (también en 3D), calcula aparte la rototraslación corregida (`rotBReal`) y avisa en el panel cuánto cambia la rotación
+- [x] Orden de filas: primero las piezas de más J en las filas «seguras» (planilla anterior: 1 a 8, que cuentan para el CR del viento B y suman peso propio en Flex; planilla 2025: 1 a 6, donde Flex lee la misma pieza). Se priorizó el CR sobre el módulo que lee Flex (decisión del usuario): una asimétrica en las filas 1 a 7 hace que la Flex de la planilla lea el módulo simétrico (la app avisa y la calcula bien en «Guía/CIRSOC»)
+- [x] Aviso por pieza cuando cae en las filas de Flex con D = 0,01 fijo (D13:D20: la planilla no suma su peso propio)
+- [x] Parapeto (Viento → «Parapeto»): se suma al medio entrepiso de la azotea en M,NyQ D; el importador lo recupera de la planilla
+- [x] Rototraslación: los rótulos ya no se enciman con los de los ejes (caja con el ancho real del texto)
+
 ## En curso
 - Nada por ahora.
 - Nada por ahora: el próximo es el primero de la lista de abajo.
@@ -83,6 +91,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ## Esperando a la cátedra
 - [ ] Rototraslación con exactamente dos piezas perpendiculares: ¿se usa el bloque «USAR SOLAMENTE PARA DOS TABIQUES» (filas 28–29, Yr = promedio de las dos posiciones, sin pesar por J) o el general (filas 31–50, Yr pesado por J, como el Anexo de la guía)? Por ahora la app usa siempre el general
+- [ ] Planilla anterior: ¿B51 e I51 de «Rototrasl. cara menor» deberían sumar hasta la fila 50, como L51, M51 y la planilla 2025? (hoy cortan en la 38)
 - [ ] Filas de las piezas 8 y 9 de «J Tabiques paralelos»: faltan fórmulas en la planilla virgen
 - [ ] «Flex comp PB paralelos» D13:D20 = 0,01 fijo: las piezas 10 a 17 no suman su peso propio
 - [ ] Edificios flexibles (F < 1 Hz): ¿Gf o 0,85?
