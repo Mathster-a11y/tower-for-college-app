@@ -179,7 +179,9 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
     const ln = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: `f-lado${ext ? ' extremo' : ''}`, 'data-par': k, style: `stroke:${colorPar(k)}` });
     ln.append(el('title', {}, `Lado ${letra(k)} ∥ rayo O${letra(k)}${ext ? ' · lado extremo: se prolonga hasta R' : ''}`));
     svg.append(ln);
-    if (Math.hypot(b.x - a.x, b.y - a.y) > 16) svg.append(el('text', { x: (a.x + b.x) / 2 + 6, y: (a.y + b.y) / 2 + 4, class: 'f-letra chica', 'data-par': k, style: `fill:${colorPar(k)}` }, letra(k)));
+    // la letra de un lado corto aparece cuando el zoom lo hace largo (más de 16 px en la pantalla)
+    const largo = Math.hypot(b.x - a.x, b.y - a.y);
+    svg.append(el('text', { x: (a.x + b.x) / 2 + 6, y: (a.y + b.y) / 2 + 4, 'data-ancla': `${(a.x + b.x) / 2} ${(a.y + b.y) / 2}`, class: 'f-letra chica', 'data-par': k, style: `fill:${colorPar(k)}`, ...(largo > 16 ? {} : { 'data-zoom-min': (16 / Math.max(largo, 0.5)).toFixed(2) }) }, letra(k)));
   });
   v.forEach(q => svg.append(el('circle', { cx: X(q.x), cy: Z(q.z), r: 2, class: 'f-vertice' })));
   // resultante
@@ -203,7 +205,10 @@ export function dibujoPoligono(c: import('../engine/funicular').Construccion, zB
     r.append(el('title', {}, `Rayo O${letra(k)} ∥ lado ${letra(k)} (espacio ${letra(k)}, ${separa})`));
     svg.append(r);
     // letra en el punto del polígono, si hay lugar
-    if (PX(s2) - ultX >= 10 || k === n) { svg.append(el('text', { x: PX(s2), y: yF - 8, class: 'f-letra chica', 'text-anchor': 'middle', 'data-par': k, style: `fill:${colorPar(k)}` }, letra(k))); ultX = PX(s2); }
+    // si no hay lugar, la letra aparece al acercar (cuando la separación llega a 10 px en la pantalla)
+    const sep = PX(s2) - ultX, entra = sep >= 10 || k === n;
+    svg.append(el('text', { x: PX(s2), y: yF - 8, 'data-ancla': `${PX(s2)} ${yF}`, class: 'f-letra chica', 'text-anchor': 'middle', 'data-par': k, style: `fill:${colorPar(k)}`, ...(entra ? {} : { 'data-zoom-min': (10 / Math.max(sep, 0.5)).toFixed(2) }) }, letra(k)));
+    if (entra) ultX = PX(s2);
   });
   svg.append(el('text', { x: (PX(0) + PX(c.W)) / 2, y: yF - 26, class: 'f-txt f-nota', 'text-anchor': 'middle' }, `W = ${fmt(c.W, 1)} t`));
   svg.append(el('circle', { cx: Ox, cy: Oy, r: 3.5, class: 'f-punto ok' }));

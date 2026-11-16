@@ -33,7 +33,8 @@ let nId = 0;
  * se distinga del tronco aunque el tronco sea grueso.
  */
 function flecha(x1: number, y1: number, x2: number, y2: number, w: number, clase: string, titulo?: string): SVGGElement {
-  const g = el('g', { class: `rt-flecha-dib ${clase}` });
+  // data-punta: al acercar el dibujo, la punta se achica hacia su vértice (zoomDibujo) y el tronco la sigue
+  const g = el('g', { class: `rt-flecha-dib ${clase}`, 'data-punta': `${x2} ${y2}` });
   const L = Math.hypot(x2 - x1, y2 - y1);
   const largoP = Math.max(9, w * 2.6), anchoP = Math.max(9, w * 3);
   const ux = L > 0 ? (x2 - x1) / L : 0, uy = L > 0 ? (y2 - y1) / L : -1;
@@ -149,7 +150,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   else if (!coinciden) g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`));
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
-  g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
+  g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, 'data-ancla': `${xr} ${Y(d.Yr)}`, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
   // excentricidad
   if (Math.abs(d.Xr) > 1e-3) {
     const ye = Y(-d.S / 2) + 18;
@@ -264,7 +265,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const ly = PY(sAc) + 4;
       while (letrasP.some(q => Math.abs(q.y - ly) < 11 && Math.abs(q.x - lx) < 10)) lx += 11;      // se corre a la derecha
       letrasP.push({ x: lx, y: ly });
-      g.append(el('text', { x: lx, y: ly, class: 'rt-letra chica', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
+      g.append(el('text', { x: lx, y: ly, 'data-ancla': `${px} ${PY(sAc)}`, class: 'rt-letra chica', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
     });
     g.append(el('circle', { cx: O.x, cy: O.y, r: 3.5, class: 'rt-cr' }));
     g.append(el('text', { x: O.x + 6, y: O.y + 4, class: 'd-eje' }, 'O'));
@@ -282,7 +283,10 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       g.append(ln);
       // letra en el tramo (en los extremos, en la parte de afuera, antes del vértice)
       const q = extremo ? { x: (a2.x + (i === 0 ? verts[0].x : verts[m - 1].x)) / 2, y: (a2.y + (i === 0 ? verts[0].y : verts[m - 1].y)) / 2 } : { x: (a2.x + b2.x) / 2, y: (a2.y + b2.y) / 2 };
-      if (extremo || Math.hypot(b2.x - a2.x, b2.y - a2.y) > 22) g.append(el('text', { x: Math.abs(q.x - R.x) < 12 ? R.x + 14 : q.x, y: q.y - 7, class: 'rt-letra', 'text-anchor': 'middle', 'data-par': i, style: `fill:${colorPar(i)}` }, letra(i)));
+      // la letra de un tramo corto aparece al acercar (cuando mide más de 22 px en la pantalla)
+      const lt = Math.hypot(b2.x - a2.x, b2.y - a2.y);
+      g.append(el('text', { x: Math.abs(q.x - R.x) < 12 ? R.x + 14 : q.x, y: q.y - 7, 'data-ancla': `${q.x} ${q.y}`, class: 'rt-letra', 'text-anchor': 'middle', 'data-par': i, style: `fill:${colorPar(i)}`,
+        ...(extremo || lt > 22 ? {} : { 'data-zoom-min': (22 / Math.max(lt, 0.5)).toFixed(2) }) }, letra(i)));
     });
     verts.forEach(v => g.append(el('circle', { cx: v.x, cy: v.y, r: 2.6, class: 'rt-vertice' })));
     const todo = visible(m);

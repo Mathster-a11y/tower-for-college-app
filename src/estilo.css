@@ -1298,3 +1298,6 @@ svg .linea-ref-punta { fill: var(--panel, #fff); stroke: var(--accent); stroke-w
 /* vistas del informe */
 .informe .inf-vista svg, .informe .inf-vista img { display: block; width: 100%; height: auto; max-height: 230mm; object-fit: contain; border: 1px solid #ccc; }
 .vista-dib { background: #fff; }
+
+/* rótulos de los dibujos que aparecen al acercar */
+svg [data-zoom-min] { display: none; }
