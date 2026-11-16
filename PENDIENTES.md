@@ -57,6 +57,9 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Planilla 2025: «Flex comp PB paralelos» desde la fila 10 lee área y módulo de otra fila de la hoja J que la que lee Rototrasl. (B10 = O14 pero J10 → AY10). Decisión: se deja así (la app lo reproduce y avisa en cada pieza)
 - [x] Ejemplo de EDIFICIO_TORRE_1: B22:B54 de M,NyQ escritos a mano y corridos una fila respecto de «viento». Confirmado: error del ejemplo; al exportar se vuelve a poner el vínculo con «viento»
 - [x] Agregar filas de piezas a la planilla 2025 sin cambiar sus relaciones (más de 20 piezas por viento): las filas van al final de cada bloque (J paralelos desde la 32, J ortogonales desde la 24, los dos bloques de cada Rototrasl. y Flex desde la 24), con las fórmulas del bloque; las sumas que terminan en la última fila se estiran y todo lo de abajo se corre como con «Insertar filas» de Excel (fórmulas de todas las hojas, comentarios, dibujos). Verificado con LibreOffice: torre de 44 piezas por viento, 5374 de 5374 celdas iguales. Las hojas «G ·» siguen mostrando las primeras 20 piezas
+- [x] Modo de cálculo «En vivo» / «Con botón» (F9). Con botón, los cambios se guardan sin calcular; el cálculo, el 3D y los diagramas esperan a «Calcular». El 3D ya no se dibuja 60 veces por segundo: con la app quieta, el procesador pasó de ~2,8 s a ~0,1 s cada 5 s
+- [x] Zoom en los funiculares (viento y J) con detalle: trazos, puntos, flechas y letras de tamaño fijo en la pantalla; aparecen las letras que no entraban; los rótulos acompañan a su elemento y se separan si se encima
+- [x] Revisión de bugs: barrido automático de 12 proyectos × 4 combinaciones de motor y método × todas las etapas, subpasos, vientos y valores; arreglados el gráfico de rigidez sin muros (NaN), la importación de la planilla 2025 (vínculos de la rototraslación), el ala inferior colgada del alma correcta en el armado de la app y dos detalles del modo con botón
 
 ## En curso
 - Nada por ahora.
