@@ -238,6 +238,24 @@ export function tuboEnTabiques(m: Muro, nuevoId: () => string): Muro[] {
   ];
 }
 
+/** cierra un vano calado (hueco o puerta con dintel): los dos tramos vuelven a ser un solo muro, con la suma de sus áreas */
+export function cerrarVano(muros: Muro[], id: string): { muros: Muro[]; id: string } | { error: string } {
+  const m = muros.find(x => x.id === id);
+  if (!m) return { error: 'no se encontró el muro' };
+  const a = m.vano ? m : muros.find(x => x.vano?.con === id);
+  const b = a && muros.find(x => x.id === a.vano!.con);
+  if (!a || !b) return { error: `${id} no tiene un vano calado` };
+  if (a.dir !== b.dir) return { error: 'los dos tramos no están en la misma línea' };
+  const ini = (w: Muro) => (w.dir === 'X' ? w.x : w.y) - w.largo / 2;
+  const s0 = Math.min(ini(a), ini(b)), s1 = Math.max(ini(a) + a.largo, ini(b) + b.largo), L = r2(s1 - s0), c = r2(s0 + L / 2);
+  const { vano: _v, ...resto } = a; void _v;
+  const unido: Muro = { ...resto, largo: L, x: a.dir === 'X' ? c : a.x, y: a.dir === 'Y' ? c : a.y, areaInf: r2(a.areaInf + b.areaInf), ...(b.vano ? { vano: b.vano } : {}) };
+  let lista = muros.filter(x => x.id !== b.id).map(x => (x.id === a.id ? unido : x));
+  const g = unido.grupo;
+  if (g) lista = agrupar(lista, lista.filter(x => x.grupo === g).map(x => x.id), g).muros;
+  return { muros: lista, id: a.id };
+}
+
 /**
  * Cala un vano de «ancho» m en el muro «id», centrado en el punto (proyectado sobre el eje del muro). El muro queda en
  * dos tramos; el área de influencia se reparte por largo. Un tubo rectangular primero se pasa a sus cuatro tabiques y se

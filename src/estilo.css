@@ -1320,3 +1320,12 @@ svg [data-zoom-min] { display: none; }
 .grilla tr.resaltada > th { color: var(--accent); font-weight: 700; }
 .nota-conjunto:empty { display: none; }
 .nota-conjunto { color: var(--accent); font-weight: 600; margin: 4px 0; }
+/* ---------- calar: abertura o vano elegido, sus cotas ---------- */
+.planta .abertura-sel { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.planta .cotas-vano { pointer-events: none; }
+.planta .cotas-vano.previa .cota-lin, .planta .cotas-vano.previa .cota-ext, .planta .cotas-vano.previa .cota-marca { stroke: var(--accent); }
+.planta .cotas-vano.sel .cota-lin, .planta .cotas-vano.sel .cota-marca { stroke: var(--accent); stroke-width: 1.4; }
+.planta .cotas-vano .cota-ancho { font-weight: 700; fill: var(--accent); }
+svg.planta.calando.sobre-calado { cursor: grab; }
+.calar-elegido { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line, #ccc); }
+.calar-elegido button { align-self: flex-start; }

@@ -145,6 +145,25 @@ export function desagruparNodo(p: Proyecto, gid: string): string | null {
   return null;
 }
 
+/** deshace el grupo y todos los que tiene adentro: todos sus muros quedan sueltos en el nivel del grupo */
+export function desagruparTodo(p: Proyecto, gid: string): string | null {
+  const g = grupoPorId(p, gid);
+  if (!g) return 'No existe el grupo.';
+  const sub = subgrupos(p, gid);
+  const bloq = sub.map(s => grupoPorId(p, s)).find(x => x && grupoBloqueado(p, x.id));
+  if (bloq) return `${bloq.nombre} está bloqueado: desbloquealo primero.`;
+  // de adentro hacia afuera, para que cada uno suelte su contenido en el de arriba
+  for (const s of sub.reverse()) { const e = desagruparNodo(p, s); if (e) return e; }
+  return null;
+}
+
+/** deshace varios grupos de una vez (los que no se puedan quedan; devuelve el primer aviso) */
+export function desagruparVarios(p: Proyecto, gids: string[], todo = false): { hechos: number; error: string | null } {
+  let hechos = 0, error: string | null = null;
+  for (const id of gids) { if (!grupoPorId(p, id)) continue; const e = todo ? desagruparTodo(p, id) : desagruparNodo(p, id); if (e) error ??= e; else hechos++; }
+  return { hechos, error };
+}
+
 /** borra el grupo con todo lo que tiene (no si está bloqueado) */
 export function borrarGrupo(p: Proyecto, gid: string): string | null {
   const g = grupoPorId(p, gid);

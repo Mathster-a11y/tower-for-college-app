@@ -83,3 +83,22 @@ describe('imán de nodos (arrastrar desde una esquina)', () => {
     expect(imanarNodo({ x: 5.123, y: 7.481 }, [t('M1', 'Y', 0, 0, 4)], 0.1)).toMatchObject({ a: 'grilla', p: { x: 5.1, y: 7.5 } });
   });
 });
+
+describe('cerrar un vano calado', async () => {
+  const { calarMuro, cerrarVano } = await import('./dibujo');
+  it('calar y cerrar devuelve el mismo muro (largo, centro y área)', () => {
+    const m = { id: 'M1', dir: 'X' as const, x: 2, y: 1, largo: 5, espesor: 0.2, llega: true, areaInf: 12, piezaA: 'T1', pegadoA: '', piezaB: 'T1B', pegadoB: '' };
+    const r = calarMuro([m], 'M1', { x: 3, y: 1 }, 0.9, 'hueco');
+    if ('error' in r) throw new Error(r.error);
+    expect(r.muros).toHaveLength(2);
+    const otro = r.muros.find(x => x.id !== 'M1')!.id;
+    for (const id of ['M1', otro]) {
+      const c = cerrarVano(r.muros, id);
+      if ('error' in c) throw new Error(c.error);
+      expect(c.muros).toHaveLength(1);
+      expect(c.muros[0]).toMatchObject({ id: 'M1', x: 2, y: 1, largo: 5, piezaA: 'T1' });
+      expect(c.muros[0].areaInf).toBeCloseTo(12, 1);
+      expect(c.muros[0].vano).toBeUndefined();
+    }
+  });
+});

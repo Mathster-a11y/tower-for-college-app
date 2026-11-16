@@ -257,3 +257,22 @@ describe('grupo fijo en su lugar 📌', () => {
     expect(p.muros.find(m => m.id === 'M1')!.espesor).toBe(0.3);
   });
 });
+
+describe('desagrupar más fácil', async () => {
+  const { desagruparTodo, desagruparVarios } = await import('./grupos');
+  const { ejemploGuia } = await import('./modelo');
+  it('«desagrupar todo» suelta también los grupos de adentro; «varios» deshace cada uno', () => {
+    const p = ejemploGuia();
+    const ids = p.muros.slice(0, 4).map(m => m.id);
+    const a = agruparNodos(p, ids.slice(0, 2), [], null) as { id: string };
+    const b = agruparNodos(p, ids.slice(2, 4), [], null) as { id: string };
+    const top = agruparNodos(p, [], [a.id, b.id], null) as { id: string };
+    expect(desagruparTodo(p, top.id)).toBeNull();
+    expect(p.grupos ?? []).toHaveLength(0);
+    expect(p.muros.some(m => m.gd)).toBe(false);
+    const c = agruparNodos(p, ids.slice(0, 2), [], null) as { id: string };
+    const d = agruparNodos(p, ids.slice(2, 4), [], null) as { id: string };
+    expect(desagruparVarios(p, [c.id, d.id])).toEqual({ hechos: 2, error: null });
+    expect(p.grupos ?? []).toHaveLength(0);
+  });
+});
