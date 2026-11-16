@@ -283,6 +283,9 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const alasMedio = medio.map(x => x.a.id);
   if (medio.length) avisos.push(`Nota: ${medio.map(x => x.a.id).join(', ')} ${medio.length > 1 ? 'están' : 'está'} en el medio del alma; ${medio.length > 1 ? 'se suman' : 'se suma'} al ala superior del molde (se puede cambiar a «fuera» o «ala inf.»). Mirá la diferencia de J.`);
   const sup = info.filter(x => papelAla(x) === 'ala sup.'), inf = info.filter(x => papelAla(x) === 'ala inf.');
+  // el molde cuelga el ala inferior del alma izquierda: si el ala inferior está pegada al alma derecha (y no se eligió a
+  // mano), se cambian las almas; el J no depende de cuál es la izquierda salvo por la profundidad del ala inferior
+  if (der && !forzDer && inf.filter(x => x.w === der).length > inf.filter(x => x.w === izq).length) [izq, der] = [der, izq];
   // solo las alas de los extremos recortan el alma (las del medio no)
   const extSup = sup.filter(x => x.pos === arriba).map(x => x.a), extInf = inf.filter(x => x.pos === abajo).map(x => x.a);
   const banda = (g: Muro[]) => (g.length ? [Math.min(...g.map(a => s(a) - a.espesor / 2)), Math.max(...g.map(a => s(a) + a.espesor / 2))] : null);

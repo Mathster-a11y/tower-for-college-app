@@ -152,17 +152,19 @@ class Estado {
       if (i >= 0) { const a = areasInfluencia(pa, i); pa.muros.forEach(m => { if (m.id in a.area && Math.abs(m.areaInf - a.area[m.id]) > 1e-9) m.areaInf = a.area[m.id]; }); }
     }
     const nuevo = JSON.stringify(this.proyecto);
-    if (nuevo !== this.ultimo) {
+    const cambio = nuevo !== this.ultimo;
+    if (cambio) {
       this.atras.push(this.ultimo);
       if (this.atras.length > 100) this.atras.shift();
       this.adelante = [];
       this.ultimo = nuevo;
     }
-    this.actualizar();
+    this.actualizar(cambio);
   }
-  private actualizar() {
+  /** @param cambio cambiaron los datos del proyecto (cambiar de viento o de vista no cuenta como cambio pendiente) */
+  private actualizar(cambio = true) {
     if (this.modo === 'vivo') { this.recalcular(); this.pendiente = false; this.cambiosPendientes = 0; }
-    else { this.pendiente = true; this.cambiosPendientes++; }
+    else if (cambio) { this.pendiente = true; this.cambiosPendientes++; }
     try { localStorage.setItem(CLAVE, this.ultimo); } catch { /* sin almacenamiento: no pasa nada */ }
     this.oyentes.forEach(o => o());
   }
@@ -180,7 +182,8 @@ class Estado {
     this.limpiarGrupos();
     this.actualizar();
   }
-  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); envolverPiezas(this.proyecto, nombrePieza); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); }
+  /** otro proyecto (ejemplo, archivo abierto): se calcula siempre, también en el modo con botón */
+  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); envolverPiezas(this.proyecto, nombrePieza); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); if (this.pendiente) this.calcularAhora(); }
   /** saca de la selección y del contexto los grupos que ya no existen */
   limpiarGrupos() {
     const ids = new Set((this.proyecto.grupos ?? []).map(g => g.id));

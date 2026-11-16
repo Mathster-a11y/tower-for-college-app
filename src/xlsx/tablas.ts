@@ -3,7 +3,7 @@
  * libros .xlsx simples (la tabla de niveles y muros que el alumno puede llenar en Excel).
  */
 import JSZip from 'jszip';
-import { leerCompartidos, partes } from './xml';
+import { expandirTodas, leerCompartidos, partes } from './xml';
 
 export type Valor = string | number | null;
 export interface Hoja {
@@ -12,15 +12,18 @@ export interface Hoja {
   filas: Valor[][];
   /** valor por referencia («B5») */
   celda: (ref: string) => Valor;
+  /** fórmula de la celda, sin «=» (solo libros .xlsx; null si no tiene) */
+  formula: (ref: string) => string | null;
 }
 
 const unesc = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function hoja(nombre: string, filas: Valor[][]): Hoja {
+function hoja(nombre: string, filas: Valor[][], formulas: Map<string, string> = new Map()): Hoja {
   return {
     nombre, filas,
     celda: ref => { const p = partes(ref); return filas[p.fila - 1]?.[p.col - 1] ?? null; },
+    formula: ref => formulas.get(ref) ?? null,
   };
 }
 
@@ -39,13 +42,17 @@ export async function leerLibro(buf: ArrayBuffer | Uint8Array): Promise<Hoja[]> 
     const target = /Target="([^"]+)"/.exec(t ?? '')?.[1];
     if (!target) continue;
     const ruta = target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
-    const xml = await zip.file(ruta)?.async('string');
-    if (!xml) continue;
+    const xml0 = await zip.file(ruta)?.async('string');
+    if (!xml0) continue;
+    const xml = expandirTodas(xml0);
     const filas: Valor[][] = [];
+    const formulas = new Map<string, string>();
     for (const c of xml.matchAll(/<c r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const { fila, col } = partes(c[1]);
       const tipo = /\st="([^"]+)"/.exec(c[2])?.[1];
       const cuerpo = c[3] ?? '';
+      const f = /<f[^>]*>([\s\S]*?)<\/f>/.exec(cuerpo)?.[1];
+      if (f) formulas.set(c[1], unesc(f));
       let v: Valor = null;
       if (tipo === 'inlineStr') v = unesc([...cuerpo.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(''));
       else {
@@ -61,7 +68,7 @@ export async function leerLibro(buf: ArrayBuffer | Uint8Array): Promise<Hoja[]> 
       (filas[fila - 1] ??= [])[col - 1] = v;
     }
     for (let i = 0; i < filas.length; i++) filas[i] ??= [];
-    out.push(hoja(nombre, filas));
+    out.push(hoja(nombre, filas, formulas));
   }
   return out;
 }

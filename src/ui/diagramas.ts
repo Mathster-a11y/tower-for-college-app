@@ -271,9 +271,10 @@ export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
   const cap = document.createElement('figcaption');
   cap.textContent = 'Rigidez: ΣJ de cada dirección contra el J mínimo';
   fig.append(cap);
-  const xMax = Math.max(...rs.flatMap(r => [r.J, r.minimos.h600])) * 1.3;
+  // sin muros (ΣJ = 0 y J mínimo = 0) la escala no puede ser 0: se usa 1 m⁴
+  const xMax = Math.max(...rs.flatMap(r => [r.J, r.minimos.h600]).filter(Number.isFinite), 0) * 1.3 || 1;
   const tx = marcas(0, xMax);
-  const X = (x: number) => mi + (x / Math.max(tx[tx.length - 1], xMax)) * (ancho - mi - md);
+  const X = (x: number) => mi + ((Number.isFinite(x) ? x : 0) / (Math.max(tx[tx.length - 1], xMax) || 1)) * (ancho - mi - md);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico', role: 'img', 'aria-label': rs.map(r => `viento ${r.dir}: ΣJ ${fmt(r.J, 2)} m⁴, J mínimo h/500 ${fmt(r.minimos.h500, 2)} m⁴`).join('; ') });
   tx.forEach(v => { svg.append(el('line', { x1: X(v), x2: X(v), y1: ms - 6, y2: alto - 24, class: v === 0 ? 'd-cero' : 'd-grilla' })); svg.append(el('text', { x: X(v), y: alto - 8, class: 'd-eje', 'text-anchor': 'middle' }, fmt(v, decimales(tx)))); });
   rs.forEach((r, i) => {

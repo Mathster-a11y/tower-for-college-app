@@ -70,3 +70,35 @@ describe('importar', () => {
     expect(r2.mnyq.H61).toBeCloseTo(r.mnyq.H61, 6);
   });
 });
+
+describe('importar la planilla de la cátedra 2025', () => {
+  const p = ejemploGuia();
+  it('EDIFICIO_TORRE_1 (el ejemplo de la cátedra): cada pieza sale de la fila que lee la rototraslación (ΣJ y eje de inercia como Excel)', async () => {
+    const { usarConfig } = await import('../src/engine/config');
+    const libro = await leerLibro(readFileSync(new URL('../src/assets/planilla_catedra_2025.xlsx', import.meta.url)));
+    const imp = interpretar(libro);
+    expect(imp.tipo).toBe('planilla');
+    const q = { ...p, niveles: imp.niveles!, muros: imp.muros, sitio: { ...p.sitio, ...imp.sitio }, fundacion: imp.fundacion! };
+    const r = usarConfig({ motor: 'nuevo' }, () => calcularPlanilla(aPlanilla(q).datos));
+    // valores guardados por Excel en «Rototrasl. cara mayor»: B25 = 192,8324 m⁴ · J7 = 2,2989 m
+    expect(r.rotA.B25).toBeCloseTo(192.832433, 4);
+    expect(r.rotA.J7).toBeCloseTo(2.298900, 4);
+    // cara menor: B25 = 10,2230 m⁴ · J7 = −1,9851 m
+    expect(r.rotB.B25).toBeCloseTo(10.222989, 4);
+    expect(r.rotB.J7).toBeCloseTo(-1.985126, 3);    // 0,4 mm: las piezas asimétricas se redibujan como muros al importar
+  });
+  it('una torre de 26 piezas escrita en la planilla 2025 vuelve con las mismas piezas', async () => {
+    const { usarConfig } = await import('../src/engine/config');
+    const q0 = { ...p, muros: [...p.muros] };
+    for (let k = 0; k < 20; k++) q0.muros.push({ id: `X${k}`, dir: 'Y', x: -9 + k * 0.9, y: k % 2 ? 7 : -7, largo: 1 + (k % 3) * 0.2, espesor: 0.2, llega: true, areaInf: 5, piezaA: `PA${k}`, pegadoA: '', piezaB: '', pegadoB: '' });
+    const { a, r } = usarConfig({ motor: 'nuevo' }, () => { const a = aPlanilla(q0); return { a, r: calcularPlanilla(a.datos) }; });
+    const xlsx = await escribirPlanilla(readFileSync(new URL('../src/assets/planilla_catedra_2025.xlsx', import.meta.url)), a.datos, r, q0, undefined, undefined, { motor: 'nuevo', virgen: true });
+    const imp = interpretar(await leerLibro(xlsx));
+    const q = { ...q0, niveles: imp.niveles!, muros: imp.muros };
+    const r2 = usarConfig({ motor: 'nuevo' }, () => calcularPlanilla(aPlanilla(q).datos));
+    expect(r2.jpar.filas.length).toBe(26);
+    expect(r2.rotA.B25).toBeCloseTo(r.rotA.B25, 6);
+    expect(r2.rotA.J7).toBeCloseTo(r.rotA.J7, 3);   // las posiciones se importan redondeadas al mm
+    expect(r2.rotB.B25).toBeCloseTo(r.rotB.B25, 6);
+  });
+});
