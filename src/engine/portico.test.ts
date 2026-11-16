@@ -19,7 +19,7 @@ describe('pórtico', () => {
     expect(calcFilaJ(pa.fila, false, false).AX).toBeCloseTo(J, 6);
     expect(pa.Jreal).toBeCloseTo(J, 6);
     const pb = asig.piezas.find(z => z.nombre === 'P1B')!;
-    expect(asig.papeles[cols[0].id].B).toBe('fuera del cálculo');
+    expect(asig.papeles[cols[0].id].B).toBe('sin pieza');            // trabaja en su plano (viento A): en el B no toma carga, pero no está fuera del cálculo
     expect(pb.avisos.join(' ')).toMatch(/en su plano/);
     expect(() => calcularPlanilla(asig.datos)).not.toThrow();
   });

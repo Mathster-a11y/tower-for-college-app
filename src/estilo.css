@@ -1314,3 +1314,7 @@ svg [data-zoom-min] { display: none; }
 /* barra superior con el modo de cálculo: el nombre del proyecto se acorta antes de que la barra pase a dos renglones */
 @media (max-width: 1700px) { .barra .proyecto { max-width: 18ch; } .modo-calculo > .nota { display: none; } }
 @media (max-width: 1450px) { .barra .proyecto { max-width: 12ch; } }
+
+/* filas de lo elegido en la planta (muro, pieza o varios) */
+.grilla tr.resaltada > td, .grilla tr.resaltada > th, #panel tr.resaltada > td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.grilla tr.resaltada > th { color: var(--accent); font-weight: 700; }

@@ -107,16 +107,17 @@ export function perfilPlanilla(nombre: string, dir: Direccion, muros0: Muro[], p
   if (muros.length === 1) {
     const m = muros[0];
     if (!esAlma(m)) {
-      set(m, 'fuera del cálculo');
-      avisos.push(`Método planilla: ${m.id} es un tabique suelto perpendicular a este viento; va solo en la hoja de su dirección fuerte.`);
+      // no es «fuera del cálculo»: trabaja en el otro viento (su dirección fuerte); en este no tiene pieza
+      set(m, 'sin pieza');
+      avisos.push(`Método planilla: ${m.id} es un tabique suelto perpendicular a este viento; va solo en la hoja de su dirección fuerte (en este viento no tiene pieza, pero sigue en el cálculo).`);
       return { ...base, molde: 'simétrico', fila: {} };
     }
     set(m, 'alma');
     return { ...base, posicion: aT(t(m)), molde: 'simétrico', fila: { B: m.espesor, C: m.largo } };
   }
   if (!almas.length) {
-    alas.forEach(m => set(m, 'fuera del cálculo'));
-    avisos.push('Método planilla: la pieza no tiene muros paralelos a este viento (almas); no entra en esta hoja.');
+    alas.forEach(m => set(m, 'sin pieza'));
+    avisos.push('Método planilla: la pieza no tiene muros paralelos a este viento (almas); no entra en esta hoja (sigue en el cálculo del otro viento).');
     return { ...base, molde: 'simétrico', fila: {} };
   }
   const sup = alas.filter(m => s(m) >= sg), inf = alas.filter(m => s(m) < sg);
@@ -161,7 +162,9 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
 
   // pórtico: dos columnas unidas por una viga, alineadas con el viento (columnas AO a AU de la hoja J)
   const cols = muros.filter(m => m.portico);
-  if (cols.length && cols.length === muros.length) {
+  // un pórtico son dos columnas; con otra cantidad, las columnas se calculan como tabiques (no se dejan fuera)
+  if (cols.length && cols.length === muros.length && cols.length !== 2) avisos.push(`Un pórtico tiene dos columnas y esta pieza tiene ${cols.length}: se calculan como tabiques.`);
+  if (cols.length === 2 && cols.length === muros.length) {
     const enV = (m: Muro) => (m.dir === dirAlma ? m.largo : m.espesor), tr = (m: Muro) => (m.dir === dirAlma ? m.espesor : m.largo);
     const [c1, c2] = [...cols].sort((a, b) => s(a) - s(b));
     if (cols.length === 2 && Math.abs(t(c1) - t(c2)) <= Math.max(tr(c1), tr(c2)) / 2 + 0.05) {
@@ -187,8 +190,9 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
         return { ...base, molde: 'simétrico', fila: { B: b, C: h }, Jreal: Jv };
       }
     }
-    cols.forEach(m => set(m, 'fuera del cálculo'));
-    avisos.push(cols.length === 2 ? `El pórtico ${muros.map(m => m.id).join('–')} trabaja en su plano: con este viento sus columnas quedan fuera del cálculo.` : 'Un pórtico tiene dos columnas; esta pieza queda fuera del cálculo.');
+    // el pórtico trabaja en su plano (el otro viento): en este no tiene pieza, pero no está «fuera del cálculo»
+    cols.forEach(m => set(m, 'sin pieza'));
+    avisos.push(`El pórtico ${muros.map(m => m.id).join('–')} trabaja en su plano: en este viento no toma carga (sí en el otro).`);
     return { ...base, molde: 'pórtico', fila: {} };
   }
   // perfil irregular (solo o con otros muros en la pieza): en la hoja J va el rectángulo equivalente de este viento,
@@ -229,13 +233,21 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const activos = muros.filter(m => rol(m) !== 'fuera');
   let almas = activos.filter(m => m.dir === dirAlma);
   const alas = activos.filter(m => m.dir !== dirAlma);
-  // más de dos almas: el molde admite dos; se toman las de más área (o las elegidas a mano) y el resto queda fuera
+  // más de dos almas: el molde admite dos. Ningún muro queda fuera sin que lo pida el usuario: las almas de más se suman
+  // a la más cercana de las dos del molde (espesores sumados). El J respecto del eje perpendicular al viento no depende de
+  // la posición transversal del alma, así que si cubren el mismo tramo el J del molde es exacto.
+  const sumadas: { de: Muro; a: string }[] = [];
   if (almas.length > 2) {
     const elegidas = almas.filter(m => rol(m) === 'alma' || rol(m) === 'alma der.');
     const orden = [...elegidas, ...[...almas].filter(m => !elegidas.includes(m)).sort((x, y) => y.largo * y.espesor - x.largo * x.espesor)];
-    const quedan = orden.slice(0, 2), sobran = orden.slice(2);
-    sobran.forEach(m => set(m, 'fuera del cálculo'));
-    avisos.push(`Más de dos almas: el molde de la hoja admite dos. Se tomaron ${quedan.map(m => m.id).join(' y ')} (las de más área) y quedan fuera ${sobran.map(m => m.id).join(', ')}; se puede elegir otras en el grupo. Mirá la diferencia de J.`);
+    const quedan = orden.slice(0, 2).map(m => ({ ...m })), sobran = orden.slice(2);
+    sobran.forEach(m => {
+      const w = quedan.reduce((b, x) => (Math.abs(t(x) - t(m)) < Math.abs(t(b) - t(m)) ? x : b), quedan[0]);
+      // si no cubre el mismo tramo, se suma el área con el largo del alma del molde (aproximado: el aviso de J lo muestra)
+      w.espesor = r4(w.espesor + (m.largo * m.espesor) / w.largo);
+      sumadas.push({ de: m, a: w.id });
+    });
+    avisos.push(`Más de dos almas: el molde de la hoja admite dos (${quedan.map(m => m.id).join(' y ')}). ${sumadas.map(x => `${x.de.id} se sumó a ${x.a}`).join(', ')} (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.`);
     almas = quedan;
   }
 
@@ -309,6 +321,7 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   set(izq, 'alma');
   if (der) set(der, 'alma der.');
   info.forEach(x => set(x.a, papelAla(x)));
+  sumadas.forEach(x => set(x.de, x.a === izq.id ? 'alma' : 'alma der.'));
   const A = ala(sup, extSup, almas), B = ala(inf, extInf, [izq]);
 
   if (!der) {
@@ -365,6 +378,12 @@ function elegirPerfil(nombre: string, dir: Direccion, muros: Muro[], papeles: As
   return elegirPerfilSinCalados(nombre, dir, muros, papeles);
 }
 function elegirPerfilSinCalados(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
+  // la app ya no prueba variantes que dejan muros fuera del molde: ningún muro sale del cálculo sin que el usuario lo
+  // pida («fuera» en el grupo). El aviso de la diferencia de J sigue mostrando cuánto se aparta el molde de la sección real.
+  return perfilEquivalente(nombre, dir, muros, papeles);
+}
+/** (ya no se usa) búsqueda de la combinación de almas y alas con el J más cercano al real, dejando muros fuera */
+export function elegirPerfilConVariantes(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
   const pz = perfilEquivalente(nombre, dir, muros, papeles);
   if (!Object.keys(pz.fila).length || pz.molde === 'tubo' || pz.molde === 'pórtico') return pz;
   const clave = dir === 'A' ? 'rolA' : 'rolB';

@@ -17,6 +17,7 @@ import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } fro
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
+import { resaltarFilas } from './ui/grilla';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
 import { config, type Motor } from './engine/config';
@@ -95,6 +96,7 @@ function dibujarPanel() {
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
   }
   try { e.panel(p, sub); } catch (err) { console.error(err); p.append(h('p', { class: 'error' }, `No se pudo armar el panel: ${String(err)}`)); }
+  requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
 }
 function dibujarTira(e: Etapa) {
@@ -574,6 +576,22 @@ $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.ta
 
 estado.suscribir(() => dibujarTodo(true));
 estado.suscribirSeleccion(() => { if (etapaPorId(estado.etapa).centro !== 'planta') dibujarCentro(); });
+// lo elegido en la planta (muro, pieza o varios) se resalta en las tablas de la izquierda: Muros, medidas y Piezas
+function resaltarEnTablas() {
+  const p = estado.proyecto, ids = new Set<string>(estado.multi.m);
+  if (estado.seleccion) ids.add(estado.seleccion);
+  if (estado.grupoSel) murosDe(p, estado.grupoSel).forEach(m => ids.add(m.id));
+  estado.multi.g.forEach(g => murosDe(p, g).forEach(m => ids.add(m.id)));
+  resaltarFilas('muros', ids); resaltarFilas('medidas-A', ids); resaltarFilas('medidas-B', ids);
+  let primera: HTMLElement | null = null;
+  document.querySelectorAll<HTMLElement>('#panel tr[data-muros-pieza]').forEach(tr => {
+    const si = (tr.dataset.murosPieza ?? '').split(' ').some(id => ids.has(id));
+    tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr;
+  });
+  (primera as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+}
+estado.suscribirSeleccion(resaltarEnTablas);
+estado.suscribir(() => requestAnimationFrame(resaltarEnTablas));
 montarPlanta($('vista-planta'));
 montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRoto3D, rotulo: true });
 montarDiagramaJ($('vista-3d'), $<HTMLButtonElement>('b-j3d'));

@@ -370,7 +370,7 @@ export function panelMuros(c: H) {
       escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
   // la tabla edita cualquier muro, también los de una pieza agrupada (el grupo cerrado es para el mouse en la planta);
   // solo quedan fuera los bloqueados 🔒
-  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
+  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, clave: m => m.id, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
   // las piezas agrupadas van debajo de la tabla (la tabla es lo principal)
   seccionGrupos(c);
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];
@@ -405,7 +405,7 @@ function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElemen
     num('Largo', 'largo', 0.01), num('Esp.', 'espesor', 0.01), num('x (m)', 'x'), num('y (m)', 'y'),
     { titulo: 'Lado y', clave: 'ladoY', tipo: 'numero', ayuda: 'Solo tubo rectangular', leer: m => (tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : null),
       escribir: (m, v) => { const x = aNumero(v); if (tipoDe(m) !== 'tubo-rect') return false; if (x === null || Number.isNaN(x) || x <= 0) return false; m.ladoY = x; } },
-  ], { id: `medidas-${dir}`, filas: () => estado.proyecto.muros.filter(m => ids.includes(m.id)), alElegirFila: m => estado.elegir(m?.id ?? null),
+  ], { id: `medidas-${dir}`, filas: () => estado.proyecto.muros.filter(m => ids.includes(m.id)), clave: m => m.id, alElegirFila: m => estado.elegir(m?.id ?? null),
     bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
   return caja;
 }
@@ -426,7 +426,7 @@ export function panelPiezas(c: H) {
       nom.addEventListener('click', ev => ev.stopPropagation());
       nom.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') nom.blur(); if (ev.key === 'Escape') { nom.value = pz.nombre; nom.blur(); } });
       nom.addEventListener('change', () => renombrarPieza(dir, pz.nombre, nom.value));
-      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas' },
+      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
         h('td', {}, nom), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);

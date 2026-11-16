@@ -29,12 +29,27 @@ export interface OpcionesGrilla<T> {
   /** fila «activa» (para sincronizar con la planta) */
   alElegirFila?: (f: T | null) => void;
   rotuloFila?: (f: T, i: number) => string;
+  /** clave de la fila (por ejemplo, el id del muro): sirve para resaltarla desde afuera (resaltarFilas) */
+  clave?: (f: T) => string;
   /** la fila no se puede editar desde la tabla (devuelve el motivo): por ejemplo, un muro de un grupo cerrado */
   bloqueo?: (f: T) => string | null;
 }
 
 interface Sel { r0: number; c0: number; r1: number; c1: number; }
 const selecciones = new Map<string, Sel>();
+/** filas resaltadas de cada grilla (por clave): lo elegido en la planta */
+const resaltadas = new Map<string, Set<string>>();
+/**
+ * Resalta en la grilla las filas de estas claves (lo elegido en la planta) sin volver a dibujarla, y la desplaza hasta la
+ * primera si no se ve. También queda guardado para la próxima vez que se dibuje.
+ */
+export function resaltarFilas(id: string, claves: Set<string>) {
+  resaltadas.set(id, claves);
+  const filas = [...document.querySelectorAll<HTMLTableRowElement>(`[data-grilla="${id}"] tbody tr[data-clave]`)];
+  let primera: HTMLTableRowElement | null = null;
+  filas.forEach(tr => { const si = claves.has(tr.dataset.clave!); tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr; });
+  (primera as HTMLTableRowElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
 let enfocada: string | null = null;
 
 const num = (v: string) => { const t = v.trim().replace(/\s/g, ''); if (!t) return null; const x = Number(t.includes(',') && !t.includes('.') ? t.replace(',', '.') : t.replace(/,(?=\d{3}\b)/g, '')); return isFinite(x) ? x : NaN; };
@@ -53,6 +68,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
 
   const caja = document.createElement('div');
   caja.className = 'grilla-caja';
+  caja.dataset.grilla = op.id;
   caja.tabIndex = 0;
   caja.setAttribute('role', 'grid');
   caja.setAttribute('aria-label', 'Tabla editable: flechas para moverse, escribir para cambiar, arrastrar el cuadradito para llenar');
@@ -70,6 +86,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   conExtra.forEach((f, r) => {
     const tr = document.createElement('tr');
     if (f === null) tr.className = 'nueva';
+    else if (op.clave) { tr.dataset.clave = op.clave(f); if (resaltadas.get(op.id)?.has(tr.dataset.clave)) tr.classList.add('resaltada'); }
     const th = document.createElement('th');
     th.textContent = f === null ? '+' : op.rotuloFila ? op.rotuloFila(f, r) : String(r + 1);
     if (f === null) th.title = 'Escribí o pegá acá para agregar';
