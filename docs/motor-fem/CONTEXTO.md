@@ -223,3 +223,16 @@ Después de cada paso: `npm test`, verificador externo, capturas para el usuario
 - Proyecto CIRSOC 102-24: https://www.inti.gob.ar/assets/uploads/files/cirsoc/04-Reglamentos-en-discusion-publica-nacional/Proyecto-CIRSOC-102-24-Discusion-Publica-Nacional.pdf
 - Analogía de pórtico para muros (ASCE, 1984): https://ascelibrary.com/doi/10.1061/%28ASCE%290733-9445%281984%29110%3A11%282655%29
 - Método continuo (Stafford Smith y Coull; tesis Khachatoorian, 1984): https://theses.gla.ac.uk/2952/1/1984Khachatoorianphd.pdf
+
+## 11. Respuestas del usuario (16/11/2026)
+
+| Pregunta | Decisión |
+|---|---|
+| 1 · Primer motor | **Pseudo-3D con diafragma rígido (motor A)** |
+| 2 · Corte e inercia fisurada | Euler y Timoshenko como **columnas aparte**; **inercia fisurada opcional**, con un factor que se elige |
+| 3 · Fuerzas de cada piso | **Las de la planilla** (Wi de M,NyQ): se compara solo el reparto |
+| 4 · Licencias de ETABS, RFEM, Robot o CYPECAD | pendiente |
+| 5 · Sistemas de acero primero | **pórticos rígidos, tubo y diagrid** (los arriostrados, después) |
+
+Rama de trabajo: `claude/nice-ptolemy-xvgp8n`. Junta `motor-fem` con el último trabajo de la app (tablas de Muros,
+planta sin superposiciones, armado de piezas). Se sigue el plan de la sección 8 desde el paso 1.
