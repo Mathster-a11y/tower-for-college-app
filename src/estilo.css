@@ -1333,3 +1333,32 @@ svg.planta.calando.sobre-calado { cursor: grab; }
 .planta .cotas-vano .cota-ext.calado { stroke: var(--ink); }
 .planta .cotas-vano .cota-txt.guia { fill: var(--accent); }
 .planta .cotas-vano .cota-txt.en-guia { font-size: 10px; fill: var(--accent); }
+
+/* ---------- vista previa de la planilla (otra pestaña, #planilla) ---------- */
+body.vista-planilla { display: flex; flex-direction: column; height: 100vh; margin: 0; overflow: hidden; background: var(--lienzo, #f5f5f3); color: var(--ink); font-family: var(--sans, system-ui, sans-serif); }
+.vp-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 14px; border-bottom: 1px solid var(--line, #ccc); background: var(--panel, #fff); }
+.vp-barra .vp-nombre { color: var(--ink2); }
+.vp-barra label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.vp-barra select { font: inherit; }
+.vp-zoom { display: inline-flex; align-items: center; gap: 4px; }
+.vp-zoom button { min-width: 28px; }
+.vp-zoom .mono { min-width: 46px; text-align: center; font-size: 12px; }
+.vp-estado { font-size: 12px; color: var(--ink2); margin-left: auto; }
+.vp-estado.vp-mal { color: var(--mal, #c62828); }
+.vp-barra-f { display: flex; gap: 10px; align-items: baseline; padding: 4px 14px; border-bottom: 1px solid var(--line, #ccc); background: var(--panel, #fff); font: 12px/1.6 var(--mono, monospace); min-height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vp-barra-f .vp-ref { min-width: 54px; font-weight: 700; color: var(--accent); }
+.vp-hoja { flex: 1; overflow: auto; background: #fff; }
+.vp-tabla { border-collapse: collapse; table-layout: fixed; font: 13px/1.25 Arial, 'Liberation Sans', sans-serif; color: #000; background: #fff; }
+.vp-tabla th { position: sticky; background: #eef0f2; color: #555; font: 11px/1.4 var(--mono, monospace); font-weight: 400; border: 1px solid #d0d4d8; padding: 0 4px; z-index: 1; }
+.vp-tabla thead th { top: 0; z-index: 2; text-align: center; }
+.vp-tabla tbody th { left: 0; text-align: right; }
+.vp-tabla .vp-esq { left: 0; z-index: 3; }
+.vp-tabla td { border: 1px solid #e3e3e3; padding: 1px 3px; white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 0; vertical-align: bottom; cursor: cell; }
+.vp-tabla td.vp-error { color: #c62828; }
+.vp-resaltar .vp-tabla td.vp-dato { box-shadow: inset 0 0 0 2px #1a6bbd; }
+.vp-tabla td.vp-sel { outline: 2px solid #1a7f37; outline-offset: -2px; }
+.vp-pestanas { display: flex; gap: 2px; padding: 0 10px; border-top: 1px solid var(--line, #ccc); background: var(--panel, #fff); overflow-x: auto; }
+.vp-pestanas button { border: 1px solid transparent; border-top: none; border-radius: 0 0 6px 6px; background: transparent; padding: 5px 12px; font-size: 13px; white-space: nowrap; cursor: pointer; color: var(--ink2); }
+.vp-pestanas button[aria-pressed="true"] { background: #fff; color: #000; border-color: var(--line, #ccc); font-weight: 600; }
+.vp-nota { margin: 0; padding: 4px 14px 6px; font-size: 11px; color: var(--ink2); background: var(--panel, #fff); }
+.vp-tabla td.vp-desborda { overflow: visible; position: relative; z-index: 0; }

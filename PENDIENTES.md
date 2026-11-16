@@ -68,6 +68,8 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Aviso por pieza cuando cae en las filas de Flex con D = 0,01 fijo (D13:D20: la planilla no suma su peso propio)
 - [x] Parapeto (Viento → «Parapeto»): se suma al medio entrepiso de la azotea en M,NyQ D; el importador lo recupera de la planilla
 - [x] Rototraslación: los rótulos ya no se enciman con los de los ejes (caja con el ancho real del texto)
+- [x] Vista previa de la planilla (Exportar → «Vista previa de la planilla ↗», o desde el diálogo de exportar): otra pestaña con las 7 hojas de la cátedra como quedan al exportar, colores, anchos y celdas combinadas, y las fórmulas calculadas con un evaluador propio (src/xlsx/formulas.ts). Se actualiza sola cuando cambia la torre en la pestaña principal. Verificado con LibreOffice: todas las celdas con fórmula iguales en 20 planillas (10 torres × 2 planillas, ~80.000 celdas; tools/verificar_vista_previa.ts + tools/comparar_vista_previa.py)
+- [x] Planilla anterior: M,NyQ G55:G57 apuntan a otro libro ([1]viento!S56, la planilla 2024) con la copia vacía; Excel y LibreOffice dan 0 (son subsuelos: no cambia nada)
 
 ## En curso
 - Nada por ahora.

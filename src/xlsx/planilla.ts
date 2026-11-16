@@ -149,11 +149,13 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
  * @param figuras dibujos explicativos rediseñados para poner sobre las hojas originales (lista vacía: vuelve a
  *          dejar los dibujos originales; sin pasar: no toca los dibujos)
  */
-export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
-  op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
+/**
+ * La plantilla de la cátedra con los datos de la torre: agrega las filas de piezas que hagan falta (planilla 2025) y
+ * escribe las celdas de datos. Es el primer paso de la exportación y lo que muestra la vista previa.
+ */
+export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor) {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
-  const motor = op.motor ?? config.motor;
   // planilla 2025 con más de 20 piezas en un viento: se agregan las filas (con sus fórmulas) antes de escribir los datos
   const eA = Math.max(0, d.jpar.length - 20), eB = Math.max(0, d.jort.length - 20);
   if (eA || eB) {
@@ -168,6 +170,13 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
     for (const [ref, v] of Object.entries(cs)) xml = escribirCelda(xml, ref, v);
     zip.file(ruta, xml);
   }
+  return { zip, rutas, celdas };
+}
+
+export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
+  op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
+  const motor = op.motor ?? config.motor;
+  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor);
   for (const ruta of Object.values(rutas)) {
     const f = zip.file(ruta);
     if (f) zip.file(ruta, borrarResultadosGuardados(await f.async('string')));
