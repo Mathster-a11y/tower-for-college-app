@@ -3,6 +3,7 @@
  * etapa (viento, fuerzas, funicular, rigidez, rototraslación paso a paso, perfiles de las piezas y cartas) y se
  * convierten a PNG. Cada hoja de la planilla recibe los dibujos que la explican.
  */
+import { filaExcelJ } from '../engine/planilla';
 import { estado } from './estado';
 import { ETAPAS } from './etapas';
 import { carta } from './carta';
@@ -70,7 +71,7 @@ export async function dibujosPorHoja(): Promise<Dibujo[][]> {
       const fila = (dir === 'A' ? asig.datos.jpar : asig.datos.jort)[pz.filaHoja!];
       const fr = (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja!];
       const muros = pz.muros.map(id => estado.proyecto.muros.find(m => m.id === id)).filter((m): m is Muro => !!m);
-      out.push(...await svgSuelto(dibujoPerfil(pz, fila, fr, muros, 420, asig.papeles), `Perfil equivalente · ${pz.nombre} (fila ${pz.filaHoja! + 4})`));
+      out.push(...await svgSuelto(dibujoPerfil(pz, fila, fr, muros, 420, asig.papeles), `Perfil equivalente · ${pz.nombre} (fila ${filaExcelJ(pz.dir, pz.filaHoja!)})`));
     }
     return out;
   };

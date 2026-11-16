@@ -7,6 +7,7 @@
  *  - asimétrico: ala sup. b1 × h1 (W, X) arriba a la izquierda, alma izq. b2 × h2 (Z, AB), alma der. b3 × h3
  *    (AE, AF) y ala inf. (AH, AI); el eje de inercia está a AK del borde superior.
  */
+import { filaExcelJ } from '../engine/planilla';
 import { fmt, COLORES } from './estado';
 import type { FilaJ, FilaJRes } from '../engine/planilla';
 import type { PiezaEquivalente } from '../engine/mapping';
@@ -73,7 +74,7 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
   const y0 = altoB + 10;
   const { rects, circ, ejeV } = rectangulosPerfil(f);
   svg.append(el('text', { x: 10, y: y0 + 18, class: 'd-valor' }, `en la hoja J · molde ${pz.molde}`));
-  svg.append(el('text', { x: 10, y: y0 + 32, class: 'd-eje' }, `fila ${pz.filaHoja === null ? '—' : pz.filaHoja + 4} de «${pz.dir === 'A' ? 'J Tabiques paralelos' : 'J Tabiques ortogonales'}»`));
+  svg.append(el('text', { x: 10, y: y0 + 32, class: 'd-eje' }, `fila ${pz.filaHoja === null ? '—' : filaExcelJ(pz.dir, pz.filaHoja)} de «${pz.dir === 'A' ? 'J Tabiques paralelos' : 'J Tabiques ortogonales'}»`));
   svg.append(el('text', { x: 10, y: alto - 22, class: 'd-valor' }, `J hoja = ${fmt(r.AY, 4)} m⁴ (col. AY)${pz.Jreal !== undefined ? ` · J real = ${fmt(pz.Jreal, 4)} m⁴` : ''}`));
   if (pz.Jreal) { const dif = (100 * (r.AY - pz.Jreal)) / pz.Jreal; if (Math.abs(dif) > 0.5) svg.append(el('text', { x: ancho - 10, y: alto - 8, class: Math.abs(dif) > 5 ? 'd-valor pf-mal' : 'd-eje', 'text-anchor': 'end' }, `la simplificación cambia el J ${dif > 0 ? '+' : '−'}${fmt(Math.abs(dif), 0)} %`)); }
   svg.append(el('text', { x: 10, y: alto - 8, class: 'd-eje' }, `área = ${fmt(r.O, 3)} m² (col. O)`));

@@ -49,6 +49,14 @@ Se tacha cada ítem cuando está hecho, probado y subido.
   - Compresión con el viento al revés en almas corridas del baricentro.
   - Eje de inercia y CR en la planta según los valores elegidos.
 
+## Rama «nuevo-motor» (noviembre 2026)
+- [x] Dos motores con un botón (barra del centro, «Motor»): «Actual» (planilla anterior) y «Planilla 2025» (EDIFICIO_TORRE_1 de la cátedra, sin cambios: `src/assets/planilla_catedra_2025.xlsx`). Verificado celda por celda con LibreOffice: 3166 de 3166 celdas con fórmula iguales en 5 torres (tools/verificar_motor_nuevo.ts + tools/comparar_motor_nuevo.py)
+- [x] Botón «Cambiar a método planilla»: armado de piezas con el método simplificado de la cátedra (especificación, sección 7)
+- [x] Valores «Guía/CIRSOC» apagados por defecto (se siguen pudiendo elegir)
+- [x] Exportar: planilla 2025 o anterior, y contenido virgen (solo datos + tablas T3D) o renovada (con hojas «G ·» y dibujos)
+- [ ] Planilla 2025: «Flex comp PB paralelos» desde la fila 10 lee área y módulo de otra fila de la hoja J que la que lee Rototrasl. (B10 = O14 pero J10 → AY10): se reproduce tal cual; consultar a la cátedra
+- [ ] Agregar filas de piezas a la planilla sin cambiar sus relaciones (más de 20 piezas)
+
 ## En curso
 - Nada por ahora.
 - Nada por ahora: el próximo es el primero de la lista de abajo.

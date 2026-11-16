@@ -9,7 +9,8 @@
  */
 import { AVISO } from '../autoria';
 import JSZip from 'jszip';
-import type { PlanillaDatos, PlanillaRes } from '../engine/planilla';
+import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
+import { config, type Motor } from '../engine/config';
 import type { Proyecto } from '../engine/modelo';
 import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
 import { ejemploGuia } from '../engine/modelo';
@@ -40,7 +41,8 @@ async function rutasHojas(zip: JSZip): Promise<Record<string, string>> {
 const num = (x: number | null | undefined): ValorCelda => (x === null || x === undefined ? { vacia: true } : { num: x });
 
 /** Celdas que cambia la app, hoja por hoja (lo que se muestra al alumno antes de confirmar). */
-export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes): Record<string, Record<string, ValorCelda>> {
+export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor): Record<string, Record<string, ValorCelda>> {
+  const nuevo = motor === 'nuevo';
   const c: Record<string, Record<string, ValorCelda>> = {};
   const v = (c[HOJAS.viento] = {} as Record<string, ValorCelda>);
   const s = d.viento;
@@ -55,6 +57,9 @@ export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes): Record<string
     m[`D${r}`] = d.mnyq.D[k] !== null ? { num: d.mnyq.D[k]! } : { formula: `(B${r - 1}-B${r + 1})/2` };
     m[`E${r}`] = d.mnyq.E[k] !== null ? { num: d.mnyq.E[k]! } : { formula: `+E${r - 1}` };
     m[`F${r}`] = d.mnyq.F[k] !== null ? { num: d.mnyq.F[k]! } : { formula: `+F${r - 1}` };
+    // planilla 2025: el ejemplo de la cátedra tiene cotas escritas a mano en B22:B54 de M,NyQ; se vuelve a poner el
+    // vínculo original con «viento» (la fila r de M,NyQ lee la fila r+1 de viento), que es la fórmula de la planilla
+    if (nuevo) m[`B${r}`] = { formula: `+viento!B${r + 1}` };
   }
   m.E4 = { num: d.mnyq.E[0] ?? 0 };
   m.F4 = { num: d.mnyq.F[0] ?? 0 };
@@ -63,7 +68,9 @@ export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes): Record<string
   const mn = r.mnyq;
   m.O99 = { str: mn.L99 >= 1.5 && mn.M99 <= mn.N99 ? 'VERIFICA' : 'NO VERIFICA' };
 
-  for (const [hoja, filas] of [[HOJAS.jpar, d.jpar], [HOJAS.jort, d.jort]] as const) {
+  // planilla 2025: «J Tabiques paralelos» tiene 28 filas; cada pieza va en la fila que lee su ranura de Rototrasl.
+  const jpar = nuevo ? filasParalelosNuevo(d.jpar) : d.jpar;
+  for (const [hoja, filas] of [[HOJAS.jpar, jpar], [HOJAS.jort, d.jort]] as const) {
     const h = (c[hoja] = {} as Record<string, ValorCelda>);
     filas.forEach((f, i) => COLS_J.forEach(col => (h[`${col}${4 + i}`] = num(f[col]))));
   }
@@ -140,10 +147,11 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
  * @param figuras dibujos explicativos rediseñados para poner sobre las hojas originales (lista vacía: vuelve a
  *          dejar los dibujos originales; sin pasar: no toca los dibujos)
  */
-export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[]): Promise<Uint8Array> {
+export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
+  op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
-  const celdas = celdasAEscribir(d, r);
+  const celdas = celdasAEscribir(d, r, op.motor ?? config.motor);
   for (const [hoja, cs] of Object.entries(celdas)) {
     const ruta = rutas[hoja];
     if (!ruta) throw new Error(`La planilla no tiene la hoja «${hoja}».`);
@@ -158,8 +166,11 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
   for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);
-  if (figuras) await agregarFiguras(zip, rutas, figuras);
-  await agregarHojasG(zip, p, g ?? opcionesG(p), (nombre, xml) => agregarHoja(zip, nombre, xml, rutas));
+  // planilla virgen: solo los datos en las hojas de la cátedra (y las tablas T3D para volver a abrirla), sin dibujos ni hojas «G ·»
+  if (!op.virgen) {
+    if (figuras) await agregarFiguras(zip, rutas, figuras);
+    await agregarHojasG(zip, p, g ?? opcionesG(p), (nombre, xml) => agregarHoja(zip, nombre, xml, rutas));
+  }
   // recalcular todo al abrir y descartar la cadena de cálculo vieja
   let wb = await zip.file('xl/workbook.xml')!.async('string');
   wb = /<calcPr[^>]*\/>/.test(wb) ? wb.replace(/<calcPr([^>]*)\/>/, (_s, a: string) => `<calcPr${a.replace(/\sfullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`) : wb.replace('</workbook>', '<calcPr fullCalcOnLoad="1"/></workbook>');

@@ -15,7 +15,8 @@
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
  *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
-import { N_FILAS, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
+import { FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
+import { config } from './config';
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
 import { detectarJuntas, huellasLimpias, propiedadesPoligonos } from './juntas';
@@ -61,6 +62,90 @@ export const FILAS_SIN_YAC = [7, 8];
 export const FILAS_O0 = [17, 18, 19];
 
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
+
+// ------------------------------------------------------------------ método de la planilla (especificación, sección 7)
+/**
+ * Método simplificado de la cátedra para armar una pieza de tabiques (especificación, secciones 6, 7, 9 y 14):
+ *  1. baricentro de referencia de la pieza, una sola vez, con la geometría original;
+ *  2. muros perpendiculares al viento (alas) y paralelos (almas);
+ *  3–4. alas sobre el baricentro → ala superior: ancho = el muro más corto, alto = suma de espesores (no conserva el
+ *       área); alas bajo el baricentro → ala inferior, con la misma regla;
+ *  5. almas a la izquierda y a la derecha del baricentro: largo = suma de los largos, espesor = el más fino;
+ *     en una pieza simétrica hay un solo grupo de almas;
+ *  6. simétrica si el baricentro cae dentro del material, asimétrica si cae fuera.
+ * Posición (supuesto 14.3): la sección simplificada se apoya en el borde superior e izquierdo de la caja de los muros;
+ * ordenada perpendicular al viento = borde izquierdo + AL (asimétricas) o + medio ancho (simétricas).
+ * Convención (supuesto 14.1): viento A, arriba = +y e izquierda = −x; viento B, arriba = +x e izquierda = +y.
+ * Un tabique suelto va solo en la hoja de su dirección fuerte (sección 9).
+ */
+export function perfilPlanilla(nombre: string, dir: Direccion, muros0: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
+  const A = dir === 'A', dirAlma = A ? 'Y' : 'X';
+  const avisos: string[] = [];
+  const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
+  const rol = (m: Muro) => (A ? m.rolA : m.rolB) || '';
+  const fuera = muros0.filter(m => rol(m) === 'fuera');
+  fuera.forEach(m => set(m, 'fuera del cálculo'));
+  const muros = muros0.filter(m => rol(m) !== 'fuera');
+  const area = muros0.reduce((a, m) => a + areaMuro(m), 0);
+  const areaInf = muros0.reduce((a, m) => a + m.areaInf, 0);
+  // coordenadas del método: s a lo largo del viento (+ = arriba), t perpendicular (+ = derecha)
+  const s = (m: Muro) => (A ? m.y : m.x), t = (m: Muro) => (A ? m.x : -m.y);
+  const esAlma = (m: Muro) => m.dir === dirAlma;
+  const medioS = (m: Muro) => (esAlma(m) ? m.largo : m.espesor) / 2, medioT = (m: Muro) => (esAlma(m) ? m.espesor : m.largo) / 2;
+  const base = { nombre, dir, muros: muros0.map(m => m.id), area, areaInf, filaHoja: null, avisos, posicion: 0 };
+  if (!muros.length) return { ...base, molde: 'simétrico', fila: {} };
+  const aT = (x: number) => r4(A ? x : -x);                       // de t a la coordenada de la planta (x en A, y en B)
+  const Am = muros.reduce((q, m) => q + m.largo * m.espesor, 0);
+  const sg = muros.reduce((q, m) => q + m.largo * m.espesor * s(m), 0) / Am;
+  const tg = muros.reduce((q, m) => q + m.largo * m.espesor * t(m), 0) / Am;
+  const tMin = Math.min(...muros.map(m => t(m) - medioT(m))), tMax = Math.max(...muros.map(m => t(m) + medioT(m)));
+  const sMax = Math.max(...muros.map(m => s(m) + medioS(m)));
+  const almas = muros.filter(esAlma), alas = muros.filter(m => !esAlma(m));
+  const f3 = (v: number) => String(r4(v)).replace('.', ',');
+
+  // tabique suelto: solo en la hoja de su dirección fuerte
+  if (muros.length === 1) {
+    const m = muros[0];
+    if (!esAlma(m)) {
+      set(m, 'fuera del cálculo');
+      avisos.push(`Método planilla: ${m.id} es un tabique suelto perpendicular a este viento; va solo en la hoja de su dirección fuerte.`);
+      return { ...base, molde: 'simétrico', fila: {} };
+    }
+    set(m, 'alma');
+    return { ...base, posicion: aT(t(m)), molde: 'simétrico', fila: { B: m.espesor, C: m.largo } };
+  }
+  if (!almas.length) {
+    alas.forEach(m => set(m, 'fuera del cálculo'));
+    avisos.push('Método planilla: la pieza no tiene muros paralelos a este viento (almas); no entra en esta hoja.');
+    return { ...base, molde: 'simétrico', fila: {} };
+  }
+  const sup = alas.filter(m => s(m) >= sg), inf = alas.filter(m => s(m) < sg);
+  const grupoAla = (g: Muro[]) => (g.length ? { b: r4(Math.min(...g.map(m => m.largo))), d: r4(g.reduce((q, m) => q + m.espesor, 0)) } : { b: 0, d: 0 });
+  const grupoAlma = (g: Muro[]) => (g.length ? { b: r4(Math.min(...g.map(m => m.espesor))), h: r4(g.reduce((q, m) => q + m.largo, 0)) } : { b: 0, h: 0 });
+  const S = grupoAla(sup), I = grupoAla(inf);
+  sup.forEach(m => set(m, 'ala sup.')); inf.forEach(m => set(m, 'ala inf.'));
+  // ¿el baricentro cae dentro del material?
+  const dentro = muros.some(m => Math.abs(t(m) - tg) <= medioT(m) + 1e-9 && Math.abs(s(m) - sg) <= medioS(m) + 1e-9);
+  const txtAlas = `ala sup. ${f3(S.b)} × ${f3(S.d)} m (${sup.map(m => m.id).join(', ') || '—'}), ala inf. ${f3(I.b)} × ${f3(I.d)} m (${inf.map(m => m.id).join(', ') || '—'})`;
+  if (dentro) {
+    const W = grupoAlma(almas);
+    almas.forEach(m => set(m, 'alma'));
+    const ancho = Math.max(W.b, S.b, I.b);
+    avisos.push(`Método planilla: pieza simétrica (el baricentro cae dentro del material): alma ${f3(W.b)} × ${f3(W.h)} m (${almas.map(m => m.id).join(', ')}), ${txtAlas}.`);
+    return { ...base, posicion: aT(tMin + ancho / 2), molde: 'simétrico', fila: { B: W.b, C: W.h, F: S.b, G: S.d, J: I.b, K: I.d } };
+  }
+  let izq = almas.filter(m => t(m) <= tg), der = almas.filter(m => t(m) > tg);
+  // un solo grupo de almas, a la derecha: va como alma izquierda del molde (mismo J); la posición se mide desde el borde derecho
+  const espejo = !izq.length && der.length > 0;
+  if (espejo) { izq = der; der = []; }
+  const L = grupoAlma(izq), R = grupoAlma(der);
+  izq.forEach(m => set(m, 'alma')); der.forEach(m => set(m, 'alma der.'));
+  const fila: FilaJ = { W: S.b, X: S.d, Z: L.b, AB: L.h, AE: R.b, AF: R.h, AH: I.b, AI: I.d };
+  const k = calcFilaJ({ S: 0.01, ...fila }, !A, false);
+  const perp = espejo ? tMax - k.AL : tMin + k.AL;
+  avisos.push(`Método planilla: pieza asimétrica (el baricentro cae fuera del material): ${txtAlas}, alma izq. ${f3(L.b)} × ${f3(L.h)} m (${izq.map(m => m.id).join(', ')}), alma der. ${f3(R.b)} × ${f3(R.h)} m (${der.map(m => m.id).join(', ') || '—'}); AK = ${f3(k.AK)} m, AL = ${f3(k.AL)} m${espejo ? ' (un solo grupo de almas, a la derecha: va como alma izquierda y AL se mide desde el borde derecho)' : ''}; ordenada a lo largo del viento (borde superior − AK) ${f3(sMax - k.AK)} m.`);
+  return { ...base, posicion: aT(perp), molde: 'asimétrico', fila };
+}
 
 // ------------------------------------------------------------------ perfil equivalente
 export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[], papeles: Asignacion['papeles']): PiezaEquivalente {
@@ -380,14 +465,18 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
       avisos.push(`No queda fila libre en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre} (máximo 20 piezas).`);
       continue;
     }
-    if (paralelos && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(i)) {
+    const actual = config.motor === 'actual';
+    if (actual && paralelos && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: en la planilla virgen le faltan las fórmulas del ala superior y del alma izquierda; su J queda incompleto en la planilla.`);
+    }
+    if (!actual && paralelos && FLEX_FILA_NUEVO[i] !== RANURA_FILA_NUEVO[i]) {
+      p.avisos.push(`Planilla 2025: va en la fila ${RANURA_FILA_NUEVO[i] + 4} de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B${5 + i}), pero «Flex comp PB paralelos» fila ${4 + i} lee el área y el módulo de la fila ${FLEX_FILA_NUEVO[i] + 4}: la flexocompresión de la planilla no corresponde a esta pieza.`);
     }
     if (paralelos && TIPO_FILA_PARALELOS[i] !== tipo) {
       const mod = { 'simétrica': 'simétrico (Q)', 'asimétrica': 'asimétrico (AN)', circular: 'circular (V)' };
       p.avisos.push(`Va en la fila de la pieza ${i + 1}, donde «Flex comp PB paralelos» lee el módulo ${mod[TIPO_FILA_PARALELOS[i]]}: la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo ${mod[tipo]} (columna «Guía/CIRSOC»).`);
     }
-    if (paralelos && FILAS_O0.includes(i)) {
+    if (actual && paralelos && FILAS_O0.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: la planilla tiene el área en 0 fijo; la app usa el área real en la flexocompresión.`);
     }
     filas[i] = p.fila;
@@ -396,8 +485,8 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
   // rellenos de 0,01 como en la planilla (evitan #DIV/0!)
   return filas.map((f, i) => {
     const r: FilaJ = { S: 0.01, W: 0.01, X: 0.01, ...(f ?? {}) };
-    if (paralelos && FILAS_SIN_YAC.includes(i)) r.sinYAC = true;
-    if (paralelos && FILAS_O0.includes(i)) r.O0 = true;
+    if (config.motor === 'actual' && paralelos && FILAS_SIN_YAC.includes(i)) r.sinYAC = true;
+    if (config.motor === 'actual' && paralelos && FILAS_O0.includes(i)) r.O0 = true;
     return r;
   });
 }
@@ -467,7 +556,9 @@ export function aPlanilla(p: Proyecto): Asignacion {
         ms = ms.filter(x => x !== a && x !== b).concat(entero);
         unidos.push([a, b]);
       });
-      const pz = elegirPerfil(nombre, dir, ms, papeles);
+      // método de la planilla (sección 7): solo para piezas de tabiques; tubos, perfiles, pórticos y calados siguen como siempre
+      const simple = (m: Muro) => tipoDe(m) === 'tabique' && !m.portico && !m.aberturas?.length;
+      const pz = config.metodo === 'planilla' && ms.every(simple) ? perfilPlanilla(nombre, dir, ms, papeles) : elegirPerfil(nombre, dir, ms, papeles);
       unidos.forEach(([a, b]) => {
         if (!pz.muros.includes(b.id)) pz.muros.push(b.id);
         if (papeles[a.id]) papeles[b.id] = { ...papeles[a.id] };

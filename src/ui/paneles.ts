@@ -1,4 +1,5 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
+import { filaExcelJ } from '../engine/planilla';
 import { conEspesor } from '../engine/juntas';
 import { dibujoPerfil } from './perfil';
 import { AUTOR, ANIO, HASTA, LICENCIA_NOMBRE, LICENCIA_URL, vigente } from '../autoria';
@@ -387,7 +388,7 @@ export function panelPiezas(c: H) {
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
       const clave = `${dir}:${pz.nombre}`;
-      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente' }, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${pz.filaHoja + 4})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente' }, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);
       tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });

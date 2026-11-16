@@ -6,6 +6,15 @@ import { calcularCorregido, type ResultadoCorregido } from '../engine/correccion
 import { controles, type Control } from '../engine/verificaciones';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
+import { config, type Metodo, type Motor } from '../engine/config';
+
+// motor y método elegidos (se recuerdan en el navegador); el motor nuevo es el de la planilla de la cátedra 2025
+const CLAVE_CONFIG = 'torre3d.config.v1';
+try {
+  const c = JSON.parse(localStorage.getItem(CLAVE_CONFIG) ?? '{}') as { motor?: Motor; metodo?: Metodo };
+  if (c.motor === 'actual' || c.motor === 'nuevo') config.motor = c.motor;
+  if (c.metodo === 'app' || c.metodo === 'planilla') config.metodo = c.metodo;
+} catch { /* sin almacenamiento: quedan los valores por defecto */ }
 
 export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
 
@@ -28,7 +37,7 @@ class Estado {
   dir: 'A' | 'B' = 'A';
   seleccion: string | null = null;
   /** de dónde salen los valores de fórmulas, indicadores y dibujos: la planilla original o la corregida (guía/CIRSOC) */
-  fuente: 'planilla' | 'guia' = 'guia';
+  fuente: 'planilla' | 'guia' = 'planilla';
   /** etapa y sub-paso a la vista */
   etapa = 'diseno';
   sub: Record<string, string> = {};
@@ -84,6 +93,13 @@ class Estado {
   avisarSeleccion() { this.oyentesSel.forEach(o => o()); }
   /** redibuja todo sin recalcular (cambió la vista, no los datos) */
   avisarPanel() { this.oyentes.forEach(o => o()); }
+  /** cambia el motor de cálculo o el método de armado de piezas, recalcula y redibuja */
+  cambiarConfig(c: { motor?: Motor; metodo?: Metodo }) {
+    Object.assign(config, c);
+    try { localStorage.setItem(CLAVE_CONFIG, JSON.stringify(config)); } catch { /* sin almacenamiento */ }
+    this.recalcular();
+    this.avisarPanel();
+  }
   recalcular() {
     try {
       this.calculo = calcularProyecto(this.proyecto);

@@ -18,6 +18,10 @@ import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
 import plantillaURL from './assets/planilla_virgen.xlsx';
+import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
+import { config, type Motor } from './engine/config';
+import { aPlanilla } from './engine/mapping';
+import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
@@ -99,6 +103,21 @@ function dibujarTira(e: Etapa) {
     });
     t.append(h('span', { class: 'nota chica' }, 'Valores'), seg);
   }
+  // motor de cálculo (planilla anterior o planilla de la cátedra 2025) y método de armado de piezas
+  const segM = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Motor de cálculo', 'data-globo': 'Motor de cálculo|«Actual»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «Planilla 2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificada celda por celda con LibreOffice.' });
+  ([['actual', 'Actual'], ['nuevo', 'Planilla 2025']] as const).forEach(([k, txt]) => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(config.motor === k) }, txt);
+    b.addEventListener('click', () => { if (config.motor !== k) estado.cambiarConfig({ motor: k }); });
+    segM.append(b);
+  });
+  const planilla = config.metodo === 'planilla';
+  const bMet = h('button', { type: 'button', class: 'chico' + (planilla ? ' primario' : ''), 'aria-pressed': String(planilla),
+    'data-globo': planilla
+      ? 'Método planilla (activo)|Piezas armadas con el método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino, simétrica si el baricentro cae dentro del material. Tocá para volver al armado de la app.'
+      : 'Método planilla|Arma las piezas con el método simplificado de la cátedra (sección 7) en lugar del armado de la app. No cambia los muros: se puede volver atrás.' },
+    planilla ? 'Cambiar a método app' : 'Cambiar a método planilla');
+  bMet.addEventListener('click', () => estado.cambiarConfig({ metodo: planilla ? 'app' : 'planilla' }));
+  t.append(h('span', { class: 'nota chica' }, 'Motor'), segM, bMet);
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Dirección del viento', 'data-globo': 'Viento A y B|El viento A empuja la cara mayor (ancho B) y lo toman los tabiques paralelos (hoja «J Tabiques paralelos»). El viento B empuja la cara menor y lo toman los ortogonales.' });
   (['A', 'B'] as const).forEach(dd => {
     const b = h('button', { type: 'button', 'aria-pressed': String(estado.dir === dd) }, `Viento ${dd}`);
@@ -224,16 +243,38 @@ async function exportar() {
   const { asig, res } = estado.calculo;
   const celdas = celdasAEscribir(asig.datos, res);
   const filas = Object.entries(celdas).map(([hoja, cs]) => `<li><b>${hoja}</b>: ${Object.keys(cs).length} celdas</li>`).join('');
+  const radio = (name: string, value: string, checked: boolean, txt: string, nota: string) =>
+    `<label class="campo-linea"><input type="radio" name="${name}" value="${value}"${checked ? ' checked' : ''}> ${txt} <small>${nota}</small></label>`;
   dialogo(`<h2>Escribir la planilla</h2>
-    <p>La app escribe solo celdas de datos de la planilla ${plantillaAbierta ? 'que abriste' : 'virgen del curso'}. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla.</p>
-    <ul>${filas}<li><b>Hojas «G ·»</b> (nuevas, al lado de cada hoja original): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b> (nuevas): la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
-    <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
+    <p><b>Planilla</b></p>
+    ${radio('exp-plan', 'nuevo', config.motor === 'nuevo', 'Planilla de la cátedra 2025', '(EDIFICIO_TORRE_1; calculada con el motor «Planilla 2025»)')}
+    ${radio('exp-plan', 'actual', config.motor === 'actual', `Planilla anterior${plantillaAbierta ? ' (la que abriste)' : ''}`, '(calculada con el motor «Actual»)')}
+    <p><b>Contenido</b></p>
+    ${radio('exp-cont', 'virgen', true, 'Planilla virgen', '(solo los datos en las 7 hojas de la cátedra, más las tablas «T3D» para volver a abrirla en la app)')}
+    ${radio('exp-cont', 'renovada', false, 'Planilla renovada', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos)')}
+    <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${config.motor === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}.</p>
+    <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
+    <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo en la renovada; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
     <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo.</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
     ['Escribir y descargar', async () => {
+      const dlg = $('dialogo');
+      const motor = (dlg.querySelector<HTMLInputElement>('input[name="exp-plan"]:checked')?.value ?? config.motor) as Motor;
+      const virgen = dlg.querySelector<HTMLInputElement>('input[name="exp-cont"]:checked')?.value !== 'renovada';
+      // se calcula con el motor de la planilla elegida (la distribución de filas de cada planilla es distinta)
+      const motorAntes = config.motor;
+      config.motor = motor;
       try {
-        const base = plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
+        const asig = aPlanilla(estado.proyecto);
+        const res = calcularPlanilla(asig.datos);
+        const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
+        if (virgen) {
+          const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true });
+          descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          $<HTMLDialogElement>('dialogo').close();
+          return;
+        }
         // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
         const g = opcionesG(estado.proyecto);
         if (estado.proyecto.exo) {
@@ -254,10 +295,10 @@ async function exportar() {
           await Promise.all(Object.entries(urlFiguras).map(async ([ruta, url]) => { png[ruta.replace(/^.*\//, '').replace('.png', '')] = new Uint8Array(await (await fetch(url)).arrayBuffer()); }));
           figuras = figurasDesdeMeta(metaFiguras as Record<string, MetaFigura>, n => png[n]);
         }
-        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras);
+        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras, { motor, virgen: false });
         descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $<HTMLDialogElement>('dialogo').close();
-      } catch (e) { fallo('No se pudo escribir la planilla', e); }
+      } catch (e) { fallo('No se pudo escribir la planilla', e); } finally { config.motor = motorAntes; }
     }, true],
   ]);
 }

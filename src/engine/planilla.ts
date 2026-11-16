@@ -13,8 +13,29 @@
  *  - rototraslación: filas 5 a 50 → índice 0 a 45 (5–24 paralelas, 28–29 atajo, 31–50 perpendiculares)
  */
 
+import { config, type Motor } from './config';
+
 export const N_FILAS = 54;
 export const N_PIEZAS = 20;
+
+/**
+ * Motor «nuevo» (planilla de la cátedra 2025, EDIFICIO_TORRE_1.xlsx): «J Tabiques paralelos» tiene 28 filas (4 a 31). Las piezas de la
+ * app ocupan 20 «ranuras» (las filas 5 a 24 de «Rototrasl. cara mayor»); cada ranura lee una fila de la hoja J:
+ *   Rototrasl. B5:B12 → AY4:AY11 · B13 → AY15 · B14:B24 → AY16:AY26  (igual en cara menor, B31:B50)
+ * Las filas 12, 13, 14 y 27 a 31 de la hoja J no las lee ninguna ranura (quedan con los rellenos de 0,01).
+ */
+export const N_FILAS_PAR_NUEVO = 28;
+export const RANURA_FILA_NUEVO: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+/**
+ * «Flex comp PB paralelos» de la planilla 2025: la fila 4+k lee el área (O) y el módulo (Q, AN o V) de esta fila
+ * de la hoja J, y el momento de «Rototrasl. cara mayor»!O(5+k). Desde la fila 10 de Flex los dos vínculos no apuntan a
+ * la misma pieza (B10 = O14 pero J10 = Rototrasl.!O11, que lee AY10): se reproduce tal cual.
+ */
+export const FLEX_FILA_NUEVO: number[] = [0, 1, 2, 3, 4, 5, 10, 11, 12, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
+/** fila del Excel de la hoja J donde va la pieza de la ranura i (viento A: «paralelos»; B: «ortogonales») */
+export const filaExcelJ = (dir: 'A' | 'B', i: number, motor: Motor = config.motor) => (dir === 'A' && motor === 'nuevo' ? RANURA_FILA_NUEVO[i] : i) + 4;
+/** fila de relleno de la plantilla (evita #DIV/0!) */
+export const FILA_RELLENO: FilaJ = { S: 0.01, W: 0.01, X: 0.01 };
 
 export interface Viento {
   V: number; Kd: number; I: number; zg: number; alfa: number; Kzt: number; G: number;
@@ -69,6 +90,8 @@ export interface VientoRes { Kz: number[]; qz: number[]; qh: number; P: number[]
 export interface Opciones {
   /** CIRSOC 102, Tabla 5, nota 2: debajo de 5 m, Kz con z = 5 m (la planilla usa la altura real) */
   kzMin5?: boolean;
+  /** planilla a replicar (por defecto, la elegida en la app: config.motor) */
+  motor?: Motor;
 }
 
 export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
@@ -86,10 +109,12 @@ export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
     }
   }
   const qh = maxOf(qz.slice(0, 51));
+  const nuevo = (op.motor ?? config.motor) === 'nuevo';
   for (let i = 0; i < N_FILAS; i++) {
     if (i <= 50) {
       P[i] = qz[i] * v.G * v.Cpb;
-      Q[i] = qh * v.G * v.Cps;
+      // actual: Q = $N$4·G·Cps · nuevo: N = IF(M = 0; 0; $N$4) y Q = N·G·Cps
+      Q[i] = (nuevo && qz[i] === 0 ? 0 : qh) * v.G * v.Cps;
       R[i] = P[i] - Q[i];
       S[i] = R[i] / 10000;
     } else {
@@ -149,9 +174,13 @@ export interface FilaJRes {
   Y: number; AC: number; AG: number; AJ: number; AK: number; AL: number; AM: number; AN: number;
   AS: number; AW: number; AX: number; AY: number;
 }
-export interface HojaJRes { filas: FilaJRes[]; AY24: number; N24: number; AM24: number; }
+export interface HojaJRes {
+  filas: FilaJRes[]; AY24: number; N24: number; AM24: number;
+  /** motor «nuevo»: las 28 filas de «J Tabiques paralelos» (filas 4 a 31) */
+  filas28?: FilaJRes[];
+}
 
-export function calcFilaJ(f: FilaJ, ortogonales: boolean, ultimaFila: boolean): FilaJRes {
+export function calcFilaJ(f: FilaJ, ortogonales: boolean, ultimaFila: boolean, nuevo = false): FilaJRes {
   const g = (k: keyof FilaJ) => n0(f[k] as number | undefined);
   const B = g('B'), C = g('C'), F = g('F'), G = g('G'), J = g('J'), K = g('K'), S = g('S'), T = g('T');
   const W = g('W'), X = g('X'), Z = g('Z'), AB = g('AB'), AE = g('AE'), AF = g('AF'), AH = g('AH'), AI = g('AI');
@@ -167,7 +196,8 @@ export function calcFilaJ(f: FilaJ, ortogonales: boolean, ultimaFila: boolean): 
   const P = C + G + K;
   const Q = div(N, C / 2 + G / 2 + K / 2);
   const R = ortogonales ? ((B * C) / 2) * (C / 4) ** 2 + F * G * (C / 2 + G / 2) ** 2 : ((B * C) / 2) * (C / 4) + F * G * (C / 2 + G / 2);
-  const V = div(div(U, S), 2);
+  // actual: V = U/S/2 (la cuarta parte del módulo) · nuevo: V = U/(S/2)
+  const V = nuevo ? div(U, S / 2) : div(div(U, S), 2);
   const area = W * X + Z * AB + AE * AF + AH * AI;
   const AK = div(W * X * X / 2 + Z * AB * (X + AB / 2) + AE * AF * (X + AF / 2) + AH * AI * (X + AB + AI / 2), area);
   const AL = div(W * X * W / 2 + Z * AB * Z / 2 + AE * AF * (W - AE / 2) + AH * AI * AH / 2, area);
@@ -186,9 +216,25 @@ export function calcFilaJ(f: FilaJ, ortogonales: boolean, ultimaFila: boolean): 
   return { D, I, M, N, O, P, Q, R, U, V, Y, AC, AG, AJ, AK, AL, AM, AN, AS, AW, AX, AY };
 }
 
-export function calcHojaJ(filas: FilaJ[], ortogonales: boolean): HojaJRes {
-  const res = filas.map((f, i) => calcFilaJ(f, ortogonales, i === N_PIEZAS - 1));
+export function calcHojaJ(filas: FilaJ[], ortogonales: boolean, nuevo = false): HojaJRes {
+  const res = filas.map((f, i) => calcFilaJ(f, ortogonales, i === N_PIEZAS - 1, nuevo));
   return { filas: res, AY24: sum(res.map(r => r.AY)), N24: sum(res.map(r => r.N)), AM24: sum(res.map(r => r.AM)) };
+}
+
+/**
+ * «J Tabiques paralelos» de la planilla 2025: arma las 28 filas (cada ranura en su fila, el resto con el relleno),
+ * las calcula y devuelve las 20 ranuras en «filas» (lo que leen la app y la rototraslación) y las 28 en «filas28».
+ * AY24 (que en la planilla 2025 es AY32) suma las 28 filas.
+ */
+export function filasParalelosNuevo(ranuras: FilaJ[]): FilaJ[] {
+  const filas: FilaJ[] = Array.from({ length: N_FILAS_PAR_NUEVO }, () => ({ ...FILA_RELLENO }));
+  ranuras.forEach((f, i) => { if (f) filas[RANURA_FILA_NUEVO[i]] = { ...f, sinYAC: false, O0: false }; });
+  return filas;
+}
+export function calcParalelosNuevo(ranuras: FilaJ[]): HojaJRes {
+  const res28 = filasParalelosNuevo(ranuras).map(f => calcFilaJ(f, false, false, true));
+  return { filas: RANURA_FILA_NUEVO.map(k => res28[k]), filas28: res28,
+    AY24: sum(res28.map(r => r.AY)), N24: sum(res28.map(r => r.N)), AM24: sum(res28.map(r => r.AM)) };
 }
 
 export interface JMinimo { W: number; h: number; tabla: { hormigon: string; h400: number; h500: number; h600: number }[]; }
@@ -213,7 +259,9 @@ export interface RotoRes {
  * @param per J total de las piezas perpendiculares (AY de la otra hoja J)
  * @param caraMenor la hoja «cara menor» tiene rangos de suma distintos (B51, I51, L25)
  */
-export function calcRoto(par: number[], per: number[], H: (number | null)[], Q: number, Mv: number, caraMenor: boolean): RotoRes {
+export function calcRoto(par: number[], per: number[], H: (number | null)[], Q: number, Mv: number, caraMenor: boolean, nuevo = false): RotoRes {
+  // planilla 2025: B51 e I51 de cara menor suman hasta la fila 50 y L25 de cara mayor hasta la 24
+  const truncaMenor = caraMenor && !nuevo, truncaL25 = !caraMenor && !nuevo;
   const NR = 46;
   const B = new Array<number>(NR).fill(0), C = new Array<number>(NR).fill(NaN), E = new Array<number>(NR).fill(NaN);
   const G = new Array<number>(NR).fill(NaN), I = new Array<number>(NR).fill(0), K = new Array<number>(NR).fill(NaN);
@@ -229,8 +277,8 @@ export function calcRoto(par: number[], per: number[], H: (number | null)[], Q: 
   const J7 = div(I25, B25);
   const J15 = Q * J7;
   const J28 = (h(23) + h(24)) / 2;
-  const B51 = sum(B.slice(23, caraMenor ? 34 : NR));              // menor: SUM(B28:B38)
-  const I51 = sum(I.slice(23, caraMenor ? 34 : NR));
+  const B51 = sum(B.slice(23, truncaMenor ? 34 : NR));            // menor (actual): SUM(B28:B38)
+  const I51 = sum(I.slice(23, truncaMenor ? 34 : NR));
   const J38 = div(I51, B51);
   for (const i of [23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)]) C[i] = div(B[i], B51); // C28:C50 = B/B51
   for (let i = 0; i < 20; i++) { K[i] = h(i) - J7; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
@@ -243,7 +291,7 @@ export function calcRoto(par: number[], per: number[], H: (number | null)[], Q: 
   }
   for (let i = 0; i < 20; i++) O[i] = G[i] + N[i];
   for (const i of [23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)]) O[i] = N[i];
-  const L25 = sum(L.slice(0, caraMenor ? 20 : 15));                // mayor: SUM(L5:L19)
+  const L25 = sum(L.slice(0, truncaL25 ? 15 : 20));                // mayor (actual): SUM(L5:L19)
   return { B, C, E, G, I, K, L, Mm, N, O, D5: Q, F5: Mv, B25, I25, J7, J15, J28, J38, B51, I51, M51, L25,
     C25: sum(C.slice(0, 20)), E25: sum(E.slice(0, 20)), G25: sum(G.slice(0, 20)) };
 }
@@ -262,7 +310,8 @@ export interface FlexRes { B: number[]; D: number[]; E: number[]; H: number[]; I
 export function calcFlex(jpar: HojaJRes, rot: RotoRes, d: FilaFlex[]): FlexRes {
   const r: FlexRes = { B: [], D: [], E: [], H: [], I: [], J: [], K: [], L: [], M: [], Nn: [], O: [], P: [], W: [] };
   for (let i = 0; i < 20; i++) {
-    const j = jpar.filas[i];
+    // planilla 2025: el área y el módulo salen de la fila de la hoja J que vincula Flex (FLEX_FILA_NUEVO)
+    const j = jpar.filas28 ? jpar.filas28[FLEX_FILA_NUEVO[i]] : jpar.filas[i];
     const tipo = TIPO_FILA_PARALELOS[i];
     const W = tipo === 'asimétrica' ? j.AN : tipo === 'circular' ? j.V : j.Q;
     const B = j.O, C = n0(d[i]?.C), F = n0(d[i]?.F), G = n0(d[i]?.G);
@@ -284,14 +333,15 @@ export interface PlanillaRes {
 }
 
 export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaRes {
-  const viento = calcViento(d.viento, op);
+  const motor = op.motor ?? config.motor, nuevo = motor === 'nuevo';
+  const viento = calcViento(d.viento, { ...op, motor });
   const mnyq = calcMNyQ(d.viento, viento, d.mnyq);
-  const jpar = calcHojaJ(d.jpar, false);
-  const jort = calcHojaJ(d.jort, true);
+  const jpar = nuevo ? calcParalelosNuevo(d.jpar) : calcHojaJ(d.jpar, false);
+  const jort = calcHojaJ(d.jort, true, nuevo);
   const AYp = jpar.filas.map(f => f.AY), AYo = jort.filas.map(f => f.AY);
   // cara mayor: D5 = M,NyQ!I55, F5 = M,NyQ!J55 (fila del 1º subsuelo); cara menor: N55 y O55
-  const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[51], mnyq.J[51], false);
-  const rotB = calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true);
+  const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[51], mnyq.J[51], false, nuevo);
+  const rotB = calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true, nuevo);
   const flex = calcFlex(jpar, rotA, d.flex);
   return { viento, mnyq, jpar, jort, jminA: calcJMinimo(mnyq, false), jminB: calcJMinimo(mnyq, true), rotA, rotB, flex };
 }
