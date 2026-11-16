@@ -12,7 +12,8 @@ import { Jreal } from '../engine/mapping';
 import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
-import { imanDeGuias, montarGuias } from './guias';
+import { imanDeGuias, montarGuias, opGuias } from './guias';
+import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo } from '../engine/grupos';
 import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparVarios, hijosGrupo, subgrupos, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
@@ -613,7 +614,9 @@ export function montarPlanta(cont: HTMLElement) {
   /** la abertura que se pondría tocando el elemento en q (null si el elemento no se puede calar así) */
   const aberturaEn = (m: Muro, q: Punto): Abertura | null => {
     const u = ubicarAbertura(m, q); if (!u) return null;
-    return { s: +u.s.toFixed(3), ancho: calAncho, desde: calTipo === 'ventana' ? calAntepecho : 0, alto: calAlto, ...(u.cara ? { cara: u.cara } : {}) };
+    const a: Abertura = { s: +u.s.toFixed(3), ancho: calAncho, desde: calTipo === 'ventana' ? calAntepecho : 0, alto: calAlto, ...(u.cara ? { cara: u.cara } : {}) };
+    const k = caraAbertura(m, a); if (k) a.s = +aGuia(k, a.s, a.ancho).toFixed(3);
+    return a;
   };
   /** abertura elegida en «Calar» (se mueve, cambia o quita), vano calado elegido (se cierra) y arrastre de la abertura */
   let abSel: { id: string; i: number } | null = null, vanoSel: string | null = null;
@@ -636,14 +639,56 @@ export function montarPlanta(cont: HTMLElement) {
   };
   const sobreCara = (k: Cara, q: Punto) => (q.x - k.o.x) * k.u.x + (q.y - k.o.y) * k.u.y;
   const fm = (v: number) => v.toFixed(2).replace('.', ',');
+  /**
+   * referencias para acotar una abertura sobre su cara: las guías que la cruzan (botón «Cotas e imán a las guías») y
+   * los bordes de las otras aberturas de la misma cara. La cota de cada lado va a la más cercana (o al borde del muro).
+   */
+  type Ref = { s: number; nombre: string; tipo: 'guia' | 'calado' };
+  let calGuias = (() => { try { return localStorage.getItem('torre3d.calarGuias') !== 'no'; } catch { return true; } })();
+  const refsGuia = (k: Cara): Ref[] => (calGuias && opGuias.ver ? crucesSobre(estado.proyecto.guias ?? [], k.o, k.u, -k.L / 2 + 1e-6, k.L / 2 - 1e-6).map(x => ({ ...x, tipo: 'guia' as const })) : []);
+  const refsCalados = (m: Muro, cara: string | undefined, sin?: number): Ref[] => (m.aberturas ?? []).flatMap((b, j) => (j === sin || (b.cara ?? 'y-') !== (cara ?? 'y-') ? [] :
+    [{ s: b.s - b.ancho / 2, nombre: 'abertura', tipo: 'calado' as const }, { s: b.s + b.ancho / 2, nombre: 'abertura', tipo: 'calado' as const }]));
+  /** la referencia más cercana de cada lado de la abertura [c0, c1] (sin contar las que coinciden con el borde) */
+  const vecinas = (refs: Ref[], c0: number, c1: number) => ({
+    izq: refs.filter(r => r.s <= c0 - 0.005).sort((a, b) => b.s - a.s)[0] as Ref | undefined,
+    der: refs.filter(r => r.s >= c1 + 0.005).sort((a, b) => a.s - b.s)[0] as Ref | undefined,
+  });
+  const nombreRef = (r: Ref) => (r.nombre === 'abertura' ? 'la otra abertura' : r.nombre === 'guía' ? 'la guía' : `el ${r.nombre}`);
+  /** imán de las guías: un borde o el centro de la abertura (ancho w, centro s) cae sobre la guía más cercana */
+  const aGuia = (k: Cara, s0: number, w: number): number => {
+    let mejor = s0, d = tolPx() / escala;
+    refsGuia(k).forEach(r => [r.s + w / 2, r.s - w / 2, r.s].forEach(c => { if (Math.abs(c - s0) < d) { d = Math.abs(c - s0); mejor = c; } }));
+    return mejor;
+  };
+  /** el hueco de toda la altura que se calaría tocando w en q: la cara (en un núcleo, la más cercana), su centro y si entra */
+  const huecoPrevio = (w: Muro, q: Punto) => {
+    const caras = tipoDe(w) === 'tubo-rect' ? tuboEnTabiques(w, (() => { let k = 0; return () => `__${k++}`; })()) : [w];
+    const dist = (c: Muro) => (c.dir === 'X' ? Math.abs(q.y - c.y) + Math.max(0, Math.abs(q.x - c.x) - c.largo / 2) : Math.abs(q.x - c.x) + Math.max(0, Math.abs(q.y - c.y) - c.largo / 2));
+    const c = [...caras].sort((a2, b2) => dist(a2) - dist(b2))[0];
+    const sc = c.dir === 'X' ? c.x : c.y, s0 = sc - c.largo / 2;
+    const kc: Cara = { o: { x: c.x, y: c.y }, u: c.dir === 'X' ? { x: 1, y: 0 } : { x: 0, y: 1 }, n: c.dir === 'X' ? { x: 0, y: 1 } : { x: -1, y: 0 }, L: c.largo, e: c.espesor };
+    const sq = aGuia(kc, (c.dir === 'X' ? q.x : q.y) - sc, calAncho) + sc;
+    const cen = Math.min(s0 + c.largo - 0.1 - calAncho / 2, Math.max(s0 + 0.1 + calAncho / 2, sq));
+    return { c, kc, sc, cen, ok: calAncho <= c.largo - 0.2, refs: [...refsGuia(kc), ...(tipoDe(w) === 'tabique' ? refsCalados(w, undefined) : [])] };
+  };
   /** cotas de una abertura sobre su cara: del borde del elemento a la abertura, el ancho y de la abertura al otro borde */
-  const dibCotasCara = (X: (x: number) => number, Y: (y: number) => number, escala: number, k: Cara, c0: number, c1: number, cls: string) => {
+  const dibCotasCara = (X: (x: number) => number, Y: (y: number) => number, escala: number, k: Cara, c0: number, c1: number, cls: string, refs: Ref[] = []) => {
     const g = el('g', { class: `cota cotas-vano ${cls}` });
     const P = (s2: number, d: number) => ({ x: k.o.x + k.u.x * s2 + k.n.x * d, y: k.o.y + k.u.y * s2 + k.n.y * d });
     const d0 = k.e / 2 + 2 / escala, d1 = k.e / 2 + 20 / escala, vert = !k.u.x;
     const ln = (a: Punto, b: Punto, c: string) => g.appendChild(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b.x), y2: Y(b.y), class: c }));
-    const marcas = [-k.L / 2, c0, c1, k.L / 2];
-    marcas.forEach(s2 => ln(P(s2, d0), P(s2, d1 + 4 / escala), 'cota-ext'));
+    // de cada lado, hasta la guía o la otra abertura más cercana; si no hay, hasta el borde del muro
+    const { izq, der } = vecinas(refs, c0, c1);
+    const marcas = [izq ? izq.s : -k.L / 2, c0, c1, der ? der.s : k.L / 2];
+    const refDe = [izq, undefined, undefined, der];
+    marcas.forEach((s2, j) => ln(P(s2, d0), P(s2, d1 + 4 / escala), 'cota-ext' + (refDe[j] ? ` ${refDe[j]!.tipo}` : '')));
+    // un borde (o el centro) justo sobre una guía: se nombra del otro lado del muro
+    refs.filter(r => r.tipo === 'guia').forEach(r => {
+      const sobre = Math.abs(r.s - c0) < 0.005 ? 'borde' : Math.abs(r.s - c1) < 0.005 ? 'borde' : Math.abs(r.s - (c0 + c1) / 2) < 0.005 ? 'centro' : '';
+      if (!sobre) return;
+      const t = P(r.s, -(k.e / 2 + 12 / escala)), tx = X(t.x), ty = Y(t.y);
+      g.appendChild(el('text', { x: tx, y: ty, class: 'cota-txt en-guia', 'text-anchor': 'middle', 'dominant-baseline': 'central', ...(vert ? { transform: `rotate(-90 ${tx} ${ty})` } : {}) }, `${sobre} en ${r.nombre}`));
+    });
     for (let i = 0; i < 3; i++) {
       const v = marcas[i + 1] - marcas[i]; if (v < 0.005) continue;
       ln(P(marcas[i], d1), P(marcas[i + 1], d1), 'cota-lin');
@@ -651,7 +696,8 @@ export function montarPlanta(cont: HTMLElement) {
       // tramo corto: el número va afuera (antes del primero, después del último) o una fila más afuera (el ancho)
       const corto = v * escala < 36, med = (marcas[i] + marcas[i + 1]) / 2;
       const t = !corto ? P(med, d1 + 9 / escala) : i === 0 ? P(marcas[0] - 6 / escala, d1) : i === 2 ? P(marcas[3] + 6 / escala, d1) : P(med, d1 + 24 / escala), tx = X(t.x), ty = Y(t.y);
-      g.appendChild(el('text', { x: tx, y: ty, class: 'cota-txt' + (i === 1 ? ' cota-ancho' : ''), 'text-anchor': !corto || i === 1 ? 'middle' : i === 0 ? 'end' : 'start', 'dominant-baseline': 'central', ...(vert ? { transform: `rotate(-90 ${tx} ${ty})` } : {}) }, fm(v)));
+      const ref = i === 0 ? izq : i === 2 ? der : undefined;
+      g.appendChild(el('text', { x: tx, y: ty, class: 'cota-txt' + (i === 1 ? ' cota-ancho' : '') + (ref ? ` ${ref.tipo}` : ''), 'text-anchor': !corto || i === 1 ? 'middle' : i === 0 ? 'end' : 'start', 'dominant-baseline': 'central', ...(vert ? { transform: `rotate(-90 ${tx} ${ty})` } : {}) }, ref ? `${fm(v)} · ${ref.nombre}` : fm(v)));
     }
     return g;
   };
@@ -726,7 +772,15 @@ export function montarPlanta(cont: HTMLElement) {
     const como = document.createElement('span'); como.textContent = calTipo === 'hueco'
       ? 'Tocá el muro donde va el vano. Un núcleo se pasa a sus cuatro tabiques y se cala la cara tocada. Deshacer: Ctrl+Z.'
       : 'Tocá el tabique, la cara del núcleo o el tubo circular donde va la abertura. Para moverla o sacarla: tocala. Deshacer: Ctrl+Z.';
-    panelCal.append(tit, que, seg, ...filas, ayuda, como);
+    // cotas e imán a las guías (y siempre, la distancia a la abertura más cercana del mismo muro)
+    const nG = (estado.proyecto.guias ?? []).length;
+    const bG = document.createElement('button'); bG.type = 'button'; bG.textContent = 'Cotas e imán a las guías'; bG.setAttribute('aria-pressed', String(calGuias));
+    bG.title = 'Las cotas de la abertura van hasta la guía más cercana que cruza el muro (si no, hasta el borde), y al ponerla o arrastrarla un borde o el centro se pega a las guías. La distancia a la otra abertura del mismo muro se acota siempre.';
+    bG.addEventListener('click', () => { calGuias = !calGuias; try { localStorage.setItem('torre3d.calarGuias', calGuias ? 'si' : 'no'); } catch { /* sin almacenamiento */ } armarPanelCal(); dibujar(); });
+    const filaG = document.createElement('div'); filaG.className = 'fila-vertices'; filaG.append(bG);
+    if (calGuias && !nG) { const sp = document.createElement('span'); sp.className = 'nota-chica'; sp.textContent = 'no hay guías: armalas en «Guías»'; filaG.append(sp); }
+    else if (calGuias && !opGuias.ver) { const sp = document.createElement('span'); sp.className = 'nota-chica'; sp.textContent = 'las guías están ocultas («Guías» → ver guías)'; filaG.append(sp); }
+    panelCal.append(tit, que, seg, ...filas, filaG, ayuda, como);
     // lo elegido: la abertura (mover, medidas, quitar) o el vano de toda la altura (cerrar)
     const p = estado.proyecto;
     const mkE = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
@@ -751,6 +805,10 @@ export function montarPlanta(cont: HTMLElement) {
         const ini = a.s - a.ancho / 2 + k.L / 2, fin = k.L / 2 - a.s - a.ancho / 2;
         caja.append(campo(k.u.x ? 'desde el borde izq.' : 'desde el borde de abajo', ini, (o, x) => { o.s = +(x + o.ancho / 2 - k.L / 2).toFixed(3); }, 'Distancia del borde del elemento al borde de la abertura'),
           campo(k.u.x ? 'hasta el borde der.' : 'hasta el borde de arriba', fin, (o, x) => { o.s = +(k.L / 2 - x - o.ancho / 2).toFixed(3); }));
+        // y a la guía o la otra abertura más cercana de cada lado
+        const { izq, der } = vecinas([...refsGuia(k), ...refsCalados(w, a.cara, i)], a.s - a.ancho / 2, a.s + a.ancho / 2);
+        if (izq) caja.append(campo(`desde ${nombreRef(izq)} (${k.u.x ? 'izq.' : 'abajo'})`, a.s - a.ancho / 2 - izq.s, (o, x) => { o.s = +(izq.s + x + o.ancho / 2).toFixed(3); }));
+        if (der) caja.append(campo(`hasta ${nombreRef(der)} (${k.u.x ? 'der.' : 'arriba'})`, der.s - a.s - a.ancho / 2, (o, x) => { o.s = +(der.s - x - o.ancho / 2).toFixed(3); }));
       }
       caja.append(campo('ancho', a.ancho, (o, x) => { o.ancho = x; }), campo('alto', a.alto, (o, x) => { o.alto = x; }));
       if (a.desde > 1e-6) caja.append(campo('antepecho', a.desde, (o, x) => { o.desde = x; }));
@@ -1794,7 +1852,7 @@ export function montarPlanta(cont: HTMLElement) {
       const w = abSel && p.muros.find(x => x.id === abSel!.id), a = w && w.aberturas?.[abSel!.i];
       if (w && a) {
         marcasAbertura(w, a).forEach(pg => svg.appendChild(el('polygon', { points: pg.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'abertura-sel' })));
-        const k = caraAbertura(w, a); if (k) svg.appendChild(dibCotasCara(X, Y, escala, k, a.s - a.ancho / 2, a.s + a.ancho / 2, 'sel'));
+        const k = caraAbertura(w, a); if (k) svg.appendChild(dibCotasCara(X, Y, escala, k, a.s - a.ancho / 2, a.s + a.ancho / 2, 'sel', [...refsGuia(k), ...refsCalados(w, a.cara, abSel!.i)]));
       }
       const vm = vanoSel && p.muros.find(x => x.id === vanoSel), vo = vm && vm.vano && p.muros.find(x => x.id === vm.vano!.con);
       if (vm && vo) {
@@ -1804,7 +1862,7 @@ export function montarPlanta(cont: HTMLElement) {
         const P = (t: number, d: number) => ({ x: k.o.x + k.u.x * t + k.n.x * d, y: k.o.y + k.u.y * t + k.n.y * d });
         const pg = [P(g0, -k.e / 2 - 0.05), P(g1, -k.e / 2 - 0.05), P(g1, k.e / 2 + 0.05), P(g0, k.e / 2 + 0.05)];
         svg.appendChild(el('polygon', { points: pg.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'abertura-sel' }));
-        svg.appendChild(dibCotasCara(X, Y, escala, k, g0, g1, 'sel'));
+        svg.appendChild(dibCotasCara(X, Y, escala, k, g0, g1, 'sel', refsGuia(k)));
       }
     }
     // vanos calados: el dintel (puertas) en trazos entre los dos tramos
@@ -1823,23 +1881,17 @@ export function montarPlanta(cont: HTMLElement) {
       if (w && ab) {
         const ok = !problemaAbertura({ ...w, aberturas: [...(w.aberturas ?? []), ab] }, ab, entrepisoMin(w));
         marcasAbertura(w, ab).forEach(pg => svg.appendChild(el('polygon', { points: pg.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: `previa-vano${ok ? '' : ' no-entra'}` })));
-        const k = caraAbertura(w, ab); if (k) svg.appendChild(dibCotasCara(X, Y, escala, k, ab.s - ab.ancho / 2, ab.s + ab.ancho / 2, 'previa'));
+        const k = caraAbertura(w, ab); if (k) svg.appendChild(dibCotasCara(X, Y, escala, k, ab.s - ab.ancho / 2, ab.s + ab.ancho / 2, 'previa', [...refsGuia(k), ...refsCalados(w, ab.cara)]));
       }
     } else if (modo === 'calar' && previaCalar) {
       const w = p.muros.find(x => x.id === previaCalar!.id);
       if (w && tipoDe(w) !== 'tubo-circ') {
-        // dónde quedaría el vano (en un núcleo, sobre la cara más cercana)
-        const caras = tipoDe(w) === 'tubo-rect' ? tuboEnTabiques(w, (() => { let k = 0; return () => `__${k++}`; })()) : [w];
-        const q = previaCalar.q;
-        const dist = (c: Muro) => (c.dir === 'X' ? Math.abs(q.y - c.y) + Math.max(0, Math.abs(q.x - c.x) - c.largo / 2) : Math.abs(q.x - c.x) + Math.max(0, Math.abs(q.y - c.y) - c.largo / 2));
-        const c = [...caras].sort((a2, b2) => dist(a2) - dist(b2))[0];
-        const s0 = (c.dir === 'X' ? c.x : c.y) - c.largo / 2, sq = c.dir === 'X' ? q.x : q.y;
-        const ok = calAncho <= c.largo - 0.2;
-        const cen = Math.min(s0 + c.largo - 0.1 - calAncho / 2, Math.max(s0 + 0.1 + calAncho / 2, sq));
+        // dónde quedaría el vano (en un núcleo, sobre la cara más cercana), con el imán de las guías
+        const { c, kc, sc, cen, ok, refs } = huecoPrevio(w, previaCalar.q);
         const ax = c.dir === 'X' ? calAncho : c.espesor + 0.1, ay = c.dir === 'X' ? c.espesor + 0.1 : calAncho;
         const cx = c.dir === 'X' ? cen : c.x, cy = c.dir === 'Y' ? cen : c.y;
         svg.appendChild(el('rect', { x: X(cx - ax / 2), y: Y(cy + ay / 2), width: Math.max(2, ax * escala), height: Math.max(2, ay * escala), class: `previa-vano${ok ? '' : ' no-entra'}` }));
-        if (ok) { const sc = c.dir === 'X' ? c.x : c.y; svg.appendChild(dibCotasCara(X, Y, escala, { o: { x: c.x, y: c.y }, u: c.dir === 'X' ? { x: 1, y: 0 } : { x: 0, y: 1 }, n: c.dir === 'X' ? { x: 0, y: 1 } : { x: -1, y: 0 }, L: c.largo, e: c.espesor }, cen - sc - calAncho / 2, cen - sc + calAncho / 2, 'previa')); }
+        if (ok) svg.appendChild(dibCotasCara(X, Y, escala, kc, cen - sc - calAncho / 2, cen - sc + calAncho / 2, 'previa', refs));
       }
     }
     // pieza tipo: vista previa donde se va a insertar
@@ -2182,7 +2234,8 @@ export function montarPlanta(cont: HTMLElement) {
         mensaje(`${calTipo === 'puerta' ? 'Puerta' : 'Ventana'} de ${String(calAncho).replace('.', ',')} × ${String(calAlto).replace('.', ',')} m en ${idM}${ab.cara ? ` (cara ${ab.cara})` : ''}, en todos sus pisos. El elemento sigue entero; el cálculo usa la sección más débil.`);
         return;
       }
-      const r = calarMuro(estado.proyecto.muros, idM, aMundo(ev), calAncho, 'hueco');
+      const mmH = estado.proyecto.muros.find(x => x.id === idM)!, hp = tipoDe(mmH) === 'tubo-circ' ? null : huecoPrevio(mmH, aMundo(ev));
+      const r = calarMuro(estado.proyecto.muros, idM, hp ? (hp.c.dir === 'X' ? { x: hp.cen, y: hp.c.y } : { x: hp.c.x, y: hp.cen }) : aMundo(ev), calAncho, 'hueco');
       if ('error' in r) { mensaje(`No se puede calar ${idM}: ${r.error}.`); return; }
       estado.cambiar(() => { estado.proyecto.muros = r.muros; });
       previaCalar = null;
@@ -2309,7 +2362,7 @@ export function montarPlanta(cont: HTMLElement) {
       const ar = arrAb, w = estado.proyecto.muros.find(x => x.id === ar.id), a = w?.aberturas?.[ar.i], k = w && a && caraAbertura(w, a);
       if (!w || !a || !k) return;
       const lim = k.L / 2 - 0.1 - a.ancho / 2;
-      const sN = Math.max(-lim, Math.min(lim, aj(ar.s0 + sobreCara(k, aMundo(ev)) - ar.q0)));
+      const sN = Math.max(-lim, Math.min(lim, aGuia(k, aj(ar.s0 + sobreCara(k, aMundo(ev)) - ar.q0), a.ancho)));
       if (Math.abs(sN - a.s) < 1e-6) return;
       const nueva = { ...a, s: +sN.toFixed(3) };
       if (!problemaAbertura({ ...w, aberturas: [...w.aberturas!.filter((_, q) => q !== ar.i), nueva] }, nueva, entrepisoMin(w))) { a.s = nueva.s; ar.movio = true; pedirDibujo(); }

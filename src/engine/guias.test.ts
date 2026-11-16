@@ -54,3 +54,20 @@ describe('edición de muros', () => {
     expect(z.x - z.largo / 2).toBeCloseTo(-9.8, 6);       // Z topa con la cara de adentro de M1
   });
 });
+
+describe('cruces de las guías sobre un muro (cotas de las aberturas)', async () => {
+  const { crucesSobre } = await import('./guias');
+  it('rectas y círculos que cortan el eje del muro, ordenados, dentro del muro y con el nombre del eje', () => {
+    const gs = [
+      { id: 'a', t: 'recta' as const, p: { x: 1, y: 0 }, ang: 90, eje: 'B' },
+      { id: 'b', t: 'recta' as const, p: { x: -2, y: 5 }, ang: 90 },
+      { id: 'c', t: 'recta' as const, p: { x: 0, y: 3 }, ang: 0 },             // paralela al muro: no lo corta
+      { id: 'd', t: 'recta' as const, p: { x: 9, y: 0 }, ang: 90, eje: 'Z' },  // fuera del muro
+      { id: 'e', t: 'circulo' as const, c: { x: 0, y: 0 }, r: 3 },
+    ];
+    // muro en X, centrado en (0, 1), de 8 m: s va de −4 a 4
+    const r = crucesSobre(gs, { x: 0, y: 1 }, { x: 1, y: 0 }, -4, 4);
+    expect(r.map(x => x.nombre)).toEqual(['círculo', 'guía', 'eje B', 'círculo']);
+    expect(r.map(x => x.s)).toEqual([-2.8284, -2, 1, 2.8284]);
+  });
+});

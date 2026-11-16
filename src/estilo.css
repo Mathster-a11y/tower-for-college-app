@@ -1329,3 +1329,7 @@ svg [data-zoom-min] { display: none; }
 svg.planta.calando.sobre-calado { cursor: grab; }
 .calar-elegido { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line, #ccc); }
 .calar-elegido button { align-self: flex-start; }
+.planta .cotas-vano .cota-ext.guia { stroke: var(--accent); stroke-dasharray: 3 2; }
+.planta .cotas-vano .cota-ext.calado { stroke: var(--ink); }
+.planta .cotas-vano .cota-txt.guia { fill: var(--accent); }
+.planta .cotas-vano .cota-txt.en-guia { font-size: 10px; fill: var(--accent); }
