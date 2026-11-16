@@ -343,6 +343,11 @@ export function panelMuros(c: H) {
     { titulo: 'Dir.', clave: 'dir', tipo: 'lista', opciones: ['Y', 'X'], leer: m => m.dir, escribir: (m, v) => { const d = v.trim().toUpperCase(); if (d !== 'X' && d !== 'Y') return false; m.dir = d; } },
     numM('x (m)', 'x'), numM('y (m)', 'y'), { ...numM('Largo', 'largo', 0.01), ayuda: 'tabique: largo · tubo rect.: lado en x · tubo circ.: diámetro exterior' },
     { ...numM('Esp.', 'espesor', 0.01), ayuda: 'tabique: espesor · tubos: espesor de pared (≥ la mitad del lado o del diámetro = macizo)' },
+    ...(['A', 'B'] as const).map((d): Columna<Muro> => ({
+      titulo: `J pieza ${d} (m⁴)`, clave: `J${d}`, tipo: 'numero', ayuda: `J de la pieza del muro en el viento ${d}: el del molde que va a la hoja J (se calcula, no se escribe)`,
+      leer: m => { const pz = estado.calculo.asig?.piezas.find(x => x.dir === d && x.muros.includes(m.id)); return pz?.Jhoja === undefined ? null : +pz.Jhoja.toFixed(3); },
+      escribir: m => { avisoPanel(`El J de la pieza de ${m.id} se calcula: cambiá las medidas de sus muros.`); return false; },
+    })),
     { titulo: 'Llega', clave: 'llega', tipo: 'lista', opciones: ['sí', 'no'], ayuda: '¿Llega a la fundación?', leer: m => (m.llega ? 'sí' : 'no'),
       escribir: (m, v) => { const t = v.trim().toLowerCase(); if (['sí', 'si', 's', '1', 'true', 'x', ''].includes(t)) m.llega = true; else if (['no', 'n', '0', 'false'].includes(t)) m.llega = false; else return false; } },
     numM('Área inf. (m²)', 'areaInf', 0),
@@ -370,7 +375,17 @@ export function panelMuros(c: H) {
       escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
   // la tabla edita cualquier muro, también los de una pieza agrupada (el grupo cerrado es para el mouse en la planta);
   // solo quedan fuera los bloqueados 🔒
-  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, clave: m => m.id, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
+  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, clave: m => m.id,
+    // un clic en la tabla elige solo esa fila (deja de editar el conjunto elegido en la planta)
+    alElegirFila: m => {
+      // dentro del conjunto elegido en la planta: se sigue editando el conjunto; afuera: se elige solo esa fila
+      const p2 = estado.proyecto, conj = new Set<string>([...estado.multi.m, ...(estado.grupoSel ? murosDe(p2, estado.grupoSel).map(x => x.id) : []), ...estado.multi.g.flatMap(g => murosDe(p2, g).map(x => x.id))]);
+      if (m && conj.size > 1 && conj.has(m.id)) return;
+      estado.grupoSel = null; estado.multi = { m: [], g: [] }; estado.seleccion = m?.id ?? null; estado.avisarSeleccion();
+    },
+    bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
+  // aviso de edición en conjunto, arriba de la tabla
+  { const tabla = c.lastElementChild; const nota = h('p', { class: 'nota nota-conjunto', id: 'nota-conjunto' }); if (tabla) c.insertBefore(nota, tabla); else c.append(nota); }
   // las piezas agrupadas van debajo de la tabla (la tabla es lo principal)
   seccionGrupos(c);
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];

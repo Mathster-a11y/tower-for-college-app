@@ -583,6 +583,8 @@ function resaltarEnTablas() {
   if (estado.grupoSel) murosDe(p, estado.grupoSel).forEach(m => ids.add(m.id));
   estado.multi.g.forEach(g => murosDe(p, g).forEach(m => ids.add(m.id)));
   resaltarFilas('muros', ids); resaltarFilas('medidas-A', ids); resaltarFilas('medidas-B', ids);
+  const nota = document.getElementById('nota-conjunto');
+  if (nota) nota.textContent = ids.size > 1 ? `${ids.size} muros elegidos en la planta (resaltados): lo que escribas en una celda de una de sus filas se aplica a todos, en esa columna. Un clic en otra fila deja de editar el conjunto.` : '';
   let primera: HTMLElement | null = null;
   document.querySelectorAll<HTMLElement>('#panel tr[data-muros-pieza]').forEach(tr => {
     const si = (tr.dataset.murosPieza ?? '').split(' ').some(id => ids.has(id));

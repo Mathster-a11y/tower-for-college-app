@@ -1318,3 +1318,5 @@ svg [data-zoom-min] { display: none; }
 /* filas de lo elegido en la planta (muro, pieza o varios) */
 .grilla tr.resaltada > td, .grilla tr.resaltada > th, #panel tr.resaltada > td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .grilla tr.resaltada > th { color: var(--accent); font-weight: 700; }
+.nota-conjunto:empty { display: none; }
+.nota-conjunto { color: var(--accent); font-weight: 600; margin: 4px 0; }

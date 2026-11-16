@@ -39,6 +39,8 @@ interface Sel { r0: number; c0: number; r1: number; c1: number; }
 const selecciones = new Map<string, Sel>();
 /** filas resaltadas de cada grilla (por clave): lo elegido en la planta */
 const resaltadas = new Map<string, Set<string>>();
+/** cada grilla dibujada sabe llevar su celda activa a una fila (la primera de lo elegido en la planta) */
+const llevarA = new Map<string, (r: number) => void>();
 /**
  * Resalta en la grilla las filas de estas claves (lo elegido en la planta) sin volver a dibujarla, y la desplaza hasta la
  * primera si no se ve. También queda guardado para la próxima vez que se dibuje.
@@ -48,7 +50,13 @@ export function resaltarFilas(id: string, claves: Set<string>) {
   const filas = [...document.querySelectorAll<HTMLTableRowElement>(`[data-grilla="${id}"] tbody tr[data-clave]`)];
   let primera: HTMLTableRowElement | null = null;
   filas.forEach(tr => { const si = claves.has(tr.dataset.clave!); tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr; });
-  (primera as HTMLTableRowElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const pr = primera as HTMLTableRowElement | null;
+  if (pr) {
+    pr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // la celda activa va a la primera fila elegida: escribir edita el conjunto
+    const r = Number(pr.querySelector('th')?.dataset.r);
+    if (Number.isFinite(r)) llevarA.get(id)?.(r);
+  }
 }
 let enfocada: string | null = null;
 
@@ -63,6 +71,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   // una fila vacía al final (como en Excel) para escribir o pegar elementos nuevos
   const nF = filas.length + (op.nueva ? 1 : 0);
   let sel = selecciones.get(op.id) ?? { r0: 0, c0: 0, r1: 0, c1: 0 };
+  llevarA.set(op.id, r => { if (editor) return; sel = { r0: r, c0: sel.c1, r1: r, c1: sel.c1 }; selecciones.set(op.id, sel); pintar(); });
   const lim = (s: Sel): Sel => ({ r0: Math.max(0, Math.min(s.r0, nF - 1)), r1: Math.max(0, Math.min(s.r1, nF - 1)), c0: Math.max(0, Math.min(s.c0, nC - 1)), c1: Math.max(0, Math.min(s.c1, nC - 1)) });
   sel = lim(sel);
 
@@ -152,6 +161,22 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
   /** aplica valores [fila][col] desde (r, c); agrega filas si hace falta; un solo paso de deshacer */
   function poner(r0: number, c0: number, vals: string[][]) {
     let malos = 0, motivo = '';
+    // lo elegido en la planta (varias filas resaltadas): un valor escrito en una de ellas va a todas, en la misma columna
+    const grupo = resaltadas.get(op.id);
+    const f0 = op.filas()[r0];
+    if (vals.length === 1 && vals[0].length === 1 && op.clave && f0 && grupo && grupo.size > 1 && grupo.has(op.clave(f0))) {
+      const col = cols[c0], v = vals[0][0];
+      let n = 0, bloq = 0;
+      estado.cambiar(() => {
+        op.filas().forEach(f => {
+          if (!grupo.has(op.clave!(f))) return;
+          if (op.bloqueo?.(f)) { bloq++; return; }
+          if (col.escribir(f, v) === false) malos++; else n++;
+        });
+      });
+      avisar(`${col.titulo}: ${n} fila${n === 1 ? '' : 's'} cambiada${n === 1 ? '' : 's'}${bloq ? ` · ${bloq} bloqueada${bloq > 1 ? 's' : ''}` : ''}${malos ? ` · ${malos} sin cambiar` : ''}.`);
+      return;
+    }
     estado.cambiar(() => {
       const lista = op.filas();
       vals.forEach((fila, i) => {
