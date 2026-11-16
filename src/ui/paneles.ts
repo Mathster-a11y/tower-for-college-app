@@ -368,7 +368,9 @@ export function panelMuros(c: H) {
     { titulo: 'Hasta', clave: 'zHasta', tipo: 'lista', opciones: ['', ...p.niveles.map(n => n.nombre)], ayuda: 'Nivel donde termina (vacío = en la azotea)',
       leer: m => (m.zHasta == null ? '' : p.niveles.find(n => Math.abs(n.cota - m.zHasta!) < 1e-6)?.nombre ?? `${m.zHasta} m`),
       escribir: (m, v) => { const t = v.trim(); if (!t) { m.zHasta = null; return; } const n = p.niveles.find(x => x.nombre === t); const z = n ? n.cota : aNumero(t); if (z === null || Number.isNaN(z)) return false; m.zHasta = z; } },
-  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => motivoNoEditable(estado.proyecto, m, estado.contexto) }));
+  // la tabla edita cualquier muro, también los de una pieza agrupada (el grupo cerrado es para el mouse en la planta);
+  // solo quedan fuera los bloqueados 🔒
+  ], { id: 'muros', filas: () => estado.proyecto.muros, nueva: nuevoMuro, alElegirFila: m => estado.elegir(m?.id ?? null), bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
   // las piezas agrupadas van debajo de la tabla (la tabla es lo principal)
   seccionGrupos(c);
   const pap = estado.calculo.asig?.papeles[estado.seleccion ?? ''];
@@ -376,6 +378,37 @@ export function panelMuros(c: H) {
 }
 
 // ------------------------------------------------------------------ Piezas
+/** cambia el nombre de una pieza en todos sus muros (viento A: «Pieza A»; viento B: «Pieza B») */
+function renombrarPieza(dir: 'A' | 'B', viejo: string, nuevo0: string) {
+  const nuevo = nuevo0.trim(), clave = dir === 'A' ? 'piezaA' : 'piezaB';
+  if (!nuevo || nuevo === viejo) { estado.avisarPanel(); return; }
+  if (estado.proyecto.muros.some(m => m[clave] === nuevo)) { avisoPanel(`Ya hay una pieza «${nuevo}» en el viento ${dir}: elegí otro nombre (si querés unir las dos piezas, cambiá «Pieza ${dir}» de sus muros en la tabla de Muros).`); estado.avisarPanel(); return; }
+  estado.cambiar(p => { p.muros.forEach(m => { if (m[clave] === viejo) m[clave] = nuevo; }); });
+  if (estado.sub.perfil === `${dir}:${viejo}`) { estado.sub.perfil = `${dir}:${nuevo}`; estado.avisarPanel(); }
+}
+/** tabla editable con las medidas y la posición de los muros de una pieza */
+function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElement {
+  const caja = h('div', { class: 'medidas-pieza' });
+  caja.append(h('h4', {}, `Medidas de ${nombre}`), h('p', { class: 'nota' }, 'Cambiá largo, espesor o posición de cada muro de la pieza: el J y el molde se recalculan. Los muros bloqueados 🔒 no se editan.'));
+  const num = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor', min = -Infinity): Columna<Muro> => ({
+    titulo, clave, tipo: 'numero', leer: m => m[clave],
+    escribir: (m, v) => {
+      const x = aNumero(v); if (x === null || Number.isNaN(x) || x < min) return false;
+      if (tipoDe(m) === 'perfil' && (clave === 'largo' || clave === 'espesor')) { avisoPanel(`${m.id} es un perfil irregular: su forma se edita con doble clic en la planta.`); return false; }
+      if (clave === 'espesor' && m.refLado) { const k = conEspesor(m, x); m.x = k.x; m.y = k.y; }
+      m[clave] = x;
+    },
+  });
+  caja.append(grilla<Muro>([
+    { titulo: 'Muro', clave: 'id', leer: m => m.id, escribir: () => { avisoPanel('El nombre del muro se cambia en la tabla de Muros (Diseño → Muros).'); return false; } },
+    { titulo: 'Dir.', clave: 'dir', leer: m => m.dir, escribir: () => false },
+    num('Largo', 'largo', 0.01), num('Esp.', 'espesor', 0.01), num('x (m)', 'x'), num('y (m)', 'y'),
+    { titulo: 'Lado y', clave: 'ladoY', tipo: 'numero', ayuda: 'Solo tubo rectangular', leer: m => (tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : null),
+      escribir: (m, v) => { const x = aNumero(v); if (tipoDe(m) !== 'tubo-rect') return false; if (x === null || Number.isNaN(x) || x <= 0) return false; m.ladoY = x; } },
+  ], { id: `medidas-${dir}`, filas: () => estado.proyecto.muros.filter(m => ids.includes(m.id)), alElegirFila: m => estado.elegir(m?.id ?? null),
+    bloqueo: m => (muroBloqueado(estado.proyecto, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null) }));
+  return caja;
+}
 export function panelPiezas(c: H) {
   const { asig, res } = estado.calculo;
   if (!asig) return;
@@ -388,7 +421,13 @@ export function panelPiezas(c: H) {
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
       const clave = `${dir}:${pz.nombre}`;
-      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente' }, ...[pz.nombre, pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+      // el nombre de la pieza se edita acá: cambia «Pieza A» (o «Pieza B») de todos sus muros
+      const nom = h('input', { type: 'text', value: pz.nombre, class: 'nombre-pieza', 'aria-label': `Nombre de la pieza ${pz.nombre}`, size: '8', title: 'Nombre de la pieza: se cambia en todos sus muros' }) as HTMLInputElement;
+      nom.addEventListener('click', ev => ev.stopPropagation());
+      nom.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') nom.blur(); if (ev.key === 'Escape') { nom.value = pz.nombre; nom.blur(); } });
+      nom.addEventListener('change', () => renombrarPieza(dir, pz.nombre, nom.value));
+      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas' },
+        h('td', {}, nom), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);
       tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });
@@ -398,6 +437,9 @@ export function panelPiezas(c: H) {
     t.append(tb);
     c.append(h('div', { class: 'scroll' }, t));
     c.append(h('p', { class: 'total' }, `ΣJ = ${fmt(dir === 'A' ? res.jpar.AY24 : res.jort.AY24, 3)} m⁴`));
+    // medidas de los muros de la pieza elegida, editables (también dentro de una pieza agrupada)
+    const elegida = asig.piezas.find(pz => pz.dir === dir && estado.sub.perfil === `${dir}:${pz.nombre}`);
+    if (elegida) c.append(medidasPieza(elegida.nombre, dir, elegida.muros));
   }
   const ley = h('div', { class: 'leyenda' });
   Object.entries(COLORES).forEach(([k, v]) => ley.append(h('span', {}, h('i', { style: `background:${v}` }), k)));

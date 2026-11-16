@@ -1058,9 +1058,11 @@ export function montarPlanta(cont: HTMLElement) {
     panelPrec.append(mk('b', `${m.id}${grupoCerrado(p, m, estado.contexto) ? ` · grupo «${grupoCerrado(p, m, estado.contexto)!.nombre}»` : m.grupo ? ` · pieza ${m.grupo}` : ''}`));
     // medidas del elemento (como en las piezas insertables): largo, espesor y dirección, sin ir a la tabla
     {
-      const t = tipoDe(m), mot = motivoNoEditable(p, m, estado.contexto);
+      // las medidas se cambian también en un muro de una pieza agrupada (el grupo cerrado es para mover con el mouse);
+      // solo los bloqueados 🔒 no se tocan
+      const t = tipoDe(m), mot = muroBloqueado(p, m) ? `${m.id} está bloqueado 🔒: desbloquealo en el Esquema.` : null;
       const med = mk('div', '', 'prec-medidas');
-      if (mot) med.append(mk('span', grupoCerrado(p, m, estado.contexto) ? 'Está en un grupo cerrado: doble clic para entrar y cambiar sus medidas.' : mot, 'prec-nota'));
+      if (mot) med.append(mk('span', mot, 'prec-nota'));
       else if (t === 'perfil') { const be = mk('button', 'Editar el contorno'); be.type = 'button'; be.title = 'También: doble clic en el perfil'; be.addEventListener('click', () => edc.abrir(m)); med.append(mk('span', 'Perfil irregular: su forma se edita con el contorno.', 'prec-nota'), be); }
       else {
         const campoM = (etq: string, v: number, ayuda: string, poner: (w: import('../engine/modelo').Muro, x: number) => string | null) => {
