@@ -97,3 +97,38 @@ describe('método planilla (sección 7)', () => {
     expect(pz.posicion).toBeCloseTo(2.1 - k.AL, 4);
   });
 });
+
+describe('agregar filas de piezas (planilla 2025)', async () => {
+  const { ajustarFormula } = await import('../src/xlsx/filas');
+  const { escribirPlanilla } = await import('../src/xlsx/planilla');
+  const { readFileSync } = await import('node:fs');
+  const JSZip = (await import('jszip')).default;
+  const RA = 'Rototrasl. cara mayor';
+  it('corre las referencias como «Insertar filas» de Excel y estira las sumas que terminan justo arriba', () => {
+    const ins = { hoja: RA, r: 25, k: 3 };
+    expect(ajustarFormula('SUM(B5:B24)', RA, ins)).toBe('SUM(B5:B27)');
+    expect(ajustarFormula('-J15/M51*L7', RA, ins)).toBe('-J15/M54*L7');
+    expect(ajustarFormula('SUM(M5:M50)', RA, ins)).toBe('SUM(M5:M53)');
+    expect(ajustarFormula("'J Tabiques paralelos'!AY26", RA, ins)).toBe("'J Tabiques paralelos'!AY26");
+    expect(ajustarFormula("'Rototrasl. cara mayor'!O30+1", 'Flex comp PB paralelos', ins)).toBe("'Rototrasl. cara mayor'!O33+1");
+    expect(ajustarFormula('O30+LOG10(2)+"B30"', 'Flex comp PB paralelos', ins)).toBe('O30+LOG10(2)+"B30"');
+    expect(ajustarFormula('$B$30*B$24', RA, ins)).toBe('$B$33*B$24');
+  });
+  it('con 26 piezas en el viento A el motor y la planilla escrita tienen 6 filas más en cada bloque', async () => {
+    const p = ejemploGuia();
+    for (let q = 0; q < 20; q++) p.muros.push({ ...muro(`X${q}`, 'Y', -9 + q * 0.9, q % 2 ? 7 : -7, 1 + (q % 3) * 0.2), piezaA: `PA${q}`, piezaB: '' });
+    const { a, r } = usarConfig({ motor: 'nuevo' }, () => { const a = aPlanilla(p); return { a, r: calcularPlanilla(a.datos) }; });
+    expect(a.datos.jpar).toHaveLength(26);
+    expect(r.rotA.nP).toBe(26); expect(r.rotA.oO).toBe(32); expect(r.flex.O).toHaveLength(26);
+    expect(r.rotA.C25).toBeCloseTo(1, 12);
+    const bytes = await escribirPlanilla(readFileSync('src/assets/planilla_catedra_2025.xlsx'), a.datos, r, p, undefined, undefined, { motor: 'nuevo', virgen: true });
+    const zip = await JSZip.loadAsync(bytes);
+    const wb = await zip.file('xl/workbook.xml')!.async('string');
+    expect(wb).toContain('Rototrasl. cara mayor');
+    const todo = (await Promise.all(Object.keys(zip.files).filter(f => /worksheets\/sheet\d+\.xml$/.test(f)).map(f => zip.file(f)!.async('string')))).join('');
+    expect(todo).toContain('<f>SUM(AY4:AY37)</f>');                                // AY32 de paralelos, estirada
+    expect(todo).toContain('<f>SUM(B5:B30)</f>');                                  // B25 de cara mayor, estirada
+    expect(todo).toContain("<f>'J Tabiques paralelos'!AY37</f>");                  // pieza 26 → fila 37 de la hoja J
+    expect(todo).toContain("<f>'Rototrasl. cara mayor'!O30</f>");                 // Flex de la pieza 26
+  });
+});

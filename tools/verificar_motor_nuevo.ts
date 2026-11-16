@@ -37,7 +37,24 @@ function torreRica(): Proyecto {
   return p;
 }
 
+/** torre con más de 20 piezas por viento: hace agregar filas a la planilla */
+function torreGrande(): Proyecto {
+  const p = torreRica();
+  p.nombre = 'Torre grande';
+  let k = 300;
+  const t = (dirM: 'X' | 'Y', x: number, y: number, largo: number, e = 0.2): Muro =>
+    ({ id: `G${k++}`, dir: dirM, x, y, largo, espesor: e, llega: true, areaInf: 6 + (k % 5), piezaA: `GA${k}`, pegadoA: '', piezaB: `GB${k}`, pegadoB: '' });
+  for (let q = 0; q < 14; q++) p.muros.push(t('Y', -9.5 + q * 1.4, q % 2 ? 6.5 : -6.5, 1 + (q % 4) * 0.3, 0.2 + (q % 3) * 0.05));
+  for (let q = 0; q < 12; q++) p.muros.push(t('X', q % 2 ? 8.6 : -8.6, -5 + q * 0.9, 0.9 + (q % 3) * 0.4));
+  const usados = new Set(p.muros.map(m => m.id));
+  const c3 = piezaTipo('C', { h: 2.5, b: 1.5, e: 0.2, giro: 3 }, 6, 6, usados);
+  p.muros = agrupar([...p.muros, ...c3], c3.map(m => m.id)).muros;
+  p.muros.push({ id: 'TC2', dir: 'Y', x: -6, y: -2, largo: 0.9, espesor: 0.45, tipo: 'tubo-circ', llega: true, areaInf: 7, piezaA: 'TC2', pegadoA: '', piezaB: 'TC2B', pegadoB: '' });
+  return p;
+}
+
 const casos: [string, () => Proyecto, Metodo][] = [
+  ['grande_app', torreGrande, 'app'], ['grande_planilla', torreGrande, 'planilla'],
   ['guia_app', ejemploGuia, 'app'], ['guia_planilla', ejemploGuia, 'planilla'],
   ['anexo_planilla', ejemploAsimetrico, 'planilla'], ['rica_app', torreRica, 'app'], ['rica_planilla', torreRica, 'planilla'],
 ];
@@ -55,22 +72,26 @@ function celdas(r: PlanillaRes): Celdas {
   const colsJ = ['D', 'I', 'M', 'N', 'O', 'P', 'Q', 'R', 'U', 'V', 'Y', 'AC', 'AG', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AS', 'AW', 'AX', 'AY'] as const;
   r.jpar.filas28!.forEach((f, i) => colsJ.forEach(c => put(JP, `${c}${4 + i}`, f[c])));
   r.jort.filas.forEach((f, i) => colsJ.forEach(c => put(JO, `${c}${4 + i}`, f[c])));
-  put(JP, 'AY32', r.jpar.AY24); put(JO, 'AY24', r.jort.AY24);
+  const eA = r.jpar.filas.length - 20, eB = r.jort.filas.length - 20;
+  put(JP, `AY${32 + eA}`, r.jpar.AY24); put(JO, `AY${24 + eB}`, r.jort.AY24);
   const jmin = (h: string, j: PlanillaRes['jminA'], f0: number) => { put(h, `I${f0}`, j.W); put(h, `J${f0}`, j.h); j.tabla.forEach((t, q) => { put(h, `K${f0 + 2 * q}`, t.h400); put(h, `M${f0 + 2 * q}`, t.h500); put(h, `O${f0 + 2 * q}`, t.h600); }); };
-  jmin(JP, r.jminA, 45); jmin(JO, r.jminB, 37);
+  jmin(JP, r.jminA, 45 + eA); jmin(JO, r.jminB, 37 + eB);
   for (const [h, ro] of [['Rototrasl. cara mayor', r.rotA], ['Rototrasl. cara menor', r.rotB]] as const) {
-    for (let i = 0; i < 46; i++) {
+    const nP = ro.nP, NR = ro.B.length, sP = 5 + nP, sO = 5 + NR;
+    for (let i = 0; i < NR; i++) {
       const f = 5 + i;
-      if (i >= 20 && i < 23) continue;
-      if (i === 25) continue;
+      if (i >= nP && i < nP + 3) continue;
+      if (i === nP + 5) continue;
       for (const c of ['B', 'C', 'E', 'G', 'I', 'K', 'L', 'N', 'O'] as const) put(h, `${c}${f}`, ro[c][i]);
       put(h, `M${f}`, ro.Mm[i]);
     }
-    for (const c of ['B25', 'I25', 'J7', 'J15', 'J28', 'J38', 'B51', 'I51', 'M51', 'L25', 'C25', 'E25', 'G25'] as const) put(h, c, ro[c]);
+    const dir: Record<string, string> = { B25: `B${sP}`, I25: `I${sP}`, L25: `L${sP}`, C25: `C${sP}`, E25: `E${sP}`, G25: `G${sP}`, J7: 'J7', J15: 'J15',
+      J28: `J${28 + nP - 20}`, J38: `J${38 + nP - 20}`, B51: `B${sO}`, I51: `I${sO}`, M51: `M${sO}` };
+    for (const c of ['B25', 'I25', 'J7', 'J15', 'J28', 'J38', 'B51', 'I51', 'M51', 'L25', 'C25', 'E25', 'G25'] as const) put(h, dir[c], ro[c]);
     put(h, 'D5', ro.D5); put(h, 'F5', ro.F5);
   }
   const fx = r.flex;
-  for (let i = 0; i < 20; i++) { const f = 4 + i; for (const [c, a] of [['B', fx.B], ['D', fx.D], ['E', fx.E], ['H', fx.H], ['I', fx.I], ['J', fx.J], ['K', fx.K], ['L', fx.L], ['M', fx.M], ['N', fx.Nn], ['O', fx.O], ['P', fx.P]] as const) put(FX, `${c}${f}`, a[i]); }
+  for (let i = 0; i < fx.B.length; i++) { const f = 4 + i; for (const [c, a] of [['B', fx.B], ['D', fx.D], ['E', fx.E], ['H', fx.H], ['I', fx.I], ['J', fx.J], ['K', fx.K], ['L', fx.L], ['M', fx.M], ['N', fx.Nn], ['O', fx.O], ['P', fx.P]] as const) put(FX, `${c}${f}`, a[i]); }
   return out;
 }
 

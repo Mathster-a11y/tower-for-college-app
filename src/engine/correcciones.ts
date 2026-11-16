@@ -44,7 +44,7 @@ export function datosSegunGuia(d: PlanillaDatos, filaPB: number): PlanillaDatos 
 
 export function repartoCorregido(r: RotoRes): PiezaRot[] {
   const hW = r.D5 === 0 ? 0 : r.F5 / r.D5;
-  return Array.from({ length: 20 }, (_, i) => {
+  return Array.from({ length: r.nP }, (_, i) => {
     const Qtras = r.E[i], Qrot = isFinite(r.N[i]) ? r.N[i] : 0, Mtras = r.G[i];
     return { Qtras, Qrot, Qtot: Qtras + Qrot, Mtras, Mrot: Qrot * hW, Mtot: Mtras + Qrot * hW, Mplanilla: r.O[i] };
   });
@@ -93,7 +93,7 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
 
 /** Fuerzas y momentos de cada fila con la rototraslación de la guía (M rot = Q rot · hW). */
 export function repartoGuiaPorFila(r: RotoRes, rg: RotoGuia): PiezaRot[] {
-  return Array.from({ length: 20 }, (_, i) => {
+  return Array.from({ length: r.nP }, (_, i) => {
     const el = rg.paralelos.find(x => x.fila === i);
     const Qtras = r.E[i], Mtras = r.G[i];
     const Qrot = el ? el.rot : 0;

@@ -61,8 +61,8 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
   }
   // Σ J·a = 0 siempre (Xr es el baricentro de los J); la celda L25 de la planilla suma solo las filas 5 a 19
   for (const [dir, rr, gg] of [['A', r.rotA, c.guia.rotA], ['B', r.rotB, c.guia.rotB]] as const) {
-    const total = gg.L.slice(0, 20).reduce((x, y) => x + (isFinite(y) ? y : 0), 0);
-    const escala = Math.max(1e-9, gg.L.slice(0, 20).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0));
+    const total = gg.L.slice(0, gg.nP).reduce((x, y) => x + (isFinite(y) ? y : 0), 0);
+    const escala = Math.max(1e-9, gg.L.slice(0, gg.nP).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0));
     const parcial = Math.abs(rr.L25 - total) > 1e-6 * escala;
     out.push({ grupo: 'Reparto', nombre: `Control Σ J·a = 0 (cara ${dir === 'A' ? 'mayor' : 'menor'})`, criterio: '= 0: el eje de inercia está bien calculado', fuente: `Rototrasl. cara ${dir === 'A' ? 'mayor' : 'menor'} L25`,
       planilla: rr.L25, guia: total, unidad: 'm⁵', estado: est(Math.abs(total) <= 1e-6 * escala), nota: parcial ? 'La celda L25 de la planilla suma solo las piezas 1 a 15: con piezas en las filas 16 a 20 no da 0, aunque el cálculo esté bien.' : undefined });
@@ -77,7 +77,7 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
         const pz = piezas.find(x => x.nombre === v.nombre && x.dir === dir)!;
         const i = pz.filaHoja!;
         const enPlanilla = dir === 'A' && d.flex[i]?.C != null;
-        const difiere = enPlanilla && TIPO_FILA_PARALELOS[i] !== (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
+        const difiere = enPlanilla && i < 20 && TIPO_FILA_PARALELOS[i] !== (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
         const peor = v.muros.reduce((m2, x) => (x.traccion > m2.traccion ? x : m2), v.muros[0]);
         const comp = v.muros.reduce((m2, x) => (x.compresion < m2.compresion ? x : m2), v.muros[0]);
         if (!peor) return;

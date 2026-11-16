@@ -33,7 +33,11 @@ export const RANURA_FILA_NUEVO: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 
  */
 export const FLEX_FILA_NUEVO: number[] = [0, 1, 2, 3, 4, 5, 10, 11, 12, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
 /** fila del Excel de la hoja J donde va la pieza de la ranura i (viento A: «paralelos»; B: «ortogonales») */
-export const filaExcelJ = (dir: 'A' | 'B', i: number, motor: Motor = config.motor) => (dir === 'A' && motor === 'nuevo' ? RANURA_FILA_NUEVO[i] : i) + 4;
+export const filaExcelJ = (dir: 'A' | 'B', i: number, motor: Motor = config.motor) => (dir === 'A' && motor === 'nuevo' ? ranuraFilaNuevo(i) : i) + 4;
+/** índice (fila − 4) de la hoja J paralelos de la ranura i; desde la 21ª, las filas agregadas a partir de la 32 */
+export const ranuraFilaNuevo = (i: number) => (i < 20 ? RANURA_FILA_NUEVO[i] : N_FILAS_PAR_NUEVO + i - 20);
+/** índice (fila − 4) de la hoja J paralelos que lee la fila 4+i de Flex (las agregadas leen la de su pieza) */
+export const flexFilaNuevo = (i: number) => (i < 20 ? FLEX_FILA_NUEVO[i] : ranuraFilaNuevo(i));
 /** fila de relleno de la plantilla (evita #DIV/0!) */
 export const FILA_RELLENO: FilaJ = { S: 0.01, W: 0.01, X: 0.01 };
 
@@ -63,7 +67,11 @@ export interface FilaJ {
   O0?: boolean;
 }
 
-export interface FilaFlex { C: number | null; F: number | null; G: number | null; }
+export interface FilaFlex {
+  C: number | null; F: number | null; G: number | null;
+  /** filas agregadas (más de 20 piezas, planilla 2025): qué módulo lee la fila nueva, según el tipo de la pieza */
+  tipo?: TipoFila;
+}
 
 export interface PlanillaDatos {
   viento: Viento;
@@ -227,13 +235,13 @@ export function calcHojaJ(filas: FilaJ[], ortogonales: boolean, nuevo = false): 
  * AY24 (que en la planilla 2025 es AY32) suma las 28 filas.
  */
 export function filasParalelosNuevo(ranuras: FilaJ[]): FilaJ[] {
-  const filas: FilaJ[] = Array.from({ length: N_FILAS_PAR_NUEVO }, () => ({ ...FILA_RELLENO }));
-  ranuras.forEach((f, i) => { if (f) filas[RANURA_FILA_NUEVO[i]] = { ...f, sinYAC: false, O0: false }; });
+  const filas: FilaJ[] = Array.from({ length: N_FILAS_PAR_NUEVO + Math.max(0, ranuras.length - 20) }, () => ({ ...FILA_RELLENO }));
+  ranuras.forEach((f, i) => { if (f) filas[ranuraFilaNuevo(i)] = { ...f, sinYAC: false, O0: false }; });
   return filas;
 }
 export function calcParalelosNuevo(ranuras: FilaJ[]): HojaJRes {
   const res28 = filasParalelosNuevo(ranuras).map(f => calcFilaJ(f, false, false, true));
-  return { filas: RANURA_FILA_NUEVO.map(k => res28[k]), filas28: res28,
+  return { filas: ranuras.map((_, i) => res28[ranuraFilaNuevo(i)]), filas28: res28,
     AY24: sum(res28.map(r => r.AY)), N24: sum(res28.map(r => r.N)), AM24: sum(res28.map(r => r.AM)) };
 }
 
@@ -252,6 +260,8 @@ export interface RotoRes {
   B: number[]; C: number[]; E: number[]; G: number[]; I: number[]; K: number[]; L: number[]; Mm: number[]; N: number[]; O: number[];
   D5: number; F5: number; B25: number; I25: number; J7: number; J15: number; J28: number; J38: number;
   B51: number; I51: number; M51: number; L25: number; C25: number; E25: number; G25: number;
+  /** cantidad de filas de paralelas (20, o más con filas agregadas) e índice donde empiezan las perpendiculares (26 con 20) */
+  nP: number; oO: number;
 }
 
 /**
@@ -262,38 +272,43 @@ export interface RotoRes {
 export function calcRoto(par: number[], per: number[], H: (number | null)[], Q: number, Mv: number, caraMenor: boolean, nuevo = false): RotoRes {
   // planilla 2025: B51 e I51 de cara menor suman hasta la fila 50 y L25 de cara mayor hasta la 24
   const truncaMenor = caraMenor && !nuevo, truncaL25 = !caraMenor && !nuevo;
-  const NR = 46;
+  // distribución de la hoja: nP filas de paralelas (5 a 24 con 20), la fila de sumas, dos filas vacías, el atajo de
+  // dos perpendiculares (28–29), una fila de títulos y nO filas de perpendiculares (31 a 50 con 20). Con más de 20
+  // piezas (planilla 2025 con filas agregadas) los bloques crecen y lo de abajo se corre.
+  const nP = Math.max(20, par.length), nO = Math.max(20, per.length);
+  const s0 = nP + 3, oO = nP + 6, NR = oO + nO;
   const B = new Array<number>(NR).fill(0), C = new Array<number>(NR).fill(NaN), E = new Array<number>(NR).fill(NaN);
   const G = new Array<number>(NR).fill(NaN), I = new Array<number>(NR).fill(0), K = new Array<number>(NR).fill(NaN);
   const L = new Array<number>(NR).fill(0), Mm = new Array<number>(NR).fill(0), N = new Array<number>(NR).fill(NaN);
   const O = new Array<number>(NR).fill(NaN);
   const h = (i: number) => n0(H[i]);
-  for (let i = 0; i < 20; i++) B[i] = par[i];
-  for (let j = 0; j < 20; j++) B[26 + j] = per[j];               // filas 31–50
-  const B25 = sum(B.slice(0, 20));
-  for (let i = 0; i < 20; i++) { C[i] = div(B[i], B25); E[i] = C[i] * Q; G[i] = C[i] * Mv; I[i] = B[i] * h(i); }
-  for (let i = 23; i < NR; i++) I[i] = B[i] * h(i);                // filas 28–50
-  const I25 = sum(I.slice(0, 20));
+  const ip = Array.from({ length: nP }, (_, i) => i), io = Array.from({ length: nO }, (_, j) => oO + j), atajo = [s0, s0 + 1];
+  for (const i of ip) B[i] = n0(par[i]);
+  io.forEach((i, j) => (B[i] = n0(per[j])));
+  const B25 = sum(ip.map(i => B[i]));
+  for (const i of ip) { C[i] = div(B[i], B25); E[i] = C[i] * Q; G[i] = C[i] * Mv; I[i] = B[i] * h(i); }
+  for (let i = s0; i < NR; i++) I[i] = B[i] * h(i);
+  const I25 = sum(ip.map(i => I[i]));
   const J7 = div(I25, B25);
   const J15 = Q * J7;
-  const J28 = (h(23) + h(24)) / 2;
-  const B51 = sum(B.slice(23, truncaMenor ? 34 : NR));            // menor (actual): SUM(B28:B38)
-  const I51 = sum(I.slice(23, truncaMenor ? 34 : NR));
+  const J28 = (h(s0) + h(s0 + 1)) / 2;
+  const B51 = sum(B.slice(s0, truncaMenor ? s0 + 11 : NR));       // menor (actual): SUM(B28:B38)
+  const I51 = sum(I.slice(s0, truncaMenor ? s0 + 11 : NR));
   const J38 = div(I51, B51);
-  for (const i of [23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)]) C[i] = div(B[i], B51); // C28:C50 = B/B51
-  for (let i = 0; i < 20; i++) { K[i] = h(i) - J7; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
-  for (let i = 23; i <= 24; i++) { K[i] = h(i) - J28; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
-  for (let i = 26; i < NR; i++) { K[i] = h(i) - J38; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
+  for (const i of [...atajo, ...io]) C[i] = div(B[i], B51);          // C28:C50 = B/B51
+  for (const i of ip) { K[i] = h(i) - J7; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
+  for (const i of atajo) { K[i] = h(i) - J28; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
+  for (const i of io) { K[i] = h(i) - J38; L[i] = B[i] * K[i]; Mm[i] = B[i] * K[i] * K[i]; }
   const M51 = sum(Mm);
-  for (const i of [...Array(20).keys(), 23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)]) {
+  for (const i of [...ip, ...atajo, ...io]) {
     N[i] = -(J15 * L[i]) / M51;
     if (!isFinite(N[i])) N[i] = NaN;
   }
-  for (let i = 0; i < 20; i++) O[i] = G[i] + N[i];
-  for (const i of [23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)]) O[i] = N[i];
-  const L25 = sum(L.slice(0, truncaL25 ? 15 : 20));                // mayor (actual): SUM(L5:L19)
+  for (const i of ip) O[i] = G[i] + N[i];
+  for (const i of [...atajo, ...io]) O[i] = N[i];
+  const L25 = sum(L.slice(0, truncaL25 ? 15 : nP));                // mayor (actual): SUM(L5:L19)
   return { B, C, E, G, I, K, L, Mm, N, O, D5: Q, F5: Mv, B25, I25, J7, J15, J28, J38, B51, I51, M51, L25,
-    C25: sum(C.slice(0, 20)), E25: sum(E.slice(0, 20)), G25: sum(G.slice(0, 20)) };
+    C25: sum(ip.map(i => C[i])), E25: sum(ip.map(i => E[i])), G25: sum(ip.map(i => G[i])), nP, oO };
 }
 
 // ------------------------------------------------------------------ flexocompresión
@@ -309,10 +324,11 @@ export interface FlexRes { B: number[]; D: number[]; E: number[]; H: number[]; I
 
 export function calcFlex(jpar: HojaJRes, rot: RotoRes, d: FilaFlex[]): FlexRes {
   const r: FlexRes = { B: [], D: [], E: [], H: [], I: [], J: [], K: [], L: [], M: [], Nn: [], O: [], P: [], W: [] };
-  for (let i = 0; i < 20; i++) {
-    // planilla 2025: el área y el módulo salen de la fila de la hoja J que vincula Flex (FLEX_FILA_NUEVO)
-    const j = jpar.filas28 ? jpar.filas28[FLEX_FILA_NUEVO[i]] : jpar.filas[i];
-    const tipo = TIPO_FILA_PARALELOS[i];
+  for (let i = 0; i < jpar.filas.length; i++) {
+    // planilla 2025: el área y el módulo salen de la fila de la hoja J que vincula Flex (FLEX_FILA_NUEVO);
+    // las filas agregadas leen la fila de su propia pieza
+    const j = jpar.filas28 ? jpar.filas28[flexFilaNuevo(i)] : jpar.filas[i];
+    const tipo = i < 20 ? TIPO_FILA_PARALELOS[i] : d[i]?.tipo ?? 'simétrica';
     const W = tipo === 'asimétrica' ? j.AN : tipo === 'circular' ? j.V : j.Q;
     const B = j.O, C = n0(d[i]?.C), F = n0(d[i]?.F), G = n0(d[i]?.G);
     const D = FLEX_D_FIJO.includes(i) ? 0.01 : B * C, E = D * 2.4, H = E + F * G * 0.7, I = E + F * G * 0.9, J = rot.O[i];

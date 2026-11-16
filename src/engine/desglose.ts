@@ -347,8 +347,8 @@ function hojaRoto(x: EntradaDesglose, menor: boolean): HojaDesglose {
   const dir = menor ? 'B' : 'A';
   const nombres = new Map(x.piezas.filter(p => p.dir === dir && p.fila !== null).map(p => [p.fila!, p.nombre]));
   const Q = rr.D5, Mv = rr.F5;
-  const par = Array.from({ length: 20 }, (_, i) => ({ i, J: n0(rr.B[i]), x: n0(H[i]) })).filter(o => o.J > 1e-6);
-  const perp = [23, 24, ...Array.from({ length: 20 }, (_, j) => 26 + j)].map(i => ({ i, J: n0(rr.B[i]), x: n0(H[i]) })).filter(o => o.J > 1e-6);
+  const par = Array.from({ length: rr.nP }, (_, i) => ({ i, J: n0(rr.B[i]), x: n0(H[i]) })).filter(o => o.J > 1e-6);
+  const perp = [rr.nP + 3, rr.nP + 4, ...Array.from({ length: rr.B.length - rr.oO }, (_, j) => rr.oO + j)].map(i => ({ i, J: n0(rr.B[i]), x: n0(H[i]) })).filter(o => o.J > 1e-6);
   const SJ = sum(par.map(o => o.J)), xr = SJ ? sum(par.map(o => o.J * o.x)) / SJ : NaN;
   const SJp = sum(perp.map(o => o.J)), yr = SJp ? sum(perp.map(o => o.J * o.x)) / SJp : 0;
   const Mt = Q * xr;

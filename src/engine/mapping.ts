@@ -15,7 +15,7 @@
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
  *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
  */
-import { FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos } from './planilla';
+import { FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
 import { config } from './config';
 import { areaMuro, dInterior, entraEnCalculo, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
@@ -452,7 +452,12 @@ function ordenFilas(tipo: 'simétrica' | 'asimétrica' | 'circular', paralelos: 
 }
 
 function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: string[]): FilaJ[] {
-  const filas: (FilaJ | null)[] = new Array(20).fill(null);
+  // planilla 2025: con más de 20 piezas se agregan filas al final de cada bloque (la planilla anterior admite 20)
+  const conFila = piezas.filter(p => Object.keys(p.fila).length).length;
+  const extra = config.motor === 'nuevo' ? Math.max(0, conFila - 20) : 0;
+  const filas: (FilaJ | null)[] = new Array(20 + extra).fill(null);
+  if (extra) avisos.push(`Viento ${paralelos ? 'A' : 'B'}: ${conFila} piezas; la planilla 2025 trae 20 filas, así que al exportar se ${extra === 1 ? 'agrega 1 fila' : `agregan ${extra} filas`} al final de «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}», de los dos bloques de rototraslación${paralelos ? ' y de «Flex comp PB paralelos»' : ''}, con las mismas fórmulas, y las sumas las incluyen.`);
+  const masFilas = Array.from({ length: extra }, (_, k) => 20 + k);
   const tipoDe = (p: PiezaEquivalente) => (p.molde === 'asimétrico' ? 'asimétrica' : p.molde === 'tubo' ? 'circular' : 'simétrica') as 'simétrica' | 'asimétrica' | 'circular';
   // primero los tipos con menos filas propias
   const prioridad = { asimétrica: 0, circular: 1, simétrica: 2 };
@@ -460,7 +465,7 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
   for (const p of orden) {
     if (!Object.keys(p.fila).length) continue;
     const tipo = tipoDe(p);
-    const i = ordenFilas(tipo, paralelos).find(k => filas[k] === null);
+    const i = [...ordenFilas(tipo, paralelos), ...masFilas].find(k => filas[k] === null);
     if (i === undefined) {
       avisos.push(`No queda fila libre en «J Tabiques ${paralelos ? 'paralelos' : 'ortogonales'}» para la pieza ${p.nombre} (máximo 20 piezas).`);
       continue;
@@ -469,10 +474,10 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
     if (actual && paralelos && tipo === 'asimétrica' && FILAS_SIN_YAC.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: en la planilla virgen le faltan las fórmulas del ala superior y del alma izquierda; su J queda incompleto en la planilla.`);
     }
-    if (!actual && paralelos && FLEX_FILA_NUEVO[i] !== RANURA_FILA_NUEVO[i]) {
+    if (!actual && paralelos && i < 20 && FLEX_FILA_NUEVO[i] !== RANURA_FILA_NUEVO[i]) {
       p.avisos.push(`Planilla 2025: va en la fila ${RANURA_FILA_NUEVO[i] + 4} de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B${5 + i}), pero «Flex comp PB paralelos» fila ${4 + i} lee el área y el módulo de la fila ${FLEX_FILA_NUEVO[i] + 4}: la flexocompresión de la planilla no corresponde a esta pieza.`);
     }
-    if (paralelos && TIPO_FILA_PARALELOS[i] !== tipo) {
+    if (paralelos && i < 20 && TIPO_FILA_PARALELOS[i] !== tipo) {
       const mod = { 'simétrica': 'simétrico (Q)', 'asimétrica': 'asimétrico (AN)', circular: 'circular (V)' };
       p.avisos.push(`Va en la fila de la pieza ${i + 1}, donde «Flex comp PB paralelos» lee el módulo ${mod[TIPO_FILA_PARALELOS[i]]}: la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo ${mod[tipo]} (columna «Guía/CIRSOC»).`);
     }
@@ -585,23 +590,26 @@ export function aPlanilla(p: Proyecto): Asignacion {
   const jpar = asignarFilas(piezasA, true, avisos);
   const jort = asignarFilas(piezasB, false, avisos);
 
-  const Hpos = (par: PiezaEquivalente[], per: PiezaEquivalente[]) => {
-    const H = new Array<number | null>(46).fill(null);
+  // columna H de rototraslación: paralelas desde la fila 5 y perpendiculares desde la fila 31 (o más abajo si se
+  // agregaron filas de paralelas: el bloque de perpendiculares empieza 6 filas después del de paralelas)
+  const Hpos = (par: PiezaEquivalente[], per: PiezaEquivalente[], nP: number, nO: number) => {
+    const H = new Array<number | null>(nP + 6 + nO).fill(null);
     par.forEach(pz => { if (pz.filaHoja !== null) H[pz.filaHoja] = pz.posicion; });
-    per.forEach(pz => { if (pz.filaHoja !== null) H[26 + pz.filaHoja] = pz.posicion; });
+    per.forEach(pz => { if (pz.filaHoja !== null) H[nP + 6 + pz.filaHoja] = pz.posicion; });
     return H;
   };
   const alturaTotal = arriba.length ? arriba[0].cota - (arriba[arriba.length - 1]?.cota ?? 0) : 0;
   const pisosArriba = Math.max(0, arriba.length - 1);
-  const flex = new Array(20).fill(null).map(() => ({ C: null as number | null, F: null as number | null, G: null as number | null }));
-  piezasA.forEach(pz => { if (pz.filaHoja !== null) flex[pz.filaHoja] = { C: alturaTotal, F: r4(pz.areaInf), G: pisosArriba }; });
+  const flex: PlanillaDatos['flex'] = new Array(jpar.length).fill(null).map(() => ({ C: null as number | null, F: null as number | null, G: null as number | null }));
+  const tipoFlex = (pz: PiezaEquivalente): TipoFila => (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
+  piezasA.forEach(pz => { if (pz.filaHoja !== null) flex[pz.filaHoja] = { C: alturaTotal, F: r4(pz.areaInf), G: pisosArriba, ...(pz.filaHoja >= 20 ? { tipo: tipoFlex(pz) } : {}) }; });
 
   const datos: PlanillaDatos = {
     viento: { ...p.sitio, Z },
     mnyq: { C, D, E, F, b1: p.fundacion.b1, a1: p.fundacion.a1 },
     jpar, jort,
-    rotA: { H: Hpos(piezasA, piezasB) },
-    rotB: { H: Hpos(piezasB, piezasA) },
+    rotA: { H: Hpos(piezasA, piezasB, jpar.length, jort.length) },
+    rotB: { H: Hpos(piezasB, piezasA, jort.length, jpar.length) },
     flex,
   };
   // las piezas que quedan enteras fuera del molde (columnas que no toman viento) van en un solo aviso

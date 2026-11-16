@@ -83,7 +83,7 @@ export interface Reparto { Q: number; Mv: number; d: number; Mt: number; piezas:
 /** Rototraslación de una dirección: cada pieza con su posición, su parte de J y las fuerzas de traslación y rotación. */
 export function reparto(r: RotoRes, H: (number | null)[], piezas: PiezaEquivalente[], dir: 'A' | 'B'): Reparto {
   const out: PiezaReparto[] = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < r.nP; i++) {
     const J = r.B[i];
     if (!(J > 1e-9)) continue;
     const pz = piezas.find(x => x.dir === dir && x.filaHoja === i);

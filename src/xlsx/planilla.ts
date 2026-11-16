@@ -19,6 +19,7 @@ import { leerLibro } from './tablas';
 import { agregarHojasG, type OpcionesG } from './hojasG';
 import { opcionesG } from './opcionesG';
 import { agregarFiguras, type FiguraPlanilla } from './figuras';
+import { agregarFilasPiezas } from './filas';
 
 export const HOJAS = {
   viento: 'viento', mnyq: 'M,NyQ', jpar: 'J Tabiques paralelos', jort: 'J Tabiques ortogonales',
@@ -74,9 +75,10 @@ export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes, motor: Motor =
     const h = (c[hoja] = {} as Record<string, ValorCelda>);
     filas.forEach((f, i) => COLS_J.forEach(col => (h[`${col}${4 + i}`] = num(f[col]))));
   }
-  for (const [hoja, H] of [[HOJAS.rotA, d.rotA.H], [HOJAS.rotB, d.rotB.H]] as const) {
+  // columna H: paralelas desde la fila 5 y perpendiculares 6 filas después del bloque de paralelas (31 con 20 piezas)
+  for (const [hoja, H, nP] of [[HOJAS.rotA, d.rotA.H, d.jpar.length], [HOJAS.rotB, d.rotB.H, d.jort.length]] as const) {
     const h = (c[hoja] = {} as Record<string, ValorCelda>);
-    H.forEach((x, i) => { if (i < 20 || i >= 26) h[`H${5 + i}`] = num(x); });
+    H.forEach((x, i) => { if (i < nP || i >= nP + 6) h[`H${5 + i}`] = num(x); });
   }
   const f = (c[HOJAS.flex] = {} as Record<string, ValorCelda>);
   d.flex.forEach((x, i) => { f[`C${4 + i}`] = num(x.C); f[`F${4 + i}`] = num(x.F); f[`G${4 + i}`] = num(x.G); });
@@ -151,7 +153,14 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
-  const celdas = celdasAEscribir(d, r, op.motor ?? config.motor);
+  const motor = op.motor ?? config.motor;
+  // planilla 2025 con más de 20 piezas en un viento: se agregan las filas (con sus fórmulas) antes de escribir los datos
+  const eA = Math.max(0, d.jpar.length - 20), eB = Math.max(0, d.jort.length - 20);
+  if (eA || eB) {
+    if (motor !== 'nuevo') throw new Error('La planilla anterior admite 20 piezas por viento; con más, exportá la planilla de la cátedra 2025.');
+    await agregarFilasPiezas(zip, rutas, eA, eB, d.flex.slice(20).map(f => f.tipo ?? 'simétrica'));
+  }
+  const celdas = celdasAEscribir(d, r, motor);
   for (const [hoja, cs] of Object.entries(celdas)) {
     const ruta = rutas[hoja];
     if (!ruta) throw new Error(`La planilla no tiene la hoja «${hoja}».`);

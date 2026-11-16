@@ -46,7 +46,7 @@ export function correrFormula(f: string, df: number, dc: number): string {
 const RE_CELDA = (ref: string) => new RegExp(`<c r="${ref}"(?=[\\s/>])[^>]*?(?:/>|>[\\s\\S]*?</c>)`);
 
 /** Convierte un grupo de fórmula compartida en fórmulas explícitas (necesario antes de pisar la celda madre). */
-function expandirCompartida(xml: string, si: string): string {
+export function expandirCompartida(xml: string, si: string): string {
   const madreRe = new RegExp(`<c r="([A-Z]+\\d+)"[^>]*?><f t="shared" ref="[^"]*" si="${si}">([\\s\\S]*?)</f>`);
   const m = madreRe.exec(xml);
   if (!m) return xml;
@@ -61,7 +61,7 @@ function expandirCompartida(xml: string, si: string): string {
   });
 }
 
-function nuevaCelda(ref: string, estilo: string, v: ValorCelda): string {
+export function nuevaCelda(ref: string, estilo: string, v: ValorCelda): string {
   const s = estilo ? ` s="${estilo}"` : '';
   if ('num' in v) return isFinite(v.num) ? `<c r="${ref}"${s}><v>${v.num}</v></c>` : `<c r="${ref}"${s}/>`;
   if ('str' in v) return `<c r="${ref}"${s} t="inlineStr"><is><t>${esc(v.str)}</t></is></c>`;
@@ -126,3 +126,11 @@ export function borrarResultadosGuardados(xml: string): string {
   return xml.replace(/<c ([^>]*?)>(<f[^>]*?(?:\/>|>[\s\S]*?<\/f>))<v>[\s\S]*?<\/v><\/c>/g, (_s, attrs: string, f: string) =>
     `<c ${attrs.replace(/\st="(?:str|e|n|b)"/, '')}>${f}</c>`);
 }
+
+/** Convierte todas las fórmulas compartidas de una hoja en fórmulas explícitas. */
+export function expandirTodas(xml: string): string {
+  const sis = [...new Set([...xml.matchAll(/<f t="shared" ref="[^"]*" si="(\d+)">/g)].map(m => m[1]))];
+  for (const si of sis) xml = expandirCompartida(xml, si);
+  return xml;
+}
+export { esc as escaparXml, unesc as desescaparXml };

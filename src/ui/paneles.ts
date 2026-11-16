@@ -449,7 +449,7 @@ export function panelResultados(c: H, completo = true) {
     const tr = h('table', { class: 'tabla compacta' });
     tr.append(h('thead', {}, h('tr', {}, ...['Pieza', '% tras.', 'Q rot (t)', 'M planilla G+N (tm)', 'M corregido (tm)'].map(x => h('th', {}, x)))));
     const b = h('tbody');
-    r.B.slice(0, 20).forEach((J, i) => {
+    r.B.slice(0, r.nP).forEach((J, i) => {
       if (!(J > 1e-6)) return;
       const nombre = estado.calculo.asig?.piezas.find(pz => pz.dir === dir && pz.filaHoja === i)?.nombre ?? `fila ${i + 1}`;
       b.append(h('tr', {}, h('td', {}, nombre), h('td', { class: 'n' }, fmt(r.C[i] * 100, 1)), h('td', { class: 'n' }, fmt(r.N[i])), h('td', { class: 'n' }, fmt(r.O[i], 1)), h('td', { class: 'n' }, fmt(cr[i].Mtot, 1))));
