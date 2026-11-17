@@ -348,11 +348,11 @@ export function perfilDesdeCamino(p: Proyecto, c: Camino, gd?: string): { id: st
 }
 /** justificación de un muro sobre un camino: el camino es la cara izquierda, el eje o la cara derecha del muro */
 export type Justificacion = 'izq' | 'eje' | 'der';
-interface Tramo { a: Punto; b: Punto; bulge: number }
+export interface Tramo { a: Punto; b: Punto; bulge: number }
 const tangIni = (t: Tramo) => { const th = 4 * Math.atan(t.bulge), dx = t.b.x - t.a.x, dy = t.b.y - t.a.y, L = Math.hypot(dx, dy) || 1, c = Math.cos(-th / 2), s = Math.sin(-th / 2); return { x: (dx * c - dy * s) / L, y: (dx * s + dy * c) / L }; };
 const tangFin = (t: Tramo) => { const th = 4 * Math.atan(t.bulge), dx = t.b.x - t.a.x, dy = t.b.y - t.a.y, L = Math.hypot(dx, dy) || 1, c = Math.cos(th / 2), s = Math.sin(th / 2); return { x: (dx * c - dy * s) / L, y: (dx * s + dy * c) / L }; };
 /** tramos del camino: rectas y arcos; las Bézier se parten en rectas */
-function tramosDe(v: Camino['v'], cerrado: boolean): Tramo[] {
+export function tramosDe(v: Camino['v'], cerrado: boolean): Tramo[] {
   const n = v.length, out: Tramo[] = [];
   for (let i = 0; i < (cerrado ? n : n - 1); i++) {
     const a = v[i], b = v[(i + 1) % n];
@@ -372,7 +372,7 @@ function partirArco(t: Tramo): Tramo[] {
  * siendo arcos (mismo centro y mismo ángulo, radio ± d), las rectas se cortan en inglete. Si un arco no llega
  * tangente a su vecino, se parte en rectas cortas para poder cortarlo en inglete.
  */
-function paralela(ts: Tramo[], d: number, cerrado: boolean): { v: Camino['v'] } | { error: string } {
+export function paralelaTramos(ts: Tramo[], d: number, cerrado: boolean): { v: Camino['v'] } | { error: string } {
   const n = ts.length, tangente = (i: number, j: number) => { const u = tangFin(ts[i]), w = tangIni(ts[j]); return Math.abs(u.x * w.y - u.y * w.x) < 2e-3 && u.x * w.x + u.y * w.y > 0; };
   const izq = (t: Punto) => ({ x: -t.y, y: t.x });
   const ini: Punto[] = [], fin: Punto[] = [];
@@ -400,6 +400,13 @@ function paralela(ts: Tramo[], d: number, cerrado: boolean): { v: Camino['v'] } 
   if (!cerrado) pts.push(fin[n - 1]);
   return { v: pts.map((q, i) => ({ x: r4(q.x), y: r4(q.y), ...(i < n && ts[i].bulge ? { b: ts[i].bulge } : {}) })) };
 }
+/** tramos listos para desfasar: los arcos que no llegan tangentes a una esquina se parten en rectas cortas */
+export function tramosListos(v: Camino['v'], cerrado: boolean): Tramo[] {
+  const ts = tramosDe(v, cerrado), n0 = ts.length;
+  const tg = (i: number, j: number) => { const u = tangFin(ts[i]), w = tangIni(ts[j]); return Math.abs(u.x * w.y - u.y * w.x) < 2e-3 && u.x * w.x + u.y * w.y > 0; };
+  const partir = ts.map((t, i) => !!t.bulge && (((i > 0 || cerrado) && !tg((i - 1 + n0) % n0, i)) || ((i < n0 - 1 || cerrado) && !tg(i, (i + 1) % n0))));
+  return ts.flatMap((t, i) => (partir[i] ? partirArco(t) : [t]));
+}
 /**
  * Perfil de un muro de espesor e que sigue un camino (rectas, arcos y Bézier). Con «just» el camino es la cara
  * izquierda del muro (el muro queda a su izquierda), el eje o la cara derecha. Abierto: los extremos se cierran en
@@ -407,15 +414,11 @@ function paralela(ts: Tramo[], d: number, cerrado: boolean): { v: Camino['v'] } 
  */
 export function perfilSobreCamino(c: Pick<Camino, 'v' | 'cerrado'>, e: number, just: Justificacion = 'eje'): import('./perfil').Perfil | { error: string } {
   if (!(e > 0)) return { error: 'El espesor tiene que ser mayor que cero.' };
-  let ts = tramosDe(c.v, c.cerrado);
+  const ts = tramosListos(c.v, c.cerrado);
   if (!ts.length) return { error: 'El camino necesita al menos dos puntos.' };
-  // arcos que no llegan tangentes a una esquina: en rectas cortas
-  const n0 = ts.length, tg = (i: number, j: number) => { const u = tangFin(ts[i]), w = tangIni(ts[j]); return Math.abs(u.x * w.y - u.y * w.x) < 2e-3 && u.x * w.x + u.y * w.y > 0; };
-  const partir = ts.map((t, i) => !!t.bulge && ((i > 0 || c.cerrado) && !tg((i - 1 + n0) % n0, i) || (i < n0 - 1 || c.cerrado) && !tg(i, (i + 1) % n0)));
-  ts = ts.flatMap((t, i) => (partir[i] ? partirArco(t) : [t]));
   const dI = just === 'izq' ? e : just === 'eje' ? e / 2 : 0, dD = dI - e;
-  const L = dI ? paralela(ts, dI, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
-  const R = dD ? paralela(ts, dD, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
+  const L = dI ? paralelaTramos(ts, dI, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
+  const R = dD ? paralelaTramos(ts, dD, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
   if ('error' in L) return L;
   if ('error' in R) return R;
   if (c.cerrado) {

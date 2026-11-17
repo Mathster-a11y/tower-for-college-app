@@ -140,3 +140,13 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 ### Pendientes de la cátedra (preguntas abiertas, arriba)
 - [ ] Criterio de alas intermedias y de piezas con más de dos almas en el molde
 - [ ] Torsión de la Fig. 9, edificios flexibles (Gf), criterios de flexocompresión
+
+
+## Muros curvos y herramientas de dibujo (hecho)
+- «Muro curvo» en Colocar → Caminos: se traza el camino (rectas, arcos tangentes o por 3 puntos, Bézier) y al terminar
+  queda un muro (perfil) del espesor elegido, con justificación muro a la izquierda / eje / muro a la derecha. Los arcos
+  tangentes quedan exactos; un arco que llega en esquina se parte en tramos de 3°. Camino cerrado → anillo con hueco.
+- «Forma»: rectángulo, círculo, polígono regular y elipse con dos toques → perfil lleno, muro anillo o camino.
+- Editor de contorno: coordenadas x/y del vértice, empalme (radio) y chaflán, largo/ángulo/radio de un lado, dividir un
+  lado, desfasar hacia afuera/adentro, simetría, girar y escalar el contorno, cambiar el contorno por una forma, huecos
+  con forma, Shift = de a 15°, Ctrl+Z / Ctrl+Y.
