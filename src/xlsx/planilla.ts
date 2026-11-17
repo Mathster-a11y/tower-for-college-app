@@ -12,7 +12,8 @@ import JSZip from 'jszip';
 import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
 import { config, type Motor } from '../engine/config';
 import { COLUMNA_ORTO_49 } from '../engine/planilla';
-import { hojaEspeciales, hojaFlexGuia, hojaXml } from './hojasNuevas';
+import { hojaEspeciales, hojaXml } from './hojasNuevas';
+import { HOJA_FLEX, estilosFlex, hojaFlexXml } from './hojaFlex';
 import { TENSION_ADM } from '../engine/verificaciones';
 import type { Asignacion } from '../engine/mapping';
 import type { Proyecto } from '../engine/modelo';
@@ -186,8 +187,9 @@ export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
   if (extra) {
     const esp = hojaEspeciales(extra.asig, r, extra.p, motor);
     if (esp) await agregarHoja(zip, esp.nombre, hojaXml(esp), rutas);
-    const flex = hojaFlexGuia(extra.asig, r, extra.p, motor, TENSION_ADM(extra.p.hormigon || 'H30'));
-    if (flex) await agregarHoja(zip, flex.nombre, hojaXml(flex), rutas);
+    const { st, S, dxfOk, dxfNo } = estilosFlex(await zip.file('xl/styles.xml')!.async('string'));
+    const flex = hojaFlexXml(extra.asig, extra.p, motor, TENSION_ADM(extra.p.hormigon || 'H30'), S, dxfOk, dxfNo);
+    if (flex) { zip.file('xl/styles.xml', st); await agregarHoja(zip, HOJA_FLEX, flex, rutas); }
   }
   return { zip, rutas, celdas };
 }

@@ -24,7 +24,7 @@ const muchas = (): Proyecto => {
 /** dos tabiques perpendiculares en las filas 28–29 de las dos hojas de rototraslación */
 const conPar = (): Proyecto => ({ ...ejemploAsimetrico(), parPerp: { A: ['T6B', 'T1B'], B: ['T5', 'T6'] } });
 const casos: [string, () => Proyecto][] = [['par', conPar], ['muchas', muchas], ['guia', ejemploGuia], ['anexo', ejemploAsimetrico], ['p34', ejemploPlanta34], ...TORRES_PRUEBA.slice(0, 6).map((t, i) => [`P${i + 1}`, () => armarTorre(t)] as [string, () => Proyecto])];
-const catedra = new Set([...Object.values(HOJAS), 'Elementos especiales', 'Flexocompresión (guía)']);
+const catedra = new Set([...Object.values(HOJAS), 'Elementos especiales', 'Flexocompresión PB']);
 for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of casos) {
   config.motor = motor;
   const p = f();

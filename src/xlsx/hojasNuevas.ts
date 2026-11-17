@@ -7,7 +7,7 @@
 import type { Asignacion, PiezaEquivalente } from '../engine/mapping';
 import type { PlanillaRes } from '../engine/planilla';
 import { filaExcelJ } from '../engine/planilla';
-import { alturaYLosas, datosAlturaDe, partesDePieza } from '../engine/flexocompresion';
+import { partesDePieza } from '../engine/flexocompresion';
 import { tipoDe, type Muro, type Proyecto } from '../engine/modelo';
 import type { Motor } from '../engine/config';
 
@@ -54,7 +54,7 @@ export function hojaEspeciales(asig: Asignacion, _r: PlanillaRes, p: Proyecto, m
   const porId = new Map(p.muros.map(m => [m.id, m]));
   const filas: CeldaN[][] = [
     ['ELEMENTOS ESPECIALES (oblicuos, curvos, calados y piezas clasificadas a mano como especiales)'],
-    ['La hoja J de la cátedra lleva el rectángulo equivalente de cada uno (mismo J y misma área que la sección real). Acá va la sección real: su J, su baricentro, sus fibras extremas y el W real que usa la hoja de flexocompresión. La columna «J en la hoja J» lee el J de la planilla y «Diferencia» lo controla.'],
+    ['La hoja J de la cátedra lleva el rectángulo equivalente de cada uno (mismo J y misma área que la sección real). Acá va la sección real: su J, su baricentro, sus fibras extremas y su W real. La columna «J en la hoja J» lee el J de la planilla y «Diferencia» lo controla.'],
     [],
     ['Pieza', 'Viento', 'Fila hoja J', 'Muros', 'Tipo', 'Área real (m²)', 'J real (m⁴)', 'x baricentro (m)', 'y baricentro (m)', 'Posición H (m)', 'c arriba (m)', 'c abajo (m)', 'W real = J / c máx (m³)', 'b equivalente (m)', 'h equivalente (m)', 'J equivalente = b·h³/12 (m⁴)', 'Área equivalente = b·h (m²)', 'J en la hoja J (m⁴)', 'Diferencia (m⁴)'],
   ];
@@ -75,55 +75,4 @@ export function hojaEspeciales(asig: Asignacion, _r: PlanillaRes, p: Proyecto, m
     filas.push([pz.nombre, m.id, TIPO[tipoDe(m)] ?? tipoDe(m), m.dir, m.x, m.y, m.largo, m.espesor, ab, m.aberturas?.length ? m.caladoJ ?? 'entero' : '', cont]);
   }));
   return { nombre: 'Elementos especiales', filas, anchos: [10, 7, 9, 22, 20, 11, 11, 11, 11, 11, 10, 10, 14, 11, 11, 14, 14, 13, 12] };
-}
-
-// ------------------------------------------------------------------ flexocompresión (guía / CIRSOC)
-/**
- * Hoja «Flexocompresión (guía)»: la verificación de la guía (sección 5) muro por muro, en PB y para los dos vientos, con
- * fórmulas vivas. Cada pieza toma del momento en PB (M,NyQ) la misma fracción que toma de la fuerza en la rototraslación:
- * (traslación E + rotación N) / W (columnas de la hoja «Rototrasl.»). La «Flex comp PB paralelos» de la cátedra suma en
- * O = G + N un momento (G, tm) y una fuerza (N, t): por eso esta hoja no la usa.
- * Las almas, a flexocompresión con su fibra más alejada; las alas hacen un par (fuerza axial M·A·d / J).
- */
-export function hojaFlexGuia(asig: Asignacion, r: PlanillaRes, p: Proyecto, motor: Motor, adm: number): HojaNueva | null {
-  const piezas = asig.piezas.filter(z => z.filaHoja !== null);
-  if (!piezas.length) return null;
-  const porId = new Map(p.muros.map(m => [m.id, m]));
-  const alt = datosAlturaDe(p);
-  const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-  const filaPB = (asig.filaNivel[iPB] ?? 50) + 4;
-  const filas: CeldaN[][] = [
-    ['FLEXOCOMPRESIÓN EN PB · GUÍA «EDIFICIO EN TORRE» (SECCIÓN 5) Y CIRSOC'],
-    [`σ = −N / A ± M · y / J. N = peso propio (área × altura × 2,4 t/m³) + losas (0,7 t/m² descargado, 0,9 t/m² cargado, × área de influencia × losas). M de cada pieza en PB = M,NyQ (fila ${filaPB}) × su fracción de la fuerza en la rototraslación, (E + N) / D5. Las alas hacen un par. Tracción con el edificio descargado; compresión con el edificio cargado, contra σbk del hormigón (${adm} kg/cm²). As = T / 2400 kg/cm²; mínima 0,8 % de la sección. La «Flex comp PB paralelos» de la cátedra queda como estaba.`],
-    [],
-    ['Pieza', 'Viento', 'Muro', 'Papel', 'A (m²)', 'b (m)', 'h (m)', 'd (m)', 'J pieza (m⁴)', 'Altura (m)', 'Losas', 'Área inf. (m²)', 'Pp (t)', 'N descargado (t)', 'N cargado (t)', 'M pieza en PB (tm)', 'y máx (m)', 'σ por M (t/m²)', 'Tracción (kg/cm²)', 'Compresión (kg/cm²)', 'σbk (kg/cm²)', 'Verifica', 'x traccionado (m)', 'T (t)', 'As (cm²)', 'As mín (cm²)', 'Armadura', 'y1 (m)', 'y2 (m)', 'σ otra fibra, descargado (t/m²)'],
-  ];
-  for (const dir of ['A', 'B'] as const) {
-    const hojaR = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor', colM = dir === 'A' ? 'J' : 'O';
-    piezas.filter(z => z.dir === dir).forEach(pz => {
-      const muros = pz.muros.map(id => porId.get(id)).filter((m): m is Muro => !!m);
-      const { partes, J } = partesDePieza(muros, dir);
-      const areaDe = new Map<string, number>();
-      partes.forEach(q => areaDe.set(q.id, (areaDe.get(q.id) ?? 0) + q.A));
-      const rr = 5 + pz.filaHoja!;
-      partes.forEach(q => {
-        const m = porId.get(q.id)!, { altura, losas } = alturaYLosas(m, alt), f = filas.length + 1;
-        const frac = q.A / (areaDe.get(q.id) || q.A);
-        filas.push([pz.nombre, dir, q.id, q.papel, q.A, q.b, q.h, q.d, J, altura, losas, m.areaInf * frac,
-          { f: `E${f}*J${f}*2.4` }, { f: `M${f}+0.7*L${f}*K${f}` }, { f: `M${f}+0.9*L${f}*K${f}` },
-          { f: `ABS(('${hojaR}'!E${rr}+'${hojaR}'!N${rr})/'${hojaR}'!D5*'M,NyQ'!${colM}${filaPB})` },
-          { f: `IF(D${f}="ala",ABS(H${f}),MAX(ABS(AB${f}),ABS(AC${f})))` },
-          { f: `IF(I${f}>0,P${f}*Q${f}/I${f},0)` },
-          { f: `(-N${f}/E${f}+R${f})/10` }, { f: `(-O${f}/E${f}-R${f})/10` }, adm,
-          { f: `IF(ABS(MIN(0,T${f}))<=U${f},"VERIFICA","NO VERIFICA")` },
-          { f: `IF(S${f}<=0,0,IF(D${f}="ala",G${f},IF(AD${f}>=0,G${f},G${f}*S${f}*10/(S${f}*10-AD${f}))))` },
-          { f: `IF(S${f}<=0,0,IF(D${f}="ala",S${f}*10*E${f},IF(AD${f}>=0,(S${f}*10+AD${f})/2*E${f},S${f}*10*IF(D${f}="tubo",E${f}/G${f},F${f})*W${f}/2)))` },
-          { f: `X${f}*1000/2400` }, { f: `0.008*E${f}*10000` }, { f: `IF(Y${f}>Z${f},"por tracción","mínima")` },
-          { f: `H${f}-G${f}/2` }, { f: `H${f}+G${f}/2` },
-          { f: `IF(I${f}>0,-N${f}/E${f}+P${f}*SIGN(IF(ABS(AB${f})>=ABS(AC${f}),AB${f},AC${f}))*IF(ABS(AB${f})>=ABS(AC${f}),AC${f},AB${f})/I${f},-N${f}/E${f})` }]);
-      });
-    });
-  }
-  void r; void motor;
-  return { nombre: 'Flexocompresión (guía)', filas, anchos: [9, 7, 8, 7, 9, 8, 8, 8, 11, 9, 7, 10, 10, 12, 12, 13, 9, 11, 12, 12, 10, 12, 11, 10, 10, 10, 12, 8, 8, 13] };
 }

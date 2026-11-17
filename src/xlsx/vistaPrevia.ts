@@ -74,7 +74,12 @@ function leerEstilos(xml: string, tema: string[]) {
     return { fondo: fills[Number(/fillId="(\d+)"/.exec(a)?.[1] ?? 0)], fuente: Number(/fontId="(\d+)"/.exec(a)?.[1] ?? 0), formato: Number(/numFmtId="(\d+)"/.exec(a)?.[1] ?? 0),
       alinear: /horizontal="(\w+)"/.exec(al)?.[1], envolver: /wrapText="(?:1|true)"/.test(al) };
   });
-  return { xfs, fonts, formatos };
+  // formatos condicionales: relleno y letra de cada dxf
+  const dxfs = [...bloque('dxfs').matchAll(/<dxf>([\s\S]*?)<\/dxf>|<dxf\/>/g)].map(m => {
+    const d = m[1] ?? '';
+    return { fondo: colorDe(/<bgColor([^>]*)\/>/.exec(d)?.[1] ?? '', tema), color: colorDe(/<font>[\s\S]*?<color([^>]*)\/>/.exec(d)?.[1] ?? '', tema), negrita: /<b\/>/.test(d) };
+  });
+  return { xfs, fonts, formatos, dxfs };
 }
 
 // ------------------------------------------------------------------ números
@@ -126,7 +131,11 @@ function leerHoja(xml: string, compartidos: string[]) {
   const altos: Record<number, number> = {};
   for (const m of xml.matchAll(/<row ([^>]*?)>/g)) { const r = Number(/r="(\d+)"/.exec(m[1])?.[1]); const ht = /ht="([\d.]+)"/.exec(m[1])?.[1]; if (r && ht && /customHeight="(?:1|true)"/.test(m[1])) altos[r] = Math.round(Number(ht) * 4 / 3); }
   const combinadas = [...xml.matchAll(/<mergeCell ref="([A-Z]+\d+):([A-Z]+\d+)"\/>/g)].map(m => [m[1], m[2]] as const);
-  return { celdas, anchos, anchoBase, altos, combinadas };
+  // formato condicional «empieza con» (el que usan las hojas de la app), en el orden de prioridad
+  const condicionales = [...xml.matchAll(/<conditionalFormatting sqref="([^"]+)">([\s\S]*?)<\/conditionalFormatting>/g)].flatMap(m =>
+    [...m[2].matchAll(/<cfRule ([^>]*)>/g)].map(r => ({ rangos: m[1].split(/\s+/), tipo: /type="(\w+)"/.exec(r[1])?.[1], texto: desescaparXml(/text="([^"]*)"/.exec(r[1])?.[1] ?? ''), dxf: Number(/dxfId="(\d+)"/.exec(r[1])?.[1] ?? -1), prio: Number(/priority="(\d+)"/.exec(r[1])?.[1] ?? 0) })))
+    .filter(r => r.tipo === 'beginsWith' && r.dxf >= 0).sort((a, b) => a.prio - b.prio);
+  return { celdas, anchos, anchoBase, altos, combinadas, condicionales };
 }
 
 /** la planilla que se exportaría, calculada: las 7 hojas de la cátedra (o las que se pidan) */
@@ -156,8 +165,11 @@ export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: Planil
       const v = c.f !== undefined ? ev.celda(nombre, c.ref) : c.v ?? null;
       const codigo = est.formatos.get(xf?.formato ?? 0) ?? BASICOS[xf?.formato ?? 0];
       const texto = formatear(v, codigo);
-      if (texto === '' && !estilo.fondo) continue;
       const p = partirRef(c.ref);
+      const cf = typeof v === 'string' ? h.condicionales.find(r => v.startsWith(r.texto) && r.rangos.some(g => dentro(g, p))) : undefined;
+      const dx = cf ? est.dxfs[cf.dxf] : undefined;
+      if (dx) Object.assign(estilo, { ...(dx.fondo ? { fondo: dx.fondo } : {}), ...(dx.color ? { color: dx.color } : {}), ...(dx.negrita ? { negrita: true } : {}) });
+      if (texto === '' && !estilo.fondo) continue;
       filas = Math.max(filas, p.r); cols = Math.max(cols, p.c);
       celdas.set(c.ref, { texto, tipo: c.ref in datos ? 'dato' : c.f !== undefined ? 'formula' : 'texto', error: esError(v), ...(c.f !== undefined ? { f: c.f } : {}), estilo });
     }
@@ -174,6 +186,11 @@ export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: Planil
     out.push({ nombre, filas, cols, anchos, altos: h.altos, celdas, combinadas, tapadas });
   }
   return out;
+}
+/** la celda está en el rango (A1 o A1:B9) */
+function dentro(rango: string, p: { r: number; c: number }): boolean {
+  const [a, b = a] = rango.split(':'), x = partirRef(a), y = partirRef(b);
+  return p.r >= x.r && p.r <= y.r && p.c >= x.c && p.c <= y.c;
 }
 const colNombre = (n: number) => { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
 
