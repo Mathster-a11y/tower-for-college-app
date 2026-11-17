@@ -109,6 +109,11 @@ export interface Muro {
    */
   aberturas?: import('./aberturas').Abertura[] | null;
   /**
+   * qué J lleva a la planilla un elemento calado: «entero» (como la cátedra: las aberturas no cambian el J; por defecto)
+   * o «corte» (la sección más débil, cortada por las aberturas)
+   */
+  caladoJ?: 'entero' | 'corte' | null;
+  /**
    * perfil irregular (tipo «perfil»): contorno cerrado con rectas, arcos y Bézier, y sus huecos, con los vértices
    * respecto del baricentro (x, y). largo, espesor y dir son los de su caja (para las tablas).
    */
@@ -236,6 +241,17 @@ export function entraEnCalculo(m: Muro, zFund: number, zTop: number): boolean {
   return m.llega && (m.zDesde ?? zFund) <= zFund + 1e-6 && (m.zHasta ?? zTop) > 1e-6;
 }
 
+/**
+ * Clasificación de una pieza para la hoja J: automática (la app decide), tabique singular, compuesta simétrica (doble T:
+ * columnas B a K), compuesta asimétrica (W a AI), tubo circular (S, T), pórtico (AO a AU) o elemento especial (oblicuos,
+ * curvos, calados y cualquier sección: va como rectángulo equivalente, con su geometría en la hoja «Elementos especiales»)
+ */
+export type ClasePieza = 'auto' | 'singular' | 'simetrica' | 'asimetrica' | 'tubo' | 'portico' | 'especial';
+export const NOMBRE_CLASE: Record<ClasePieza, string> = {
+  auto: 'Automática', singular: 'Tabique singular', simetrica: 'Compuesta simétrica', asimetrica: 'Compuesta asimétrica',
+  tubo: 'Tubo circular', portico: 'Pórtico', especial: 'Elemento especial',
+};
+
 export interface Proyecto {
   version: 1;
   nombre: string;
@@ -268,6 +284,11 @@ export interface Proyecto {
    * dos piezas del otro viento. Vacío = el bloque general.
    */
   parPerp?: { A?: [string, string] | null; B?: [string, string] | null };
+  /**
+   * clasificación de cada pieza elegida por el usuario (por nombre de pieza; vacío = automática) y si entra al cálculo
+   * del J (enJ: false = no va a la hoja J; sus muros quedan fuera del cálculo en ese viento)
+   */
+  clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
 }

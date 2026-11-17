@@ -55,10 +55,19 @@ describe('calados que no parten el elemento', () => {
     expect(problemaAbertura(m, { s: 2, ancho: 0.8, desde: 0, alto: 3 }, 3)).toMatch(/toda la altura/);
     expect(problemaAbertura(m, { s: 2, ancho: 0.8, desde: 0, alto: 2.1 }, 3)).toBeNull();
   });
-  it('en la planilla: la pieza calada va con el rectángulo equivalente de su sección más débil', () => {
+  it('en la planilla, por defecto la pieza calada va entera (como la cátedra) y avisa', () => {
     const p = ejemploGuia();
     const m1 = p.muros.find(m => m.id === 'M1')!;
     m1.aberturas = [{ s: 0.5, ancho: 0.9, desde: 0, alto: 2.1 }];
+    const pz = aPlanilla(p).piezas.find(x => x.dir === 'A' && x.muros.includes('M1'))!;
+    expect(pz.fila).toEqual({ B: 0.2, C: 4.5 });
+    expect(pz.avisos.join(' ')).toMatch(/va entera en la hoja J/);
+  });
+  it('en la planilla, «con el corte»: la pieza calada va con el rectángulo equivalente de su sección más débil', () => {
+    const p = ejemploGuia();
+    const m1 = p.muros.find(m => m.id === 'M1')!;
+    m1.aberturas = [{ s: 0.5, ancho: 0.9, desde: 0, alto: 2.1 }];
+    m1.caladoJ = 'corte';
     const pz = aPlanilla(p).piezas.find(x => x.dir === 'A' && x.muros.includes('M1'))!;
     expect(pz.Jreal).toBeCloseTo(Jreal([m1], 'A'), 9);
     expect(pz.avisos.join(' ')).toMatch(/sección más débil/);

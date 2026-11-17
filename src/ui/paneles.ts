@@ -4,7 +4,7 @@ import { conEspesor } from '../engine/juntas';
 import { dibujoPerfil } from './perfil';
 import { AUTOR, ANIO, HASTA, LICENCIA_NOMBRE, LICENCIA_URL, vigente } from '../autoria';
 import { estado, fmt, COLORES } from './estado';
-import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
+import { NOMBRE_CLASE, tipoDe, type ClasePieza, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
 import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
 import { TENSION_ADM } from '../engine/verificaciones';
 import { datosAlturaDe, pesoMuro } from '../engine/flexocompresion';
@@ -419,6 +419,9 @@ function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElemen
     { titulo: 'Muro', clave: 'id', leer: m => m.id, escribir: () => { avisoPanel('El nombre del muro se cambia en la tabla de Muros (Diseño → Muros).'); return false; } },
     { titulo: 'Dir.', clave: 'dir', leer: m => m.dir, escribir: () => false },
     num('Largo', 'largo', 0.01), num('Esp.', 'espesor', 0.01), num('x (m)', 'x'), num('y (m)', 'y'),
+    { titulo: 'Calado (J)', clave: 'caladoJ', ayuda: 'Solo muros con puertas o ventanas: «entero» (como la cátedra, las aberturas no cambian el J) o «corte» (la sección más débil)',
+      leer: m => (m.aberturas?.length ? m.caladoJ ?? 'entero' : null),
+      escribir: (m, v) => { const t = String(v ?? '').trim().toLowerCase(); if (!m.aberturas?.length) return false; if (t.startsWith('c')) m.caladoJ = 'corte'; else if (t.startsWith('e') || !t) delete m.caladoJ; else return false; } },
     { titulo: 'Lado y', clave: 'ladoY', tipo: 'numero', ayuda: 'Solo tubo rectangular', leer: m => (tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : null),
       escribir: (m, v) => { const x = aNumero(v); if (tipoDe(m) !== 'tubo-rect') return false; if (x === null || Number.isNaN(x) || x <= 0) return false; m.ladoY = x; } },
   ], { id: `medidas-${dir}`, filas: () => estado.proyecto.muros.filter(m => ids.includes(m.id)), clave: m => m.id, alElegirFila: m => estado.elegir(m?.id ?? null),
@@ -428,11 +431,11 @@ function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElemen
 export function panelPiezas(c: H) {
   const { asig, res } = estado.calculo;
   if (!asig) return;
-  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. Simétrica: el muro suelto o la doble T con alas iguales y centradas. Asimétrica: todo lo demás (C, U, L, T, E), un muro por columna: ala sup., alma izq., alma der. y ala inf. «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
+  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. «Clase» la elegís vos: automática (la app decide: simétrica si el baricentro cae sobre el eje de la pieza o dentro del material, como una doble T o un cajón; asimétrica si se corre hacia un lado, como una C, U o L), tabique singular, compuesta simétrica o asimétrica, tubo circular, pórtico o elemento especial (oblicuos, curvos, calados: rectángulo equivalente con su geometría en la hoja «Elementos especiales»). Sin tildar «J», la pieza no entra al cálculo del J en ese viento. Los muros calados van enteros (como la cátedra) salvo que en sus medidas elijas «corte». «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
   for (const dir of ['A', 'B'] as const) {
     c.append(h('h3', {}, dir === 'A' ? 'Viento A · J Tabiques paralelos' : 'Viento B · J Tabiques ortogonales'));
     const t = h('table', { class: 'tabla compacta' });
-    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Muros', 'Molde', 'N.º', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
+    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Clase', 'J', 'Muros', 'Molde', 'N.º', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
     const tb = h('tbody');
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
@@ -442,13 +445,28 @@ export function panelPiezas(c: H) {
       nom.addEventListener('click', ev => ev.stopPropagation());
       nom.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') nom.blur(); if (ev.key === 'Escape') { nom.value = pz.nombre; nom.blur(); } });
       nom.addEventListener('change', () => renombrarPieza(dir, pz.nombre, nom.value));
+      // clasificación elegida a mano (vacía = automática) y si entra al cálculo del J
+      const cfg = estado.proyecto.clasesPieza?.[pz.nombre] ?? {};
+      const clase = h('select', { 'aria-label': `Clase de ${pz.nombre}`, title: 'Cómo va la pieza a la hoja J. Automática: la app decide (simétrica si el baricentro cae sobre el eje de la pieza o dentro del material). Elemento especial: oblicuos, curvos, calados o cualquier sección, con el rectángulo equivalente y su geometría en la hoja «Elementos especiales».' }) as HTMLSelectElement;
+      (Object.keys(NOMBRE_CLASE) as ClasePieza[]).forEach(k => clase.append(new Option(NOMBRE_CLASE[k], k)));
+      clase.value = cfg.clase ?? 'auto';
+      const enJ = h('input', { type: 'checkbox', 'aria-label': `${pz.nombre} entra al cálculo del J`, title: 'Entra al cálculo del J (sin tildar: no va a la hoja J de este viento)' }) as HTMLInputElement;
+      enJ.checked = cfg.enJ !== false;
+      const ponerCfg = (f: (c: { clase?: ClasePieza | null; enJ?: boolean | null }) => void) => estado.cambiar(p => {
+        const cs = (p.clasesPieza ??= {}); const c0 = { ...(cs[pz.nombre] ?? {}) }; f(c0);
+        if ((!c0.clase || c0.clase === 'auto') && c0.enJ !== false) delete cs[pz.nombre]; else cs[pz.nombre] = c0;
+        if (!Object.keys(cs).length) delete p.clasesPieza;
+      });
+      clase.addEventListener('change', () => ponerCfg(c0 => { c0.clase = clase.value === 'auto' ? null : clase.value as ClasePieza; }));
+      enJ.addEventListener('change', () => ponerCfg(c0 => { c0.enJ = enJ.checked ? null : false; }));
+      [clase, enJ].forEach(x => x.addEventListener('click', ev => ev.stopPropagation()));
       const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
-        h('td', {}, nom), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+        h('td', {}, nom), h('td', {}, clase), h('td', {}, enJ), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);
       tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });
       tb.append(tr);
-      pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '6' }, a))));
+      pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '8' }, a))));
     });
     t.append(tb);
     c.append(h('div', { class: 'scroll' }, t));
