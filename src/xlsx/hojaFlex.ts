@@ -1,31 +1,32 @@
 /**
- * Hoja «Flexocompresión PB»: la verificación de la guía «Edificio en torre» (sección 5), pensada para que el alumno la
- * lea y la use en la planilla de la cátedra sin la app. Una fila por pieza, en el orden de las hojas J, y en cada
- * columna un solo paso, con su fórmula escrita arriba:
+ * Hoja «Flexocompresión PB»: la verificación de la guía «Edificio en torre» (sección 5) con el lenguaje y la estética
+ * de las hojas de la cátedra, y que calcula sola dentro del Excel: no lleva ningún número calculado por la app.
+ * Todo sale de otras celdas de la misma planilla:
  *
- *   N = Pp + losa · área de influencia · n.º de losas     (Pp = A · H · γ)
- *   M = % del viento que toma la pieza (hoja Rototrasl.) · M en PB (hoja M,NyQ)
- *   W = J / c                                             (c = h/2 en un tabique)
- *   σ = −N / A ± M / W                                    (− compresión, + tracción)
+ *   superficie, altura de la pieza y eje neutro → «J Tabiques paralelos / ortogonales» (columnas O, P, S, X…, AK)
+ *   J y % del viento que toma (traslación + rotación) → «Rototrasl. cara mayor / menor» (B, E, N y D5)
+ *   altura, niveles y área de influencia (viento A) → «Flex comp PB paralelos» (C, G y F)
+ *   momento volcador en PB → «M,NyQ» (J y O de la fila de PB)
  *
- * Compresión con el edificio cargado (Nq) contra σadm; tracción con el edificio descargado (Ng): triángulo traccionado,
- * T = σt · b · x / 2 y As = T / σe, con la cuantía mínima de 0,8 %. Los coeficientes están en celdas amarillas
- * arriba y todas las fórmulas los leen de ahí. Las celdas amarillas de cada pieza son los datos que el alumno completa
- * (la app las llena con su torre); el J y el % se leen de las hojas de la cátedra.
+ * Lo único que escribe la app son los datos que la cátedra no tiene en otra hoja (como en sus celdas blancas): el tipo
+ * de cada pieza (columna naranja, como «Piezas» de la Flex de la cátedra) y la carga de las piezas del viento B. Los
+ * coeficientes (γ, losas, σadm, σe, cuantía) están en celdas amarillas abajo y todas las fórmulas los leen de ahí.
+ *
+ *   σ = −N / F ± M / W          (− compresión, + tracción; F = superficie, W = J / c)
  */
 import type { Asignacion, PiezaEquivalente } from '../engine/mapping';
-import type { Muro, Proyecto } from '../engine/modelo';
+import type { Proyecto } from '../engine/modelo';
 import type { Motor } from '../engine/config';
-import { alturaYLosas, datosAlturaDe, partesDePieza } from '../engine/flexocompresion';
+import { filaExcelJ } from '../engine/planilla';
 
 export const HOJA_FLEX = 'Flexocompresión PB';
 
 // ------------------------------------------------------------------ estilos (se agregan al final de styles.xml)
-export type EstiloFlex = 'tit' | 'sub' | 'secc' | 'grupo' | 'cab' | 'form' | 'lab' | 'paso' | 'nro' | 'dato' | 'datoTxt' | 'datoPct'
-  | 'n2' | 'n3' | 'pct' | 'txtC' | 'res' | 'nota';
+export type EstiloFlex = 'tit' | 'pb' | 'banda' | 'cab' | 'desc' | 'unid' | 'nro' | 'calc' | 'clave' | 'pct' | 'dato' | 'res'
+  | 'simetrica' | 'asimetrica' | 'tubo' | 'portico' | 'nota' | 'formula' | 'lab' | 'coef';
 const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** agrega a styles.xml las letras, rellenos, bordes, formatos y estilos de la hoja; devuelve el índice de cada estilo y de los dos formatos condicionales */
+/** agrega a styles.xml los estilos de la hoja (Arial, bordes finos, rellenos de la cátedra); devuelve sus índices y los de los formatos condicionales */
 export function estilosFlex(st: string): { st: string; S: Record<EstiloFlex, number>; dxfOk: number; dxfNo: number } {
   if (!/<dxfs[\s>]/.test(st)) st = st.replace(/(<tableStyles|<colors|<extLst|<\/styleSheet>)/, '<dxfs count="0"></dxfs>$1');
   st = st.replace(/<dxfs count="(\d+)"\s*\/>/, '<dxfs count="$1"></dxfs>');
@@ -42,53 +43,41 @@ export function estilosFlex(st: string): { st: string; S: Record<EstiloFlex, num
     agregar('numFmts', `<numFmt numFmtId="${id}" formatCode="${esc(code)}"/>`);
     return id;
   };
-  const font = (b: boolean, sz: number, color: string, i = false) => agregar('fonts', `<font>${b ? '<b/>' : ''}${i ? '<i/>' : ''}<sz val="${sz}"/><color rgb="FF${color}"/><name val="Arial"/><family val="2"/></font>`);
+  const font = (sz: number, b = false, color = '000000') => agregar('fonts', `<font>${b ? '<b/>' : ''}<sz val="${sz}"/><color rgb="FF${color}"/><name val="Arial"/><family val="2"/></font>`);
   const fill = (rgb: string) => agregar('fills', `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgb}"/><bgColor indexed="64"/></patternFill></fill>`);
-  const fTit = font(true, 14, '1F4E79'), fSub = font(false, 10, '404040', true), fBlanca = font(true, 10, 'FFFFFF'), fNeg = font(true, 9, '1F2328'),
-    fForm = font(false, 8, '595959', true), fNorm = font(false, 10, '1F2328'), fRes = font(true, 10, '1F2328'), fPaso = font(false, 9, '1F2328');
-  const flAzul = fill('1F4E79'), flCeleste = fill('DDEBF7'), flGris = fill('F2F2F2'), flAmarillo = fill('FFFF99'), flVerdoso = fill('F7FBF2');
-  const borde = agregar('borders', '<border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border>');
-  const n2 = fmt('0.00'), n3 = fmt('0.000'), pc = fmt('0.0%'), n0 = fmt('0');
+  const fTit = font(14, true, '0000FF'), fPB = font(18, true), f8 = font(8), f10 = font(10), f10b = font(10, true);
+  const amarilloClaro = fill('FFFF99'), amarillo = fill('FFFF00'), gris = fill('C0C0C0'), naranja = fill('FFCC00'), verde = fill('99CC00'), celeste = fill('00CCFF'), lila = fill('CC99FF');
+  const fino = agregar('borders', '<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>');
+  const medio = agregar('borders', '<border><left style="medium"/><right style="medium"/><top style="medium"/><bottom style="medium"/><diagonal/></border>');
+  // el formato de la cátedra: dos decimales y los negativos en rojo
+  const n2 = fmt('0.00_ ;[Red]\\-0.00\\ '), pc = fmt('0.0%'), n0 = fmt('0');
   const xf = (f: number, fl = 0, b = 0, num = 0, al: { h?: string; wrap?: boolean } = {}) => agregar('cellXfs',
     `<xf numFmtId="${num}" fontId="${f}" fillId="${fl}" borderId="${b}" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"${al.h ? ` horizontal="${al.h}"` : ''}${al.wrap ? ' wrapText="1"' : ''}/></xf>`);
   const S: Record<EstiloFlex, number> = {
-    tit: xf(fTit), sub: xf(fSub, 0, 0, 0, { wrap: true }),
-    secc: xf(fBlanca, flAzul, borde, 0, { wrap: true }), grupo: xf(fNeg, flCeleste, borde, 0, { h: 'center', wrap: true }),
-    cab: xf(fNeg, flGris, borde, 0, { h: 'center', wrap: true }), form: xf(fForm, flGris, borde, 0, { h: 'center', wrap: true }),
-    lab: xf(fNorm, 0, borde, 0, { wrap: true }), paso: xf(fPaso, flVerdoso, borde, 0, { wrap: true }),
-    nro: xf(fNorm, 0, borde, n0, { h: 'center' }),
-    dato: xf(fNorm, flAmarillo, borde, n2), datoTxt: xf(fRes, flAmarillo, borde, 0, { h: 'center' }), datoPct: xf(fNorm, flAmarillo, borde, pc),
-    n2: xf(fNorm, 0, borde, n2), n3: xf(fNorm, 0, borde, n3), pct: xf(fNorm, 0, borde, pc), txtC: xf(fNorm, 0, borde, 0, { h: 'center' }),
-    res: xf(fRes, 0, borde, 0, { h: 'center', wrap: true }), nota: xf(fPaso, 0, 0, 0, { wrap: true }),
+    tit: xf(fTit, 0, medio, 0, { h: 'center', wrap: true }), pb: xf(fPB, 0, medio, 0, { h: 'center' }),
+    banda: xf(f10, gris, fino, 0, { h: 'center' }),
+    cab: xf(f8, 0, fino, 0, { h: 'center', wrap: true }), desc: xf(f8, 0, fino, 0, { h: 'center', wrap: true }), unid: xf(f10, 0, fino, 0, { h: 'center' }),
+    nro: xf(f10, amarilloClaro, fino, n0, { h: 'right' }), calc: xf(f10, amarilloClaro, fino, n2), clave: xf(f10, amarillo, fino, n2), pct: xf(f10, amarilloClaro, fino, pc),
+    dato: xf(f10, 0, fino, n2), res: xf(f10b, amarillo, fino, 0, { h: 'center' }),
+    simetrica: xf(f10, naranja, fino), asimetrica: xf(f10, verde, fino), tubo: xf(f10, celeste, fino), portico: xf(f10, lila, fino),
+    nota: xf(f10), formula: xf(f10b, 0, 0, 0, { h: 'center' }), lab: xf(f10, 0, fino, 0, { wrap: true }), coef: xf(f10, amarillo, fino, 0, { h: 'right' }),
   };
   const dxfOk = agregar('dxfs', '<dxf><font><b/><color rgb="FF006100"/></font><fill><patternFill patternType="solid"><bgColor rgb="FFC6EFCE"/></patternFill></fill></dxf>');
   const dxfNo = agregar('dxfs', '<dxf><font><b/><color rgb="FF9C0006"/></font><fill><patternFill patternType="solid"><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf>');
   return { st, S, dxfOk, dxfNo };
 }
 
-// ------------------------------------------------------------------ la hoja
+// ------------------------------------------------------------------ armado de la hoja
 type Valor = string | number | null;
 const COL = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 const colN = (c: string) => [...c].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
-const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
-
-/** columnas de la tabla de piezas (letra → qué es) */
-const C = {
-  nro: 'A', pieza: 'B', A: 'C', h: 'D', c: 'E', b: 'F', J: 'G', W: 'H', H: 'I', losas: 'J', Ainf: 'K',
-  Pp: 'L', Ng: 'M', Nq: 'N', pct: 'O', M: 'P', e: 'Q', k: 'R', trac: 'S', sc: 'T', st: 'U', vc: 'V',
-  x: 'W', T: 'X', As: 'Y', Asmin: 'Z', Ascol: 'AA', res: 'AB',
-} as const;
-const ULTIMA = C.res;
-/** celdas de los datos generales */
-const G = { gamma: '$G$5', g: '$G$6', q: '$G$7', adm: '$G$8', se: '$G$9', cuantia: '$G$10', MA: '$G$11', MB: '$G$12' } as const;
 
 class Armador {
   celdas = new Map<string, [Valor, EstiloFlex]>();
   merges: string[] = [];
   altos = new Map<number, number>();
-  cf: { rango: string; ok: boolean }[] = [];
+  cf: string[] = [];
   p(ref: string, v: Valor, e: EstiloFlex) { this.celdas.set(ref, [v, e]); }
-  /** combina un rango y pone el valor en su primera celda (las demás con el mismo estilo, para los bordes) */
   m(desde: string, hasta: string, v: Valor, e: EstiloFlex) {
     const [, c0, f0] = /^([A-Z]+)(\d+)$/.exec(desde)!, [, c1, f1] = /^([A-Z]+)(\d+)$/.exec(hasta)!;
     for (let f = +f0; f <= +f1; f++) for (let c = colN(c0); c <= colN(c1); c++) this.p(`${COL(c)}${f}`, null, e);
@@ -99,7 +88,7 @@ class Armador {
     const filas = new Map<number, [string, Valor, EstiloFlex][]>();
     for (const [r, [v, e]] of this.celdas) { const f = +/\d+$/.exec(r)![0]; if (!filas.has(f)) filas.set(f, []); filas.get(f)!.push([r, v, e]); }
     const out: string[] = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
-      '<sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane xSplit="2" topLeftCell="C1" activePane="topRight" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="14"/><cols>'];
+      '<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="5" topLeftCell="B6" activePane="bottomRight" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="12.75"/><cols>'];
     anchos.forEach((w, i) => out.push(`<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`));
     out.push('</cols><sheetData>');
     for (const f of [...filas.keys()].sort((a, b) => a - b)) {
@@ -117,43 +106,37 @@ class Armador {
     out.push('</sheetData>');
     if (this.merges.length) out.push(`<mergeCells count="${this.merges.length}">${this.merges.map(r => `<mergeCell ref="${r}"/>`).join('')}</mergeCells>`);
     let prio = 1;
-    for (const { rango } of this.cf) {
+    for (const rango of this.cf) {
       const c0 = rango.split(':')[0];
       out.push(`<conditionalFormatting sqref="${rango}">`
         + `<cfRule type="beginsWith" dxfId="${dxfNo}" priority="${prio++}" stopIfTrue="1" operator="beginsWith" text="NO"><formula>LEFT(${c0},2)="NO"</formula></cfRule>`
         + `<cfRule type="beginsWith" dxfId="${dxfOk}" priority="${prio++}" operator="beginsWith" text="VERIFICA"><formula>LEFT(${c0},8)="VERIFICA"</formula></cfRule>`
         + '</conditionalFormatting>');
     }
-    out.push('<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToHeight="0"/></worksheet>');
+    out.push('<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9"/></worksheet>');
     return out.join('');
   }
 }
 
-export interface DatosPiezaFlex {
-  nro: number; nombre: string; filaRoto: number;
-  A: number; h: number; c: number | null; b: number; H: number; losas: number; Ainf: number;
-}
+/** tipo de pieza como lo escribe la columna naranja (el mismo vocabulario que «Piezas» en la Flex de la cátedra) */
+export type TipoFlex = 'simetrica' | 'asimetrica' | 'tubo' | 'portico';
+export const tipoFlexDe = (pz: PiezaEquivalente | undefined): TipoFlex =>
+  !pz ? 'simetrica' : pz.molde === 'asimétrico' ? 'asimetrica' : pz.molde === 'tubo' ? 'tubo' : pz.molde === 'pórtico' ? 'portico' : 'simetrica';
 
-/** datos de cada pieza que van en las celdas amarillas (los mismos que completaría el alumno) */
-export function datosFlex(asig: Asignacion, p: Proyecto): { A: DatosPiezaFlex[]; B: DatosPiezaFlex[] } {
-  const porId = new Map(p.muros.map(m => [m.id, m]));
-  const alt = datosAlturaDe(p);
-  const de = (pz: PiezaEquivalente): DatosPiezaFlex => {
-    const muros = pz.muros.map(id => porId.get(id)).filter((m): m is Muro => !!m);
-    const { partes } = partesDePieza(muros, pz.dir);
-    const A = partes.reduce((s, q) => s + q.A, 0);
-    const sup = partes.length ? Math.max(...partes.map(q => q.d + q.h / 2)) : 0;
-    const inf = partes.length ? Math.max(...partes.map(q => -(q.d - q.h / 2))) : 0;
-    const h = sup + inf, cMax = Math.max(sup, inf);
-    // ancho de la sección en el borde más alejado (el que se tracciona primero)
-    const borde = partes.filter(q => Math.abs((cMax === sup ? q.d + q.h / 2 : -(q.d - q.h / 2)) - cMax) < 1e-6);
-    const b = borde.length ? Math.max(...borde.map(q => q.b)) : 0;
-    let H = 0, losas = 0;
-    for (const m of muros) { const x = alturaYLosas(m, alt); if (x.altura > H) { H = x.altura; losas = x.losas; } }
-    return { nro: pz.filaHoja! + 1, nombre: pz.nombre, filaRoto: 5 + pz.filaHoja!, A: r4(A), h: r4(h), c: Math.abs(sup - inf) < 1e-4 ? null : r4(cMax), b: r4(b), H: r4(H), losas, Ainf: r4(pz.areaInf) };
+/**
+ * Columnas de la hoja J de cada dato de la sección. «J Tabiques ortogonales» de la planilla 2025 (49 columnas) tiene
+ * las asimétricas y los pórticos dos columnas antes que las otras tres hojas J.
+ */
+function columnasJ(dir: 'A' | 'B', motor: Motor) {
+  const corto = dir === 'B' && motor === 'nuevo';
+  return {
+    hoja: dir === 'A' ? 'J Tabiques paralelos' : 'J Tabiques ortogonales',
+    /** asimétrica: alto del ala superior, largo del alma izquierda, alto del ala inferior, distancia al eje neutro, ancho del ala superior y del alma */
+    h1: 'X', h2: corto ? 'AA' : 'AB', h4: corto ? 'AG' : 'AI', xn: corto ? 'AI' : 'AK', b1: 'W', b2: 'Z',
+    /** pórtico: altura total, ancho del pie superior y superficie de los dos pies */
+    Hp: corto ? 'AO' : 'AQ', Bp: corto ? 'AM' : 'AO',
+    Ap: corto ? (r: number) => `AM${r}*AN${r}+AR${r}*AS${r}` : (r: number) => `AO${r}*AP${r}+AT${r}*AU${r}`,
   };
-  const lista = (dir: 'A' | 'B') => asig.piezas.filter(z => z.dir === dir && z.filaHoja !== null).sort((a, b) => a.filaHoja! - b.filaHoja!).map(de);
-  return { A: lista('A'), B: lista('B') };
 }
 
 /** fila de «M,NyQ» de la planta baja */
@@ -162,118 +145,148 @@ export function filaPB(asig: Asignacion, p: Proyecto): number {
   return (asig.filaNivel[iPB] ?? 50) + 4;
 }
 
+/** columnas de cada tabla */
+const C = {
+  nro: 'A', F: 'B', h: 'C', c: 'D', b: 'E', J: 'F', W: 'G', H: 'H', niv: 'I', Ainf: 'J', Pp: 'K', Ng: 'L', Nq: 'M',
+  pct: 'N', M: 'O', e: 'P', k: 'Q', sc: 'R', st: 'S', vc: 'T', x: 'U', T: 'V', As: 'W', Asmin: 'X', Ascol: 'Y', res: 'Z', tipo: 'AA',
+} as const;
+const ULTIMA = C.tipo;
+/** primera fila de la tabla del viento A (encabezado en la 3, descripción en la 4, unidades en la 5) */
+export const FILA_A = 6;
+
 /** XML de la hoja (null si no hay piezas) */
-export function hojaFlexXml(asig: Asignacion, p: Proyecto, _motor: Motor, adm: number, S: Record<EstiloFlex, number>, dxfOk: number, dxfNo: number): string | null {
-  const d = datosFlex(asig, p);
-  if (!d.A.length && !d.B.length) return null;
+export function hojaFlexXml(asig: Asignacion, p: Proyecto, motor: Motor, adm: number, S: Record<EstiloFlex, number>, dxfOk: number, dxfNo: number): string | null {
+  const nA = asig.datos.jpar.length, nB = asig.datos.jort.length;
+  if (!nA && !nB) return null;
   const fPB = filaPB(asig, p);
+  const pieza = (dir: 'A' | 'B', i: number) => asig.piezas.find(z => z.dir === dir && z.filaHoja === i);
+  // carga de las piezas del viento B (la cátedra no tiene dónde ponerla): la misma altura y niveles que la Flex del viento A
+  const flex0 = asig.datos.flex.find(f => f && f.C !== null) ?? { C: 0, G: 0 };
   const h = new Armador();
-  const fin = ULTIMA;
+  const n20 = (n: number) => Math.max(20, n);
+  // filas: título, viento A (banda, encabezados, piezas), viento B, coeficientes
+  const filaB = FILA_A + n20(nA) + 1;
+  const primeraB = filaB + 4;
+  const filaCoef = primeraB + n20(nB) + 2;
+  const K = { gamma: `$G$${filaCoef + 1}`, g: `$G$${filaCoef + 2}`, q: `$G$${filaCoef + 3}`, adm: `$G$${filaCoef + 4}`, se: `$G$${filaCoef + 5}`, cuantia: `$G$${filaCoef + 6}`, MA: `$G$${filaCoef + 7}`, MB: `$G$${filaCoef + 8}` };
 
-  h.m('A1', `${fin}1`, 'FLEXOCOMPRESIÓN EN PLANTA BAJA · verificación de cada pieza', 'tit'); h.altos.set(1, 24);
-  h.m('A2', `${fin}2`, 'Cada pieza trabaja como una ménsula empotrada en la fundación: en PB recibe el mayor momento del viento y la mayor carga vertical. Se verifica con la fórmula de Resistencia de Materiales σ = −N / A ± M / W (guía «Edificio en torre», sección 5). Cada fila es una pieza de las hojas J, en el mismo orden; cada columna es un paso, con su fórmula escrita en la fila gris.', 'sub');
-  h.altos.set(2, 42);
+  h.m('A1', 'Y1', 'VERIFICACIÓN A FLEXOCOMPRESIÓN DE TABIQUES O NÚCLEOS DE CONTRAVIENTO EN PLANTA BAJA', 'tit'); h.altos.set(1, 33.75);
+  h.m('Z1', `${ULTIMA}1`, 'PB', 'pb');
 
-  // 1 · datos generales
-  h.m('A4', 'H4', '1 · COEFICIENTES (los usa toda la hoja; en amarillo, se pueden cambiar)', 'secc');
-  const coef: [string, Valor, string, EstiloFlex][] = [
-    ['Peso específico del hormigón armado  γ', 2.4, 't/m³', 'dato'],
-    ['Carga de cada losa SIN sobrecarga  g  (edificio descargado)', 0.7, 't/m²', 'dato'],
-    ['Carga de cada losa CON sobrecarga  q  (edificio cargado)', 0.9, 't/m²', 'dato'],
-    [`Tensión admisible de compresión del hormigón  σadm  (la guía usa σbk: ${p.hormigon || 'H30'} → ${adm})`, adm, 'kg/cm²', 'dato'],
-    ['Tensión del acero  σe  (para pasar de fuerza a armadura)', 2400, 'kg/cm²', 'dato'],
-    ['Cuantía mínima de armadura vertical (CIRSOC)', 0.008, 'de A', 'datoPct'],
-    [`Momento volcador en PB, viento A  (hoja M,NyQ, celda J${fPB})`, `='M,NyQ'!J${fPB}`, 'tm', 'n2'],
-    [`Momento volcador en PB, viento B  (hoja M,NyQ, celda O${fPB})`, `='M,NyQ'!O${fPB}`, 'tm', 'n2'],
-  ];
-  coef.forEach(([t, v, u, e], i) => { const f = 5 + i; h.m(`A${f}`, `F${f}`, t, 'lab'); h.p(`G${f}`, v, e); h.p(`H${f}`, u, 'txtC'); h.altos.set(f, 26); });
-
-  // 2 · pasos
-  h.m('J4', `${fin}4`, '2 · CÓMO SE LEE (un paso por grupo de columnas)', 'secc');
-  const pasos = [
-    '① Cargas verticales. Pp = A · H · γ (peso propio). N = Pp + losa · área de influencia · n.º de losas: sin sobrecarga Ng (con g) y con sobrecarga Nq (con q).',
-    '② Momento de la pieza. M = % · M en PB. El % es la parte del viento que toma la pieza en la hoja Rototrasl. (traslación + rotación): (E + N) / D5 de su fila.',
-    '③ Módulo resistente. W = J / c, con c = distancia del baricentro a la fibra más alejada (en un tabique rectangular, c = h / 2). El J es el de la hoja J.',
-    '④ Tensiones en los bordes. σ = −N / A ± M / W, pasadas a kg/cm² (÷ 10). Negativo = compresión, positivo = tracción.',
-    '⑤ Compresión: con el edificio CARGADO (Nq) en el borde comprimido. Verifica si |σ comp| ≤ σadm.',
-    '⑥ Tracción: con el edificio DESCARGADO (Ng), cuando el peso menos la frena. Si e = M / Ng ≤ k = W / A (núcleo central), toda la sección queda comprimida y no hay tracción.',
-    '⑦ Armadura. Si hay tracción: x = largo traccionado (semejanza de triángulos), T = σt · b · x / 2 y As = T / σe. Se coloca la mayor entre As y la mínima (0,8 % de A), en los dos bordes porque el viento cambia de sentido.',
-    'Colores: amarillo = dato de la pieza (completalo o revisalo) · blanco = fórmula · verde / rojo = resultado.',
-  ];
-  pasos.forEach((t, i) => h.m(`J${5 + i}`, `${fin}${5 + i}`, t, 'paso'));
-
-  // 3 · tablas de piezas
-  let f = 14;
-  const tabla = (dir: 'A' | 'B', piezas: DatosPiezaFlex[]) => {
-    const hojaR = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor', MPB = dir === 'A' ? G.MA : G.MB;
-    h.m(`A${f}`, `${fin}${f}`, dir === 'A' ? '3 · VIENTO A (sobre la cara mayor) · piezas de «J Tabiques paralelos» y «Rototrasl. cara mayor»' : '4 · VIENTO B (sobre la cara menor) · piezas de «J Tabiques ortogonales» y «Rototrasl. cara menor»', 'secc');
-    h.altos.set(f, 20); f++;
-    const grupos: [string, string, string][] = [
-      [C.nro, C.pieza, 'Pieza'], [C.A, C.W, '③ Sección'], [C.H, C.Ainf, 'Datos de carga'], [C.Pp, C.Nq, '① Cargas verticales'],
-      [C.pct, C.M, '② Momento'], [C.e, C.trac, '⑥ Núcleo central'], [C.sc, C.st, '④ Tensiones en los bordes'],
-      [C.vc, C.vc, '⑤ Compresión'], [C.x, C.Ascol, '⑦ Tracción y armadura'], [C.res, C.res, 'Resultado'],
+  const encabezados = (f: number, dir: 'A' | 'B') => {
+    const roto = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor', hj = dir === 'A' ? 'J Tabiques paralelos' : 'J Tabiques ortogonales';
+    const cab: [string, string, string, string][] = [
+      [C.nro, 'Nº DEL TABIQUE', '', ''],
+      [C.F, 'SUPERFICIE DE LA PIEZA EN PLANTA', `F (de ${hj})`, 'm2'],
+      [C.h, 'ALTURA TOTAL DE LA PIEZA (en el sentido del viento)', 'h', 'm'],
+      [C.c, 'DISTANCIA DEL EJE NEUTRO A LA FIBRA MÁS ALEJADA', 'c = h/2 (asim.: al eje neutro)', 'm'],
+      [C.b, 'ANCHO DE LA PIEZA EN EL BORDE', 'b (espesor o ala)', 'm'],
+      [C.J, 'MOMENTO DE INERCIA DE LA PIEZA', `Jj (de ${roto})`, 'm4'],
+      [C.W, 'W  RESISTENTE', 'W = J / c', 'm3'],
+      [C.H, 'ALTURA DE TERRAZA A NIVEL CONSID.', dir === 'A' ? 'de Flex comp PB' : 'completar', 'm'],
+      [C.niv, 'CANTIDAD DE NIVELES POR ENCIMA', dir === 'A' ? 'de Flex comp PB' : 'completar', ''],
+      [C.Ainf, 'AREA DE INFLUENCIA', dir === 'A' ? 'de Flex comp PB' : 'completar', 'm2'],
+      [C.Pp, 'PESO DEL TABIQUE O NÚCLEO', 'Pp = F · h · 2,4', 'ton'],
+      [C.Ng, 'N  DESCARG. (Ng)', 'Pp + 0,7 · área · niveles', 'ton'],
+      [C.Nq, 'N  CARGADO (Nq)', 'Pp + 0,9 · área · niveles', 'ton'],
+      [C.pct, '% DEL VIENTO QUE TOMA LA PIEZA', `(E + N) / D5 de ${roto}`, '%'],
+      [C.M, 'MOMENTO VOLCADOR QUE TOMA', 'M = % · M en PB', 'tm'],
+      [C.e, 'EXCENTR. DEL TABIQUE DESCARG.', 'e = M / Ng', 'm'],
+      [C.k, 'LIMITE DEL NUCLEO CENTRAL', 'k = W / F', 'm'],
+      [C.sc, 'tensión de compresión cargado', 'σ = −Nq/F − M/W', 'kg / cm2'],
+      [C.st, 'tensión en el borde traccionado descargado', 'σ = −Ng/F + M/W', 'kg / cm2'],
+      [C.vc, 'COMPRESIÓN', '|σ| ≤ σ adm', ''],
+      [C.x, 'LARGO TRACCIONADO', 'x (semejanza de triángulos)', 'm'],
+      [C.T, 'FUERZA DE TRACCIÓN', 'T = σ · b · x / 2', 'ton'],
+      [C.As, 'ARMADURA POR TRACCIÓN', 'As = T / σe', 'cm2'],
+      [C.Asmin, 'ARMADURA MÍNIMA', '0,8 % de F', 'cm2'],
+      [C.Ascol, 'ARMADURA A COLOCAR EN CADA BORDE', 'la mayor', 'cm2'],
+      [C.res, 'RESULTADO', '', ''],
+      [C.tipo, 'Piezas', 'simetrica · asimetrica · tubo · portico', ''],
     ];
-    grupos.forEach(([a, b, t]) => h.m(`${a}${f}`, `${b}${f}`, t, 'grupo'));
-    f++;
-    const cab: [string, string, string][] = [
-      [C.nro, 'N.º', 'fila en la hoja J'], [C.pieza, 'Pieza', ''],
-      [C.A, 'A (m²)', 'área en planta'], [C.h, 'h (m)', 'largo en el sentido del viento'], [C.c, 'c (m)', 'baricentro → fibra más alejada; tabique: h/2'],
-      [C.b, 'b (m)', 'ancho en el borde (espesor del tabique)'], [C.J, 'J (m⁴)', `hoja ${hojaR}, col. B`], [C.W, 'W (m³)', 'W = J / c'],
-      [C.H, 'H (m)', 'altura sobre PB'], [C.losas, 'Losas', 'n.º de losas que carga'], [C.Ainf, 'Área inf. (m²)', 'área de influencia'],
-      [C.Pp, 'Pp (t)', 'Pp = A·H·γ'], [C.Ng, 'Ng (t)', 'Ng = Pp + g·Área·Losas'], [C.Nq, 'Nq (t)', 'Nq = Pp + q·Área·Losas'],
-      [C.pct, '% del viento', `(E + N) / D5 en ${hojaR}`], [C.M, 'M (tm)', 'M = % · M en PB'],
-      [C.e, 'e (m)', 'e = M / Ng'], [C.k, 'k (m)', 'k = W / A'], [C.trac, '¿Hay tracción?', 'sí, si e > k'],
-      [C.sc, 'σ compresión (kg/cm²)', 'cargado: (−Nq/A − M/W) / 10'], [C.st, 'σ tracción (kg/cm²)', 'descargado: (−Ng/A + M/W) / 10'],
-      [C.vc, '|σ comp| ≤ σadm', ''],
-      [C.x, 'x (m)', 'largo traccionado'], [C.T, 'T (t)', 'T = σt·b·x / 2'], [C.As, 'As (cm²)', 'As = T / σe'],
-      [C.Asmin, 'As mín (cm²)', '0,8 % de A'], [C.Ascol, 'As a colocar (cm²)', 'la mayor; en cada borde'], [C.res, '', ''],
-    ];
-    cab.forEach(([c, t]) => h.p(`${c}${f}`, t, 'cab')); h.altos.set(f, 30); f++;
-    cab.forEach(([c, , fo]) => h.p(`${c}${f}`, fo, 'form')); h.altos.set(f, 34); f++;
-    const desde = f;
-    if (!piezas.length) { h.m(`A${f}`, `${fin}${f}`, 'No hay piezas en este viento.', 'lab'); f++; return; }
-    for (const z of piezas) {
-      const r = f, R = (c: string) => `${c}${r}`, roto = (c: string) => `'${hojaR}'!${c}${z.filaRoto}`;
-      h.p(R(C.nro), z.nro, 'nro'); h.p(R(C.pieza), z.nombre, 'datoTxt');
-      h.p(R(C.A), z.A, 'dato'); h.p(R(C.h), z.h, 'dato'); h.p(R(C.c), z.c ?? `=${R(C.h)}/2`, z.c === null ? 'n2' : 'dato'); h.p(R(C.b), z.b, 'dato');
-      h.p(R(C.J), `=${roto('B')}`, 'n3'); h.p(R(C.W), `=IF(${R(C.c)}>0,${R(C.J)}/${R(C.c)},0)`, 'n3');
-      h.p(R(C.H), z.H, 'dato'); h.p(R(C.losas), z.losas, 'dato'); h.p(R(C.Ainf), z.Ainf, 'dato');
-      h.p(R(C.Pp), `=${R(C.A)}*${R(C.H)}*${G.gamma}`, 'n2');
-      h.p(R(C.Ng), `=${R(C.Pp)}+${G.g}*${R(C.Ainf)}*${R(C.losas)}`, 'n2');
-      h.p(R(C.Nq), `=${R(C.Pp)}+${G.q}*${R(C.Ainf)}*${R(C.losas)}`, 'n2');
-      h.p(R(C.pct), `=IF('${hojaR}'!$D$5=0,0,ABS((${roto('E')}+${roto('N')})/'${hojaR}'!$D$5))`, 'pct');
-      h.p(R(C.M), `=${R(C.pct)}*ABS(${MPB})`, 'n2');
-      h.p(R(C.e), `=IF(${R(C.Ng)}>0,${R(C.M)}/${R(C.Ng)},0)`, 'n3');
-      h.p(R(C.k), `=IF(${R(C.A)}>0,${R(C.W)}/${R(C.A)},0)`, 'n3');
-      h.p(R(C.trac), `=IF(${R(C.e)}<=${R(C.k)},"no","sí")`, 'txtC');
-      const ok = `${R(C.A)}*${R(C.W)}>0`;
-      h.p(R(C.sc), `=IF(${ok},(-${R(C.Nq)}/${R(C.A)}-${R(C.M)}/${R(C.W)})/10,0)`, 'n2');
-      h.p(R(C.st), `=IF(${ok},(-${R(C.Ng)}/${R(C.A)}+${R(C.M)}/${R(C.W)})/10,0)`, 'n2');
-      h.p(R(C.vc), `=IF(ABS(${R(C.sc)})<=${G.adm},"VERIFICA","NO VERIFICA")`, 'res');
-      // tensión del otro borde con el edificio descargado (comprimido): −Ng/A − M·(h − c)/J
-      const otra = `(-${R(C.Ng)}/${R(C.A)}-${R(C.M)}*(${R(C.h)}-${R(C.c)})/${R(C.J)})/10`;
-      h.p(R(C.x), `=IF(${R(C.st)}<=0,0,IF(${R(C.J)}<=0,0,MIN(${R(C.h)},${R(C.h)}*${R(C.st)}/(${R(C.st)}-${otra}))))`, 'n3');
-      h.p(R(C.T), `=${R(C.st)}*10*${R(C.b)}*${R(C.x)}/2`, 'n2');
-      h.p(R(C.As), `=${R(C.T)}*1000/${G.se}`, 'n2');
-      h.p(R(C.Asmin), `=${G.cuantia}*${R(C.A)}*10000`, 'n2');
-      h.p(R(C.Ascol), `=MAX(${R(C.As)},${R(C.Asmin)})`, 'n2');
-      h.p(R(C.res), `=IF(${R(C.vc)}="NO VERIFICA","NO VERIFICA: mucha compresión",IF(${R(C.As)}>${R(C.Asmin)},"VERIFICA · armar por tracción","VERIFICA · armadura mínima"))`, 'res');
-      f++;
-    }
-    h.cf.push({ rango: `${C.vc}${desde}:${C.vc}${f - 1}`, ok: true }, { rango: `${C.res}${desde}:${C.res}${f - 1}`, ok: true });
-    f++;
+    cab.forEach(([c, t, d, u]) => { h.p(`${c}${f}`, t, 'cab'); h.p(`${c}${f + 1}`, d, 'desc'); h.p(`${c}${f + 2}`, u, 'unid'); });
+    h.altos.set(f, 45); h.altos.set(f + 1, 24);
   };
-  tabla('A', d.A);
-  tabla('B', d.B);
 
-  h.m(`A${f}`, `${fin}${f}`, '5 · SI NO VERIFICA', 'secc'); f++;
-  const notas = [
-    'Compresión excesiva (σ comp > σadm): la pieza es chica para la carga. Más área y más W: alargar el tabique en el sentido del viento (W crece con h²), engrosarlo o sumarle alas; o un hormigón de más resistencia.',
-    'Mucha tracción (As > mínima): conviene que la pieza cargue más losa (más área de influencia → más N, que comprime) o que sea más larga en el sentido del viento. La guía busca que la tracción sea nula o muy chica.',
-    'Para revisar a mano: con e ≤ k la sección queda toda comprimida (no hay tracción) y alcanza la armadura mínima. Compará siempre σ comp con σadm y As con As mín.',
+  const tabla = (dir: 'A' | 'B', f0: number, n: number) => {
+    const { hoja: hj, h1, h2, h4, xn, b1, b2, Hp, Bp, Ap } = columnasJ(dir, motor);
+    const roto = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor', MPB = dir === 'A' ? K.MA : K.MB;
+    for (let i = 0; i < n20(n); i++) {
+      const r = f0 + i, R = (c: string) => `${c}${r}`, fj = filaExcelJ(dir, i, motor), J = (c: string) => `'${hj}'!${c}${fj}`, Ro = (c: string) => `'${roto}'!${c}${5 + i}`;
+      const tipo = `${R(C.tipo)}`, pz = i < n ? pieza(dir, i) : undefined, tf = tipoFlexDe(pz);
+      const vacia = `${R(C.J)}<0.0001`;
+      h.p(R(C.nro), dir === 'A' ? i + 1 : i + 21, 'nro');
+      h.p(R(C.F), `=IF(${tipo}="portico",${Ap(fj).replace(/([A-Z]+\d+)/g, `'${hj}'!$1`)},${J('O')})`, 'calc');
+      h.p(R(C.h), `=IF(${tipo}="tubo",${J('S')},IF(${tipo}="asimetrica",${J(h1)}+${J(h2)}+${J(h4)},IF(${tipo}="portico",${J(Hp)},${J('P')})))`, 'calc');
+      h.p(R(C.c), `=IF(${tipo}="asimetrica",MAX(${J(xn)},${R(C.h)}-${J(xn)}),${R(C.h)}/2)`, 'calc');
+      h.p(R(C.b), `=IF(${tipo}="tubo",${J('S')}-${J('T')},IF(${tipo}="asimetrica",IF(${J(h1)}>0.05,${J(b1)},${J(b2)}),IF(${tipo}="portico",${J(Bp)},IF(${J('G')}>0.05,${J('F')},${J('B')}))))`, 'calc');
+      h.p(R(C.J), `=${Ro('B')}`, 'calc');
+      h.p(R(C.W), `=IF(${R(C.c)}>0,${R(C.J)}/${R(C.c)},0)`, 'calc');
+      if (dir === 'A') {
+        h.p(R(C.H), `='Flex comp PB paralelos'!C${4 + i}`, 'calc');
+        h.p(R(C.niv), `='Flex comp PB paralelos'!G${4 + i}`, 'calc');
+        h.p(R(C.Ainf), `='Flex comp PB paralelos'!F${4 + i}`, 'calc');
+      } else {
+        h.p(R(C.H), pz ? flex0.C ?? 0 : null, 'dato');
+        h.p(R(C.niv), pz ? flex0.G ?? 0 : null, 'dato');
+        h.p(R(C.Ainf), pz ? Math.round(pz.areaInf * 1e4) / 1e4 : null, 'dato');
+      }
+      h.p(R(C.Pp), `=${R(C.F)}*${R(C.H)}*${K.gamma}`, 'calc');
+      h.p(R(C.Ng), `=${R(C.Pp)}+${R(C.Ainf)}*${R(C.niv)}*${K.g}`, 'calc');
+      h.p(R(C.Nq), `=${R(C.Pp)}+${R(C.Ainf)}*${R(C.niv)}*${K.q}`, 'calc');
+      h.p(R(C.pct), `=IF('${roto}'!$D$5=0,0,ABS((${Ro('E')}+${Ro('N')})/'${roto}'!$D$5))`, 'pct');
+      h.p(R(C.M), `=${R(C.pct)}*ABS(${MPB})`, 'calc');
+      h.p(R(C.e), `=IF(${R(C.Ng)}>0,${R(C.M)}/${R(C.Ng)},0)`, 'calc');
+      h.p(R(C.k), `=IF(${R(C.F)}>0,${R(C.W)}/${R(C.F)},0)`, 'calc');
+      const ok = `${R(C.F)}*${R(C.W)}>0`;
+      h.p(R(C.sc), `=IF(${ok},(-${R(C.Nq)}/${R(C.F)}-${R(C.M)}/${R(C.W)})*0.1,0)`, 'clave');
+      h.p(R(C.st), `=IF(${ok},(-${R(C.Ng)}/${R(C.F)}+${R(C.M)}/${R(C.W)})*0.1,0)`, 'clave');
+      h.p(R(C.vc), `=IF(${vacia},"",IF(ABS(${R(C.sc)})<=${K.adm},"VERIFICA","NO VERIFICA"))`, 'res');
+      // tensión del otro borde con el edificio descargado: −Ng/F − M·(h − c)/J
+      const otra = `(-${R(C.Ng)}/${R(C.F)}-${R(C.M)}*(${R(C.h)}-${R(C.c)})/${R(C.J)})*0.1`;
+      h.p(R(C.x), `=IF(${R(C.st)}<=0,0,IF(${R(C.J)}<=0,0,MIN(${R(C.h)},${R(C.h)}*${R(C.st)}/(${R(C.st)}-${otra}))))`, 'calc');
+      h.p(R(C.T), `=${R(C.st)}*10*${R(C.b)}*${R(C.x)}/2`, 'calc');
+      h.p(R(C.As), `=${R(C.T)}*1000/${K.se}`, 'calc');
+      h.p(R(C.Asmin), `=IF(${vacia},0,${K.cuantia}*${R(C.F)}*10000)`, 'calc');
+      h.p(R(C.Ascol), `=MAX(${R(C.As)},${R(C.Asmin)})`, 'clave');
+      h.p(R(C.res), `=IF(${vacia},"",IF(${R(C.vc)}="NO VERIFICA","NO VERIFICA",IF(${R(C.As)}>${R(C.Asmin)},"VERIFICA, armar por tracción","VERIFICA, armadura mínima")))`, 'res');
+      h.p(R(C.tipo), tf, tf);
+    }
+    h.cf.push(`${C.vc}${f0}:${C.vc}${f0 + n20(n) - 1}`, `${C.res}${f0}:${C.res}${f0 + n20(n) - 1}`);
+  };
+
+  h.m('A2', `${ULTIMA}2`, 'VIENTO A (sobre la cara mayor) · PIEZAS PARALELAS AL VIENTO: J Tabiques paralelos y Rototrasl. cara mayor', 'banda');
+  encabezados(3, 'A');
+  tabla('A', FILA_A, nA);
+  h.m(`A${filaB}`, `${ULTIMA}${filaB}`, 'VIENTO B (sobre la cara menor) · PIEZAS ORTOGONALES: J Tabiques ortogonales y Rototrasl. cara menor', 'banda');
+  encabezados(filaB + 1, 'B');
+  tabla('B', primeraB, nB);
+
+  // coeficientes, fórmulas y criterio, como las notas al pie de la Flex de la cátedra
+  const f = filaCoef;
+  h.m(`A${f}`, `H${f}`, 'COEFICIENTES QUE USA LA HOJA (se pueden cambiar)', 'banda');
+  const coef: [string, Valor, string][] = [
+    ['Peso específico del hormigón armado', 2.4, 't/m3'],
+    ['Carga de cada losa sin sobrecarga (descargado)', 0.7, 't/m2'],
+    ['Carga de cada losa con sobrecarga (cargado)', 0.9, 't/m2'],
+    [`Tensión admisible de compresión del hormigón (σbk del ${p.hormigon || 'H30'})`, adm, 'kg/cm2'],
+    ['Tensión del acero', 2400, 'kg/cm2'],
+    ['Cuantía mínima de armadura vertical', 0.008, ''],
+    [`Momento volcador en PB, viento A (M,NyQ J${fPB})`, `='M,NyQ'!J${fPB}`, 'tm'],
+    [`Momento volcador en PB, viento B (M,NyQ O${fPB})`, `='M,NyQ'!O${fPB}`, 'tm'],
   ];
-  notas.forEach(t => { h.m(`A${f}`, `${fin}${f}`, t, 'nota'); h.altos.set(f, 28); f++; });
+  coef.forEach(([t, v, u], i) => { const r = f + 1 + i; h.m(`A${r}`, `F${r}`, t, 'lab'); h.p(`G${r}`, v, typeof v === 'string' ? 'calc' : 'coef'); h.p(`H${r}`, u, 'unid'); });
+  h.p(`J${f + 1}`, 'T=-N/F-M/W', 'formula'); h.p(`L${f + 1}`, 'T=-N/F+M/W', 'formula');
+  const notas = [
+    'Se verifica en PB, donde el momento del viento y la carga vertical son máximos. Cada pieza es una ménsula empotrada en la fundación.',
+    'Compresión: con el edificio CARGADO (Nq). VERIFICA si la tensión de compresión no supera la admisible del hormigón.',
+    'Tracción: con el edificio DESCARGADO (Ng). Si la excentricidad e no pasa el límite del núcleo central k, toda la pieza queda comprimida.',
+    'Si hay tracción se arma el triángulo traccionado (T = σ · b · x / 2; As = T / σe), en los dos bordes porque el viento cambia de sentido. Nunca menos que la mínima.',
+    'Si NO VERIFICA: más superficie y más W (alargar la pieza en el sentido del viento, engrosarla o sumarle alas) o un hormigón de más resistencia.',
+    'Completar el tipo de cada pieza en la columna «Piezas» y, en el viento B, la altura, los niveles y el área de influencia.',
+  ];
+  notas.forEach((t, i) => h.m(`J${f + 2 + i}`, `${ULTIMA}${f + 2 + i}`, t, 'nota'));
 
-  const anchos = [6, 10, 8, 8, 9, 8, 9, 9, 8, 7, 9, 9, 9, 9, 10, 10, 8, 8, 9, 12, 12, 13, 8, 8, 9, 9, 11, 42];
+  const anchos = [9, 12, 12, 12, 11, 12, 12, 12, 11, 12, 11, 12, 12, 12, 12, 12, 12, 12, 13, 14, 12, 12, 12, 12, 12, 34, 18.29];
   return h.xml(S, anchos, dxfOk, dxfNo);
 }

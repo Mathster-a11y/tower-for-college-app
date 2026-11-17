@@ -90,7 +90,8 @@ export function formatear(v: Valor, codigo: string | undefined): string {
   if (typeof v === 'boolean') return v ? 'VERDADERO' : 'FALSO';
   if (typeof v === 'string') return v;
   const c = (codigo ?? 'General').split(';')[v < 0 ? 1 : 0] ?? codigo ?? 'General';
-  const usarSigno = !(v < 0 && (codigo ?? '').includes(';'));
+  // con sección negativa propia, el signo es el que ella escriba (\- o -), como en Excel
+  const usarSigno = !(v < 0 && (codigo ?? '').includes(';')) || /^(?:\[[^\]]*\])*(?:\\-|-)/.test(c);
   if (!c || /^general$/i.test(c.trim()) || !/[0#]/.test(c)) {
     if (Math.abs(v) >= 1e11 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(4).replace('.', ',');
     return String(Number(v.toPrecision(10))).replace('.', ',');
@@ -165,6 +166,7 @@ export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: Planil
       const v = c.f !== undefined ? ev.celda(nombre, c.ref) : c.v ?? null;
       const codigo = est.formatos.get(xf?.formato ?? 0) ?? BASICOS[xf?.formato ?? 0];
       const texto = formatear(v, codigo);
+      if (typeof v === 'number' && v < 0 && /;\s*\[(?:Red|Rojo)\]/i.test(codigo ?? '')) estilo.color = '#ff0000';
       const p = partirRef(c.ref);
       const cf = typeof v === 'string' ? h.condicionales.find(r => v.startsWith(r.texto) && r.rangos.some(g => dentro(g, p))) : undefined;
       const dx = cf ? est.dxfs[cf.dxf] : undefined;
