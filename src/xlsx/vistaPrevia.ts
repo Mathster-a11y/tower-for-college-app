@@ -6,6 +6,8 @@
  */
 import type { PlanillaDatos, PlanillaRes } from '../engine/planilla';
 import type { Motor } from '../engine/config';
+import type { Asignacion } from '../engine/mapping';
+import type { Proyecto } from '../engine/modelo';
 import { prepararPlanilla } from './planilla';
 import { expandirTodas, leerCompartidos, desescaparXml } from './xml';
 import { Evaluador, esError, partirRef, type CeldaLibro, type Libro, type Valor } from './formulas';
@@ -128,8 +130,8 @@ function leerHoja(xml: string, compartidos: string[]) {
 }
 
 /** la planilla que se exportaría, calculada: las 7 hojas de la cátedra (o las que se pidan) */
-export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor): Promise<HojaVista[]> {
-  const { zip, rutas, celdas: escritas } = await prepararPlanilla(plantilla, d, r, motor);
+export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor, extra?: { asig: Asignacion; p: Proyecto }): Promise<HojaVista[]> {
+  const { zip, rutas, celdas: escritas } = await prepararPlanilla(plantilla, d, r, motor, extra);
   const compartidos = leerCompartidos(await zip.file('xl/sharedStrings.xml')?.async('string') ?? null);
   const tema = leerTema(await zip.file('xl/theme/theme1.xml')?.async('string') ?? null);
   const est = leerEstilos(await zip.file('xl/styles.xml')!.async('string'), tema);
@@ -176,8 +178,8 @@ export async function vistaPrevia(plantilla: ArrayBuffer | Uint8Array, d: Planil
 const colNombre = (n: number) => { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
 
 /** valores numéricos de todas las fórmulas (para compararlos con LibreOffice): hoja → celda → valor */
-export async function valoresFormulas(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor): Promise<Record<string, Record<string, Valor>>> {
-  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor);
+export async function valoresFormulas(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor, extra?: { asig: Asignacion; p: Proyecto }): Promise<Record<string, Record<string, Valor>>> {
+  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor, extra);
   const compartidos = leerCompartidos(await zip.file('xl/sharedStrings.xml')?.async('string') ?? null);
   const libro: Libro = new Map();
   for (const [nombre, ruta] of Object.entries(rutas)) {

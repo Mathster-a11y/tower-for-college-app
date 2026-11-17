@@ -24,7 +24,7 @@ const muchas = (): Proyecto => {
 /** dos tabiques perpendiculares en las filas 28–29 de las dos hojas de rototraslación */
 const conPar = (): Proyecto => ({ ...ejemploAsimetrico(), parPerp: { A: ['T6B', 'T1B'], B: ['T5', 'T6'] } });
 const casos: [string, () => Proyecto][] = [['par', conPar], ['muchas', muchas], ['guia', ejemploGuia], ['anexo', ejemploAsimetrico], ['p34', ejemploPlanta34], ...TORRES_PRUEBA.slice(0, 6).map((t, i) => [`P${i + 1}`, () => armarTorre(t)] as [string, () => Proyecto])];
-const catedra = new Set(Object.values(HOJAS));
+const catedra = new Set([...Object.values(HOJAS), 'Elementos especiales', 'Flexocompresión (guía)']);
 for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of casos) {
   config.motor = motor;
   const p = f();
@@ -32,7 +32,7 @@ for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of ca
   if (motor === 'actual' && (a.datos.jpar.length > 20 || a.datos.jort.length > 20)) continue;
   const r = calcularPlanilla(a.datos);
   writeFileSync(`${dir}/${motor}_${nombre}.xlsx`, await escribirPlanilla(plantillas[motor], a.datos, r, p, undefined, undefined, { motor, virgen: true, asig: a }));
-  const vals = await valoresFormulas(plantillas[motor], a.datos, r, motor);
+  const vals = await valoresFormulas(plantillas[motor], a.datos, r, motor, { asig: a, p });
   const lista: [string, string, unknown][] = [];
   for (const [h, cs] of Object.entries(vals)) if (catedra.has(h)) for (const [ref, v] of Object.entries(cs)) lista.push([h, ref, typeof v === 'object' && v !== null ? { error: (v as { error: string }).error } : v]);
   writeFileSync(`${dir}/${motor}_${nombre}.json`, JSON.stringify(lista));

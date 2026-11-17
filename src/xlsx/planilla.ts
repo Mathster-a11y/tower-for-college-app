@@ -12,7 +12,8 @@ import JSZip from 'jszip';
 import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
 import { config, type Motor } from '../engine/config';
 import { COLUMNA_ORTO_49 } from '../engine/planilla';
-import { hojaEspeciales, hojaXml } from './hojasNuevas';
+import { hojaEspeciales, hojaFlexGuia, hojaXml } from './hojasNuevas';
+import { TENSION_ADM } from '../engine/verificaciones';
 import type { Asignacion } from '../engine/mapping';
 import type { Proyecto } from '../engine/modelo';
 import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
@@ -164,7 +165,7 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
  * La plantilla de la cátedra con los datos de la torre: agrega las filas de piezas que hagan falta (planilla 2025) y
  * escribe las celdas de datos. Es el primer paso de la exportación y lo que muestra la vista previa.
  */
-export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor) {
+export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor, extra?: { asig: Asignacion; p: Proyecto }) {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
   // planilla 2025 con más de 20 piezas en un viento: se agregan las filas (con sus fórmulas) antes de escribir los datos
@@ -181,20 +182,24 @@ export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
     for (const [ref, v] of Object.entries(cs)) xml = escribirCelda(xml, ref, v);
     zip.file(ruta, xml);
   }
+  // hojas nuevas de la app, después de las 7 de la cátedra (no tocan ninguna de ellas)
+  if (extra) {
+    const esp = hojaEspeciales(extra.asig, r, extra.p, motor);
+    if (esp) await agregarHoja(zip, esp.nombre, hojaXml(esp), rutas);
+    const flex = hojaFlexGuia(extra.asig, r, extra.p, motor, TENSION_ADM(extra.p.hormigon || 'H30'));
+    if (flex) await agregarHoja(zip, flex.nombre, hojaXml(flex), rutas);
+  }
   return { zip, rutas, celdas };
 }
 
 export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
   op: { motor?: Motor; virgen?: boolean; asig?: Asignacion } = {}): Promise<Uint8Array> {
   const motor = op.motor ?? config.motor;
-  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor);
+  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor, op.asig ? { asig: op.asig, p } : undefined);
   for (const ruta of Object.values(rutas)) {
     const f = zip.file(ruta);
     if (f) zip.file(ruta, borrarResultadosGuardados(await f.async('string')));
   }
-  // hojas nuevas de la app, después de las 7 de la cátedra (no tocan ninguna de ellas)
-  const esp = op.asig ? hojaEspeciales(op.asig, r, p, motor) : null;
-  if (esp) await agregarHoja(zip, esp.nombre, hojaXml(esp), rutas);
   // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
   for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);

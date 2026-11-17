@@ -151,7 +151,7 @@ export function montarVistaPlanilla() {
     estadoTxt.textContent = 'Calculando…';
     try {
       const { p, motor, asig, res, metodo } = armar();
-      const hs = await vistaPrevia(await plantilla(motor), asig.datos, res, motor);
+      const hs = await vistaPrevia(await plantilla(motor), asig.datos, res, motor, { asig, p });
       if (yo !== turno) return;
       const nuevaLista = hs.map(x => x.nombre).join('|') !== hojas.map(x => x.nombre).join('|');
       hojas = hs.filter(x => x.celdas.size);

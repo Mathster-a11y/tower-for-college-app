@@ -1,7 +1,7 @@
 /**
  * Evaluador de fórmulas de Excel, lo justo para las planillas de la cátedra (vista previa de la exportación):
  * números, textos, referencias (A1, $A$1, 'Hoja'!A1, rangos), + − * / ^ &, comparaciones, y las funciones que usan
- * las planillas: SUM, MAX, MIN, IF, POWER, PI, ABS, SQRT, AVERAGE. Sigue las reglas de Excel: una celda vacía vale 0
+ * las planillas: SUM, MAX, MIN, IF, POWER, PI, ABS, SQRT, SIGN, AVERAGE. Sigue las reglas de Excel: una celda vacía vale 0
  * en una cuenta, los errores se propagan (#DIV/0!, #NUM!, #VALUE!, #REF!, #NAME?) y SUM y MAX saltean textos en rangos.
  */
 
@@ -223,6 +223,10 @@ export class Evaluador {
         if (typeof x !== 'number') return x;
         if (typeof y !== 'number') return y;
         return potencia(x, y);
+      }
+      case 'SIGN': {
+        const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja));
+        return typeof x !== 'number' ? x : Math.sign(x);
       }
       case 'ABS': case 'SQRT': {
         const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja));
