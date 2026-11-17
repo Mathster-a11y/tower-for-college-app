@@ -251,9 +251,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       }
     }
     // capa de tensiones: cada muro de las piezas del viento, piso por piso, con su peor fibra
-    const tens = estado.capas.tensiones && !roto ? mapaTensiones() : null;
+    // también sobre la deformada: cada piso de cada muro, del color de su peor fibra, se mueve con la torre
+    const tens = estado.capas.tensiones ? mapaTensiones() : null;
     leyT.hidden = !tens;
-    if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
+    leyT.classList.toggle('arriba', !!roto);            // con la deformada, abajo a la izquierda va el recuadro del giro
+    if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>${roto ? 'sobre la deformada exagerada · ' : ''}kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const porPiso = tens?.porMuro.get(m.id);

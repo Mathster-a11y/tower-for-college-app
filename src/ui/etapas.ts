@@ -466,6 +466,13 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
   const kg = estado.roto3d.giro ?? giroAuto;
   const bAuto = h('button', { type: 'button', class: 'mini' }, 'automáticas');
   bAuto.addEventListener('click', () => { estado.roto3d.exag = null; estado.roto3d.giro = null; estado.avisarPanel(); });
+  // tensiones de las fibras (la peor de cada piso de cada muro) pintadas sobre la torre deformada
+  const chipTensiones = () => {
+    const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(!!estado.capas.tensiones), title: 'Pinta cada piso de cada muro con la tensión de su peor fibra (compresión en azul, tracción en rojo) sobre la torre deformada' }, h('i', {}), 'Tensiones σ');
+    (b.firstChild as HTMLElement).style.setProperty('--c', 'var(--compresion, #378add)');
+    b.addEventListener('click', () => { estado.capas.tensiones = !estado.capas.tensiones; try { localStorage.setItem('torre3d.tensiones3d', estado.capas.tensiones ? '1' : '0'); } catch { /* sin almacenamiento */ } estado.avisarPanel(); });
+    return b;
+  };
   const chipT = (t: string, col: string, k: 'original' | 'animar' | 'rotulos', redibujar: boolean) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d[k]) }, h('i', {}), t);
     (b.firstChild as HTMLElement).style.setProperty('--c', col);
@@ -476,7 +483,7 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
     h('div', { class: 'fila-acciones controles3d' },
       deslizador('Traslación', f, auto, x => { estado.roto3d.exag = x; }, 'Exageración de la traslación|Multiplica el corrimiento δ de cada piso para que se vea. Los números del recuadro son los reales.'),
       ...(gira ? [deslizador('Giro extra', kg, giroAuto, x => { estado.roto3d.giro = x; }, 'Giro exagerado aparte|El giro es mucho más chico que la traslación; se multiplica además por este número para que el revirado se vea. El sentido y la forma son los reales.')] : []),
-      bAuto, chipT('Rótulos y cotas', 'var(--ink)', 'rotulos', true), chipT('Torre sin deformar', 'var(--ink2)', 'original', true), chipT('Animar ráfaga', 'var(--carga)', 'animar', false)));
+      bAuto, chipT('Rótulos y cotas', 'var(--ink)', 'rotulos', true), chipT('Torre sin deformar', 'var(--ink2)', 'original', true), chipT('Animar ráfaga', 'var(--carga)', 'animar', false), chipTensiones()));
   c.append(visor3DRoto());
   if (r) {
     const ley = h('div', { class: 'leyenda' });
