@@ -5,3 +5,4 @@ dist
 dist-unico
 /*.png
 tools/figuras/.salida
+__pycache__/
