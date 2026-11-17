@@ -38,6 +38,13 @@ export const filaExcelJ = (dir: 'A' | 'B', i: number, motor: Motor = config.moto
 export const ranuraFilaNuevo = (i: number) => (i < 20 ? RANURA_FILA_NUEVO[i] : N_FILAS_PAR_NUEVO + i - 20);
 /** índice (fila − 4) de la hoja J paralelos que lee la fila 4+i de Flex (las agregadas leen la de su pieza) */
 export const flexFilaNuevo = (i: number) => (i < 20 ? FLEX_FILA_NUEVO[i] : ranuraFilaNuevo(i));
+/**
+ * Planilla 2025 (EDIFICIO_TORRE_1 de la cátedra, versión de 49 columnas): en «J Tabiques ortogonales» se borraron las
+ * columnas vacías AA y AD del bloque de piezas asimétricas, así que desde la altura del alma izquierda todo se corre:
+ * una letra hasta el ancho del alma derecha y dos letras después (el J total queda en AW). La hoja de paralelos y la
+ * planilla anterior siguen con la distribución original (total en AY).
+ */
+export const COLUMNA_ORTO_49: Record<string, string> = { AB: 'AA', AE: 'AC', AF: 'AD', AH: 'AF', AI: 'AG', AO: 'AM', AP: 'AN', AQ: 'AO', AT: 'AR', AU: 'AS', AY: 'AW' };
 /** fila de relleno de la plantilla (evita #DIV/0!) */
 export const FILA_RELLENO: FilaJ = { S: 0.01, W: 0.01, X: 0.01 };
 

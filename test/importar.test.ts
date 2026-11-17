@@ -80,12 +80,13 @@ describe('importar la planilla de la cátedra 2025', () => {
     expect(imp.tipo).toBe('planilla');
     const q = { ...p, niveles: imp.niveles!, muros: imp.muros, sitio: { ...p.sitio, ...imp.sitio }, fundacion: imp.fundacion! };
     const r = usarConfig({ motor: 'nuevo' }, () => calcularPlanilla(aPlanilla(q).datos));
-    // valores guardados por Excel en «Rototrasl. cara mayor»: B25 = 192,8324 m⁴ · J7 = 2,2989 m
-    expect(r.rotA.B25).toBeCloseTo(192.832433, 4);
-    expect(r.rotA.J7).toBeCloseTo(2.298900, 4);
-    // cara menor: B25 = 10,2230 m⁴ · J7 = −1,9851 m
-    expect(r.rotB.B25).toBeCloseTo(10.222989, 4);
-    expect(r.rotB.J7).toBeCloseTo(-1.985126, 3);    // 0,4 mm: las piezas asimétricas se redibujan como muros al importar
+    // la plantilla es la versión de 49 columnas (J ortogonales con el total en AW), con el ejemplo de la torre de 34 pisos;
+    // valores guardados por Excel en «Rototrasl. cara mayor»: B25 = 862,0769 m⁴ · J7 = 2,3621 m
+    expect(r.rotA.B25).toBeCloseTo(862.076897, 4);
+    expect(r.rotA.J7).toBeCloseTo(2.362054, 4);
+    // cara menor (lee AW de ortogonales): B25 = 278,9634 m⁴ · J7 = 1,36 m
+    expect(r.rotB.B25).toBeCloseTo(278.963386, 4);
+    expect(r.rotB.J7).toBeCloseTo(1.36, 3);
   });
   it('una torre de 26 piezas escrita en la planilla 2025 vuelve con las mismas piezas', async () => {
     const { usarConfig } = await import('../src/engine/config');

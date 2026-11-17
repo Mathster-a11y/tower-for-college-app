@@ -11,6 +11,7 @@ import { AVISO } from '../autoria';
 import JSZip from 'jszip';
 import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
 import { config, type Motor } from '../engine/config';
+import { COLUMNA_ORTO_49 } from '../engine/planilla';
 import type { Proyecto } from '../engine/modelo';
 import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
 import { ejemploGuia } from '../engine/modelo';
@@ -26,6 +27,8 @@ export const HOJAS = {
   rotA: 'Rototrasl. cara mayor', rotB: 'Rototrasl. cara menor', flex: 'Flex comp PB paralelos', t3d: 'T3D',
 };
 const COLS_J = ['B', 'C', 'F', 'G', 'J', 'K', 'S', 'T', 'W', 'X', 'Z', 'AB', 'AE', 'AF', 'AH', 'AI', 'AO', 'AP', 'AQ', 'AT', 'AU'] as const;
+/** letra de la columna en la planilla para una columna de la hoja J (los nombres del motor son los de la distribución original) */
+export const colJ = (orto: boolean, col: string, motor: Motor) => (orto && motor === 'nuevo' ? COLUMNA_ORTO_49[col] ?? col : col);
 
 async function rutasHojas(zip: JSZip): Promise<Record<string, string>> {
   const wb = await zip.file('xl/workbook.xml')!.async('string');
@@ -73,7 +76,7 @@ export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes, motor: Motor =
   const jpar = nuevo ? filasParalelosNuevo(d.jpar) : d.jpar;
   for (const [hoja, filas] of [[HOJAS.jpar, jpar], [HOJAS.jort, d.jort]] as const) {
     const h = (c[hoja] = {} as Record<string, ValorCelda>);
-    filas.forEach((f, i) => COLS_J.forEach(col => (h[`${col}${4 + i}`] = num(f[col]))));
+    filas.forEach((f, i) => COLS_J.forEach(col => (h[`${colJ(hoja === HOJAS.jort, col, motor)}${4 + i}`] = num(f[col]))));
   }
   // columna H: paralelas desde la fila 5 y perpendiculares 6 filas después del bloque de paralelas (31 con 20 piezas)
   for (const [hoja, rot, ro, nP] of [[HOJAS.rotA, d.rotA, r.rotA, d.jpar.length], [HOJAS.rotB, d.rotB, r.rotB, d.jort.length]] as const) {

@@ -6,6 +6,7 @@
  */
 import type { Hoja, Valor } from '../xlsx/tablas';
 import type { Muro, Nivel, Sitio } from './modelo';
+import { COLUMNA_ORTO_49 } from './planilla';
 
 export interface Linea { x1: number; y1: number; x2: number; y2: number; capa?: string; espesor?: number; id?: string }
 export interface Importacion {
@@ -243,19 +244,21 @@ function desdePlanilla(hojas: Hoja[]): Importacion {
   const flex = hojas.find(h => h.nombre === 'Flex comp PB paralelos');
   for (const [hojaJ, hojaRot, dir] of [['J Tabiques paralelos', 'Rototrasl. cara mayor', 'A'], ['J Tabiques ortogonales', 'Rototrasl. cara menor', 'B']] as const) {
     const J = H(hojaJ), R = hojas.find(h => h.nombre === hojaRot);
+    // planilla 2025 de 49 columnas: la rototraslación lee el J total de ortogonales en AW (no en AY)
+    const orto49 = dir === 'B' && /!\$?AW\$?\d+\s*$/.test(R?.formula?.('B5') ?? '');
     // cada fila de la rototraslación dice qué fila de la hoja J lee (B5 = 'J …'!AY4): así se lee bien la planilla anterior
     // (filas seguidas), la de la cátedra 2025 (28 filas con saltos) y las que tienen filas agregadas (más de 20 piezas)
     const filaJ = (i: number): number | null => {
       const f = R?.formula?.(`B${5 + i}`) ?? null;
       if (f === null) return i < 20 ? 4 + i : null;                          // sin fórmulas (valores): filas seguidas
-      const m = /!\$?AY\$?(\d+)\s*$/.exec(f.replace(/^=/, ''));
+      const m = /!\$?A[YW]\$?(\d+)\s*$/.exec(f.replace(/^=/, ''));
       return m ? +m[1] : null;                                              // la fila de sumas (SUM) termina el bloque
     };
     for (let i = 0; i < 200; i++) {
       const fj = filaJ(i);
       if (fj === null) break;
       const v: Record<string, number> = {};
-      COLS_J.forEach(c => { const x = g(J, `${c}${fj}`); v[c] = x !== null && x > 0.0101 ? x : 0; });
+      COLS_J.forEach(c => { const x = g(J, `${orto49 ? COLUMNA_ORTO_49[c] ?? c : c}${fj}`); v[c] = x !== null && x > 0.0101 ? x : 0; });
       const pos = (R && g(R, `H${5 + i}`)) ?? 0;
       const area = dir === 'A' && flex ? g(flex, `F${4 + i}`) ?? 0 : 0;
       const nombre = `${dir === 'A' ? 'P' : 'O'}${i + 1}`;

@@ -70,6 +70,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Rototraslación: los rótulos ya no se enciman con los de los ejes (caja con el ancho real del texto)
 - [x] Vista previa de la planilla (Exportar → «Vista previa de la planilla ↗», o desde el diálogo de exportar): otra pestaña con las 7 hojas de la cátedra como quedan al exportar, colores, anchos y celdas combinadas, y las fórmulas calculadas con un evaluador propio (src/xlsx/formulas.ts). Se actualiza sola cuando cambia la torre en la pestaña principal. Verificado con LibreOffice: todas las celdas con fórmula iguales en 20 planillas (10 torres × 2 planillas, ~80.000 celdas; tools/verificar_vista_previa.ts + tools/comparar_vista_previa.py)
 - [x] Planilla anterior: M,NyQ G55:G57 apuntan a otro libro ([1]viento!S56, la planilla 2024) con la copia vacía; Excel y LibreOffice dan 0 (son subsuelos: no cambia nada)
+- [x] Planilla 2025 → versión de 49 columnas (la EDIFICIO_TORRE_1 que pasó el usuario en noviembre 2026): en «J Tabiques ortogonales» se borraron las columnas vacías AA y AD (el J total pasa de AY a AW y Rototraslación lo lee de ahí). Fuera de eso las fórmulas son las mismas; el ejemplo había pisado 37 fórmulas de M,NyQ (E y F de las filas 40–57, D de los subsuelos) con números, y en la plantilla se devolvieron. La app escribe en ortogonales con las columnas corridas (COLUMNA_ORTO_49), los vínculos de filas agregadas van a AW y el importador reconoce las dos versiones. Verificado con LibreOffice (motor y vista previa, todas las celdas)
 
 ## En curso
 - Nada por ahora.
