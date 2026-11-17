@@ -76,9 +76,15 @@ export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes, motor: Motor =
     filas.forEach((f, i) => COLS_J.forEach(col => (h[`${col}${4 + i}`] = num(f[col]))));
   }
   // columna H: paralelas desde la fila 5 y perpendiculares 6 filas después del bloque de paralelas (31 con 20 piezas)
-  for (const [hoja, H, nP] of [[HOJAS.rotA, d.rotA.H, d.jpar.length], [HOJAS.rotB, d.rotB.H, d.jort.length]] as const) {
+  for (const [hoja, rot, ro, nP] of [[HOJAS.rotA, d.rotA, r.rotA, d.jpar.length], [HOJAS.rotB, d.rotB, r.rotB, d.jort.length]] as const) {
     const h = (c[hoja] = {} as Record<string, ValorCelda>);
-    H.forEach((x, i) => { if (i < nP || i >= nP + 6) h[`H${5 + i}`] = num(x); });
+    rot.H.forEach((x, i) => { if (i < nP || i >= nP + 6) h[`H${5 + i}`] = num(x); });
+    // dos tabiques perpendiculares: J y posición en las filas 28–29 (datos) y el bloque general en 0 (B31:B50 son
+    // vínculos a la otra hoja J: es la única fórmula que se reemplaza, para no contar dos veces esas piezas)
+    if (rot.par) {
+      [0, 1].forEach(k => { h[`B${5 + nP + 3 + k}`] = num(ro.B[nP + 3 + k]); h[`H${5 + nP + 3 + k}`] = num(rot.H[nP + 3 + k]); });
+      for (let i = ro.oO; i < ro.B.length; i++) h[`B${5 + i}`] = { num: 0 };
+    }
   }
   const f = (c[HOJAS.flex] = {} as Record<string, ValorCelda>);
   d.flex.forEach((x, i) => { f[`C${4 + i}`] = num(x.C); f[`F${4 + i}`] = num(x.F); f[`G${4 + i}`] = num(x.G); });

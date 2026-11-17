@@ -304,6 +304,8 @@ async function exportar() {
   const { asig, res } = estado.calculo;
   const celdas = celdasAEscribir(asig.datos, res);
   const filas = Object.entries(celdas).map(([hoja, cs]) => `<li><b>${hoja}</b>: ${Object.keys(cs).length} celdas</li>`).join('');
+  // par de dos tabiques perpendiculares: B31:B50 de esa hoja van en 0 (son vínculos: es la excepción a «no tocar fórmulas»)
+  const conPar = ([['A', 'Rototrasl. cara mayor'], ['B', 'Rototrasl. cara menor']] as const).filter(([k]) => (k === 'A' ? asig.datos.rotA : asig.datos.rotB).par).map(([, n]) => `«${n}»`);
   const radio = (name: string, value: string, checked: boolean, txt: string, nota: string) =>
     `<label class="campo-linea"><input type="radio" name="${name}" value="${value}"${checked ? ' checked' : ''}> ${txt} <small>${nota}</small></label>`;
   dialogo(`<h2>Escribir la planilla</h2>
@@ -313,7 +315,7 @@ async function exportar() {
     <p><b>Contenido</b></p>
     ${radio('exp-cont', 'virgen', true, 'Planilla virgen', '(solo los datos en las 7 hojas de la cátedra, más las tablas «T3D» para volver a abrirla en la app)')}
     ${radio('exp-cont', 'renovada', false, 'Planilla renovada', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos)')}
-    <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${config.motor === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}.</p>
+    <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${config.motor === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}${conPar.length ? `, y B31:B50 de ${conPar.join(' y ')}, que van en 0 porque elegiste dos tabiques perpendiculares (filas 28–29) en vez del bloque general` : ''}.</p>
     <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo en la renovada; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}

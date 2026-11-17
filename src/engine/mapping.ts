@@ -651,12 +651,26 @@ export function aPlanilla(p: Proyecto): Asignacion {
   const tipoFlex = (pz: PiezaEquivalente): TipoFila => (pz.molde === 'asimétrico' ? 'asimétrica' : pz.molde === 'tubo' ? 'circular' : 'simétrica');
   piezasA.forEach(pz => { if (pz.filaHoja !== null) flex[pz.filaHoja] = { C: alturaTotal, F: r4(pz.areaInf), G: pisosArriba, ...(pz.filaHoja >= 20 ? { tipo: tipoFlex(pz) } : {}) }; });
 
+  // dos tabiques perpendiculares que trabajan juntos contra el giro (elegidos en Rototraslación): filas 28–29 de la hoja
+  // del viento, con su posición en H28 y H29; el bloque general (filas 31–50) queda en 0
+  const conPar = (dir: Direccion, par: PiezaEquivalente[], per: PiezaEquivalente[], nP: number, nO: number): PlanillaDatos['rotA'] => {
+    const H = Hpos(par, per, nP, nO);
+    const elegido = p.parPerp?.[dir];
+    if (!elegido) return { H };
+    const [a, b] = elegido.map(n => per.find(z => z.nombre === n && z.filaHoja !== null));
+    if (!a || !b || a === b) {
+      avisos.push(`Rototraslación del viento ${dir}: el par de tabiques perpendiculares (${elegido.join(' y ')}) ya no está entre las piezas del viento ${dir === 'A' ? 'B' : 'A'}; se usa el bloque general (filas 31 a 50).`);
+      return { H };
+    }
+    H[nP + 3] = a.posicion; H[nP + 4] = b.posicion;
+    return { H, par: [a.filaHoja!, b.filaHoja!] };
+  };
   const datos: PlanillaDatos = {
     viento: { ...p.sitio, Z },
     mnyq: { C, D, E, F, b1: p.fundacion.b1, a1: p.fundacion.a1 },
     jpar, jort,
-    rotA: { H: Hpos(piezasA, piezasB, jpar.length, jort.length) },
-    rotB: { H: Hpos(piezasB, piezasA, jort.length, jpar.length) },
+    rotA: conPar('A', piezasA, piezasB, jpar.length, jort.length),
+    rotB: conPar('B', piezasB, piezasA, jort.length, jpar.length),
     flex,
   };
   // las piezas que quedan enteras fuera del molde (columnas que no toman viento) van en un solo aviso

@@ -21,7 +21,9 @@ const muchas = (): Proyecto => {
   for (let q = 0; q < 20; q++) p.muros.push({ id: `X${q}`, dir: 'Y', x: -9 + q * 0.9, y: q % 2 ? 7 : -7, largo: 1 + (q % 3) * 0.2, espesor: 0.2, llega: true, areaInf: 10, piezaA: `PA${q}`, pegadoA: '', piezaB: `PB${q}`, pegadoB: '' });
   return p;
 };
-const casos: [string, () => Proyecto][] = [['muchas', muchas], ['guia', ejemploGuia], ['anexo', ejemploAsimetrico], ['p34', ejemploPlanta34], ...TORRES_PRUEBA.slice(0, 6).map((t, i) => [`P${i + 1}`, () => armarTorre(t)] as [string, () => Proyecto])];
+/** dos tabiques perpendiculares en las filas 28–29 de las dos hojas de rototraslación */
+const conPar = (): Proyecto => ({ ...ejemploAsimetrico(), parPerp: { A: ['T6B', 'T1B'], B: ['T5', 'T6'] } });
+const casos: [string, () => Proyecto][] = [['par', conPar], ['muchas', muchas], ['guia', ejemploGuia], ['anexo', ejemploAsimetrico], ['p34', ejemploPlanta34], ...TORRES_PRUEBA.slice(0, 6).map((t, i) => [`P${i + 1}`, () => armarTorre(t)] as [string, () => Proyecto])];
 const catedra = new Set(Object.values(HOJAS));
 for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of casos) {
   config.motor = motor;
@@ -34,5 +36,14 @@ for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of ca
   const lista: [string, string, unknown][] = [];
   for (const [h, cs] of Object.entries(vals)) if (catedra.has(h)) for (const [ref, v] of Object.entries(cs)) lista.push([h, ref, typeof v === 'object' && v !== null ? { error: (v as { error: string }).error } : v]);
   writeFileSync(`${dir}/${motor}_${nombre}.json`, JSON.stringify(lista));
+  // el motor de la app contra las fórmulas de la planilla (las de rototraslación y flex, que usan el par)
+  let peor = 0, donde = '';
+  for (const [hoja, ro] of [['Rototrasl. cara mayor', r.rotA], ['Rototrasl. cara menor', r.rotB]] as const) {
+    const ev = vals[hoja], mir = (ref: string, x: number) => { const y = ev[ref]; if (typeof y !== 'number' || !Number.isFinite(x)) return; const d = Math.abs(y - x) / Math.max(1, Math.abs(x)); if (d > peor) { peor = d; donde = `${hoja}!${ref}`; } };
+    mir(`J${5 + ro.nP + 3}`, ro.J28); mir(`M${5 + ro.B.length + 1}`, ro.M51);
+    for (let i = 0; i < ro.B.length; i++) { mir(`N${5 + i}`, ro.N[i]); mir(`O${5 + i}`, ro.O[i]); }
+  }
+  r.flex.J.forEach((x, i) => { const y = vals['Flex comp PB paralelos'][`J${4 + i}`]; if (typeof y === 'number' && Number.isFinite(x)) { const d = Math.abs(y - x) / Math.max(1, Math.abs(x)); if (d > peor) { peor = d; donde = `Flex!J${4 + i}`; } } });
+  console.log(`   motor vs planilla: mayor diferencia relativa ${peor.toExponential(1)}${donde ? ` (${donde})` : ''}`);
   console.log(motor, nombre, lista.length, 'fórmulas');
 }

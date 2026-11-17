@@ -261,6 +261,13 @@ export interface Proyecto {
   juntas?: Record<string, 'inglete' | 'pasaA' | 'pasaB'>;
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
+  /**
+   * Rototraslación: par de tabiques perpendiculares al viento que trabajan juntos contra el giro (dos muros cerca uno
+   * del otro). Van en las filas 28–29 de la hoja del viento («USAR SOLAMENTE PARA DOS TABIQUES»), con los brazos desde
+   * su punto medio, en vez de las filas 31–50. Clave: el viento de la hoja (A = cara mayor); valor: los nombres de las
+   * dos piezas del otro viento. Vacío = el bloque general.
+   */
+  parPerp?: { A?: [string, string] | null; B?: [string, string] | null };
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
 }

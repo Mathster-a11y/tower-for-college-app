@@ -353,11 +353,14 @@ const rototrasl: Etapa = {
     };
     c.append(seccion('Tabiques paralelos al viento (t)', tabla(dp.paralelos, false)).el);
     if (dp.perpendiculares.some(x => Math.abs(x.rot) > 1e-9) || dp.perpendiculares.length) c.append(seccion(guia ? 'Muros perpendiculares: solo rotación (t)' : 'Piezas perpendiculares: solo rotación (t)', tabla(dp.perpendiculares, true)).el);
+    if (!guia) c.append(seccionParPerp(d));
     const aviso = avisoCRCaraMenor(d);
     if (aviso) c.append(h('p', { class: 'aviso-linea' }, aviso));
     c.append(h('p', { class: 'nota' }, guia
       ? 'Valores «Guía/CIRSOC»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
-      : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
+      : (d.dir === 'A' ? d.asig.datos.rotA : d.asig.datos.rotB).par
+        ? 'Valores de la planilla: las dos piezas perpendiculares elegidas entran a la rotación en las filas 28–29, con los brazos desde su punto medio; las demás no cuentan (filas 31 a 50 en 0).'
+        : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
   },
   centro(c, tam) {
     const d = datos();
@@ -486,6 +489,47 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
 /** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
 export function datosRotoPlanoActual() { return datosRotoPlano(datos()); }
 /**
+ * «Dos tabiques perpendiculares» (filas 28–29 de la hoja del viento): cuando dos muros perpendiculares al viento están
+ * cerca uno del otro trabajan juntos contra el giro. Se eligen las dos piezas del otro viento; la planilla mide sus
+ * brazos desde el punto medio entre las dos (J28) y deja el bloque general (filas 31–50) en 0.
+ */
+const parAMedias: Partial<Record<'A' | 'B', [string, string]>> = {};
+function seccionParPerp(d: ReturnType<typeof datos>): HTMLElement {
+  const p = estado.proyecto, dir = d.dir as 'A' | 'B', otra = dir === 'A' ? 'B' : 'A';
+  const hoja = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor';
+  const cand = d.asig.piezas.filter(z => z.dir === otra && z.filaHoja !== null).map(z => z.nombre);
+  const actual = p.parPerp?.[dir] ?? null;
+  const usado = !!(dir === 'A' ? d.asig.datos.rotA : d.asig.datos.rotB).par;
+  const cuerpo = h('div', { class: 'par-perp' });
+  const sel = (k: 0 | 1) => {
+    const s = h('select', { 'aria-label': `Tabique ${k + 1}` }) as HTMLSelectElement;
+    s.append(new Option('—', ''), ...cand.map(n => new Option(n, n)));
+    s.value = (actual ?? parAMedias[dir])?.[k] ?? '';
+    s.addEventListener('change', () => {
+      const otro = (cuerpo.querySelectorAll('select')[k ? 0 : 1] as HTMLSelectElement).value;
+      const par = [k ? otro : s.value, k ? s.value : otro] as [string, string];
+      // con uno solo elegido, se espera al otro sin cambiar el proyecto
+      if (!(par[0] && par[1] && par[0] !== par[1])) { parAMedias[dir] = par; if (!actual) return; }
+      else delete parAMedias[dir];
+      estado.cambiar(pp => {
+        pp.parPerp = { ...(pp.parPerp ?? {}) };
+        if (par[0] && par[1] && par[0] !== par[1]) pp.parPerp[dir] = par; else delete pp.parPerp[dir];
+        if (!pp.parPerp.A && !pp.parPerp.B) delete pp.parPerp;
+      });
+    });
+    return s;
+  };
+  const quitar = h('button', { type: 'button', class: 'mini' }, 'Usar el bloque general');
+  quitar.addEventListener('click', () => { delete parAMedias[dir]; }, true);
+  quitar.addEventListener('click', () => estado.cambiar(pp => { if (pp.parPerp) { delete pp.parPerp[dir]; if (!pp.parPerp.A && !pp.parPerp.B) delete pp.parPerp; } }));
+  cuerpo.append(h('div', { class: 'fila-acciones' }, sel(0), sel(1), ...(actual ? [quitar] : [])),
+    h('p', { class: 'nota' }, usado
+      ? `En uso: ${actual!.join(' y ')} van en las filas 28–29 de «${hoja}», con los brazos desde su punto medio (J28 = ${fmt(d.R[dir === 'A' ? 'rotA' : 'rotB'].J28, 2)} m). El bloque general (filas 31 a 50) queda en 0: al exportar, B31:B50 se escriben en 0 en esta hoja (son vínculos a la otra hoja J; es la única fórmula que se reemplaza).`
+      : `Cuando dos muros perpendiculares al viento están cerca uno del otro trabajan juntos y se oponen mejor a la rotación: elegí las dos piezas y la planilla usa las filas 28–29 («USAR SOLAMENTE PARA DOS TABIQUES»), con los brazos desde su punto medio, en vez del bloque general (filas 31 a 50).`),
+    ...(cand.length < 2 ? [h('p', { class: 'nota' }, `Hacen falta al menos dos piezas en el viento ${otra}.`)] : []));
+  return seccion('Dos tabiques perpendiculares (filas 28–29)', cuerpo).el;
+}
+/**
  * Planilla anterior, viento B: B51 e I51 de «Rototrasl. cara menor» suman solo hasta la fila 38, así que las piezas 9
  * a 20 del viento A no cuentan para el CR. Devuelve el aviso (o null si no cambia nada o no corresponde).
  */
@@ -527,14 +571,16 @@ function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: num
   // la planilla: piezas paralelas (filas 5 a 24) y perpendiculares (filas 31 a 50), por pieza
   const rot = A ? d.R.rotA : d.R.rotB;
   const H = A ? d.asig.datos.rotA.H : d.asig.datos.rotB.H;
-  const elem = (otra: boolean) => d.asig.piezas.filter(pz => (otra ? pz.dir !== d.dir : pz.dir === d.dir) && pz.filaHoja !== null).map(pz => {
-    const i = (otra ? 26 : 0) + pz.filaHoja!;
+  // con el par de dos tabiques (filas 28–29), las perpendiculares son solo esas dos, en las filas del atajo
+  const dos = (A ? d.asig.datos.rotA : d.asig.datos.rotB).par ?? null, s0 = rot.nP + 3;
+  const elem = (otra: boolean) => d.asig.piezas.filter(pz => (otra ? pz.dir !== d.dir : pz.dir === d.dir) && pz.filaHoja !== null && (!otra || !dos || dos.includes(pz.filaHoja!))).map(pz => {
+    const i = otra ? (dos ? s0 + dos.indexOf(pz.filaHoja!) : rot.oO + pz.filaHoja!) : pz.filaHoja!;
     const rotF = isFinite(rot.N[i]) ? rot.N[i] : 0, tras = otra ? 0 : rot.E[i];
     return { nombre: pz.nombre, pos: otra ? (H[i] ?? 0) : t(H[i] ?? 0), J: rot.B[i], frac: otra ? 0 : rot.C[i], tras, rot: rotF, total: tras + rotF, a: rot.K[i], muros: muros(pz.muros) } as ElementoPlano;
   });
   // planilla anterior, viento B: su CR (J38) no cuenta las piezas 9 a 20 del viento A; el dibujo y el 3D usan el real
   const real = !A && d.R.rotBReal ? d.R.rotBReal : null;
-  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: (real ?? rot).J38 ?? 0, YrPlanilla: rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
+  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: dos ? rot.J28 : (real ?? rot).J38 ?? 0, YrPlanilla: dos ? rot.J28 : rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
 }
 
 // ------------------------------------------------------------------ 07 Flexión
