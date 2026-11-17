@@ -15,7 +15,9 @@ import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
-import { borrarGrupo, copiarNodo, espejarNodo, girarNodo } from '../engine/grupos';
+import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
+import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
+import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
 import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparVarios, hijosGrupo, subgrupos, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
@@ -2338,8 +2340,92 @@ export function montarPlanta(cont: HTMLElement) {
   svg.addEventListener('contextmenu', ev => {
     if (modo === 'dibujar') { ev.preventDefault(); if (inicio) { inicio = null; dibujar(); } else ponerModo('mover'); return; }
     if (modo !== 'mover') { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
+    // «Mover»: sobre un muro o un grupo, el menú de herramientas; en el fondo vacío, como Esc
+    // el muro bajo el puntero (el destino del evento puede ser el svg si el arrastre capturó el puntero)
+    const bajo = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => (e.closest?.('g.muro') as SVGGElement | null)?.dataset.id).find(Boolean);
+    const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id ?? bajo;
+    if (idM) { ev.preventDefault(); menuDe(idM, ev.clientX, ev.clientY); return; }
     if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
   });
+  /** clase de pieza y «entra al J» para las piezas de unos muros (en los dos vientos) */
+  const piezasDe = (ids: string[]) => { const p = estado.proyecto, s = new Set<string>(); ids.forEach(id => { const m = p.muros.find(x => x.id === id); if (m?.piezaA) s.add(m.piezaA); if (m?.piezaB) s.add(m.piezaB); }); return [...s]; };
+  const menuClase = (ids: string[]): EntradaMenu[] => {
+    const nombres = piezasDe(ids), cs = estado.proyecto.clasesPieza ?? {};
+    if (!nombres.length) return [{ texto: 'Clase de la pieza', no: 'Estos muros no tienen pieza en ningún viento (Diseño → Muros).' }];
+    const actual = new Set(nombres.map(n => cs[n]?.clase ?? 'auto')), enJ = nombres.every(n => cs[n]?.enJ !== false);
+    const poner = (f: (c: { clase?: ClasePieza | null; enJ?: boolean | null }) => void, txt: string) => {
+      estado.cambiar(pp => {
+        const t = (pp.clasesPieza ??= {});
+        nombres.forEach(n => { const c0 = { ...(t[n] ?? {}) }; f(c0); if ((!c0.clase || c0.clase === 'auto') && c0.enJ !== false) delete t[n]; else t[n] = c0; });
+        if (!Object.keys(t).length) delete pp.clasesPieza;
+      });
+      mensaje(`${nombres.join(', ')}: ${txt}.`); estado.avisarPanel();
+    };
+    return [
+      { texto: `Clase de la pieza (${nombres.join(', ')})`, sub: (Object.keys(NOMBRE_CLASE) as ClasePieza[]).map(k => ({ texto: NOMBRE_CLASE[k], marcado: actual.size === 1 && actual.has(k), accion: () => poner(c => { c.clase = k === 'auto' ? null : k; }, `clase «${NOMBRE_CLASE[k]}»`) })) },
+      { texto: 'Entra al cálculo del J', marcado: enJ, ayuda: 'Sin tildar: la pieza no va a la hoja J (en los dos vientos)', accion: () => poner(c => { c.enJ = enJ ? false : null; }, enJ ? 'fuera del cálculo del J' : 'vuelve al cálculo del J') },
+    ];
+  };
+  /** el menú de clic derecho sobre el muro idM: el grupo cerrado que lo contiene, lo elegido o el muro solo */
+  function menuDe(idM: string, x: number, y: number) {
+    const p = estado.proyecto, m = p.muros.find(w => w.id === idM);
+    if (!m) return;
+    const enMulti = estado.multi.m.includes(idM) || estado.multi.g.some(g => dentroDe(p, m, g));
+    const nodo = nodoAlTocar(p, m, estado.contexto);
+    if (!enMulti) {
+      // como un clic: queda elegido lo que se tocó (el grupo cerrado o el muro)
+      estado.multi = { m: [], g: [] };
+      if (nodo?.t === 'g') { estado.grupoSel = nodo.id; estado.seleccion = null; } else { estado.grupoSel = null; estado.seleccion = idM; }
+      estado.avisarPanel();
+    }
+    const nSel = estado.multi.m.length + estado.multi.g.length;
+    if (enMulti && nSel > 1) {
+      const ids = [...estado.multi.m, ...estado.multi.g.flatMap(g => murosDe(p, g).map(w => w.id))];
+      abrirMenuContextual(x, y, [{ titulo: `${nSel} elegidos` },
+        { texto: 'Agrupar', atajo: 'Ctrl+G', accion: () => agruparElegidos() },
+        { texto: 'Desagrupar', atajo: 'Ctrl+Mayús+G', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', accion: () => desagruparElegidos(estado.multi.g) },
+        { texto: 'Desagrupar todo (explotar)', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', ayuda: 'Deshace los grupos y los de adentro: todos los muros quedan sueltos', accion: () => desagruparElegidos(estado.multi.g, true) },
+        '—', ...menuClase(ids), '—',
+        { texto: 'Soltar la selección', atajo: 'Esc', accion: () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); } },
+        { texto: 'Borrar', atajo: 'Supr', peligro: true, accion: () => borrarElegidos() }]);
+      return;
+    }
+    if (nodo?.t === 'g') {
+      const g = grupoPorId(p, nodo.id)!, id = g.id;
+      const bloq = ancestros(p, id).some(a => a.bloq), fijo = ancestros(p, id).some(a => a.fijo);
+      const ids = murosDe(p, id).map(w => w.id);
+      const toggle = (k: 'bloq' | 'fijo' | 'oculto', si: string, no: string) => { estado.cambiar(pp => { const gg = grupoPorId(pp, id); if (!gg) return; if (gg[k]) delete gg[k]; else gg[k] = true; }); mensaje(grupoPorId(estado.proyecto, id)?.[k] ? si : no); estado.avisarPanel(); };
+      const motivo = bloq ? 'Está bloqueado 🔒: desbloquealo primero' : false;
+      abrirMenuContextual(x, y, [
+        { titulo: `${g.bloq ? '🔒 ' : ''}${g.fijo ? '📌 ' : ''}${g.nombre} · ${g.comp ? `componente ${g.comp}` : 'grupo'}` },
+        { texto: 'Entrar a editar', atajo: 'doble clic', no: motivo, accion: () => { estado.contexto = id; estado.grupoSel = null; mensaje(`Editando «${g.nombre}»: Esc para salir.`); estado.avisarPanel(); } },
+        { texto: 'Desagrupar', atajo: 'Ctrl+Mayús+G', no: motivo, ayuda: g.comp ? 'Deshace el grupo; esta copia deja de estar vinculada al componente' : 'Deshace el grupo; su contenido queda suelto y elegido', accion: () => desagruparElegidos([id]) },
+        { texto: 'Desagrupar todo (explotar)', no: motivo || (subgrupos(p, id).length < 2 ? 'No tiene grupos adentro' : false), ayuda: 'Deshace el grupo y los grupos de adentro: todos sus muros quedan sueltos', accion: () => desagruparElegidos([id], true) },
+        '—',
+        g.comp
+          ? { texto: 'Hacer único', no: motivo, ayuda: 'Separa esta copia del componente: deja de cambiar con las demás', accion: () => conGrupo(pp => { hacerUnico(pp, id); }, 'La copia ya no está vinculada: es un grupo común.') }
+          : { texto: 'Hacer componente', no: motivo, ayuda: 'Un componente es un grupo con copias vinculadas: si editás una, cambian todas', accion: () => conGrupo(pp => hacerComponente(pp, id), 'Ahora es un componente: «Copia vinculada» para repetirlo.') },
+        { texto: 'Duplicar', ayuda: 'Copia independiente a la derecha', accion: () => duplicarGrupo(false) },
+        { texto: 'Copia vinculada', ayuda: 'Otra copia del mismo componente: si se edita una, cambian todas (si no era componente, pasa a serlo)', accion: () => duplicarGrupo(true) },
+        '—',
+        { texto: 'Girar 90°', no: motivo || (fijo ? 'Está fijo en su lugar 📌' : false), accion: () => conGrupo(pp => { girarNodo(pp, id); }, 'Grupo girado 90°.') },
+        { texto: 'Espejar ↔', no: motivo || (fijo ? 'Está fijo en su lugar 📌' : false), accion: () => conGrupo(pp => { espejarNodo(pp, id, 'x'); }, 'Grupo espejado.') },
+        { texto: 'Espejar ↕', no: motivo || (fijo ? 'Está fijo en su lugar 📌' : false), accion: () => conGrupo(pp => { espejarNodo(pp, id, 'y'); }, 'Grupo espejado.') },
+        '—',
+        { texto: 'Bloquear', marcado: !!g.bloq, ayuda: 'No se mueve ni se edita; se sigue calculando', accion: () => toggle('bloq', `«${g.nombre}» bloqueado 🔒.`, `«${g.nombre}» desbloqueado.`) },
+        { texto: 'Fijo en su lugar', marcado: !!g.fijo, ayuda: 'No se mueve, gira ni espeja; se puede entrar a cambiar medidas', accion: () => toggle('fijo', `«${g.nombre}» fijo en su lugar 📌.`, `«${g.nombre}» suelto.`) },
+        { texto: 'Ocultar en la planta', marcado: !!g.oculto, ayuda: 'Se sigue calculando', accion: () => toggle('oculto', `«${g.nombre}» oculto: se sigue calculando.`, `«${g.nombre}» visible.`) },
+        '—', ...menuClase(ids), '—',
+        { texto: 'Borrar el grupo', atajo: 'Supr', peligro: true, no: motivo, accion: () => { conGrupo(pp => borrarGrupo(pp, id), 'Grupo borrado. Ctrl+Z deshace.'); estado.grupoSel = null; estado.avisarPanel(); } },
+      ]);
+      return;
+    }
+    const mot = motivoNoEditable(p, m, estado.contexto);
+    abrirMenuContextual(x, y, [{ titulo: `${m.id} · ${m.largo.toFixed(2).replace('.', ',')} × ${m.espesor.toFixed(2).replace('.', ',')} m` },
+      ...(estado.contexto ? [{ texto: 'Salir del grupo', atajo: 'Esc', accion: () => salirDeGrupo() } as EntradaMenu] : []),
+      ...menuClase([idM]), '—',
+      { texto: 'Borrar', atajo: 'Supr', peligro: true, no: mot || false, accion: () => borrarElegidos() }]);
+  }
   document.addEventListener('keydown', ev => {
     if (modo !== 'calar' || calQue !== 'muro' || (ev.target as HTMLElement).closest?.('input, select, textarea')) return;
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && (abSel || vanoSel)) { ev.preventDefault(); quitarCalado(); }
