@@ -1,8 +1,8 @@
 # Rama `motor-fem`: motores de cálculo nuevos para comparar con la planilla
 
 Documento de arranque para una sesión nueva de Claude Code en la rama `motor-fem`. Junta lo que se investigó y se
-decidió el 16/11/2026. **Todavía no hay código del motor nuevo**: esta rama solo tiene este documento y el prototipo
-de `docs/motor-fem/prototipo/`.
+decidió el 16/11/2026. Estado al 17/11/2026: el paso 1 está hecho (verificadores en `tools/motor_fem/` y prueba de oro
+en `test/motorFem.test.ts`); el motor pseudo-3D (paso 2) todavía no.
 
 > **Cómo usarlo en la sesión nueva:** leer este archivo entero, después `README.md` y `PENDIENTES.md`, y responder
 > con el usuario las preguntas abiertas (sección 9) antes de escribir código.
@@ -80,24 +80,31 @@ seguir si se aprueba.
 
 ## 5. Prototipo y resultados (ya verificados)
 
-Archivos en `docs/motor-fem/prototipo/`:
+El prototipo pasó a `tools/motor_fem/` (paso 1 del plan, hecho el 17/11/2026):
 
-- `exportar.ts`: desde la app, exporta los niveles (con la fuerza Wi de M,NyQ), las piezas del viento A (J,
-  posición, área, área de corte del alma) y las piezas del viento B (para la torsión). Genera `guia.json` y
-  `anexo.json`.
-- `opensees_torre.py`: cada pieza es una ménsula vertical (`elasticBeamColumn` o `ElasticTimoshenkoBeam` con el
-  argumento `timo`), con `rigidDiaphragm` en cada piso. El viento va en el eje de simetría (x = 0).
-- `pynite_torre.py`: el mismo modelo en Pynite. El diafragma se arma con brazos rígidos del centro del piso a cada
-  muro, **articulados en el muro** (`def_releases(..., Rxj, Ryj, Rzj)`). Sin esa articulación, los brazos traban el
-  giro de los muros y la flecha sale unas 235 veces menor (error de modelado que hubo que corregir).
-- `grafico.py`: arma `docs/motor-fem/comparacion_motores.png`.
+- `src/engine/femEntrada.ts`: `entradaFem(proyecto, viento)` arma la entrada común de los motores nuevos: fuerzas de
+  cada piso de la planilla (H de M,NyQ para el viento A, D·F·G para el B), piezas paralelas (J de la hoja, posición,
+  área, área de corte de las almas, cotas desde y hasta), perpendiculares (para la torsión) y el reparto de la
+  planilla. Ejes locales iguales para los dos vientos: x perpendicular al viento, y en la dirección del viento.
+- `tools/motor_fem/casos.ts`: los casos de comparación (guía, anexo y planta34, vientos A y B).
+- `tools/motor_fem/exportar.ts`: escribe `test/fixtures/motor_fem/<caso>.entrada.json`.
+- `tools/motor_fem/opensees_torre.py`: cada pieza es una ménsula vertical (`elasticBeamColumn` o
+  `ElasticTimoshenkoBeam`), con `rigidDiaphragm` en cada piso. Respeta la cota hasta donde llega cada pieza.
+- `tools/motor_fem/pynite_torre.py`: el mismo modelo en Pynite, con brazos rígidos **articulados en el muro**. Dos
+  arreglos para que Pynite no dé resultados falsos: las piezas que caen en el mismo punto de la planta se separan en la
+  coordenada que no influye, y el nudo central va corrido del eje (con un momento que lleva la fuerza a x = 0).
+- `tools/motor_fem/verificar.py`: resuelve todos los casos, guarda `<caso>.resultados.json` y muestra la tabla.
+- `tools/motor_fem/grafico.py`: arma `docs/motor-fem/comparacion_motores.png`.
+- `test/motorFem.test.ts`: **la prueba de oro** y los controles cruzados, con los resultados guardados (`npm test` no
+  necesita Python).
 
 Para volver a correrlo (desde la raíz del repo):
 
 ```bash
 python3 -m venv /tmp/venv && /tmp/venv/bin/pip install openseespy PyniteFEA matplotlib
-npx vite-node docs/motor-fem/prototipo/exportar.ts
-cd docs/motor-fem/prototipo && for c in guia anexo; do /tmp/venv/bin/python opensees_torre.py $c.json euler | grep '^{' > os_${c}_e.json; /tmp/venv/bin/python opensees_torre.py $c.json timo | grep '^{' > os_${c}_t.json; /tmp/venv/bin/python pynite_torre.py $c.json | grep '^{' > pn_${c}.json; done; /tmp/venv/bin/python grafico.py
+npx vite-node tools/motor_fem/exportar.ts
+/tmp/venv/bin/python tools/motor_fem/verificar.py
+/tmp/venv/bin/python tools/motor_fem/grafico.py
 ```
 
 ### Resultados: % del corte en la base de cada pieza, viento A
@@ -125,7 +132,11 @@ Con Timoshenko la flecha sube solo un 2 % (0,06379 m).
    deriva de cada piso la manda la rigidez al corte G·A del alma, no el J. La flecha y los momentos casi no cambian. Es
    el factor de verificación nuevo más importante, y la planilla no lo puede ver.
 3. Pynite difiere de OpenSees en menos del 1 %, porque los brazos no son infinitamente rígidos.
-4. **Aclaración:** el corte total del modelo de elementos finitos (125,81 t) no incluye el viento de la franja de PB,
+4. **Hallazgo del paso 1 (planta34, viento B):** la hoja «cara menor» de la planilla original suma B51 e I51 solo hasta
+   la fila 38. Con más de 8 perpendiculares, el centro de las perpendiculares (J38) sale corrido: en planta34 da 0 m en
+   lugar de 1,74 m. La rotación cambia hasta 0,025 puntos de %. La app lo replica tal cual (la planilla no se toca).
+5. Pynite da la misma flecha que OpenSees (diferencia menor que 1e-6 m) en los seis casos.
+6. **Aclaración:** el corte total del modelo de elementos finitos (125,81 t) no incluye el viento de la franja de PB,
    que en la planilla sí suma (129,55 t). Por eso se comparan porcentajes.
 
 ## 6. Motores propuestos (de más simple a más completo)
@@ -143,7 +154,7 @@ Con Timoshenko la flecha sube solo un 2 % (0,06379 m).
     y giro de planta.
   - Integra el exoesqueleto, que ya se condensa a rigidez lateral.
 - **Desventajas:** no modela dinteles, muros acoplados, pórticos 3D generales ni P-Δ.
-- Prueba externa: el prototipo de la sección 5 (OpenSees y Pynite).
+- Prueba externa: los verificadores de la sección 5 (OpenSees y Pynite) y, para casos elegidos, Robot.
 
 ### B. Análisis modal (sobre A)
 
@@ -185,7 +196,7 @@ Con Timoshenko la flecha sube solo un 2 % (0,06379 m).
 
 ## 8. Plan de trabajo sugerido para la rama
 
-1. Pasar el prototipo a `tools/` (verificadores con OpenSeesPy y Pynite que lean un JSON exportado por la app) y fijar
+1. ✅ (17/11/2026) Pasar el prototipo a `tools/` (verificadores con OpenSeesPy y Pynite que lean un JSON exportado por la app) y fijar
    la prueba de oro en `test/` (motor A en modo Euler = planilla).
 2. `src/engine/pseudo3d.ts`: el motor A, con pruebas contra la planilla y contra los resultados de la sección 5.
 3. Análisis modal (motor B).
@@ -231,7 +242,7 @@ Después de cada paso: `npm test`, verificador externo, capturas para el usuario
 | 1 · Primer motor | **Pseudo-3D con diafragma rígido (motor A)** |
 | 2 · Corte e inercia fisurada | Euler y Timoshenko como **columnas aparte**; **inercia fisurada opcional**, con un factor que se elige |
 | 3 · Fuerzas de cada piso | **Las de la planilla** (Wi de M,NyQ): se compara solo el reparto |
-| 4 · Licencias de ETABS, RFEM, Robot o CYPECAD | pendiente |
+| 4 · Licencias de ETABS, RFEM, Robot o CYPECAD | la facultad no tiene; **el usuario tiene Robot** (Autodesk Robot Structural Analysis): se arman casos para que los corra y se comparan sus resultados |
 | 5 · Sistemas de acero primero | **pórticos rígidos, tubo y diagrid** (los arriostrados, después) |
 
 Rama de trabajo: `claude/nice-ptolemy-xvgp8n`. Junta `motor-fem` con el último trabajo de la app (tablas de Muros,
