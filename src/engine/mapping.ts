@@ -207,7 +207,8 @@ function piezaPorClase(nombre: string, dir: Direccion, muros: Muro[], papeles: A
   }
   const J = Jreal(muros, dir);
   if (!(J > 0 && area > 0)) return otra('no se pudo calcular la sección');
-  const { b, h } = rectanguloEquivalente(J, area);
+  // sin redondear (al 1e-8 m): el J del rectángulo de la hoja queda igual al de la sección real (la hoja «Elementos especiales» lo controla)
+  const h = Math.round(Math.sqrt((12 * J) / area) * 1e8) / 1e8, b = Math.round((area / h) * 1e8) / 1e8;
   muros.forEach(m => set(m, m.dir === dirAlma ? 'alma' : 'ala sup.'));
   const tipos = [...new Set(muros.map(m => (m.aberturas?.length ? 'calado' : tipoDe(m) === 'perfil' ? 'perfil (oblicuo o curvo)' : tipoDe(m))))];
   const f3 = (v: number) => v.toFixed(3).replace('.', ',');
@@ -684,6 +685,8 @@ export function aPlanilla(p: Proyecto): Asignacion {
         pz = { nombre, dir, muros: ms.map(m => m.id), molde: 'simétrico', fila: {}, posicion: 0, area: ms.reduce((q, m) => q + areaMuro(m), 0), areaInf: ms.reduce((q, m) => q + m.areaInf, 0), filaHoja: null,
           avisos: ['Fuera del cálculo del J (elegido a mano): no va a la hoja J de este viento.'] };
       } else if (cfg?.clase && cfg.clase !== 'auto') pz = piezaPorClase(nombre, dir, ms, papeles, cfg.clase);
+      // automática: perfiles (oblicuos o curvos) y calados con corte son elementos especiales
+      else if (ms.some(m => tipoDe(m) === 'perfil' || m.aberturas?.length)) pz = { ...piezaPorClase(nombre, dir, ms, papeles, 'especial'), clase: undefined };
       else {
         // método de la planilla (sección 7): solo para piezas de tabiques; tubos, perfiles, pórticos y calados siguen como siempre
         const simple = (m: Muro) => tipoDe(m) === 'tabique' && !m.portico && !m.aberturas?.length;

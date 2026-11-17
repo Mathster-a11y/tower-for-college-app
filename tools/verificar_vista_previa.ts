@@ -31,7 +31,7 @@ for (const motor of ['actual', 'nuevo'] as Motor[]) for (const [nombre, f] of ca
   const a = aPlanilla(p);
   if (motor === 'actual' && (a.datos.jpar.length > 20 || a.datos.jort.length > 20)) continue;
   const r = calcularPlanilla(a.datos);
-  writeFileSync(`${dir}/${motor}_${nombre}.xlsx`, await escribirPlanilla(plantillas[motor], a.datos, r, p, undefined, undefined, { motor, virgen: true }));
+  writeFileSync(`${dir}/${motor}_${nombre}.xlsx`, await escribirPlanilla(plantillas[motor], a.datos, r, p, undefined, undefined, { motor, virgen: true, asig: a }));
   const vals = await valoresFormulas(plantillas[motor], a.datos, r, motor);
   const lista: [string, string, unknown][] = [];
   for (const [h, cs] of Object.entries(vals)) if (catedra.has(h)) for (const [ref, v] of Object.entries(cs)) lista.push([h, ref, typeof v === 'object' && v !== null ? { error: (v as { error: string }).error } : v]);

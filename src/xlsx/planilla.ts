@@ -12,6 +12,8 @@ import JSZip from 'jszip';
 import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
 import { config, type Motor } from '../engine/config';
 import { COLUMNA_ORTO_49 } from '../engine/planilla';
+import { hojaEspeciales, hojaXml } from './hojasNuevas';
+import type { Asignacion } from '../engine/mapping';
 import type { Proyecto } from '../engine/modelo';
 import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
 import { ejemploGuia } from '../engine/modelo';
@@ -183,13 +185,16 @@ export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
 }
 
 export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
-  op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
+  op: { motor?: Motor; virgen?: boolean; asig?: Asignacion } = {}): Promise<Uint8Array> {
   const motor = op.motor ?? config.motor;
   const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor);
   for (const ruta of Object.values(rutas)) {
     const f = zip.file(ruta);
     if (f) zip.file(ruta, borrarResultadosGuardados(await f.async('string')));
   }
+  // hojas nuevas de la app, después de las 7 de la cátedra (no tocan ninguna de ellas)
+  const esp = op.asig ? hojaEspeciales(op.asig, r, p, motor) : null;
+  if (esp) await agregarHoja(zip, esp.nombre, hojaXml(esp), rutas);
   // la torre completa en tablas legibles (con ellas alcanza para volver a armarla) y el JSON de respaldo
   for (const t of tablasProyecto(p)) await agregarHoja(zip, t.nombre, tablaXml(t), rutas);
   await agregarHoja(zip, HOJAS.t3d, hojaT3D(p), rutas);

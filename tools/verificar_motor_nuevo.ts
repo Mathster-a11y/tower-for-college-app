@@ -105,7 +105,7 @@ for (const [nombre, f, metodo] of casos) {
   const p = f();
   const a = aPlanilla(p);
   const r = calcularPlanilla(a.datos);
-  writeFileSync(`${dir}/${nombre}.xlsx`, await escribirPlanilla(plantilla, a.datos, r, p, undefined, undefined, { motor: 'nuevo', virgen: true }));
+  writeFileSync(`${dir}/${nombre}.xlsx`, await escribirPlanilla(plantilla, a.datos, r, p, undefined, undefined, { motor: 'nuevo', virgen: true, asig: a }));
   writeFileSync(`${dir}/${nombre}.json`, JSON.stringify(celdas(r)));
   console.log(nombre, '· piezas A', a.piezas.filter(x => x.dir === 'A' && x.filaHoja !== null).length, '· B', a.piezas.filter(x => x.dir === 'B' && x.filaHoja !== null).length,
     '· W', r.mnyq.H61.toFixed(2), '· ΣJ A', r.jpar.AY24.toFixed(3), '· e A', r.rotA.J7.toFixed(3));

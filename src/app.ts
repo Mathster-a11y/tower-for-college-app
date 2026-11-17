@@ -316,7 +316,7 @@ async function exportar() {
     ${radio('exp-cont', 'virgen', true, 'Planilla virgen', '(solo los datos en las 7 hojas de la cátedra, más las tablas «T3D» para volver a abrirla en la app)')}
     ${radio('exp-cont', 'renovada', false, 'Planilla renovada', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos)')}
     <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${config.motor === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}${conPar.length ? `, y B31:B50 de ${conPar.join(' y ')}, que van en 0 porque elegiste dos tabiques perpendiculares (filas 28–29) en vez del bloque general` : ''}.</p>
-    <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
+    <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo en la renovada; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
     <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en otra pestaña y se actualiza sola mientras editás).</p>`, [
@@ -334,7 +334,7 @@ async function exportar() {
         const res = calcularPlanilla(asig.datos);
         const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
         if (virgen) {
-          const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true });
+          const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true, asig });
           descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
           $<HTMLDialogElement>('dialogo').close();
           return;
@@ -359,7 +359,7 @@ async function exportar() {
           await Promise.all(Object.entries(urlFiguras).map(async ([ruta, url]) => { png[ruta.replace(/^.*\//, '').replace('.png', '')] = new Uint8Array(await (await fetch(url)).arrayBuffer()); }));
           figuras = figurasDesdeMeta(metaFiguras as Record<string, MetaFigura>, n => png[n]);
         }
-        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras, { motor, virgen: false });
+        const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras, { motor, virgen: false, asig });
         descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $<HTMLDialogElement>('dialogo').close();
       } catch (e) { fallo('No se pudo escribir la planilla', e); } finally { config.motor = motorAntes; }

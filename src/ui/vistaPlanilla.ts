@@ -169,7 +169,7 @@ export function montarVistaPlanilla() {
   async function descargar() {
     try {
       const { p, motor, asig, res } = armar();
-      const bytes = await escribirPlanilla(await plantilla(motor), asig.datos, res, p, undefined, undefined, { motor, virgen: true });
+      const bytes = await escribirPlanilla(await plantilla(motor), asig.datos, res, p, undefined, undefined, { motor, virgen: true, asig });
       const a = h('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })), download: `${(p.nombre || 'torre').replace(/[\\/:*?"<>|]+/g, '_')} - planilla.xlsx` });
       document.body.append(a); a.click(); a.remove();
     } catch (e) { estadoTxt.textContent = `No se pudo descargar: ${(e as Error).message}`; estadoTxt.classList.add('vp-mal'); }

@@ -70,7 +70,8 @@ describe('calados que no parten el elemento', () => {
     m1.caladoJ = 'corte';
     const pz = aPlanilla(p).piezas.find(x => x.dir === 'A' && x.muros.includes('M1'))!;
     expect(pz.Jreal).toBeCloseTo(Jreal([m1], 'A'), 9);
-    expect(pz.avisos.join(' ')).toMatch(/sección más débil/);
+    expect(pz.especial?.tipos).toContain('calado');                // con corte: elemento especial
+    expect(pz.avisos.join(' ')).toMatch(/rectángulo equivalente/);
     const { B, C } = pz.fila as { B: number; C: number };
     expect((B * C ** 3) / 12 / pz.Jreal!).toBeCloseTo(1, 3);     // b y h redondeados al mm
   });
