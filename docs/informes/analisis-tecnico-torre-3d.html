@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Revisión técnica de Torre 3D, con hallazgos y soluciones recomendadas por prioridad.">
+  <title>Informe técnico de Torre 3D</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --fondo: #f5f5f3;
+      --papel: #fff;
+      --texto: #1f2328;
+      --secundario: #515b65;
+      --linea: #d7dcd9;
+      --enlace: #155888;
+      --alto: #9a2924;
+      --medio-alto: #795018;
+      --medio: #36564a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--fondo);
+      color: var(--texto);
+      font: 1rem/1.6 'IBM Plex Sans', system-ui, sans-serif;
+    }
+    main {
+      width: min(100% - 3rem, 64rem);
+      margin: 2rem auto 3rem;
+      padding: clamp(1.5rem, 5vw, 4rem);
+      border: 1px solid var(--linea);
+      background: var(--papel);
+    }
+    h1, h2, h3, h4, p, dl, ul { margin: 0; }
+    h1, h2, h3, h4 { line-height: 1.2; }
+    h1 { margin: 0.5rem 0 1.25rem; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
+    h2 { font-size: clamp(1.45rem, 3vw, 1.85rem); letter-spacing: -0.02em; }
+    h3 { font-size: 1.2rem; }
+    h4 { font-size: 1.08rem; }
+    p + p { margin-top: 0.75rem; }
+    a { color: var(--enlace); text-underline-offset: 0.17em; overflow-wrap: anywhere; }
+    a:hover { text-decoration-thickness: 0.13em; }
+    :focus-visible { outline: 2px solid var(--enlace); outline-offset: 3px; }
+    code { font: 0.9em 'JetBrains Mono', ui-monospace, monospace; overflow-wrap: anywhere; }
+    [id] { scroll-margin-top: 1.25rem; }
+    .meta, .fuentes { color: var(--secundario); font-size: 0.875rem; }
+    .resumen { max-width: 46rem; font-size: 1.08rem; }
+    nav { margin-top: 1.5rem; padding: 0.875rem 0; border-block: 1px solid var(--linea); }
+    nav ul { display: flex; flex-wrap: wrap; gap: 0.4rem 1.375rem; padding: 0; list-style: none; }
+    section { margin-top: 2.5rem; }
+    section > h2, .prioridad > h3, .hallazgo > h4 { margin-bottom: 0.75rem; }
+    .prioridad { margin-top: 1.75rem; }
+    .prioridad > h3 { padding-bottom: 0.625rem; border-bottom: 2px solid currentColor; }
+    .alta > h3 { color: var(--alto); }
+    .media-alta > h3 { color: var(--medio-alto); }
+    .media > h3 { color: var(--medio); }
+    .hallazgo { padding: 1.125rem 0; border-bottom: 1px solid var(--linea); }
+    .hallazgo:last-child { border-bottom: 0; }
+    .hallazgo dl { margin-top: 0.75rem; }
+    .hallazgo dl > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.25rem 0.875rem; }
+    .hallazgo dl > div + div { margin-top: 0.45rem; }
+    dt { font-weight: 650; }
+    dd { margin: 0; }
+    .fuentes { margin-top: 0.75rem; }
+    .tabla { overflow-x: auto; margin-top: 0.75rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.94rem; }
+    th, td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--linea); text-align: left; vertical-align: top; }
+    thead { background: var(--fondo); }
+    tbody th { width: 24%; }
+    .formato { margin-top: 1.25rem; }
+    .formato h3 { margin-bottom: 0.625rem; }
+    .formato + p, .tabla + p { margin-top: 0.875rem; }
+    .lista { padding-left: 1.15rem; }
+    .lista li + li { margin-top: 0.45rem; }
+
+    @media (max-width: 38rem) {
+      main { width: 100%; margin: 0; border: 0; }
+      nav ul { gap: 0.375rem 1rem; }
+      .hallazgo dl > div { grid-template-columns: minmax(0, 1fr); }
+      th, td { padding-inline: 0.45rem; }
+    }
+
+    @media print {
+      body { background: #fff; font-size: 10pt; }
+      main { width: 100%; margin: 0; padding: 0; border: 0; }
+      nav { display: none; }
+      section { margin-top: 1.4rem; }
+      h1, h2, h3, h4 { break-after: avoid; }
+      tr, .hallazgo dl > div { break-inside: avoid; }
+      .tabla { overflow: visible; }
+      .meta, .fuentes, table { font-size: 9pt; }
+    }
+    @page { size: A4; margin: 16mm; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="meta">Repositorio <code>tower-for-college-app</code> · Revisión de <code>d84125e</code> · <time datetime="2026-11-17">17 de noviembre de 2026</time></p>
+      <h1>Informe técnico de Torre 3D</h1>
+      <p class="resumen">El motor de cálculo está separado de la interfaz y tiene una base sólida de pruebas. Las primeras correcciones deben proteger la importación y el guardado, hacer reproducible el cálculo entre computadoras y garantizar que la versión web arranque sin conexión.</p>
+      <nav aria-label="Contenido del informe">
+        <ul>
+          <li><a href="#hallazgos">Hallazgos por prioridad</a></li>
+          <li><a href="#proyecto-portable">Proyecto portable</a></li>
+          <li><a href="#arquitectura">Tipos y clases</a></li>
+          <li><a href="#verificaciones">Verificaciones realizadas</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <section id="hallazgos" aria-labelledby="titulo-hallazgos">
+      <h2 id="titulo-hallazgos">Hallazgos y soluciones recomendadas</h2>
+
+      <div class="prioridad alta">
+        <h3>Prioridad alta</h3>
+
+        <article class="hallazgo" id="inyeccion-html">
+          <h4>1. Un archivo importado puede ejecutar JavaScript</h4>
+          <p>En Chrome, un nombre de nivel de un JSON de prueba ejecutó JavaScript al abrir «Rototrasl. → En 3D». El rótulo llega a <code>innerHTML</code>. En la versión web, ese código podría acceder al proyecto activo, a las copias guardadas y a la URL de sincronización con Sheets si está configurada.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Crear los rótulos con nodos DOM y asignar nombres e identificadores con <code>textContent</code>. Revisar los usos de <code>innerHTML</code> que interpolan datos de proyectos, planillas y tablas remotas.</dd></div>
+            <div><dt>Verificación</dt><dd>Abrir en Chrome un proyecto con etiquetas y atributos HTML como texto. Deben verse literalmente en rótulos y medidas, sin ejecutar código.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../src/ui/vista3d.ts#L423">Rótulos 3D</a> · <a href="../../src/ui/planta.ts#L913">Panel de medidas</a></p>
+        </article>
+
+        <article class="hallazgo" id="validacion-y-guardado">
+          <h4>2. Un proyecto inválido puede reemplazar el guardado activo</h4>
+          <p>La validación inicial comprueba la versión y algunos campos superiores. Una prueba con <code>niveles: [null]</code> llegó al guardado automático. Si falla un recálculo, el estado puede conservar datos del cálculo anterior junto con el error. Los fallos del guardado automático se descartan en silencio.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Usar un lector común que valide y migre JSON, datos reconstruidos desde Excel, Sheets y almacenamiento local antes de activar el proyecto. Modelar el cálculo como vigente, pendiente o fallido y vincularlo a la revisión del modelo. Indicar si falló el guardado y ofrecer descargar el proyecto activo.</dd></div>
+            <div><dt>Verificación</dt><dd>Probar proyectos con niveles o muros inválidos, referencias rotas y almacenamiento lleno. Un error de importación debe preservar el último proyecto válido. Las vistas y exportaciones deben detectar resultados vencidos.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../src/main.ts#L363">Validación de entrada</a> · <a href="../../src/ui/estado.ts#L127">Cálculo y persistencia</a></p>
+        </article>
+
+        <article class="hallazgo" id="sheets">
+          <h4>3. Sheets permite escrituras amplias y puede dejar cambios parciales</h4>
+          <p>Este punto es de prioridad alta si se usa Sheets para entregas. El instructivo configura acceso público y ejecuta el script como propietario. El servidor acepta hojas, rangos y fórmulas de la petición, y toma el bloqueo al marcar la versión, después de escribir. Google documenta que <code>getDocumentLock()</code> devuelve <code>null</code> en una app web.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Restringir el acceso a usuarios autorizados, abrir la planilla por ID configurado del lado del script y permitir únicamente las tablas, celdas y operaciones previstas. Validar el paquete completo antes de escribir, tomar un bloqueo de script que cubra la operación y exigir la revisión remota esperada. En el cliente, serializar los envíos y cancelar o descartar las respuestas de una conexión reemplazada.</dd></div>
+            <div><dt>Verificación</dt><dd>En una planilla de prueba, enviar un paquete fuera de los rangos permitidos, simular dos editores y provocar un fallo a mitad de escritura. Verificar el rechazo, la detección del conflicto y el tratamiento de los cambios parciales.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../sheets/Codigo.gs#L44">Escritura y bloqueo en Apps Script</a> · <a href="../../src/sync/sheets.ts#L75">Cliente de sincronización</a> · <a href="https://developers.google.com/apps-script/reference/lock/lock-service#getDocumentLock()">Documentación de Google</a></p>
+        </article>
+
+        <article class="hallazgo" id="sin-conexion">
+          <h4>4. La versión web puede fallar sin red después de la primera visita</h4>
+          <p>En un perfil nuevo de Chrome, la primera visita dejó en caché el HTML, el manifiesto y los íconos. La recarga sin conexión falló porque faltaban el JavaScript y el CSS. La activación también elimina las cachés del mismo origen que tengan un nombre diferente al suyo. Eso puede afectar otros proyectos bajo el mismo dominio de GitHub Pages.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Generar en el build un manifiesto de precaché con los recursos requeridos. Usar un prefijo y una versión propios del sitio y limpiar solo sus versiones anteriores. Indicar cuándo terminó la descarga de los recursos necesarios para trabajar sin conexión.</dd></div>
+            <div><dt>Verificación</dt><dd>Abrir la app con un perfil limpio, esperar la instalación, cortar la red y volver a abrir. Probar también una actualización de versión y comprobar que se conservan las cachés ajenas.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../public/sw.js">Service worker</a> · <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages">Sitios de proyecto en GitHub Pages</a></p>
+        </article>
+      </div>
+
+      <div class="prioridad media-alta">
+        <h3>Prioridad media-alta</h3>
+
+        <article class="hallazgo" id="reproducibilidad">
+          <h4>5. El mismo archivo puede producir resultados diferentes</h4>
+          <p>El JSON guarda el modelo. El motor y el método de armado se leen de la configuración del navegador. La exportación a Excel, además, cambia temporalmente el motor global durante operaciones asíncronas. Con el mismo JSON del ejemplo asimétrico, cambiar solo de motor alteró la carga total de viento A de <strong>129,55 t a 125,81 t</strong>. Con el mismo motor, cambiar el método llevó ΣJ del viento B de <strong>7,233 a 7,748 m⁴</strong>.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Guardar un <a href="#proyecto-portable">JSON versionado</a> con el modelo y la configuración del cálculo. Pasar esta configuración explícitamente al motor. Exportar y sincronizar desde una copia fija del proyecto, los parámetros y el resultado de esa misma revisión.</dd></div>
+            <div><dt>Verificación</dt><dd>Abrir el archivo en dos perfiles limpios con preferencias locales distintas. Con la versión de fórmulas registrada, comparar valores de ambos vientos, asignación de piezas y estados de los controles.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../src/engine/config.ts">Motores y métodos</a> · <a href="../../src/ui/estado.ts#L12">Preferencias locales</a> · <a href="../../src/main.ts#L317">Exportación Excel</a></p>
+        </article>
+
+        <article class="hallazgo" id="alcance-calculo">
+          <h4>6. «Todo verifica» puede dar una impresión más amplia que los controles</h4>
+          <p>El resumen puede indicar «Todo verifica» aunque la tensión admisible del suelo sea un dato informativo que depende del estudio de suelos. El motor también distingue verificaciones, avisos y cuestiones que requieren revisión de la cátedra.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Describir el alcance como «Verifican los controles calculados» y mostrar los controles informativos o los datos pendientes por separado. Identificar en pantalla y en los informes la fuente elegida, el motor y el método.</dd></div>
+            <div><dt>Verificación</dt><dd>Revisar un caso con controles calculados satisfactorios y datos informativos. El resumen y el informe deben indicar qué quedó sujeto a revisión.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../src/main.ts#L203">Resumen de estado</a> · <a href="../../src/engine/verificaciones.ts#L30">Criterios y controles</a></p>
+        </article>
+
+        <article class="hallazgo" id="distribucion-materiales">
+          <h4>7. Las plantillas de la cátedra se distribuyen públicamente</h4>
+          <p>Las dos plantillas de Excel están disponibles como recursos de GitHub Pages y forman parte de la distribución. La licencia del repositorio excluye el material de la cátedra.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Verificar y documentar el permiso de redistribución para cada plantilla. Si alguna requiere distribución restringida, permitir que el estudiante aporte su copia al exportar y ajustar qué recursos se incluyen en ambos builds públicos.</dd></div>
+            <div><dt>Verificación</dt><dd>Revisar el inventario del artefacto web y del HTML autocontenido contra los permisos confirmados.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../LICENSE#L35">Licencia del repositorio</a> · <a href="../../src/assets/">Plantillas del código fuente</a></p>
+        </article>
+      </div>
+
+      <div class="prioridad media">
+        <h3>Prioridad media</h3>
+
+        <article class="hallazgo" id="pipeline">
+          <h4>8. La validación y la publicación pueden aislarse mejor</h4>
+          <p>GitHub Actions instala desde el lockfile, ejecuta las pruebas y construye ambas variantes. El workflow se activa al actualizar <code>main</code> o manualmente, comparte permisos de Pages con el job de build y referencia las acciones por etiqueta.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Ejecutar pruebas, chequeo de tipos y builds también en los pull requests. Reservar <code>pages: write</code> e <code>id-token: write</code> para el job de despliegue y fijar las acciones a commits verificados.</dd></div>
+            <div><dt>Verificación</dt><dd>Un pull request debe validar ambas variantes sin credenciales de publicación. La actualización de <code>main</code> debe publicar únicamente cuando termine el build correspondiente.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../.github/workflows/pages.yml">Workflow de Pages</a> · <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages">Guía de despliegue de GitHub</a></p>
+        </article>
+
+        <article class="hallazgo" id="version-autocontenida">
+          <h4>9. Hay dos copias del HTML descargable con contenido diferente</h4>
+          <p>La versión de <code>descargar/</code> y la publicada difieren en bytes. Ambas pesan alrededor de 4,7 MB, mientras que el README indica unos 0,8 MB.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Distribuir el HTML que genera CI desde un enlace único por versión. Mostrar el identificador de compilación en la app y actualizar el README con la ubicación y el tamaño reales.</dd></div>
+            <div><dt>Verificación</dt><dd>Descargar el archivo desde el enlace documentado, abrirlo localmente sin red y cotejar su versión con el build publicado.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../README.md#L15">Instrucciones de descarga</a> · <a href="https://mathster-a11y.github.io/tower-for-college-app/torre3d.html">HTML publicado</a></p>
+        </article>
+
+        <article class="hallazgo" id="dependencias">
+          <h4>10. Vite y Vitest tienen avisos para sus servidores de desarrollo y prueba</h4>
+          <p>La auditoría del lockfile detectó avisos aplicables a las versiones instaladas. Los ejemplos citados afectan al servidor de desarrollo de Vite y al servidor de API de Vitest cuando está habilitado.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Actualizar Vite, Vitest y sus dependencias relacionadas a versiones compatibles con las correcciones. Revisar los avisos según el entorno en que se usan y verificar la versión web y el HTML clásico.</dd></div>
+            <div><dt>Verificación</dt><dd>Repetir la auditoría y ejecutar las pruebas, los builds y una apertura del HTML autocontenido.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../package-lock.json">Lockfile</a> · <a href="https://github.com/vitejs/vite/security/advisories/GHSA-vg6x-rcgg-rjx6">Aviso de Vite</a> · <a href="https://github.com/vitest-dev/vitest/security/advisories/GHSA-9crc-q9x8-hgqq">Aviso de Vitest</a></p>
+        </article>
+
+        <article class="hallazgo" id="estado-y-edicion">
+          <h4>11. El estado compartido concentra demasiadas responsabilidades</h4>
+          <p><code>Estado</code> administra el modelo, historial, persistencia, vistas y cálculo. <code>main.ts</code> coordina archivos, navegación y sincronización. El editor de planta mezcla herramientas de dibujo y manejo del DOM. En proyectos grandes, serializar una copia completa por edición y recalcular en vivo son puntos a medir.</p>
+          <dl>
+            <div><dt>Solución</dt><dd>Separar de forma incremental las ediciones del modelo, el historial y la persistencia, el cálculo derivado y el estado visual. Extraer herramientas del editor al modificarlas. Medir arrastre, guardado y cálculo con una torre grande antes de introducir procesamiento en segundo plano o historial por operaciones.</dd></div>
+            <div><dt>Verificación</dt><dd>Comprobar que abrir, editar, deshacer, rehacer y exportar conservan su comportamiento. Medir la latencia antes y después con el mismo proyecto y equipo.</dd></div>
+          </dl>
+          <p class="fuentes"><a href="../../src/ui/estado.ts#L36">Estado de la aplicación</a> · <a href="../../src/main.ts">Punto de entrada</a> · <a href="../../src/ui/planta.ts">Editor de planta</a></p>
+        </article>
+      </div>
+    </section>
+
+    <section id="proyecto-portable" aria-labelledby="titulo-proyecto">
+      <h2 id="titulo-proyecto">Guardado y proyecto portable</h2>
+      <p>El guardado automático mantiene un proyecto activo en el navegador. «Mis proyectos» conserva hasta 40 copias, con un máximo de 5 automáticas. Para trasladar el modelo se descarga un JSON. Excel permite otra vía de intercambio: el libro generado incluye tablas «T3D …» y una copia del JSON. Al reabrirlo, las tablas tienen prioridad para recuperar las ediciones hechas en la planilla.</p>
+      <p class="fuentes"><a href="../../src/ui/biblioteca.ts#L7">Biblioteca local</a> · <a href="../../src/main.ts#L505">Descarga del JSON</a> · <a href="../../src/xlsx/planilla.ts#L196">Lectura de Excel</a></p>
+
+      <div class="formato">
+        <h3>Formato recomendado · JSON versionado</h3>
+        <p>Usar un archivo de datos como <code>mi-torre.torre3d.json</code>. La versión del esquema indica cómo leer y migrar el archivo. La versión de las fórmulas identifica el cálculo que se debe poder volver a ejecutar.</p>
+        <div class="tabla">
+          <table aria-label="Bloques propuestos para el archivo JSON">
+            <thead><tr><th scope="col">Bloque</th><th scope="col">Contenido</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Formato</th><td>Identificador de Torre 3D y versión del esquema de datos.</td></tr>
+              <tr><th scope="row">Modelo</th><td>Sitio y viento, hormigón, fundación, niveles, geometría, materiales, cargas, áreas de influencia, piezas, exoesqueleto y demás datos editables que intervienen en el cálculo. Definir unidades, orden de los niveles y referencias entre elementos mediante identificadores estables.</td></tr>
+              <tr><th scope="row">Cálculo</th><td>Motor de planilla, método de armado, versión de las fórmulas y opciones que cambian los resultados. Cuando aplique, identificar también la plantilla de Excel usada para la entrega.</td></tr>
+              <tr><th scope="row">Vista</th><td>Fuente visible («Planilla» o «Guía/CIRSOC»), viento seleccionado y opciones necesarias para retomar la revisión. Puede ser opcional.</td></tr>
+              <tr><th scope="row">Resultados de referencia</th><td>Opcionales para entregas. Incluir magnitudes y unidades de ambos vientos, estados de verificación y versión del cálculo. Comparar valores al reabrir con tolerancias definidas por magnitud.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Validar la estructura con JSON Schema y comprobar además reglas del dominio, como dimensiones válidas, cotas coherentes y referencias a elementos que existen. Leer los archivos antiguos mediante un importador. Si se desconoce el motor o el método original, pedir que se indiquen al migrar. Si la versión de cálculo registrada ya no está disponible, indicar cómo abrir la versión histórica o mostrar los resultados de referencia, cuando estén incluidos.</p>
+        <p class="fuentes"><a href="https://json-schema.org/draft/2020-12">Especificación de JSON Schema</a></p>
+      </div>
+
+      <div class="formato">
+        <h3>Alternativa · ZIP con adjuntos</h3>
+        <p>Ofrecer un ZIP cuando haga falta trasladar el entorno de trabajo completo. Incluir el mismo JSON versionado y los adjuntos elegidos, como un DXF, PDF o imagen de calco. Registrar su escala, posición y capas cuando corresponda. Al importar, validar qué archivos se aceptan, sus rutas y su tamaño descomprimido. El JSON mantiene la definición del proyecto y Excel sigue disponible como formato de entrega.</p>
+        <p class="fuentes"><a href="../../src/ui/estado.ts#L53">Planos de referencia en el estado actual</a></p>
+      </div>
+    </section>
+
+    <section id="arquitectura" aria-labelledby="titulo-arquitectura">
+      <h2 id="titulo-arquitectura">Composición, tipos y clases</h2>
+      <p>Torre 3D es una aplicación web educativa para modelar edificios en torre y estudiar su respuesta al viento. Usa TypeScript, HTML y CSS, SVG en planta y Three.js para el 3D. El motor de <code>src/engine/</code> opera sobre interfaces y funciones independientes del DOM. <code>src/ui/</code> organiza las vistas y el editor, <code>src/xlsx/</code> lee y escribe las planillas y <code>src/sync/</code> se ocupa de Sheets. Esta estructura permite probar el cálculo por separado y serializar el modelo como datos simples.</p>
+      <p>TypeScript usa <code>strict</code>. El tipo <code>Muro</code> reúne varias geometrías con atributos opcionales. Por ejemplo, admite un muro declarado como <code>perfil</code> sin su geometría y el motor lo interpreta como tabique. Conviene usar una unión discriminada en el modelo interno, con los atributos obligatorios de cada geometría, y resolver la compatibilidad con los archivos antiguos en el lector.</p>
+      <div class="tabla">
+        <table aria-label="Evaluación de las clases">
+          <thead><tr><th scope="col">Clase</th><th scope="col">Evaluación y mejora</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><a href="../../src/ui/vista3d.ts#L55"><code>Prisma</code></a></th><td>Encapsula el estado geométrico y actualiza los buffers durante la animación. Declarar <code>readonly</code> para las referencias a malla y bordes si conservan su identidad.</td></tr>
+            <tr><th scope="row"><a href="../../src/xlsx/hojasG.ts#L88"><code>Hoja</code></a></th><td>Agrupa celdas, gráficos e imágenes y produce XML. Modelar texto y fórmulas como variantes explícitas. Hoy una cadena que empieza con <code>=</code> se exporta como fórmula.</td></tr>
+            <tr><th scope="row"><a href="../../src/sync/sheets.ts#L75"><code>SincroSheets</code></a></th><td>Administra temporizadores, peticiones y revisión remota, con <code>fetch</code> inyectable para pruebas. Serializar escrituras y controlar el ciclo de vida de la conexión, como se detalla en <a href="#sheets">el punto 3</a>.</td></tr>
+            <tr><th scope="row"><a href="../../src/ui/estado.ts#L36"><code>Estado</code></a></th><td>El singleton simplifica la comunicación entre vistas, pero sus atributos públicos y mutables dificultan controlar cuándo se guarda y recalcula. Encauzar las mutaciones del modelo por operaciones explícitas y separar la selección, el historial y el resultado derivado. Véase <a href="#estado-y-edicion">el punto 11</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fuentes"><a href="../../tsconfig.json">Configuración de TypeScript</a> · <a href="../../src/engine/modelo.ts#L143">Tipos de geometría</a> · <a href="../../package.json">Dependencias</a></p>
+    </section>
+
+    <section id="verificaciones" aria-labelledby="titulo-verificaciones">
+      <h2 id="titulo-verificaciones">Verificaciones realizadas</h2>
+      <ul class="lista">
+        <li>Pasaron el chequeo de TypeScript, 382 pruebas de Vitest y los builds web y autocontenido con la configuración del repositorio.</li>
+        <li>En una copia local aislada de Chrome se reprodujeron la ejecución de JavaScript desde un rótulo, el guardado de un nivel inválido y el fallo al recargar sin conexión tras la primera visita.</li>
+        <li>Se ejecutaron las combinaciones de motor y método sobre el mismo JSON de ejemplo. Se verificaron el sitio publicado, el despliegue exitoso del commit revisado y el acceso directo a las dos plantillas.</li>
+        <li>El análisis de Sheets se basó en el código y en la documentación de Apps Script. La conexión con una planilla real queda por verificar.</li>
+      </ul>
+      <p class="fuentes"><a href="https://mathster-a11y.github.io/tower-for-college-app/">Sitio publicado</a> · <a href="https://github.com/Mathster-a11y/tower-for-college-app/actions/runs/43962948883">Despliegue revisado</a></p>
+    </section>
+  </main>
+</body>
+</html>
