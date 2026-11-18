@@ -21,6 +21,13 @@ import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
 import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparVarios, hijosGrupo, subgrupos, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
 import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
+/** «rótulo <b>valor</b> unidad» con nodos de texto */
+function datoPieza(rotulo: string, valor: string, unidad: string): HTMLSpanElement {
+  const s = document.createElement('span'), b = document.createElement('b');
+  b.textContent = valor; s.append(rotulo, b, unidad);
+  return s;
+}
+
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, txt?: string) => {
   const e = document.createElementNS(NS, tag);
@@ -905,7 +912,8 @@ export function montarPlanta(cont: HTMLElement) {
       vista.replaceChildren(miniatura(insTipo, insMed, 96));
       const ms = piezaTipo(insTipo, insMed, 0, 0, new Set());
       const f = (x: number) => x.toLocaleString('es-AR', { maximumFractionDigits: 3 });
-      datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>área <b>${f(ms.reduce((q, m) => q + (tipoDe(m) === 'tubo-circ' ? Math.PI / 4 * (m.largo ** 2 - Math.max(0, m.largo - 2 * m.espesor) ** 2) : rectangulos(m).reduce((z, r) => z + r.ax * r.ay, 0)), 0))}</b> m²</span>`;
+      datos.replaceChildren(datoPieza('J viento A (↑) ', f(Jreal(ms, 'A')), ' m⁴'), datoPieza('J viento B (→) ', f(Jreal(ms, 'B')), ' m⁴'),
+        datoPieza('área ', f(ms.reduce((q, m) => q + (tipoDe(m) === 'tubo-circ' ? Math.PI / 4 * (m.largo ** 2 - Math.max(0, m.largo - 2 * m.espesor) ** 2) : rectangulos(m).reduce((z, r) => z + r.ax * r.ay, 0)), 0)), ' m²'));
     };
     const filaMed = document.createElement('div'); filaMed.className = 'medidas';
     filaMed.append(campo(esCirc(insTipo) ? 'D' : 'h', 'h', esCirc(insTipo) ? 'diámetro exterior (m)' : insTipo === 'pórtico' ? 'largo total del pórtico, de cara exterior a cara exterior (m)' : 'largo del alma, medida total (m)'));
@@ -970,7 +978,9 @@ export function montarPlanta(cont: HTMLElement) {
     vista.append(miniatura(tipo, med, 96));
     const datos = document.createElement('div'); datos.className = 'datos-pieza';
     const f = (x: number) => x.toLocaleString('es-AR', { maximumFractionDigits: 3 });
-    datos.innerHTML = `<span>J viento A (↑) <b>${f(Jreal(ms, 'A'))}</b> m⁴</span><span>J viento B (→) <b>${f(Jreal(ms, 'B'))}</b> m⁴</span><span>${ms.length} muro${ms.length > 1 ? 's' : ''}: ${ms.map(m => m.id).join(', ')}</span>`;
+    // los nombres de los muros vienen del proyecto: van como texto, nunca como HTML
+    const lista = document.createElement('span'); lista.textContent = `${ms.length} muro${ms.length > 1 ? 's' : ''}: ${ms.map(m => m.id).join(', ')}`;
+    datos.replaceChildren(datoPieza('J viento A (↑) ', f(Jreal(ms, 'A')), ' m⁴'), datoPieza('J viento B (→) ', f(Jreal(ms, 'B')), ' m⁴'), lista);
     const nota = document.createElement('p'); nota.className = 'nota chica';
     nota.textContent = `${t.ayuda} Las partes se nombran en la posición de la pieza sin girar (alma vertical, ala superior arriba). Los cambios se aplican al salir del campo o con Enter; el centro de la pieza queda donde está.`;
     const listo = document.createElement('button'); listo.type = 'button'; listo.textContent = 'Listo';

@@ -186,7 +186,9 @@ export function tablaValores(cols: string[], filas: (string | number)[][], dec: 
   det.append(sum);
   const t = document.createElement('table');
   t.className = 'tabla compacta';
-  t.innerHTML = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+  const cab = document.createElement('thead'), trc = document.createElement('tr');
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; trc.append(th); });
+  cab.append(trc); t.append(cab);
   const tb = document.createElement('tbody');
   filas.forEach(f => { const tr = document.createElement('tr'); f.forEach((v, j) => { const td = document.createElement('td'); if (typeof v === 'number') { td.className = 'n'; td.textContent = fmt(v, dec[j] ?? 2); } else td.textContent = v; tr.append(td); }); tb.append(tr); });
   t.append(tb);

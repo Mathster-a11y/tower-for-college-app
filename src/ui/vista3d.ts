@@ -421,11 +421,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     }
   }
 
-  /** etiqueta HTML pegada a un punto 3D */
-  function etiqueta(texto: string, clase: string, globo?: string): CSS2DObject {
+  /** etiqueta pegada a un punto 3D. El texto va siempre como texto (los nombres vienen del proyecto: nunca como HTML) */
+  function etiqueta(texto: string | (string | Node)[], clase: string, globo?: string): CSS2DObject {
     const e = document.createElement('div');
     e.className = `et3d ${clase}`;
-    e.innerHTML = texto;
+    e.append(...(Array.isArray(texto) ? texto : [texto]));
     if (globo) e.title = globo;
     const o = new CSS2DObject(e);
     grupo.add(o);
@@ -511,7 +511,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (i % paso && i !== nivs.length - 1) return;
       const pt = esq.clone().setY(n.cota);
       grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pt.clone().add(new THREE.Vector3(A ? 0 : 0, 0, A ? 0.5 : 0)), pt.clone().add(A ? new THREE.Vector3(0, 0, 1.2) : new THREE.Vector3(-1.2, 0, 0))]), tick));
-      etiqueta(`${n.nombre} <span>${n.cota > 0 ? '+' : ''}${fmt(n.cota)}</span>`, 'nivel').position.copy(pt.add(A ? new THREE.Vector3(0, 0, 1.4) : new THREE.Vector3(-1.4, 0, 0)));
+      const cotaN = document.createElement('span'); cotaN.textContent = `${n.cota > 0 ? '+' : ''}${fmt(n.cota)}`;
+      etiqueta([`${n.nombre} `, cotaN], 'nivel').position.copy(pt.add(A ? new THREE.Vector3(0, 0, 1.4) : new THREE.Vector3(-1.4, 0, 0)));
     });
     // δ en la azotea: del CR sin deformar al CR corrido (solo la traslación)
     const gD = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);

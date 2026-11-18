@@ -16,7 +16,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, h, hacerPlegable } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable } from './ui/comp';
 import { resaltarFilas } from './ui/grilla';
 import { abrirVistaPlanilla } from './ui/vistaPlanilla';
 import plantillaURL from './assets/planilla_virgen.xlsx';
@@ -407,7 +407,6 @@ function dialogoImportar(imp: Importacion, archivo: string, planilla: ArrayBuffe
   if (imp.muros.length) partes.push(`${imp.muros.length} muros`);
   if (imp.lineas.length) partes.push(`${imp.lineas.length} líneas`);
   if (imp.sitio) partes.push('datos del viento y de la fundación');
-  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   dialogo(`<h2>${titulo}</h2>
     <p>«${esc(archivo)}»: ${partes.join(', ') || 'nada para importar'}.</p>
     ${imp.lineas.length ? `<div class="grilla2">
@@ -544,7 +543,7 @@ function armarMis() {
       const p = leerVersion(v.id); if (!p) return;
       try {
         const html = tablaComparacion(comparar(p, estado.proyecto), v.nombre, 'Actual');
-        dialogo(`<h2>Comparar con «${v.nombre.replace(/</g, '&lt;')}»</h2><p class="nota">Valores según la guía/CIRSOC. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+        dialogo(`<h2>Comparar con «${esc(v.nombre)}»</h2><p class="nota">Valores según la guía/CIRSOC. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
       } catch (e) { fallo('No se pudo comparar', e); }
     });
     const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');
@@ -676,7 +675,7 @@ $('b-sheets').addEventListener('click', () => {
       <li>Implementar → Nueva implementación → Aplicación web · Ejecutar como: yo · Acceso: cualquier persona.</li>
       <li>Pegá acá la dirección que termina en <code>/exec</code>.</li>
     </ol>
-    <label class="campo"><span>Dirección de la aplicación web</span><input id="sh-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${actual.replace(/"/g, '&quot;')}"></label>
+    <label class="campo"><span>Dirección de la aplicación web</span><input id="sh-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(actual)}"></label>
     <p class="nota">Desde la planilla se editan las hojas «T3D Niveles», «T3D Muros» y los datos de la hoja «viento». Si la planilla ya tiene un edificio, al conectar se trae ese; si está vacía, se escribe el de la app. La dirección es la llave: no la compartas.</p>`, [
     ...(sincro ? [['Desconectar', () => { desconectarSheets(); $<HTMLDialogElement>('dialogo').close(); }] as [string, () => void]] : []),
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],

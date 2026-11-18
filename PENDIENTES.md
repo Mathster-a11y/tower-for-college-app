@@ -77,6 +77,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 
 ## En curso
 - **Plan de métodos y planillas** (`docs/plan_metodos.html` y `.pdf`): cuatro métodos (Planilla virgen, Guía, CIRSOC, FEM) y Combinado, un Excel por método, bibliografía revisada (CIRSOC 101-25, 102-25, 401, EC7-3, guía 2024). Listo para la etapa 1 (reorganizar sin cambiar números). Falta el PDF del CIRSOC 201-2005 para la etapa 4.
+- **Etapa 0 (informe técnico de Gaspar):** [x] hallazgo 1 — los nombres del proyecto ya no llegan como HTML (rótulos del 3D, datos de la pieza en la planta, encabezados de tablas, diálogos con esc() completo). Reproducido antes (8 nombres ejecutaban código) y verificado después en Chrome; prueba `test/sinHtmlDeDatos.test.ts` que frena cualquier HTML nuevo sin revisar. [ ] hallazgo 2 (lector único que valida) · [ ] hallazgo 4 (sin red)
 
 ## Próximos
 - [x] Silueta de cada piso: editarla en la planta (vértices) o importarla de AutoCAD (DXF, polilínea con arcos); se ve en la planta y en las losas del 3D. La planilla sigue leyendo B y L (botón «Usar la caja como B y L»)

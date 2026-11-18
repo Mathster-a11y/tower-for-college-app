@@ -11,7 +11,8 @@ export const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<s
   hijos.forEach(c => e.append(c));
   return e;
 };
-export const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** escapa un texto para meterlo en HTML (contenido o atributo entre comillas): los datos del proyecto nunca van como HTML */
+export const esc = (t: string) => t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** títulos de las secciones plegadas (se recuerdan entre sesiones: los paneles se rearman con cada cambio) */
 const CLAVE_PLEGADAS = 'torre3d.plegadas.v2';
