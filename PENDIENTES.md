@@ -76,8 +76,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [ ] Planilla de la cátedra (las dos versiones): en Rototrasl., O = G + N suma un momento (G, tm) y una fuerza (N = Mt·J·a/ΣJ·a², t), y «Flex comp PB paralelos» toma O como el momento de la pieza. La rotación casi no suma momento: en el Anexo de la guía, T1 y T3 quedan 46 % abajo y T2 y T4 31 % arriba. La hoja «Flexocompresión (guía)» usa (E + N)/D5 × M en PB. Pregunta para la cátedra
 
 ## En curso
-- Nada por ahora.
-- Nada por ahora: el próximo es el primero de la lista de abajo.
+- **Plan de métodos y planillas** (`docs/plan_metodos.html` y `.pdf`): cuatro métodos (Planilla virgen, Guía, CIRSOC, FEM) y Combinado, un Excel por método, bibliografía revisada (CIRSOC 101-25, 102-25, 401, EC7-3, guía 2024). Listo para la etapa 1 (reorganizar sin cambiar números). Falta el PDF del CIRSOC 201-2005 para la etapa 4.
 
 ## Próximos
 - [x] Silueta de cada piso: editarla en la planta (vértices) o importarla de AutoCAD (DXF, polilínea con arcos); se ve en la planta y en las losas del 3D. La planilla sigue leyendo B y L (botón «Usar la caja como B y L»)

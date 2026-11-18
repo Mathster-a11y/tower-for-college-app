@@ -51,7 +51,7 @@ svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
 <body><div class="pag">
 
 <h1>Plan de trabajo · métodos de cálculo y planillas</h1>
-<p class="sub">Torre 3D · cuarta versión del plan: tus respuestas, la guía «Edificio en torre» 2024 y las fundaciones · noviembre 2026 · <b>todavía sin código</b>: este documento es para decidir.</p>
+<p class="sub">Torre 3D · quinta versión del plan: tus respuestas, la guía «Edificio en torre» 2024 y las fundaciones · noviembre 2026 · <b>listo para empezar la etapa 1</b> (todavía sin código).</p>
 
 <div class="tarjeta gris">
 <b>En una frase.</b> La app pasa a tener <b>cuatro métodos</b> (Planilla virgen, Guía, CIRSOC y FEM), cada uno con sus
@@ -78,7 +78,8 @@ el libro calcula solo.
   <li><b>C.</b> La guía «Edificio en torre» 2024 leída paso por paso: qué hace, qué ya hace la app y qué falta (esbeltez, flecha directa, armado con barras, corte en dinteles).</li>
   <li><b>D.</b> Fundaciones: el alcance mínimo, tomado de la guía, y cómo se verifica en cada método.</li>
   <li>Tus respuestas aplicadas: la planilla de la guía se arma desde la guía; todas las correcciones de hoy son del método Guía (incluido Kz con z mínimo de 5 m, que la guía hace en 2.1.3); el armado queda como opción.</li>
-  <li><b>No llegaron al repo</b> el CIRSOC 401 ni el Eurocódigo 7 (en <code>main</code> solo están la guía y la guía de viento). Tampoco el CIRSOC 201. Ver la sección 9.</li>
+  <li><b>20/11:</b> llegaron el <b>CIRSOC 401</b> (estudios geotécnicos, 2018) y el <b>Eurocódigo 7, Parte 3</b> (proyecto asistido por ensayos de campo). Con ellos se cerró la sección D. Respuestas aplicadas: armado de la cátedra por defecto, erratas de la guía anotadas, platea = planta del último subsuelo y CIRSOC 201-2005 hasta que esté la edición nueva.</li>
+  <li><b>Sigue faltando el PDF del CIRSOC 201-2005.</b> Las etapas 1 a 3 no lo necesitan; la 4 sí (sección 9).</li>
 </ul>
 </div>
 
@@ -126,8 +127,9 @@ importante: <b>el 101 y el 102 que subiste son las ediciones 2025</b>, no las de
 <tr><td><b>reglamento_301</b> (CIRSOC 301, julio 2005)</td><td>Estructuras de acero para edificios</td><td>Exoesqueleto (etapa 8)</td></tr>
 <tr><td><b>CIRSOC-302</b> (julio 2005)</td><td>Elementos de tubos de acero</td><td>Exoesqueleto: diagrid y barras tubulares</td></tr>
 <tr><td><b>CIRSOC-303</b> (julio 2009)</td><td>Acero conformado en frío</td><td>Poco uso en una torre; quizás en elementos secundarios del exo</td></tr>
-<tr><td><b>INPRES-CIRSOC 103, Parte III</b> (2018)</td><td>Sismo · construcciones de mampostería</td><td>Casi nada para tabiques de hormigón (pregunta 10)</td></tr>
-<tr><td style="color:var(--mal)"><b>Falta: CIRSOC 201</b></td><td>Hormigón armado</td><td>Sin él no se puede hacer la verificación CIRSOC (etapa 4)</td></tr>
+<tr><td><b>INPRES-CIRSOC 103, Parte III</b> (2018)</td><td>Sismo · construcciones de mampostería</td><td>Casi nada para tabiques de hormigón (pregunta 7)</td></tr>
+<tr><td><b>CIRSOC-401-Reglamento</b> (2018) y <b>UNE-ENV 1997-3</b> (llegaron el 20/11)</td><td>Estudios geotécnicos · Eurocódigo 7, Parte 3</td><td>Fundaciones (sección D)</td></tr>
+<tr><td style="color:var(--mal)"><b>Falta: CIRSOC 201-2005</b></td><td>Hormigón armado</td><td>Sin él no se puede hacer la verificación CIRSOC (etapa 4)</td></tr>
 <tr><td><b>7-edif torre 2024</b> y <b>guía viento torre cirsoc2005</b> (llegaron el 19/11)</td><td>La guía de predimensionado y la de viento</td><td><span class="chip gui">Guía</span> método y planilla (sección C)</td></tr>
 </table>
 
@@ -185,7 +187,7 @@ en las combinaciones con 1,0 en lugar de 1,6. Hay que explicarlo así para que e
     (la resistencia tiene que igualar o superar el efecto). Ya no es «coeficiente ≥ 1,5». La presión en el suelo está en la sección D.</li>
   <li><b>Deformación</b> (102-25, comentario C B.4.2): la combinación de servicio es D + 0,5 L + Wa, con el viento de un
     período de retorno menor (suele usarse 10 años). Los límites de deriva habituales son <b>1/600 a 1/400</b> de la altura
-    del piso o del edificio. Son orientativos (comentario, no obligatorio). (Pregunta 9.)</li>
+    del piso o del edificio. Son orientativos (comentario, no obligatorio). (Pregunta 6.)</li>
 </ul>
 
 <!-- ============================================================ C -->
@@ -244,14 +246,25 @@ planilla siguen este orden.</p>
   <li>el corte en PB es 126 t en la tabla y 204,8 t en el diagrama;</li>
   <li>x vale 78 cm en el texto, 1,05 m en el esquema y 67 cm si se calcula.</li>
 </ul>
-Propuesta: el método Guía sigue el procedimiento (da los números bien) y las pruebas comparan con la guía, dejando anotada cada diferencia (pregunta 7 de abajo).</div>
+Propuesta: el método Guía sigue el procedimiento (da los números bien) y las pruebas comparan con la guía, dejando anotada cada diferencia (aceptado el 20/11).</div>
 
 <!-- ============================================================ D -->
 <h2><span class="n">D</span>Fundaciones: lo mínimo necesario</h2>
 <p>La guía fija el alcance: <b>fundación directa (platea) considerada rígida</b>, apoyada en un suelo del que solo se
 conoce la <b>tensión admisible</b> del estudio de suelos. No calcula capacidad de carga, asentamientos ni pilotes. Las
-fundaciones las mantenemos en ese alcance; los textos de fundaciones (CIRSOC 401 y Eurocódigo 7) solo agregan lo
-mínimo para el método CIRSOC.</p>
+fundaciones las mantenemos en ese alcance. Los dos textos que subiste lo confirman:</p>
+<ul>
+  <li><b>CIRSOC 401</b> (2018) es el reglamento de <b>estudios geotécnicos</b>: dice cómo se investiga el suelo y que el
+    informe da las «recomendaciones geotécnicas… parámetros para el diseño geotécnico» (art. 7.4). El diseño de las
+    fundaciones va en el <b>CIRSOC 402, «en preparación»</b> (art. 1.2). Para nosotros: la tensión admisible es un
+    <b>dato del estudio</b>, como en la guía.</li>
+  <li><b>Eurocódigo 7, Parte 3</b> trata de cómo sacar parámetros del suelo de los ensayos de campo (SPT, CPT, placa).
+    Las fórmulas de capacidad de carga y de área efectiva con carga excéntrica están en la <b>Parte 1</b>, que no
+    está. Con el alcance de la guía no hace falta: <b>el área efectiva queda fuera</b>.</li>
+  <li>Un dato didáctico del 401 que sí sumamos, como información: la <b>profundidad mínima de investigación</b> es la
+    mayor entre 6 m y el plano de fundación más 2 veces el ancho de la zapata (art. 3.5.6.2). En una platea de 18 m de ancho da
+    ≥ fundación + 36 m. Sirve para que el alumno vea qué estudio de suelos pide su torre.</li>
+</ul>
 
 <figure>
 <svg viewBox="0 0 960 300" role="img" aria-label="Presiones bajo la platea">
@@ -277,21 +290,20 @@ mínimo para el método CIRSOC.</p>
       <text x="140" y="232" text-anchor="middle" font-size="11">σmáx = 2N / (3·B1·(L/2 − e))</text>
       <text x="140" y="250" text-anchor="middle" font-size="11" fill="#5f6b76">la guía pide no llegar acá (núcleo central)</text>
     </g>
-    <!-- 3 área efectiva -->
+    <!-- 3 estudio geotécnico -->
     <g transform="translate(640,20)">
-      <text x="140" y="14" text-anchor="middle" font-weight="700" fill="#1a6bbd">área efectiva (EC7, a confirmar)</text>
+      <text x="140" y="14" text-anchor="middle" font-weight="700" fill="#1a6bbd">el dato sale del estudio (CIRSOC 401)</text>
       <rect x="60" y="30" width="160" height="70" fill="#f0f0ee" stroke="#8a949e"/>
       <rect x="30" y="100" width="220" height="16" fill="#c3cad1" stroke="#5f6b76"/>
-      <rect x="70" y="116" width="180" height="46" fill="#dbe8f6" stroke="#1a6bbd"/>
-      <path d="M30 172 H 68" stroke="#1a6bbd"/><path d="M30 168 V176"/><text x="49" y="188" text-anchor="middle" font-size="10" fill="#1a6bbd">2e</text>
-      <text x="160" y="143" text-anchor="middle" font-size="11">L' = L − 2e</text>
-      <text x="140" y="214" text-anchor="middle" font-size="11">q = N / (B1·L') uniforme</text>
-      <text x="140" y="232" text-anchor="middle" font-size="11" fill="#5f6b76">se compara con la resistencia del suelo</text>
-      <text x="140" y="250" text-anchor="middle" font-size="11" fill="#5f6b76">(método CIRSOC; se confirma con los textos)</text>
+      <rect x="0" y="116" width="280" height="30" fill="#f6efe6"/><rect x="0" y="146" width="280" height="30" fill="#efe4d2"/><rect x="0" y="176" width="280" height="22" fill="#e6d6bd"/>
+      <line x1="262" y1="104" x2="262" y2="198" stroke="#1a6bbd" stroke-width="3"/><text x="258" y="212" text-anchor="end" font-size="10" fill="#1a6bbd">sondeo</text>
+      <text x="10" y="134" font-size="10" fill="#5f6b76">estrato 1</text><text x="10" y="164" font-size="10" fill="#5f6b76">estrato 2</text>
+      <text x="140" y="230" text-anchor="middle" font-size="11">σt adm = dato del informe (art. 7.4)</text>
+      <text x="140" y="248" text-anchor="middle" font-size="11" fill="#5f6b76">profundidad ≥ máx(6 m; Df + 2·ancho)</text>
     </g>
   </g>
 </svg>
-<figcaption>Figura D. Las tres formas de leer la presión bajo la platea. La guía usa la primera; la segunda aparece si la resultante sale del núcleo central; la tercera es la del Eurocódigo 7 para cargas excéntricas.</figcaption>
+<figcaption>Figura D. La presión bajo la platea y el dato del suelo. La guía usa la primera; la segunda aparece si la resultante sale del núcleo central; la tercera recuerda de dónde sale el único dato del suelo.</figcaption>
 </figure>
 
 <h3>Datos mínimos (hoja «Datos»)</h3>
@@ -299,6 +311,7 @@ mínimo para el método CIRSOC.</p>
   <li><b>Platea:</b> B1 × L1. Por defecto, la planta del último subsuelo, como en la guía (22 × 18 m).</li>
   <li><b>Nivel de fundación</b> (la app ya lo tiene: fondo del último subsuelo).</li>
   <li><b>σt adm del estudio de suelos</b> (la guía usa 2,5 kg/cm²). Es el único dato del suelo.</li>
+  <li>Platea por defecto: <b>la planta del último subsuelo</b> (respuesta del 20/11), editable.</li>
 </ul>
 
 <h3>Qué se verifica en cada método</h3>
@@ -306,8 +319,8 @@ mínimo para el método CIRSOC.</p>
 <tr><th style="width:14%">Control</th><th class="pla">Planilla virgen</th><th class="gui">Guía</th><th class="cir">CIRSOC y FEM</th></tr>
 <tr><td><b>Vuelco</b></td><td>M,NyQ L99 tal cual</td><td>Me/Mv ≥ 1,5 con G sin sobrecarga (2.2)</td><td>0,9 D·brazo ≥ 1,0 W·hw (101-25, art. 1.3.5 y combinación 0,9 D + 1,0 W)</td></tr>
 <tr><td><b>Resultante</b></td><td>e ≤ b'/6 (M,NyQ M99)</td><td>e en el núcleo central; gráfico W + G en el tercio medio</td><td>Igual; si sale, contacto parcial (Figura D, centro)</td></tr>
-<tr><td><b>Presión en el suelo</b></td><td>M,NyQ N89 y N90</td><td>σ = −G/F ± M/W ≤ σt adm, con G con sobrecarga (2.3)</td><td>Cargas de servicio D + L + W contra σt adm del estudio. Opción: área efectiva del EC7. <i>A confirmar con el CIRSOC 401 y el EC7.</i></td></tr>
-<tr><td><b>Deslizamiento</b></td><td>—</td><td>— (la guía no lo pide)</td><td>Opcional e informativo: H ≤ μ·N, con μ como dato. <i>A confirmar con el EC7.</i></td></tr>
+<tr><td><b>Presión en el suelo</b></td><td>M,NyQ N89 y N90</td><td>σ = −G/F ± M/W ≤ σt adm, con G con sobrecarga (2.3)</td><td>Cargas de servicio D + L + W contra σt adm del estudio geotécnico (CIRSOC 401, art. 7.4); sin tracción, y si la resultante sale del núcleo central, contacto parcial</td></tr>
+<tr><td><b>Estudio de suelos</b></td><td>—</td><td>—</td><td>Informativo: profundidad mínima de investigación (CIRSOC 401, art. 3.5.6.2)</td></tr>
 </table>
 <p class="nota">Queda fuera de alcance, en todos los métodos: la capacidad de carga calculada (fórmulas de Terzaghi o Brinch Hansen), los asentamientos, los pilotes y el diseño estructural de la platea.</p>
 
@@ -754,7 +767,7 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <figcaption>Figura 8. Orden y dependencias. La etapa 1 es la base de todo y no cambia ningún número.</figcaption>
 </figure>
 
-<div class="paso"><div class="b">0</div><div><b>Bibliografía y respuestas</b> (ahora). Subís los reglamentos y la guía; contestamos las preguntas de la sección 9.</div></div>
+<div class="paso"><div class="b">0</div><div><b>Bibliografía y respuestas</b> <span class="chip ok">hecho</span> salvo el PDF del CIRSOC 201-2005, que se necesita recién en la etapa 4.</div></div>
 <div class="paso"><div class="b">1</div><div><b>Reorganizar sin cambiar números.</b> Carpetas por capa, <code>ResultadoMetodo</code>, selector único de método. <small>Está lista cuando las 413 pruebas siguen pasando y la virgen da exactamente lo mismo que hoy.</small></div></div>
 <div class="paso"><div class="b">2</div><div><b>Método Guía.</b> Se separa de los valores «Guía/CIRSOC» de hoy (casi todo el código ya existe). Se suma lo que la guía hace y la app no: esbeltez, flecha directa, armado con barras y corte en dinteles (sección C). <small>Está lista cuando reproduce el ejemplo de la guía y el Anexo (T1, alas de T5, porcentajes de rotación), con las erratas anotadas.</small></div></div>
 <div class="paso"><div class="b">3</div><div><b>CIRSOC cargas</b>: 101 (D y L), 102 completo (frecuencia, G/Gf, casos de la Fig. 9, carga mínima) y combinaciones. <small>Está lista cuando da igual que ejemplos resueltos a mano con las tablas del reglamento.</small></div></div>
@@ -769,7 +782,7 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <table>
 <tr><th>Riesgo</th><th>Control</th></tr>
 <tr><td>La reorganización cambia, sin querer, un número que los alumnos ya conocen</td><td>Etapa 1 sin cambios de resultado y pruebas de oro de la virgen celda por celda</td></tr>
-<tr><td>Si el armado por defecto pasa a ser el de la cátedra, cambian algunos números que se ven hoy (hoy viene el de la app)</td><td>El armado de la app queda como opción; la app avisa al cambiarlo (pregunta 6)</td></tr>
+<tr><td>Si el armado por defecto pasa a ser el de la cátedra, cambian algunos números que se ven hoy (hoy viene el de la app)</td><td>El armado de la app queda como opción; por defecto el de la cátedra (respondido); la app avisa al cambiarlo</td></tr>
 <tr><td>Un número del CIRSOC sale de memoria y no del texto</td><td>Cada tabla y coeficiente se carga desde el PDF que subas, con artículo y página en el código y en la hoja</td></tr>
 <tr><td>Hay cálculos que en Excel quedan ilegibles (interacción N-M, corte de secciones compuestas)</td><td>Se resuelven con una tabla de puntos visible (por ejemplo, 20 posiciones del eje neutro) y un gráfico, sin macros ni «Buscar objetivo»</td></tr>
 <tr><td>Las imágenes no se actualizan si el alumno cambia datos en el Excel</td><td>Todo lo que depende de datos va como gráfico de Excel; las imágenes llevan el aviso «dibujo del momento de exportar»</td></tr>
@@ -782,11 +795,11 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <tr><th>Texto</th><th>Estado</th></tr>
 <tr><td>CIRSOC 101-25 y 102-25 (con comentarios)</td><td><span class="chip ok">está</span> revisados (sección B)</td></tr>
 <tr><td>CIRSOC 301, 302 y 303 (acero)</td><td><span class="chip ok">está</span> para la etapa 8</td></tr>
-<tr><td>INPRES-CIRSOC 103, Parte III</td><td><span class="chip ok">está</span> (mampostería; pregunta 10)</td></tr>
-<tr><td><b>CIRSOC 201</b> (hormigón armado), reglamento y comentarios</td><td><span class="chip warn">falta</span> imprescindible para la etapa 4: cap. 9 (φ), 10 (flexión y axial), 11 (corte), 14 (muros)</td></tr>
+<tr><td>INPRES-CIRSOC 103, Parte III</td><td><span class="chip ok">está</span> (mampostería; pregunta 7)</td></tr>
+<tr><td><b>CIRSOC 201-2005</b> (hormigón armado), reglamento y comentarios</td><td><span class="chip warn">falta el PDF</span> se usa la edición 2005 hasta conseguir la nueva; imprescindible para la etapa 4: cap. 9 (φ), 10 (flexión y axial), 11 (corte), 14 (muros)</td></tr>
 <tr><td>Guía «Edificio en torre» 2024 y guía de viento (2015)</td><td><span class="chip ok">está</span> revisadas (sección C). Falta la clase 5 (rototraslación), si existe aparte</td></tr>
-<tr><td>Mapa de velocidades de servicio (Figura C AB.4.2-1 del 102-25)</td><td><span class="chip gris">está en el PDF</span> como figura; hay que leer el valor de Mar del Plata a mano (pregunta 13)</td></tr>
-<tr><td><b>CIRSOC 401</b> y <b>Eurocódigo 7</b> (fundaciones)</td><td><span class="chip warn">no llegaron</span> en <code>main</code> no aparecen. Si los subiste por la web de GitHub, los archivos de más de 25 MB no se suben; probá partirlos o subirlos por git</td></tr>
+<tr><td>Mapa de velocidades de servicio (Figura C AB.4.2-1 del 102-25)</td><td><span class="chip gris">está en el PDF</span> como figura; hay que leer el valor de Mar del Plata a mano (pregunta 10)</td></tr>
+<tr><td><b>CIRSOC 401</b> (2018) y <b>Eurocódigo 7, Parte 3</b> (UNE-ENV 1997-3)</td><td><span class="chip ok">está</span> revisados (sección D). Alcanzan para el alcance de la guía; la Parte 1 del EC7 no hace falta</td></tr>
 </table>
 
 <!-- ============================================================ 10 -->
@@ -796,26 +809,26 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <tr><th style="width:30%">Pregunta</th><th>Respuesta</th></tr>
 <tr><td>Planilla de la guía</td><td>No existe: se arma desde la guía (sección C)</td></tr>
 <tr><td>Correcciones de hoy: ¿guía o CIRSOC?</td><td>Todas son de la guía (Kz con z mínimo de 5 m, criterio C, rotación muro por muro, J completo)</td></tr>
-<tr><td>Armado de la cátedra</td><td>Queda como opción</td></tr>
-<tr><td>Fundaciones</td><td>Lo mínimo, con el alcance de la guía (sección D); CIRSOC 401 y EC7 para el método CIRSOC</td></tr>
+<tr><td>Armado</td><td>Queda como opción; <b>por defecto, el de la cátedra</b></td></tr>
+<tr><td>Erratas de la guía</td><td>El método Guía da los números bien y anota la diferencia con el texto (aviso en la app y nota en la planilla)</td></tr>
+<tr><td>Fundaciones</td><td>Alcance de la guía; σt adm es dato del estudio (CIRSOC 401); sin área efectiva (sección D)</td></tr>
+<tr><td>Platea por defecto</td><td>La planta del último subsuelo, editable</td></tr>
+<tr><td>CIRSOC 201</td><td>Edición 2005 hasta conseguir la nueva; después se actualiza</td></tr>
 <tr><td>Planilla y Guía con el 102-2005</td><td>Sí: la guía es del 102-2005 (2.1)</td></tr>
 <tr><td>Vuelco y deriva en CIRSOC</td><td>Salen del 101-25 y del Apéndice B del 102-25 (sección B)</td></tr>
 </table>
 
-<h3>Abiertas</h3>
-<div class="preg"><b class="q">1. CIRSOC 401, Eurocódigo 7 y CIRSOC 201.</b> No aparecen en el repo. ¿Los volvés a subir? Del 201, ¿es el de 2005 o hay una edición nueva?</div>
+<h3>Abiertas (ninguna frena la etapa 1)</h3>
+<div class="preg"><b class="q">1. PDF del CIRSOC 201-2005.</b> No está en el repo. Hace falta para la etapa 4.</div>
 <div class="preg"><b class="q">2. Versión de la planilla.</b> ¿Siguen las dos (anterior y 2025), solo en el método Planilla virgen?<div class="prop">Propuesta: sí.</div></div>
 <div class="preg"><b class="q">3. Excel del combinado.</b><div class="prop">Propuesta: un reporte «Comparación de métodos» con la tabla y gráficos superpuestos, y un botón para descargar los cuatro libros juntos.</div></div>
 <div class="preg"><b class="q">4. Gráficos vivos y dibujos fijos.</b> ¿Te sirve la regla de la sección 4: lo que depende de datos va como gráfico de Excel y lo demás como imagen marcada?</div>
 <div class="preg"><b class="q">5. Reabrir la virgen en la app.</b><div class="prop">Propuesta: mandan las hojas de la cátedra para lo que tienen; las tablas completan la geometría, y la app avisa si no coinciden.</div></div>
-<div class="preg"><b class="q">6. Armado por defecto.</b> Con el armado como opción, ¿cuál viene elegido en Planilla virgen y en Guía?<div class="prop">Propuesta: el de la cátedra, porque es el que enseña la guía.</div></div>
-<div class="preg"><b class="q">7. Erratas de la guía.</b> ¿El método Guía da los números bien (siguiendo el procedimiento) y anota la diferencia con el texto?<div class="prop">Propuesta: sí, con un aviso en la app y una nota en la planilla de la guía.</div></div>
-<div class="preg"><b class="q">8. Platea por defecto.</b> ¿B1 × L1 igual a la planta del último subsuelo, como en la guía, editable en «Datos»?</div>
-<div class="preg"><b class="q">9. Deriva en CIRSOC.</b> El 102-25 orienta entre 1/600 y 1/400.<div class="prop">Propuesta: 1/500, para que coincida con la guía, con la banda 1/600 a 1/400 a la vista.</div></div>
-<div class="preg"><b class="q">10. Sismo y CIRSOC 103 Parte III.</b> ¿Para qué la subiste? ¿El sismo queda fuera, por estar Mar del Plata en la zona de menor peligrosidad?</div>
-<div class="preg"><b class="q">11. Simple y completa.</b> ¿Son solo para la verificación CIRSOC 201, o también querés un viento CIRSOC «simple» (sin los casos de torsión)?</div>
-<div class="preg"><b class="q">12. Materiales en CIRSOC.</b> ¿f'c sale del H (H-30 → 30 MPa) y el acero es ADN 420, con recubrimiento en «Datos»?</div>
-<div class="preg"><b class="q">13. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (62,5 m/s en Mar del Plata) y exposición B por defecto? ¿Viento de servicio con 10 años de recurrencia?</div>
+<div class="preg"><b class="q">6. Deriva en CIRSOC.</b> El 102-25 orienta entre 1/600 y 1/400.<div class="prop">Propuesta: 1/500, para que coincida con la guía, con la banda 1/600 a 1/400 a la vista.</div></div>
+<div class="preg"><b class="q">7. Sismo y CIRSOC 103 Parte III.</b> ¿Para qué la subiste? ¿El sismo queda fuera, por estar Mar del Plata en la zona de menor peligrosidad?</div>
+<div class="preg"><b class="q">8. Simple y completa.</b> ¿Son solo para la verificación CIRSOC 201, o también querés un viento CIRSOC «simple» (sin los casos de torsión)?</div>
+<div class="preg"><b class="q">9. Materiales en CIRSOC.</b> ¿f'c sale del H (H-30 → 30 MPa) y el acero es ADN 420, con recubrimiento en «Datos»?</div>
+<div class="preg"><b class="q">10. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (62,5 m/s en Mar del Plata) y exposición B por defecto? ¿Viento de servicio con 10 años de recurrencia?</div>
 
 <p class="pie">Torre 3D · plan de métodos y planillas · rama claude/dazzling-ritchie-36ebib · documento para decidir, sin código.</p>
 </div></body></html>
