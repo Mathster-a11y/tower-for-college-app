@@ -51,7 +51,7 @@ svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
 <body><div class="pag">
 
 <h1>Plan de trabajo · métodos de cálculo y planillas</h1>
-<p class="sub">Torre 3D · tercera versión del plan, con tus respuestas y la revisión de la bibliografía · noviembre 2026 · <b>todavía sin código</b>: este documento es para decidir.</p>
+<p class="sub">Torre 3D · cuarta versión del plan: tus respuestas, la guía «Edificio en torre» 2024 y las fundaciones · noviembre 2026 · <b>todavía sin código</b>: este documento es para decidir.</p>
 
 <div class="tarjeta gris">
 <b>En una frase.</b> La app pasa a tener <b>cuatro métodos</b> (Planilla virgen, Guía, CIRSOC y FEM), cada uno con sus
@@ -71,6 +71,48 @@ el libro calcula solo.
     <b>CIRSOC</b> y <b>FEM</b> hacen lo que pide el reglamento.</li>
 </ul>
 
+<div class="tarjeta" style="border-color:var(--acc)">
+<b>Qué hay de nuevo en esta versión (19/11)</b>
+<ul>
+  <li><b>A.</b> Foto de la «planilla renovada» de hoy, para que quede claro de cuál hablo.</li>
+  <li><b>C.</b> La guía «Edificio en torre» 2024 leída paso por paso: qué hace, qué ya hace la app y qué falta (esbeltez, flecha directa, armado con barras, corte en dinteles).</li>
+  <li><b>D.</b> Fundaciones: el alcance mínimo, tomado de la guía, y cómo se verifica en cada método.</li>
+  <li>Tus respuestas aplicadas: la planilla de la guía se arma desde la guía; todas las correcciones de hoy son del método Guía (incluido Kz con z mínimo de 5 m, que la guía hace en 2.1.3); el armado queda como opción.</li>
+  <li><b>No llegaron al repo</b> el CIRSOC 401 ni el Eurocódigo 7 (en <code>main</code> solo están la guía y la guía de viento). Tampoco el CIRSOC 201. Ver la sección 9.</li>
+</ul>
+</div>
+
+<!-- ============================================================ A -->
+<h2><span class="n">A</span>Cuál es la «planilla renovada» de hoy</h2>
+<p>Hoy, en <b>Exportar</b>, el diálogo «Escribir la planilla» ofrece dos contenidos. La <b>virgen</b> es la que mejoramos:
+las 7 hojas de la cátedra, más «Flexocompresión PB», «Elementos especiales» (si hay) y las tablas «T3D». La
+<b>renovada</b> es la virgen <b>más las hojas «G ·»</b>, que la app agregó en la fase 2.</p>
+<figure>
+<img src="plan_metodos/renovada_dialogo.png" alt="Diálogo «Escribir la planilla» con las opciones Planilla virgen y Planilla renovada" style="width:62%;display:block;margin:0 auto;border:1px solid var(--hair);border-radius:8px">
+<figcaption>Foto 1. El diálogo de hoy. «Contenido»: Planilla virgen o Planilla renovada.</figcaption>
+</figure>
+<div class="cols">
+<figure><img src="plan_metodos/renovada_viento_corregido.png" alt="Hoja G · Viento corregido" style="width:100%;border:1px solid var(--hair);border-radius:8px"><figcaption>Foto 2. Una hoja «G ·» de la renovada de hoy: «G · Viento corregido» (Kz con z mínimo de 5 m).</figcaption></figure>
+<figure><img src="plan_metodos/renovada_carta.png" alt="Hoja G · Carta de la torre" style="width:100%;border:1px solid var(--hair);border-radius:8px"><figcaption>Foto 3. Otra: «G · Carta de la torre» (Wi, Q, M y N de cada nivel), que lee M,NyQ.</figcaption></figure>
+</div>
+<p>La renovada de hoy tiene 26 hojas:</p>
+<ul>
+  <li>las 7 de la cátedra;</li>
+  <li>8 «G ·»: Viento corregido, Carta de la torre, Sección real, Planta, Perfiles y áreas (app), Rotación muro por muro, Peso por muro y, si hay, las del exoesqueleto;</li>
+  <li>10 «T3D» y «Flexocompresión PB».</li>
+</ul>
+<p>El problema es el que vimos: mezcla fórmulas con números puestos por la app y repite datos.</p>
+<p><b>Con el plan:</b> la virgen queda como está. La renovada de hoy desaparece, y sus hojas «G ·» se reparten así:</p>
+<table>
+<tr><th>Hoja de hoy</th><th>Pasa a</th></tr>
+<tr><td>G · Viento corregido, G · Carta de la torre, G · Rotación muro por muro, G · Peso por muro</td><td><span class="chip gui">Planilla de la guía</span> (son todas correcciones de la guía)</td></tr>
+<tr><td>G · Sección real, G · Planta</td><td><span class="chip gui">Planilla de la guía</span> y <span class="chip cir">Planilla renovada</span> (hojas «Secciones» y «Planta»)</td></tr>
+<tr><td>G · Perfiles y áreas (app), G · Niveles agrupados</td><td>Hoja «Datos» de cada libro (son datos que pone la app)</td></tr>
+<tr><td>G · Exoesqueleto, G · Balance tabiques + exo</td><td>Etapa 8 (CIRSOC y FEM con acero)</td></tr>
+<tr><td>G · Dibujos de la app</td><td>Reporte FEM y las imágenes marcadas de cada libro</td></tr>
+</table>
+<p>La <b>nueva</b> «planilla renovada» es otra cosa: un libro CIRSOC con el estilo de la virgen.</p>
+
 <!-- ============================================================ B -->
 <h2><span class="n">B</span>Lo que encontré en la bibliografía (revisión del 18/11)</h2>
 <p>Subiste a <code>main</code> seis reglamentos. Los leí enteros en lo que toca a una torre de tabiques. El hallazgo más
@@ -86,7 +128,7 @@ importante: <b>el 101 y el 102 que subiste son las ediciones 2025</b>, no las de
 <tr><td><b>CIRSOC-303</b> (julio 2009)</td><td>Acero conformado en frío</td><td>Poco uso en una torre; quizás en elementos secundarios del exo</td></tr>
 <tr><td><b>INPRES-CIRSOC 103, Parte III</b> (2018)</td><td>Sismo · construcciones de mampostería</td><td>Casi nada para tabiques de hormigón (pregunta 10)</td></tr>
 <tr><td style="color:var(--mal)"><b>Falta: CIRSOC 201</b></td><td>Hormigón armado</td><td>Sin él no se puede hacer la verificación CIRSOC (etapa 4)</td></tr>
-<tr><td style="color:var(--mal)"><b>Falta: la guía</b> «Edificio en torre»</td><td>Procedimiento analítico</td><td>Método Guía y su planilla (etapas 2 y 5a)</td></tr>
+<tr><td><b>7-edif torre 2024</b> y <b>guía viento torre cirsoc2005</b> (llegaron el 19/11)</td><td>La guía de predimensionado y la de viento</td><td><span class="chip gui">Guía</span> método y planilla (sección C)</td></tr>
 </table>
 
 <h3>Qué cambia del 102-2005 (planilla y guía) al 102-25 (método CIRSOC)</h3>
@@ -140,11 +182,134 @@ en las combinaciones con 1,0 en lugar de 1,6. Hay que explicarlo así para que e
     hormigón hay una expresión propia, na = 117,3·√Cw / h, donde Cw suma el aporte de cada tabique (área, largo y altura).
     Es ideal para la planilla renovada; el FEM la reemplaza por el modal.</li>
   <li><b>Vuelco</b> (101-25 art. 1.3.5): se tiene que considerar, y en el método CIRSOC se verifica con 0,9 D + 1,0 W
-    (la resistencia tiene que igualar o superar el efecto). Ya no es «coeficiente ≥ 1,5». Esto contesta en parte la pregunta 8; la tensión en el suelo sigue abierta.</li>
+    (la resistencia tiene que igualar o superar el efecto). Ya no es «coeficiente ≥ 1,5». La presión en el suelo está en la sección D.</li>
   <li><b>Deformación</b> (102-25, comentario C B.4.2): la combinación de servicio es D + 0,5 L + Wa, con el viento de un
     período de retorno menor (suele usarse 10 años). Los límites de deriva habituales son <b>1/600 a 1/400</b> de la altura
-    del piso o del edificio. Son orientativos (comentario, no obligatorio). Esto contesta en parte la pregunta 9.</li>
+    del piso o del edificio. Son orientativos (comentario, no obligatorio). (Pregunta 9.)</li>
 </ul>
+
+<!-- ============================================================ C -->
+<h2><span class="n">C</span>Lo que hace la guía «Edificio en torre» 2024, paso por paso</h2>
+<p>Leí la guía de predimensionado (28 págs.: torre de viviendas en Neuquén, 2 subsuelos, PB de 4 m y 20 pisos de 3 m)
+y la guía de viento (2015). Las dos usan el <b>CIRSOC 102-2005, procedimiento analítico</b>. El método Guía y su
+planilla siguen este orden.</p>
+
+<figure>
+<svg viewBox="0 0 960 250" role="img" aria-label="Pasos de la guía">
+  <g font-size="12">
+    <g>
+      <rect x="10" y="20" width="110" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="65" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">1 · Diseño</text><text x="65" y="62" text-anchor="middle" font-size="11">esbeltez</text><text x="65" y="78" text-anchor="middle" font-size="11">λ = h / L</text><text x="65" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">3 · 5–10 · ≥ 10</text>
+      <rect x="128" y="20" width="118" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="187" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">2.1 · Viento</text><text x="187" y="62" text-anchor="middle" font-size="11">V, Kd, I, Kz, Kzt</text><text x="187" y="78" text-anchor="middle" font-size="11">G, Cp, GCpi, qz, p</text><text x="187" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">10 pasos · 102-2005</text>
+      <rect x="254" y="20" width="118" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="313" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">2.2 · Vuelco</text><text x="313" y="62" text-anchor="middle" font-size="11">Me / Mv ≥ 1,5</text><text x="313" y="78" text-anchor="middle" font-size="11">e en núcleo central</text><text x="313" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">gráfico W + G</text>
+      <rect x="380" y="20" width="118" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="439" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">2.3 · Terreno</text><text x="439" y="62" text-anchor="middle" font-size="11">platea rígida</text><text x="439" y="78" text-anchor="middle" font-size="11">σ = −G/F ± M/W</text><text x="439" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">≤ σt adm</text>
+      <rect x="506" y="20" width="118" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="565" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">3 · Planilla</text><text x="565" y="62" text-anchor="middle" font-size="11">Wi, Q, M</text><text x="565" y="78" text-anchor="middle" font-size="11">N desc. / carg.</text><text x="565" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">por nivel</text>
+      <rect x="632" y="20" width="148" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="706" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">4 · Contraviento</text><text x="706" y="62" text-anchor="middle" font-size="11">J (Steiner) · flecha h/500</text><text x="706" y="78" text-anchor="middle" font-size="11">eje de inercia · rigidez</text><text x="706" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">relativa</text>
+      <rect x="788" y="20" width="162" height="88" rx="8" fill="#efe7f7" stroke="#6a3d9a"/><text x="869" y="42" text-anchor="middle" font-weight="700" fill="#6a3d9a">5 · Tabiques en PB</text><text x="869" y="62" text-anchor="middle" font-size="11">flexocompresión</text><text x="869" y="78" text-anchor="middle" font-size="11">armadura · corte</text><text x="869" y="96" text-anchor="middle" font-size="10.5" fill="#5f6b76">almas, alas, dinteles</text>
+    </g>
+    <g stroke="#6a3d9a" stroke-width="1.4" marker-end="url(#fl)"><path d="M120 64 H126"/><path d="M246 64 H252"/><path d="M372 64 H378"/><path d="M498 64 H504"/><path d="M624 64 H630"/><path d="M780 64 H786"/></g>
+    <rect x="632" y="132" width="318" height="56" rx="8" fill="#fff" stroke="#6a3d9a" stroke-dasharray="4 3"/><text x="791" y="154" text-anchor="middle" font-weight="700" fill="#6a3d9a">Anexo · rototraslación</text><text x="791" y="172" text-anchor="middle" font-size="11">Wj = W·Jj/ΣJ ± W·e·Jj·aj / ΣJjt·aj² (muro por muro)</text>
+    <path d="M706 108 V 130" stroke="#6a3d9a" stroke-dasharray="3 3" marker-end="url(#fl)"/>
+    <g font-size="11" fill="#5f6b76">
+      <text x="10" y="150">Datos de la guía: H30 (σbk 300 kg/cm², τ 24 kg/cm², E 340.000 kg/cm²) · AB42 (σek 4200, σe 2400 kg/cm²)</text>
+      <text x="10" y="168">Losas: 0,7 t/m² sin sobrecarga · 0,9 t/m² con sobrecarga · hormigón 2,4 t/m³</text>
+      <text x="10" y="186">Cuantía mínima de tabiques 0,8 % (en 2 capas) · Fe horizontal = 1/5 de la vertical</text>
+      <text x="10" y="204">mínimos Ø8 c/20 cm vertical y Ø6 c/25 cm horizontal («Cirsoc 201», según la guía)</text>
+      <text x="10" y="232" fill="#6a3d9a" font-weight="600">La guía pide verificar también la otra dirección (Y-Y), que la app ya hace como «viento B».</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Figura C. El procedimiento de la guía. Cada caja es una o más hojas de la planilla de la guía.</figcaption>
+</figure>
+
+<table>
+<tr><th style="width:24%">Paso de la guía</th><th>Qué hace</th><th style="width:16%">¿Lo hace la app hoy?</th></tr>
+<tr><td>1 · Esbeltez</td><td>λ = h/L: mayor que 3, el viento importa; entre 5 y 10, problemas de vuelco; desde 10, difícil de materializar</td><td><span class="chip warn">no</span> se agrega (indicador)</td></tr>
+<tr><td>2.1 · Viento (2.1.1 a 2.1.10)</td><td>V de la ciudad, Kd = 0,85, I por categoría, exposición, <b>Kz constante por debajo de 5 m</b>, Kzt, G = 0,85 con control de F = 1/T (T = 0,08·h/√L·√(h/(L+h))), cerrado, GCpi ±0,18, Cp 0,8 / −0,5 (L/B), qz, p = qz·G·Cp − qh·GCpi y acción conjunta</td><td><span class="chip ok">sí</span> (viento + Kz de 5 m de «G · Viento corregido»)</td></tr>
+<tr><td>Peso propio</td><td>G = q·B·L·n.º de losas, con los subsuelos con su propia planta; con sobrecarga 0,9 y sin sobrecarga 0,7 t/m²</td><td><span class="chip ok">sí</span> (M,NyQ)</td></tr>
+<tr><td>2.2 · Vuelco</td><td>Me/Mv ≥ 1,5 con G sin sobrecarga y brazo hasta el borde de la base; W y hw con el trapecio; e = Mv/N en el núcleo central; gráfico W + G en el tercio medio</td><td><span class="chip ok">sí</span> (M,NyQ L99, funicular)</td></tr>
+<tr><td>2.3 · Tensión del terreno</td><td>Platea: σ = −G/F ± Mv/(B1·L1²/6) ≤ σt adm (dato del estudio de suelos), con G con sobrecarga</td><td><span class="chip ok">sí</span> (M,NyQ N89 y N90)</td></tr>
+<tr><td>3 · Planilla de características</td><td>Wi, Q, M, N descargado y cargado en cada nivel, con diagramas</td><td><span class="chip ok">sí</span></td></tr>
+<tr><td>4.1 · J</td><td>J de cada tabique; piezas en U con Steiner (alas y alma, con el % de cada parte)</td><td><span class="chip ok">sí</span></td></tr>
+<tr><td>4.2 · Flecha</td><td>f = qv·h⁴/(8·E·J) ≤ h/500, con qv = promedio de la carga y h hasta la fundación</td><td><span class="chip warn">parcial</span>: la app usa el J mínimo de la planilla; se agrega la fórmula directa</td></tr>
+<tr><td>4.3 y 4.4 · Eje de inercia y rigidez relativa</td><td>Varignon con las áreas; reparto por J (traslación)</td><td><span class="chip ok">sí</span></td></tr>
+<tr><td>5 · Flexocompresión en PB</td><td>σ = −N/F ± M/W; N = Pp + q·área·losas; almas a flexocompresión, alas con el par M/z</td><td><span class="chip ok">sí</span> (Guía/CIRSOC de hoy)</td></tr>
+<tr><td>5 · Armadura</td><td>T = σ·b·x/2, As = T/σe; cuantía 0,8 % en 2 capas; barras (por ejemplo, Ø12 c/14); Fe horizontal 1/5; mínimos Ø8 c/20 y Ø6 c/25</td><td><span class="chip warn">parcial</span>: da As y cuantía; falta proponer barras y la armadura horizontal</td></tr>
+<tr><td>5 · Corte en dinteles</td><td>Con aberturas: τ = (Qj·S/Jj)·h piso / (h dintel·b) ≤ τ adm (24 kg/cm² en H30)</td><td><span class="chip warn">no</span>: la app modela las aberturas pero no verifica el dintel; se agrega</td></tr>
+<tr><td>Anexo · Rototraslación</td><td>Muro por muro, con los perpendiculares (alas de T6)</td><td><span class="chip ok">sí</span></td></tr>
+</table>
+<div class="aviso"><b>Erratas de la guía.</b> El texto tiene algunos números que no cierran:
+<ul>
+  <li>qz a 7 m es 426,17 en una tabla y 453,42 en la otra;</li>
+  <li>el momento en PB es 4463,8 tm en la tabla y 6025,2 tm en el texto;</li>
+  <li>el corte en PB es 126 t en la tabla y 204,8 t en el diagrama;</li>
+  <li>x vale 78 cm en el texto, 1,05 m en el esquema y 67 cm si se calcula.</li>
+</ul>
+Propuesta: el método Guía sigue el procedimiento (da los números bien) y las pruebas comparan con la guía, dejando anotada cada diferencia (pregunta 7 de abajo).</div>
+
+<!-- ============================================================ D -->
+<h2><span class="n">D</span>Fundaciones: lo mínimo necesario</h2>
+<p>La guía fija el alcance: <b>fundación directa (platea) considerada rígida</b>, apoyada en un suelo del que solo se
+conoce la <b>tensión admisible</b> del estudio de suelos. No calcula capacidad de carga, asentamientos ni pilotes. Las
+fundaciones las mantenemos en ese alcance; los textos de fundaciones (CIRSOC 401 y Eurocódigo 7) solo agregan lo
+mínimo para el método CIRSOC.</p>
+
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Presiones bajo la platea">
+  <g font-size="12">
+    <!-- 1 trapecio -->
+    <g transform="translate(20,20)">
+      <text x="140" y="14" text-anchor="middle" font-weight="700" fill="#6a3d9a">e ≤ L/6 · trapecio (guía)</text>
+      <rect x="60" y="30" width="160" height="70" fill="#f0f0ee" stroke="#8a949e"/><text x="140" y="70" text-anchor="middle" font-size="11" fill="#5f6b76">torre</text>
+      <rect x="30" y="100" width="220" height="16" fill="#c3cad1" stroke="#5f6b76"/><text x="140" y="112" text-anchor="middle" font-size="10">platea B1 × L1</text>
+      <path d="M30 116 L 30 150 L 250 186 L 250 116 Z" fill="#efe7f7" stroke="#6a3d9a"/>
+      <text x="26" y="166" text-anchor="end" font-size="11">σmín</text><text x="254" y="200" font-size="11">σmáx</text>
+      <text x="140" y="228" text-anchor="middle" font-size="11">σ = −N/F ± M/(B1·L1²/6)</text>
+      <text x="140" y="246" text-anchor="middle" font-size="11" fill="#5f6b76">σmáx ≤ σt adm · σmín ≤ 0 (sin tracción)</text>
+    </g>
+    <!-- 2 triángulo -->
+    <g transform="translate(330,20)">
+      <text x="140" y="14" text-anchor="middle" font-weight="700" fill="#a8650a">e &gt; L/6 · contacto parcial</text>
+      <rect x="60" y="30" width="160" height="70" fill="#f0f0ee" stroke="#8a949e"/>
+      <rect x="30" y="100" width="220" height="16" fill="#c3cad1" stroke="#5f6b76"/>
+      <path d="M110 116 L 250 196 L 250 116 Z" fill="#fdf0dc" stroke="#a8650a"/>
+      <path d="M30 124 H 108" stroke="#c62828" stroke-dasharray="3 3"/><text x="70" y="140" text-anchor="middle" font-size="10" fill="#c62828">se despega</text>
+      <text x="180" y="214" text-anchor="middle" font-size="11">contacto = 3·(L/2 − e)</text>
+      <text x="140" y="232" text-anchor="middle" font-size="11">σmáx = 2N / (3·B1·(L/2 − e))</text>
+      <text x="140" y="250" text-anchor="middle" font-size="11" fill="#5f6b76">la guía pide no llegar acá (núcleo central)</text>
+    </g>
+    <!-- 3 área efectiva -->
+    <g transform="translate(640,20)">
+      <text x="140" y="14" text-anchor="middle" font-weight="700" fill="#1a6bbd">área efectiva (EC7, a confirmar)</text>
+      <rect x="60" y="30" width="160" height="70" fill="#f0f0ee" stroke="#8a949e"/>
+      <rect x="30" y="100" width="220" height="16" fill="#c3cad1" stroke="#5f6b76"/>
+      <rect x="70" y="116" width="180" height="46" fill="#dbe8f6" stroke="#1a6bbd"/>
+      <path d="M30 172 H 68" stroke="#1a6bbd"/><path d="M30 168 V176"/><text x="49" y="188" text-anchor="middle" font-size="10" fill="#1a6bbd">2e</text>
+      <text x="160" y="143" text-anchor="middle" font-size="11">L' = L − 2e</text>
+      <text x="140" y="214" text-anchor="middle" font-size="11">q = N / (B1·L') uniforme</text>
+      <text x="140" y="232" text-anchor="middle" font-size="11" fill="#5f6b76">se compara con la resistencia del suelo</text>
+      <text x="140" y="250" text-anchor="middle" font-size="11" fill="#5f6b76">(método CIRSOC; se confirma con los textos)</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Figura D. Las tres formas de leer la presión bajo la platea. La guía usa la primera; la segunda aparece si la resultante sale del núcleo central; la tercera es la del Eurocódigo 7 para cargas excéntricas.</figcaption>
+</figure>
+
+<h3>Datos mínimos (hoja «Datos»)</h3>
+<ul>
+  <li><b>Platea:</b> B1 × L1. Por defecto, la planta del último subsuelo, como en la guía (22 × 18 m).</li>
+  <li><b>Nivel de fundación</b> (la app ya lo tiene: fondo del último subsuelo).</li>
+  <li><b>σt adm del estudio de suelos</b> (la guía usa 2,5 kg/cm²). Es el único dato del suelo.</li>
+</ul>
+
+<h3>Qué se verifica en cada método</h3>
+<table>
+<tr><th style="width:14%">Control</th><th class="pla">Planilla virgen</th><th class="gui">Guía</th><th class="cir">CIRSOC y FEM</th></tr>
+<tr><td><b>Vuelco</b></td><td>M,NyQ L99 tal cual</td><td>Me/Mv ≥ 1,5 con G sin sobrecarga (2.2)</td><td>0,9 D·brazo ≥ 1,0 W·hw (101-25, art. 1.3.5 y combinación 0,9 D + 1,0 W)</td></tr>
+<tr><td><b>Resultante</b></td><td>e ≤ b'/6 (M,NyQ M99)</td><td>e en el núcleo central; gráfico W + G en el tercio medio</td><td>Igual; si sale, contacto parcial (Figura D, centro)</td></tr>
+<tr><td><b>Presión en el suelo</b></td><td>M,NyQ N89 y N90</td><td>σ = −G/F ± M/W ≤ σt adm, con G con sobrecarga (2.3)</td><td>Cargas de servicio D + L + W contra σt adm del estudio. Opción: área efectiva del EC7. <i>A confirmar con el CIRSOC 401 y el EC7.</i></td></tr>
+<tr><td><b>Deslizamiento</b></td><td>—</td><td>— (la guía no lo pide)</td><td>Opcional e informativo: H ≤ μ·N, con μ como dato. <i>A confirmar con el EC7.</i></td></tr>
+</table>
+<p class="nota">Queda fuera de alcance, en todos los métodos: la capacidad de carga calculada (fórmulas de Terzaghi o Brinch Hansen), los asentamientos, los pilotes y el diseño estructural de la platea.</p>
 
 <!-- ============================================================ 1 -->
 <h2><span class="n">1</span>Los cuatro métodos y el combinado</h2>
@@ -225,7 +390,7 @@ en las combinaciones con 1,0 en lugar de 1,6. Hay que explicarlo así para que e
 <tr><td><span class="chip gui">Guía</span></td><td>El procedimiento analítico de la guía y de las clases (rotación muro por muro del Anexo, almas y alas por separado, funicular, tercio medio, J mínimo).</td><td>Entender de dónde sale cada número de la planilla, a mano.</td><td>Planilla de la guía (calculadora paso a paso, con diagramas)</td></tr>
 <tr><td><span class="chip cir">CIRSOC</span></td><td>CIRSOC 101 (cargas), 102 (viento) y 201 (hormigón), con verificación simple o completa.</td><td>Ver lo que pide el reglamento y en qué se simplifica la cátedra.</td><td>Planilla renovada (calculadora, simple o completa, con diagramas)</td></tr>
 <tr><td><span class="chip fem">FEM</span></td><td>Las mismas reglas del CIRSOC; cambia solo cómo se reparte el viento entre las piezas (modelo de la torre) y la frecuencia sale del análisis modal.</td><td>Ver lo que las hipótesis de la rototraslación no muestran: corte, muros que no llegan arriba, deriva.</td><td>Reporte FEM (datos y diagramas, no calculadora)</td></tr>
-<tr><td><span class="chip com">Combinado</span></td><td>Ninguna propia.</td><td>Comparar los cuatro y explicar cada diferencia.</td><td>A definir (pregunta 5)</td></tr>
+<tr><td><span class="chip com">Combinado</span></td><td>Ninguna propia.</td><td>Comparar los cuatro y explicar cada diferencia.</td><td>A definir (pregunta 3)</td></tr>
 </table>
 
 <!-- ============================================================ 2 -->
@@ -245,7 +410,7 @@ en el combinado, de qué capa sale cada diferencia.</p>
     <rect x="764" y="12" width="190" height="28" rx="6" fill="#1d8a68"/><text x="859" y="31" text-anchor="middle" fill="#fff" font-weight="700">FEM</text>
     <!-- fila 1 armado -->
     <text x="20" y="80" font-weight="700">1 · Armado</text><text x="20" y="96" fill="#5f6b76" font-size="11">de las piezas</text>
-    <rect x="170" y="56" width="388" height="56" rx="6" fill="#f6efe6" stroke="#c9a46a"/><text x="364" y="80" text-anchor="middle" font-weight="600">Método de la cátedra</text><text x="364" y="97" text-anchor="middle" fill="#5f6b76" font-size="11">rectángulo equivalente, alas, filas de la hoja J</text>
+    <rect x="170" y="56" width="388" height="56" rx="6" fill="#f6efe6" stroke="#c9a46a"/><text x="364" y="80" text-anchor="middle" font-weight="600">Método de la cátedra</text><text x="364" y="97" text-anchor="middle" fill="#5f6b76" font-size="11">por defecto · opción: el armado de la app</text>
     <rect x="566" y="56" width="388" height="56" rx="6" fill="#e3eef4" stroke="#7fb0c9"/><text x="760" y="80" text-anchor="middle" font-weight="600">Secciones reales de la app</text><text x="760" y="97" text-anchor="middle" fill="#5f6b76" font-size="11">J real, curvos, oblicuos, calados</text>
     <!-- fila 2 cargas -->
     <text x="20" y="148" font-weight="700">2 · Cargas</text><text x="20" y="164" fill="#5f6b76" font-size="11">viento y pesos</text>
@@ -276,8 +441,8 @@ se diferencian en la capa 3 (y por eso en la 5): el FEM no es otra norma, es un 
 <h3>Qué hace cada método en cada capa (detalle)</h3>
 <table>
 <tr><th style="width:14%">Capa</th><th class="pla">Planilla virgen</th><th class="gui">Guía</th><th class="cir">CIRSOC</th><th class="fem">FEM</th></tr>
-<tr><td><b>Armado</b></td><td colspan="2">Método simplificado de la cátedra (especificación, sección 7)</td><td colspan="2">Secciones reales de la app: J y área reales; curvos, oblicuos y calados con su sección real</td></tr>
-<tr><td><b>Viento</b></td><td>Fórmulas de la hoja «viento» tal cual (incluido lo que la planilla hace distinto)</td><td>Lo que hace la guía (pregunta 2: qué correcciones de hoy son de la guía)</td><td colspan="2">CIRSOC 102-25, procedimiento direccional (cap. 2): V según la categoría de riesgo (Mar del Plata, cat. II: 62,5 m/s), Kz (Tabla 1.13-1), Kzt, Kd = 0,85, Ke, G = 0,85 si n1 ≥ 1 Hz y Gf si no (art. 1.9), Cp barlovento y sotavento, carga mínima 0,75 kN/m² (art. 2.1.5), cuatro casos de la Fig. 2.4-8. <span style="color:var(--fem)">En el FEM, F sale del modal.</span></td></tr>
+<tr><td><b>Armado</b></td><td colspan="2">Método de la cátedra por defecto (especificación, sección 7); el de la app, como opción</td><td colspan="2">Secciones reales de la app: J y área reales; curvos, oblicuos y calados con su sección real</td></tr>
+<tr><td><b>Viento</b></td><td>Fórmulas de la hoja «viento» tal cual (incluido lo que la planilla hace distinto)</td><td>CIRSOC 102-2005 como la guía (2.1.1 a 2.1.10): Kz constante por debajo de 5 m, G = 0,85 con aviso si F &lt; 1 Hz, acción conjunta barlovento − sotavento; viento en PB con el criterio C</td><td colspan="2">CIRSOC 102-25, procedimiento direccional (cap. 2): V según la categoría de riesgo (Mar del Plata, cat. II: 62,5 m/s), Kz (Tabla 1.13-1), Kzt, Kd = 0,85, Ke, G = 0,85 si n1 ≥ 1 Hz y Gf si no (art. 1.9), Cp barlovento y sotavento, carga mínima 0,75 kN/m² (art. 2.1.5), cuatro casos de la Fig. 2.4-8. <span style="color:var(--fem)">En el FEM, F sale del modal.</span></td></tr>
 <tr><td><b>Pesos</b></td><td>Como «Flex comp PB»: Ng con 0,7 t/m² y Nq con 0,9 t/m²</td><td>Como la guía, muro por muro</td><td colspan="2">CIRSOC 101-25: D y L (Tabla 4.1) por separado, combinadas según el art. 2.3.2 del 101-25 y el Apéndice B del 102-25. Lo más desfavorable de cada combinación (por ejemplo, 0,9 D + 1,0 W para la tracción y el vuelco)</td></tr>
 <tr><td><b>Reparto</b></td><td>Rototraslación de la planilla, con sus particularidades (O = G + N, sumas cortadas), como hoy</td><td>Anexo de la guía: muro por muro, con las unidades bien</td><td>La misma de la guía, para cada caso de carga del CIRSOC</td><td>Modelo pseudo-3D con losa rígida: corte, altura parcial, reparto que cambia en altura</td></tr>
 <tr><td><b>Verificación</b></td><td>Pieza entera (hoja Flexocompresión PB) contra σbk, sin coeficiente de seguridad; vuelco y suelo de M,NyQ</td><td>Almas a flexocompresión y alas «haciendo un par», con su N; tracción y cuantía de 0,8 %; vuelco ≥ 1,5, tercio medio, funicular</td><td colspan="2"><b>Simple:</b> muro por muro con el método empírico (art. 14.5) cuando corresponde, cuantías mínimas (art. 14.3) y corte de muros (art. 11.10). <b>Completa:</b> diagrama de interacción N-M de cada pieza, corte, cuantías y esbeltez. Las dos con φ y combinaciones. Vuelco con 0,9 D + 1,0 W. <i>Artículos del 201 a confirmar cuando esté el texto.</i></td></tr>
@@ -325,7 +490,7 @@ app y la planilla renovada lo van a decir con esas palabras, para que el alumno 
       <rect x="720" y="10" width="78" height="24" rx="12" fill="#1f2328"/><text x="759" y="26" text-anchor="middle" fill="#fff" font-size="11">anterior</text>
       <rect x="804" y="10" width="62" height="24" rx="12" fill="#fff" stroke="#c3cad1"/><text x="835" y="26" text-anchor="middle" font-size="11">2025</text>
     </g>
-    <text x="20" y="226" fill="#5f6b76" font-size="11.5">Con «Planilla virgen» aparece la versión (anterior o 2025). Con «CIRSOC» o «FEM» aparecen «Verificación: simple · completa» y, en FEM, «Euler · Timoshenko».</text>
+    <text x="20" y="226" fill="#5f6b76" font-size="11.5">Con «Planilla virgen» aparecen la versión (anterior o 2025) y el armado (cátedra o app); con «Guía», el armado. Con «CIRSOC» o «FEM» aparecen «Verificación: simple · completa» y, en FEM, «Euler · Timoshenko».</text>
     <text x="20" y="242" fill="#5f6b76" font-size="11.5">Las etapas, los diagramas, el 3D y las verificaciones muestran siempre los valores del método elegido; en Combinado, la tabla comparativa.</text>
   </g>
 </svg>
@@ -335,11 +500,11 @@ app y la planilla renovada lo van a decir con esas palabras, para que el alumno 
 <table>
 <tr><th>Hoy</th><th>Pasa a</th></tr>
 <tr><td>Motor «Actual» / «Planilla 2025»</td><td>Sub-opción «versión» del método Planilla virgen (y de su Excel)</td></tr>
-<tr><td>Armado «App» / «Planilla»</td><td>Fijo por método: Planilla virgen y Guía usan el de la cátedra; CIRSOC y FEM, el de la app (pregunta 3)</td></tr>
-<tr><td>Valores «Guía/CIRSOC»: rotación muro por muro, flexocompresión de almas y alas, M de rotación con unidades, J completo en todas las filas</td><td>Método <b>Guía</b></td></tr>
-<tr><td>Valores «Guía/CIRSOC»: Kz con z mínimo de 5 m, controles de frecuencia, torsión de la Fig. 9 y carga mínima</td><td>Método <b>CIRSOC</b> (hoy son solo avisos; pasan a cambiar el cálculo)</td></tr>
-<tr><td>Viento en PB, criterio C (franja de PB fuera del corte de los tabiques)</td><td>Guía o CIRSOC: pregunta 2</td></tr>
-<tr><td>Planilla renovada de hoy (hojas de la cátedra + hojas «G ·»)</td><td>Deja de existir. Sus hojas «G ·» se reparten entre la Planilla de la guía, la renovada nueva y el reporte FEM (pregunta 1)</td></tr>
+<tr><td>Armado «App» / «Planilla»</td><td>Opción dentro de Planilla virgen y Guía (por defecto, el de la cátedra); CIRSOC y FEM usan el de la app</td></tr>
+<tr><td>Valores «Guía/CIRSOC»: Kz con z mínimo de 5 m, rotación muro por muro, flexocompresión de almas y alas, M de rotación con unidades, J completo en todas las filas</td><td>Método <b>Guía</b></td></tr>
+<tr><td>Valores «Guía/CIRSOC»: controles de frecuencia, torsión de la Fig. 9 y carga mínima</td><td>Método <b>CIRSOC</b> (hoy son solo avisos; pasan a cambiar el cálculo)</td></tr>
+<tr><td>Viento en PB, criterio C (franja de PB fuera del corte de los tabiques)</td><td>Método <b>Guía</b></td></tr>
+<tr><td>Planilla renovada de hoy (hojas de la cátedra + hojas «G ·»)</td><td>Deja de existir. Sus hojas «G ·» se reparten entre la Planilla de la guía, la renovada nueva y el reporte FEM (sección A)</td></tr>
 <tr><td>Exoesqueleto (hojas «G · Exoesqueleto» y «Balance»)</td><td>Queda como está hasta la etapa del exo (CIRSOC y FEM con reglamentos de acero)</td></tr>
 </table>
 
@@ -410,7 +575,7 @@ app y la planilla renovada lo van a decir con esas palabras, para que el alumno 
 <table>
 <tr><th style="width:17%">Libro</th><th>Tipo</th><th>Hojas (propuesta)</th><th>Diagramas</th></tr>
 <tr><td><span class="chip pla">Planilla virgen</span></td><td>Calculadora. Las 7 hojas de la cátedra sin cambios.</td><td>Las 7 de la cátedra + «Flexocompresión PB» + «Elementos especiales» (si hay) + tablas para reabrir</td><td>Los de la cátedra (no se agregan)</td></tr>
-<tr><td><span class="chip gui">Planilla de la guía</span></td><td>Calculadora paso a paso, en el orden de la guía</td><td>Léame · Datos · 1 Viento · 2 Esfuerzos y vuelco (M-N-Q, tercio medio, suelo) · 3 Secciones (J con Steiner) · 4 Rigidez (J mín) · 5 Rototraslación muro por muro · 6 Flexocompresión almas y alas · Resumen</td><td>Presión y fuerzas en altura, M-N-Q, planta con ejes y CR, reparto de cada pieza, tensiones de cada muro, funicular</td></tr>
+<tr><td><span class="chip gui">Planilla de la guía</span></td><td>Calculadora paso a paso, en el orden de la guía</td><td>Léame · Datos · 1 Diseño (esbeltez) · 2 Viento (102-2005, 10 pasos) · 3 Pesos y vuelco · 4 Fundación (platea) · 5 Planilla de características (Q, M, N) · 6 Secciones, eje de inercia y flecha · 7 Rototraslación · 8 Flexocompresión y armadura · 9 Corte en dinteles · Resumen</td><td>Presión y fuerzas en altura, M-N-Q, planta con ejes y CR, reparto de cada pieza, tensiones de cada muro, funicular</td></tr>
 <tr><td><span class="chip cir">Planilla renovada</span></td><td>Calculadora CIRSOC, <b>simple</b> o <b>completa</b> al exportar</td><td>Léame · Datos · 1 Viento CIRSOC 102 (frecuencia, G/Gf, casos de torsión) · 2 Cargas y combinaciones · 3 Secciones · 4 Reparto por caso · 5 Verificación 201 (simple: muro por muro; completa: + diagrama N-M y corte) · 6 Deformación · Resumen</td><td>Los de la guía + los casos de carga de la Fig. 9 + el diagrama N-M de cada pieza</td></tr>
 <tr><td><span class="chip fem">Reporte FEM</span></td><td>Reporte de datos (valores, no calculadora): es el más simple</td><td>Léame · Modelo (nudos, piezas, losas) · Modal (períodos y formas) · Reparto en altura · Deriva por piso · Verificación CIRSOC · Comparación con la rototraslación</td><td>Formas modales, corte de cada pieza en altura, deriva, deformada, planta con giros</td></tr>
 </table>
@@ -591,7 +756,7 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 
 <div class="paso"><div class="b">0</div><div><b>Bibliografía y respuestas</b> (ahora). Subís los reglamentos y la guía; contestamos las preguntas de la sección 9.</div></div>
 <div class="paso"><div class="b">1</div><div><b>Reorganizar sin cambiar números.</b> Carpetas por capa, <code>ResultadoMetodo</code>, selector único de método. <small>Está lista cuando las 413 pruebas siguen pasando y la virgen da exactamente lo mismo que hoy.</small></div></div>
-<div class="paso"><div class="b">2</div><div><b>Método Guía.</b> Se separa de los valores «Guía/CIRSOC» de hoy (casi todo el código ya existe). <small>Está lista cuando reproduce el ejemplo de la guía y el Anexo (T1, alas de T5, porcentajes de rotación).</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>Método Guía.</b> Se separa de los valores «Guía/CIRSOC» de hoy (casi todo el código ya existe). Se suma lo que la guía hace y la app no: esbeltez, flecha directa, armado con barras y corte en dinteles (sección C). <small>Está lista cuando reproduce el ejemplo de la guía y el Anexo (T1, alas de T5, porcentajes de rotación), con las erratas anotadas.</small></div></div>
 <div class="paso"><div class="b">3</div><div><b>CIRSOC cargas</b>: 101 (D y L), 102 completo (frecuencia, G/Gf, casos de la Fig. 9, carga mínima) y combinaciones. <small>Está lista cuando da igual que ejemplos resueltos a mano con las tablas del reglamento.</small></div></div>
 <div class="paso"><div class="b">4</div><div><b>CIRSOC 201</b>: verificación simple y completa. <small>Está lista cuando da igual que ejemplos de los comentarios del reglamento o de bibliografía que pases, más pruebas de casos límite.</small></div></div>
 <div class="paso"><div class="b">5</div><div><b>Excel.</b> Primero el kit común (hoja «Datos», estilo, gráficos, verificador) con la planilla de la guía; después la renovada, simple y completa. <small>Está lista cuando LibreOffice da igual que la app en todas las celdas, en varias torres de prueba.</small></div></div>
@@ -604,7 +769,7 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <table>
 <tr><th>Riesgo</th><th>Control</th></tr>
 <tr><td>La reorganización cambia, sin querer, un número que los alumnos ya conocen</td><td>Etapa 1 sin cambios de resultado y pruebas de oro de la virgen celda por celda</td></tr>
-<tr><td>Fijar el armado de la cátedra en Planilla virgen cambia los números que se ven hoy (hoy viene con el armado de la app)</td><td>Pregunta 3; si cambia, se avisa en la app</td></tr>
+<tr><td>Si el armado por defecto pasa a ser el de la cátedra, cambian algunos números que se ven hoy (hoy viene el de la app)</td><td>El armado de la app queda como opción; la app avisa al cambiarlo (pregunta 6)</td></tr>
 <tr><td>Un número del CIRSOC sale de memoria y no del texto</td><td>Cada tabla y coeficiente se carga desde el PDF que subas, con artículo y página en el código y en la hoja</td></tr>
 <tr><td>Hay cálculos que en Excel quedan ilegibles (interacción N-M, corte de secciones compuestas)</td><td>Se resuelven con una tabla de puntos visible (por ejemplo, 20 posiciones del eje neutro) y un gráfico, sin macros ni «Buscar objetivo»</td></tr>
 <tr><td>Las imágenes no se actualizan si el alumno cambia datos en el Excel</td><td>Todo lo que depende de datos va como gráfico de Excel; las imágenes llevan el aviso «dibujo del momento de exportar»</td></tr>
@@ -619,36 +784,38 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <tr><td>CIRSOC 301, 302 y 303 (acero)</td><td><span class="chip ok">está</span> para la etapa 8</td></tr>
 <tr><td>INPRES-CIRSOC 103, Parte III</td><td><span class="chip ok">está</span> (mampostería; pregunta 10)</td></tr>
 <tr><td><b>CIRSOC 201</b> (hormigón armado), reglamento y comentarios</td><td><span class="chip warn">falta</span> imprescindible para la etapa 4: cap. 9 (φ), 10 (flexión y axial), 11 (corte), 14 (muros)</td></tr>
-<tr><td><b>La guía «Edificio en torre»</b> y la clase 5</td><td><span class="chip warn">falta</span> para el método Guía; hoy solo está lo que se pasó al código</td></tr>
-<tr><td>Mapa de velocidades de servicio (Figura C AB.4.2-1 del 102-25)</td><td><span class="chip gris">está en el PDF</span> como figura; hay que leer el valor de Mar del Plata a mano (pregunta 14)</td></tr>
-<tr><td>Algo de fundaciones (tensión admisible del suelo)</td><td><span class="chip gris">opcional</span> pregunta 8</td></tr>
+<tr><td>Guía «Edificio en torre» 2024 y guía de viento (2015)</td><td><span class="chip ok">está</span> revisadas (sección C). Falta la clase 5 (rototraslación), si existe aparte</td></tr>
+<tr><td>Mapa de velocidades de servicio (Figura C AB.4.2-1 del 102-25)</td><td><span class="chip gris">está en el PDF</span> como figura; hay que leer el valor de Mar del Plata a mano (pregunta 13)</td></tr>
+<tr><td><b>CIRSOC 401</b> y <b>Eurocódigo 7</b> (fundaciones)</td><td><span class="chip warn">no llegaron</span> en <code>main</code> no aparecen. Si los subiste por la web de GitHub, los archivos de más de 25 MB no se suben; probá partirlos o subirlos por git</td></tr>
 </table>
 
 <!-- ============================================================ 10 -->
 <h2><span class="n">10</span>Preguntas</h2>
-<div class="preg"><b class="q">1. Planilla de la guía.</b> ¿Ya existe un Excel de la cátedra con el procedimiento de la guía, o lo armamos nosotros desde la guía? ¿Y la renovada de hoy (cátedra + hojas «G ·») deja de existir?
-<div class="prop">Propuesta: la armamos nosotros siguiendo las secciones de la guía; la renovada de hoy desaparece y sus hojas «G ·» se reparten en los libros nuevos.</div></div>
-<div class="preg"><b class="q">2. Qué es «guía» y qué es «CIRSOC» de las correcciones de hoy.</b> En el viento: ¿la guía usa Kz con z mínimo de 5 m? ¿El criterio C del viento en PB (la franja de PB fuera del corte de los tabiques) es de la guía o lo tomamos como criterio CIRSOC?
-<div class="prop">Propuesta: Kz mínimo → CIRSOC (salvo que la guía lo haga); criterio C → los dos, porque lo elegiste para los valores corregidos.</div></div>
-<div class="preg"><b class="q">3. Armado de la cátedra en Planilla virgen.</b> Hoy el método Planilla viene con el armado de la app. Fijarlo en el de la cátedra cambia algunos números que se ven hoy (piezas asimétricas, alas). ¿Lo fijamos, o queda el armado de la app como opción dentro del método?
-<div class="prop">Propuesta: fijo en el de la cátedra en Planilla y Guía, sin opción, para que cada método sea uno solo.</div></div>
-<div class="preg"><b class="q">4. Versión de la planilla.</b> ¿Siguen las dos (anterior y 2025)? ¿La versión afecta solo a Planilla virgen?
-<div class="prop">Propuesta: sí, las dos, y solo en Planilla virgen.</div></div>
-<div class="preg"><b class="q">5. Excel del combinado.</b> ¿Exporta algo?
-<div class="prop">Propuesta: un reporte «Comparación de métodos» (valores) con la tabla y gráficos superpuestos de los cuatro métodos, y un botón para descargar los cuatro libros juntos.</div></div>
-<div class="preg"><b class="q">6. Gráficos vivos y dibujos fijos.</b> ¿Te sirve la regla de la sección 4 (todo lo que depende de datos va como gráfico de Excel, y lo que no se puede, como imagen marcada)?</div>
-<div class="preg"><b class="q">7. Reabrir la virgen en la app.</b> Si el alumno cambia un dato en las hojas de la cátedra y la vuelve a abrir en la app, ¿mandan las hojas de la cátedra o las tablas guardadas?
-<div class="prop">Propuesta: mandan las hojas de la cátedra para todo lo que tienen; las tablas completan lo demás (geometría de los muros), y la app avisa si no coinciden.</div></div>
-<div class="preg"><b class="q">8. Suelo en el método CIRSOC.</b> El vuelco ya está resuelto (0,9 D + 1,0 W, 101-25 art. 1.3.5). La tensión en el suelo no la fija ningún texto que subiste. ¿Usamos la tensión admisible del estudio de suelos, como la guía, con cargas de servicio?<div class="prop">Propuesta: sí, con D + L + W de servicio, y el dato del suelo en «Datos».</div></div>
-<div class="preg"><b class="q">9. Límite de deriva en CIRSOC.</b> El comentario del Apéndice B da 1/600 a 1/400 (orientativo). ¿Cuál fijamos?<div class="prop">Propuesta: 1/500 de la altura total y de cada piso, para que coincida con la guía, y mostrar 1/600 y 1/400 como banda.</div></div>
-<div class="preg"><b class="q">10. Sismo.</b> Subiste la Parte III del 103 (mampostería), que no aplica a tabiques de hormigón. ¿Era para algo puntual (por ejemplo la inercia fisurada 0,40·Ig que mencionamos para el FEM)? ¿El sismo queda fuera, por estar Mar del Plata en la zona de menor peligrosidad?</div>
-<div class="preg"><b class="q">11. Simple y completa.</b> ¿Las dos opciones son solo para la verificación CIRSOC 201 (métodos CIRSOC y FEM), o también querés una versión «simple» del viento CIRSOC (por ejemplo, sin los casos de torsión)?</div>
-<div class="preg"><b class="q">12. Materiales en el CIRSOC.</b> ¿f'c sale del H de la cátedra (H-30 → 30 MPa) y el acero es ADN 420? ¿Recubrimiento y cuantía de armado los pone el alumno en «Datos»?</div>
+<h3>Respondidas</h3>
+<table>
+<tr><th style="width:30%">Pregunta</th><th>Respuesta</th></tr>
+<tr><td>Planilla de la guía</td><td>No existe: se arma desde la guía (sección C)</td></tr>
+<tr><td>Correcciones de hoy: ¿guía o CIRSOC?</td><td>Todas son de la guía (Kz con z mínimo de 5 m, criterio C, rotación muro por muro, J completo)</td></tr>
+<tr><td>Armado de la cátedra</td><td>Queda como opción</td></tr>
+<tr><td>Fundaciones</td><td>Lo mínimo, con el alcance de la guía (sección D); CIRSOC 401 y EC7 para el método CIRSOC</td></tr>
+<tr><td>Planilla y Guía con el 102-2005</td><td>Sí: la guía es del 102-2005 (2.1)</td></tr>
+<tr><td>Vuelco y deriva en CIRSOC</td><td>Salen del 101-25 y del Apéndice B del 102-25 (sección B)</td></tr>
+</table>
 
-<div class="preg"><b class="q">13. CIRSOC 201.</b> ¿Subís el 201-2005 con comentarios? ¿Hay una edición nueva (2025) en discusión o aprobada? Si la hay, conviene usar esa, porque estaría alineada con las combinaciones del 102-25.</div>
-<div class="preg"><b class="q">14. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (viviendas y oficinas, V = 62,5 m/s en Mar del Plata) y exposición B por defecto, editables en «Datos»? ¿Y para el viento de servicio usamos 10 años de recurrencia?</div>
-<div class="preg"><b class="q">15. Planilla y Guía siguen con el 102-2005.</b> ¿Confirmás que esos dos métodos se quedan con el reglamento de 2005, como la cátedra, y que solo CIRSOC y FEM usan el 2025? El combinado mostraría las dos ediciones lado a lado.</div>
-<div class="preg"><b class="q">16. La guía.</b> ¿Podés subir el PDF de la guía «Edificio en torre» y las clases? Para el método Guía voy a citar sección por sección.</div>
+<h3>Abiertas</h3>
+<div class="preg"><b class="q">1. CIRSOC 401, Eurocódigo 7 y CIRSOC 201.</b> No aparecen en el repo. ¿Los volvés a subir? Del 201, ¿es el de 2005 o hay una edición nueva?</div>
+<div class="preg"><b class="q">2. Versión de la planilla.</b> ¿Siguen las dos (anterior y 2025), solo en el método Planilla virgen?<div class="prop">Propuesta: sí.</div></div>
+<div class="preg"><b class="q">3. Excel del combinado.</b><div class="prop">Propuesta: un reporte «Comparación de métodos» con la tabla y gráficos superpuestos, y un botón para descargar los cuatro libros juntos.</div></div>
+<div class="preg"><b class="q">4. Gráficos vivos y dibujos fijos.</b> ¿Te sirve la regla de la sección 4: lo que depende de datos va como gráfico de Excel y lo demás como imagen marcada?</div>
+<div class="preg"><b class="q">5. Reabrir la virgen en la app.</b><div class="prop">Propuesta: mandan las hojas de la cátedra para lo que tienen; las tablas completan la geometría, y la app avisa si no coinciden.</div></div>
+<div class="preg"><b class="q">6. Armado por defecto.</b> Con el armado como opción, ¿cuál viene elegido en Planilla virgen y en Guía?<div class="prop">Propuesta: el de la cátedra, porque es el que enseña la guía.</div></div>
+<div class="preg"><b class="q">7. Erratas de la guía.</b> ¿El método Guía da los números bien (siguiendo el procedimiento) y anota la diferencia con el texto?<div class="prop">Propuesta: sí, con un aviso en la app y una nota en la planilla de la guía.</div></div>
+<div class="preg"><b class="q">8. Platea por defecto.</b> ¿B1 × L1 igual a la planta del último subsuelo, como en la guía, editable en «Datos»?</div>
+<div class="preg"><b class="q">9. Deriva en CIRSOC.</b> El 102-25 orienta entre 1/600 y 1/400.<div class="prop">Propuesta: 1/500, para que coincida con la guía, con la banda 1/600 a 1/400 a la vista.</div></div>
+<div class="preg"><b class="q">10. Sismo y CIRSOC 103 Parte III.</b> ¿Para qué la subiste? ¿El sismo queda fuera, por estar Mar del Plata en la zona de menor peligrosidad?</div>
+<div class="preg"><b class="q">11. Simple y completa.</b> ¿Son solo para la verificación CIRSOC 201, o también querés un viento CIRSOC «simple» (sin los casos de torsión)?</div>
+<div class="preg"><b class="q">12. Materiales en CIRSOC.</b> ¿f'c sale del H (H-30 → 30 MPa) y el acero es ADN 420, con recubrimiento en «Datos»?</div>
+<div class="preg"><b class="q">13. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (62,5 m/s en Mar del Plata) y exposición B por defecto? ¿Viento de servicio con 10 años de recurrencia?</div>
 
 <p class="pie">Torre 3D · plan de métodos y planillas · rama claude/dazzling-ritchie-36ebib · documento para decidir, sin código.</p>
 </div></body></html>
