@@ -51,7 +51,7 @@ svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
 <body><div class="pag">
 
 <h1>Plan de trabajo · métodos de cálculo y planillas</h1>
-<p class="sub">Torre 3D · quinta versión del plan: tus respuestas, la guía «Edificio en torre» 2024 y las fundaciones · noviembre 2026 · <b>listo para empezar la etapa 1</b> (todavía sin código).</p>
+<p class="sub">Torre 3D · sexta versión del plan: tus respuestas, la guía «Edificio en torre» 2024, las fundaciones y el informe técnico de Gaspar · noviembre 2026 · <b>en curso: etapa 0</b>.</p>
 
 <div class="tarjeta gris">
 <b>En una frase.</b> La app pasa a tener <b>cuatro métodos</b> (Planilla virgen, Guía, CIRSOC y FEM), cada uno con sus
@@ -323,6 +323,24 @@ fundaciones las mantenemos en ese alcance. Los dos textos que subiste lo confirm
 <tr><td><b>Estudio de suelos</b></td><td>—</td><td>—</td><td>Informativo: profundidad mínima de investigación (CIRSOC 401, art. 3.5.6.2)</td></tr>
 </table>
 <p class="nota">Queda fuera de alcance, en todos los métodos: la capacidad de carga calculada (fórmulas de Terzaghi o Brinch Hansen), los asentamientos, los pilotes y el diseño estructural de la platea.</p>
+
+<!-- ============================================================ E -->
+<h2><span class="n">E</span>Informe técnico de Gaspar (17/11): etapa 0 antes de reorganizar</h2>
+<p>Gaspar subió <code>docs/informes/analisis-tecnico-torre-3d.html</code>, una auditoría de la app (no del cálculo
+estructural). Su conclusión: el motor está bien separado y probado, pero antes de seguir hay que proteger la
+importación y el guardado, hacer que un archivo dé siempre los mismos resultados y que la versión web funcione sin
+red. Los hallazgos 1, 4, 5 y 6 siguen presentes en esta rama.</p>
+<table>
+<tr><th style="width:5%">#</th><th style="width:38%">Hallazgo</th><th>Dónde entra en el plan</th></tr>
+<tr><td>1</td><td>Un archivo importado puede ejecutar código (nombres que llegan como HTML a los rótulos del 3D)</td><td><span class="chip warn">etapa 0</span> los datos del proyecto se escriben siempre como texto</td></tr>
+<tr><td>2</td><td>Un proyecto inválido puede pisar el guardado; los fallos del guardado no se avisan</td><td><span class="chip warn">etapa 0</span> lector único que valida JSON, Excel, Sheets y el guardado del navegador antes de activar el proyecto</td></tr>
+<tr><td>3</td><td>Sheets: acceso público, escrituras amplias, cambios parciales</td><td>Solo si se usa Sheets para entregar (pregunta 11)</td></tr>
+<tr><td>4</td><td>Sin red la versión web no abre; borra cachés ajenas del mismo dominio</td><td><span class="chip warn">etapa 0</span> precaché generado en el build, con prefijo propio</td></tr>
+<tr><td>5</td><td>El mismo archivo da resultados distintos (motor y método salen del navegador)</td><td><span class="chip">etapa 1</span> el método va <b>dentro del proyecto</b> y se pasa explícito al motor; formato <code>.torre3d.json</code> con versión de esquema y de fórmulas</td></tr>
+<tr><td>6</td><td>«Todo verifica» promete más de lo que se controla</td><td><span class="chip">etapa 1</span> «Verifican los controles calculados», informativos aparte, y el método a la vista</td></tr>
+<tr><td>7</td><td>Las plantillas de la cátedra se publican</td><td>Pregunta 12: permiso de la cátedra</td></tr>
+<tr><td>8–11</td><td>Pruebas en los pull requests, una sola copia del HTML descargable, actualizar Vite y Vitest, separar el estado de la app</td><td>Mantenimiento, después de la etapa 1</td></tr>
+</table>
 
 <!-- ============================================================ 1 -->
 <h2><span class="n">1</span>Los cuatro métodos y el combinado</h2>
@@ -767,8 +785,8 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <figcaption>Figura 8. Orden y dependencias. La etapa 1 es la base de todo y no cambia ningún número.</figcaption>
 </figure>
 
-<div class="paso"><div class="b">0</div><div><b>Bibliografía y respuestas</b> <span class="chip ok">hecho</span> salvo el PDF del CIRSOC 201-2005, que se necesita recién en la etapa 4.</div></div>
-<div class="paso"><div class="b">1</div><div><b>Reorganizar sin cambiar números.</b> Carpetas por capa, <code>ResultadoMetodo</code>, selector único de método. <small>Está lista cuando las 413 pruebas siguen pasando y la virgen da exactamente lo mismo que hoy.</small></div></div>
+<div class="paso"><div class="b">0</div><div><b>Seguridad y datos</b> (informe de Gaspar, sección E): hallazgo 1 (datos como texto), 2 (lector único que valida) y 4 (sin red). La bibliografía y las respuestas ya están, salvo el PDF del CIRSOC 201-2005, que se necesita recién en la etapa 4. <small>Está lista cuando un archivo con HTML en los nombres se ve literal, un archivo roto no pisa el guardado y la app abre sin red.</small></div></div>
+<div class="paso"><div class="b">1</div><div><b>Reorganizar sin cambiar números.</b> Carpetas por capa, <code>ResultadoMetodo</code>, selector único de método. El método elegido se guarda en el proyecto y se pasa explícito al motor (hallazgo 5); el resumen dice qué método calculó y separa lo informativo (hallazgo 6). <small>Está lista cuando las 413 pruebas siguen pasando y la virgen da exactamente lo mismo que hoy.</small></div></div>
 <div class="paso"><div class="b">2</div><div><b>Método Guía.</b> Se separa de los valores «Guía/CIRSOC» de hoy (casi todo el código ya existe). Se suma lo que la guía hace y la app no: esbeltez, flecha directa, armado con barras y corte en dinteles (sección C). <small>Está lista cuando reproduce el ejemplo de la guía y el Anexo (T1, alas de T5, porcentajes de rotación), con las erratas anotadas.</small></div></div>
 <div class="paso"><div class="b">3</div><div><b>CIRSOC cargas</b>: 101 (D y L), 102 completo (frecuencia, G/Gf, casos de la Fig. 9, carga mínima) y combinaciones. <small>Está lista cuando da igual que ejemplos resueltos a mano con las tablas del reglamento.</small></div></div>
 <div class="paso"><div class="b">4</div><div><b>CIRSOC 201</b>: verificación simple y completa. <small>Está lista cuando da igual que ejemplos de los comentarios del reglamento o de bibliografía que pases, más pruebas de casos límite.</small></div></div>
@@ -829,6 +847,9 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <div class="preg"><b class="q">8. Simple y completa.</b> ¿Son solo para la verificación CIRSOC 201, o también querés un viento CIRSOC «simple» (sin los casos de torsión)?</div>
 <div class="preg"><b class="q">9. Materiales en CIRSOC.</b> ¿f'c sale del H (H-30 → 30 MPa) y el acero es ADN 420, con recubrimiento en «Datos»?</div>
 <div class="preg"><b class="q">10. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (62,5 m/s en Mar del Plata) y exposición B por defecto? ¿Viento de servicio con 10 años de recurrencia?</div>
+
+<div class="preg"><b class="q">11. Sheets.</b> ¿Los alumnos entregan por Google Sheets? Si sí, el hallazgo 3 pasa a la etapa 0.</div>
+<div class="preg"><b class="q">12. Plantillas de la cátedra.</b> ¿La cátedra autorizó distribuirlas públicamente? Si no, el alumno sube su copia al exportar (hallazgo 7).</div>
 
 <p class="pie">Torre 3D · plan de métodos y planillas · rama claude/dazzling-ritchie-36ebib · documento para decidir, sin código.</p>
 </div></body></html>
