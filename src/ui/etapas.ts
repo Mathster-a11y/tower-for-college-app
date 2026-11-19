@@ -4,6 +4,7 @@
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
 import { describirConfig } from '../engine/metodos/tipos';
+import { armarTabique, ERRATAS_GUIA, textoBarras } from '../engine/metodos/guia';
 import { estado, fmt } from './estado';
 import { textoDiferencia } from '../engine/desglose';
 import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, type EstadoChip } from './comp';
@@ -293,6 +294,9 @@ const rigidezE: Etapa = {
       formula(`ΣJ, viento ${d.dir}`, `Σ ${v('J', 'j')}${op('=')}${r(rg.J, 3, 'm⁴')}${op(rg.J >= rg.minimos.h500 ? '≥' : '<')}${n(rg.minimos.h500, 2)}`, `J ${d.dir === 'A' ? 'paralelos' : 'ortogonales'}!AY24`, rg.J >= rg.minimos.h500 ? 'verifica' : 'no verifica'),
       formula('Desplazamiento de la azotea (ménsula, momento real de cada nivel)', `${v('δ')}${op('=')}∬ ${v('M')}/(${v('E')}·${v('J')}) d${v('z')}${op('=')}${r(def.dTop * 1000, 1, 'mm')}${op(def.dTop <= def.limite ? '≤' : '>')}${v('h')}/500${op('=')}${r(def.limite * 1000, 1, 'mm')}`, `E = ${fmt(E / 10, 0)} kg/cm² (el de la planilla) · con carga uniforme: δ = W·h³/8EJ = ${fmt(def.dUniforme * 1000, 1)} mm`, def.dTop <= def.limite ? 'verifica' : 'no verifica'),
     );
+    // método Guía: la flecha como la calcula la guía (4.2), ménsula con la carga uniforme promedio
+    const fl = estado.calculo.controles.find(x => x.nombre === `Flecha de la ménsula, viento ${d.dir}`);
+    if (fl && estado.fuente === 'guia') cu.append(formula('Flecha de la ménsula (guía 4.2)', `${v('f')}${op('=')}${v('q', 'v')} · ${v('h')}⁴ / (8 · ${v('E')} · ${v('J')})${op('=')}${r(fl.guia ?? NaN, 3, 'm')}${op(fl.estado === 'verifica' ? '≤' : '>')}${v('h')}/500`, fl.nota ?? '', fl.estado === 'verifica' ? 'verifica' : 'no verifica'));
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
     const tot = piezasDir.reduce((s, x) => s + Jp(x.filaHoja!), 0);
@@ -358,7 +362,7 @@ const rototrasl: Etapa = {
     const aviso = avisoCRCaraMenor(d);
     if (aviso) c.append(h('p', { class: 'aviso-linea' }, aviso));
     c.append(h('p', { class: 'nota' }, guia
-      ? 'Valores «Guía/CIRSOC»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
+      ? 'Valores «Guía»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
       : (d.dir === 'A' ? d.asig.datos.rotA : d.asig.datos.rotB).par
         ? 'Valores de la planilla: las dos piezas perpendiculares elegidas entran a la rotación en las filas 28–29, con los brazos desde su punto medio; las demás no cuentan (filas 31 a 50 en 0).'
         : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
@@ -557,7 +561,7 @@ function avisoCRCaraMenor(d: ReturnType<typeof datos>): string | null {
     });
     if (peor.dif > 0.005) txt += ` Como la planta gira, la rotación cambia: la que más, ${peor.nombre}, ${fmt(peor.pl, 2)} t en la planilla contra ${fmt(peor.re, 2)} t con el CR real (ΣJt·a² ${fmt(pl.M51, 1)} contra ${fmt(re.M51, 1)}).`;
   } else txt += ' En este viento la planta no gira (e = 0), así que las fuerzas no cambian.';
-  return txt + ' Con «Planilla 2025» o «Guía/CIRSOC» sale bien.';
+  return txt + ' Con «Planilla 2025» o «Guía» sale bien.';
 }
 function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla'; YrPlanilla?: number } {
   const A = d.dir === 'A';
@@ -641,7 +645,7 @@ const flexion: Etapa = {
         h('p', { class: 'nota' }, Mx ? `Con exo, el momento de los tabiques en PB es ${fmt(Mx(altP.zPB), 1)} tm (sin exo, ${fmt(d.p.niveles.length ? (d.dir === 'A' ? d.corr.guia.mnyq.J : d.corr.guia.mnyq.O)[d.filaPB] : 0, 1)} tm). Cada pieza toma su fracción de la rototraslación. Sin la marca, las cuentas son las de la planilla del curso (sin exo).` : 'Sin la marca: las cuentas de la planilla del curso, sin el exoesqueleto.'));
     }
     if (!enPB) c.append(h('p', { class: 'nota' }, `Fibras en ${nomNivel}: el mismo σ = −N/F ± M/W de PB, con el momento de ${nomNivel} (M,NyQ, la misma fracción de la pieza), lo que pesa de ${nomNivel} para arriba y la sección del muro justo encima de la losa. Los controles de la etapa siguen siendo los de PB.`));
-    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
+    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
     const t = h('table', { class: 'tabla' });
     t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'tracción', 'compresión', ''].map(x => h('th', {}, x)))));
     const tb = h('tbody');
@@ -668,6 +672,9 @@ const flexion: Etapa = {
         formula('Tracción (descargado)', `${v('σ')}${op('=')}−${v('N', 'g')}/${v('F')} + ${m.papel === 'ala' ? `${v('M')}·${v('d')}/${v('J')}` : `${v('M')}·${v('y')}/${v('J')}`}${op('=')}−${n(m.Ndesc / m.A, 1)} + ${n(m.sigM, 1)}${op('=')}${r(m.traccion, 2, 'kg/cm²')}`, m.traccion > 0 ? `tracciona en ${fmt(m.x * 100, 0)} cm: T = ${fmt(m.T, 2)} t · As = T/${SIGMA_E} = ${fmt(m.As, 2)} cm²; mínima 0,8 % = ${fmt(m.AsMin, 1)} cm² → ${fmt(Math.max(m.As, m.AsMin), 1)} cm²` : 'todo comprimido: armadura mínima', m.traccion > 0 ? 'revisar' : 'verifica'),
         formula('Compresión (cargado)', `${v('σ')}${op('=')}−${v('N', 'q')}/${v('F')} − ${n(m.sigM, 1)}${op('=')}−${n(m.Ncarg / m.A, 1)} − ${n(m.sigM, 1)}${op('=')}${r(m.compresion, 2, 'kg/cm²')}`, `|σ| ${m.verifica ? '≤' : '>'} ${adm} kg/cm² · Nq con ${String(Q_CARGADO).replace('.', ',')} t/m²`, m.verifica ? 'verifica' : 'no verifica'),
       );
+      // armado como la guía (5): dos capas, vertical (la de cálculo o la mínima) y horizontal (1/5)
+      const arm = armarTabique(m.As, m.AsMin, Math.max(m.b, m.h));
+      cu.append(formula('Armado (guía 5)', `${v('A', 's')}${op('=')}${r(arm.AsTotal, 1, 'cm²')} (${esc(arm.manda)}) → ${n(arm.vertical.pedido, 2)} cm²/m por capa${op('→')}${esc(textoBarras(arm.vertical))}; horizontal ${n(arm.horizontal.pedido, 2)} cm²/m${op('→')}${esc(textoBarras(arm.horizontal))}`, 'Fe long en 2 capas · Fe hor = 1/5 · mín. Ø8 c/20 y Ø6 c/25'));
     });
   },
   centro(c, tam) {
@@ -780,6 +787,12 @@ const resumen: Etapa = {
     const grupos = [...new Set(cs.map(x => x.grupo))];
     c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const e = peor(cs.filter(x => x.grupo === g && x.estado !== 'informativo')); return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
     c.append(seccion('Todos los controles', tablaControles(cs)).el);
+    // método Guía: dónde el texto de la guía no cierra con su propio procedimiento (la app sigue el procedimiento)
+    if (estado.fuente === 'guia') {
+      const t = h('table', { class: 'tabla compacta' }, h('thead', {}, h('tr', {}, h('th', {}, 'Dónde'), h('th', {}, 'Qué dice la guía'), h('th', {}, 'Qué calcula la app'))),
+        h('tbody', {}, ...ERRATAS_GUIA.map(e => h('tr', {}, h('td', {}, e.donde), h('td', {}, e.texto), h('td', {}, e.calculado)))));
+      c.append(seccion('Diferencias con el texto de la guía', h('p', { class: 'nota' }, 'Números del texto de la guía «Edificio en torre» 2024 que no cierran con su propio procedimiento. El método «Guía» sigue el procedimiento.'), h('div', { class: 'scroll' }, t)).el);
+    }
   },
   nombreCentro: () => 'Resumen de controles',
   estado: () => peor((estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo')),

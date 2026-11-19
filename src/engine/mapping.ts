@@ -13,7 +13,7 @@
  *    Todo lo demás (C, U, L, T, E, alas distintas) va en las columnas asimétricas, un muro por columna.
  *  - El tipo de fila es libre en las dos hojas. En «paralelos» se prefieren las filas en las que la hoja de
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
- *    flexocompresión con el módulo correcto (columna «Guía/CIRSOC») y avisa.
+ *    flexocompresión con el módulo correcto (columna «Guía») y avisa.
  */
 import { FLEX_D_FIJO, FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
 import { config } from './config';
@@ -560,13 +560,13 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
     }
     if (paralelos && i < 20 && TIPO_FILA_PARALELOS[i] !== tipo) {
       const mod = { 'simétrica': 'simétrico (Q)', 'asimétrica': 'asimétrico (AN)', circular: 'circular (V)' };
-      p.avisos.push(`Va en la fila de la pieza ${i + 1}, donde «Flex comp PB paralelos» lee el módulo ${mod[TIPO_FILA_PARALELOS[i]]}: la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo ${mod[tipo]} (columna «Guía/CIRSOC»).`);
+      p.avisos.push(`Va en la fila de la pieza ${i + 1}, donde «Flex comp PB paralelos» lee el módulo ${mod[TIPO_FILA_PARALELOS[i]]}: la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo ${mod[tipo]} (columna «Guía»).`);
     }
     if (actual && paralelos && FILAS_O0.includes(i)) {
       p.avisos.push(`Fila de la pieza ${i + 1}: la planilla tiene el área en 0 fijo; la app usa el área real en la flexocompresión.`);
     }
     if (paralelos && FLEX_D_FIJO.includes(i)) {
-      p.avisos.push(`Fila de la pieza ${i + 1}: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía/CIRSOC»).`);
+      p.avisos.push(`Fila de la pieza ${i + 1}: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).`);
     }
     if (actual && paralelos && i >= FILAS_CR_ACTUAL) {
       p.avisos.push(`Fila de la pieza ${i + 1}: la planilla anterior suma ΣJ y ΣJ·x de las piezas perpendiculares de «Rototrasl. cara menor» solo hasta la fila 38 (B51, I51), es decir, las piezas 1 a ${FILAS_CR_ACTUAL} del viento A: esta queda afuera y el CR del viento B de la planilla no la cuenta. El dibujo y el 3D usan el CR real.`);

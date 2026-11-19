@@ -566,7 +566,7 @@ function armarMis() {
       const p = leerVersion(v.id); if (!p) return;
       try {
         const html = tablaComparacion(comparar(p, estado.proyecto), v.nombre, 'Actual');
-        dialogo(`<h2>Comparar con «${esc(v.nombre)}»</h2><p class="nota">Valores según la guía/CIRSOC. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+        dialogo(`<h2>Comparar con «${esc(v.nombre)}»</h2><p class="nota">Valores según el método Guía. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
       } catch (e) { fallo('No se pudo comparar', e); }
     });
     const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');

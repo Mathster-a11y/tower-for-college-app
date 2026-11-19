@@ -493,9 +493,9 @@ export function panelResultados(c: H, completo = true) {
   const { res, corr, controles } = estado.calculo;
   if (!res) return;
   const m = res.mnyq, g = corr.guia.mnyq;
-  c.append(h('p', { class: 'nota' }, '«Planilla»: lo que calcula la planilla original, sin cambios. «Guía/CIRSOC»: con Kz mínimo de 5 m, sin viento en PB y con el momento de rotación en unidades correctas.'));
+  c.append(h('p', { class: 'nota' }, 'Columna «Planilla»: lo que calcula la planilla de la cátedra, sin cambios. Columna «Guía»: el procedimiento de la guía (Kz constante por debajo de 5 m, sin viento en PB, J completo, rotación muro por muro y momento de rotación con las unidades bien). El método elegido arriba decide qué valores usan las etapas y los dibujos.'));
   const resumen = h('table', { class: 'tabla' });
-  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, 'Guía/CIRSOC'))));
+  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, 'Guía'))));
   const tb = h('tbody');
   ([['W total (t)', m.H61, g.H61, 1], ['Mv en la fundación (tm)', m.J61, g.J61, 0], ['hW (m)', m.G66, g.G66, 2], ['P sin sobrecarga (t)', m.M61, g.M61, 0],
     ['Me / Mv', m.L99, g.L99, 2], ['e = Mv/P (m)', m.M99, g.M99, 2], ["b'/6 (m)", m.N99, g.N99, 2], ['σ máx. suelo (kg/cm²)', m.N89, g.N89, 2], ['σ mín. suelo (kg/cm²)', m.N90, g.N90, 2],
@@ -506,7 +506,7 @@ export function panelResultados(c: H, completo = true) {
   if (!completo) return;
   c.append(h('h3', {}, 'Verificaciones'));
   const t = h('table', { class: 'tabla compacta' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía/CIRSOC', 'Estado'].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', 'Estado'].map(x => h('th', {}, x)))));
   const tb2 = h('tbody');
   let grupo = '';
   controles.forEach(k => {
@@ -541,8 +541,8 @@ export const NOTAS_PLANILLA = [
   'A las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para las piezas asimétricas.',
   'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra). La app pone ahí las de menos J y avisa en cada pieza.',
   'Planilla anterior: en «Rototrasl. cara menor», B51 e I51 suman solo hasta la fila 38, así que las piezas 9 a 20 del viento A no cuentan para el CR del viento B. La app pone en las filas 1 a 8 las de más J, dibuja el CR real y avisa cuánto cambia la rotación.',
-  'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía/CIRSOC» usa el área real (pregunta abierta para la cátedra).',
-  'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía/CIRSOC» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
+  'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía» usa el área real (pregunta abierta para la cátedra).',
+  'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
 ];
 /** avisos que piden revisar algo (el de los subsuelos fijos de la planilla es solo informativo) */
 export const esInformativo = (a: string) => a.startsWith('La planilla tiene 3 subsuelos fijos') || /(^|: )Nota: /.test(a);
@@ -568,7 +568,7 @@ export function panelAyuda(c: H) {
     ['Muros', 'El origen (0, 0) es el centro de la planta de PB. Dirección Y: paralelo al viento A; X: paralelo al viento B. Arrastrá los muros en la planta o movelos con las flechas (Mayús: de a 1 m).'],
     ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
     ['Importar', 'Con «Abrir / importar…» o «Importar desde Excel…»: la tabla de la app (bajala con «Descargar tabla»), líneas exportadas de AutoCAD (x1, y1, x2, y2) o la planilla del curso ya llena.'],
-    ['Resultados', '«Planilla» es lo que da el Excel original; «Guía/CIRSOC» son los valores corregidos. Cada control dice si verifica.'],
+    ['Resultados', '«Planilla» es lo que da el Excel original; «Guía» son los valores corregidos. Cada control dice si verifica.'],
     ['Diagramas', 'Viento en altura, corte y momento, rototraslación en planta, flexocompresión muro por muro (como la guía, con la armadura por tracción), rigidez y deformada, y la verificación funicular (polígono de fuerzas, polo, rayos y funicular). Pasá el mouse (o tocá) el gráfico para ver los valores.'],
     ['Elementos', 'En «Muros», la columna «Tipo»: tabique (o columna rectangular), tubo rectangular o tubo circular. «Desde» y «Hasta» dicen en qué niveles está cada muro; arriba de la planta elegís qué piso ver.'],
     ['Escribir planilla', 'Descarga la planilla del curso con tus datos. Excel o LibreOffice la recalculan al abrirla. La hoja «T3D» guarda el proyecto: con «Abrir…» la volvés a cargar.'],
