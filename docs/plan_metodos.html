@@ -834,20 +834,20 @@ libro más corto; el completo agrega las hojas de interacción N-M y de corte.</
 <tr><td>CIRSOC 201</td><td>Edición 2005 hasta conseguir la nueva; después se actualiza</td></tr>
 <tr><td>Planilla y Guía con el 102-2005</td><td>Sí: la guía es del 102-2005 (2.1)</td></tr>
 <tr><td>Vuelco y deriva en CIRSOC</td><td>Salen del 101-25 y del Apéndice B del 102-25 (sección B)</td></tr>
+<tr><td>Gráficos vivos y dibujos fijos (21/11)</td><td>Sí: lo que depende de datos va como gráfico de Excel; lo demás, imagen marcada</td></tr>
+<tr><td>Alcance geográfico (21/11)</td><td>La app tiene que servir en toda la Argentina, no solo en Mar del Plata: el sismo entra (ver la pregunta 7 nueva)</td></tr>
+<tr><td>Torsión (21/11)</td><td>El viento CIRSOC lleva siempre los cuatro casos de la Fig. 2.4-8; «simple / completa» es solo para la verificación del hormigón</td></tr>
+<tr><td>Recubrimiento (21/11)</td><td>Lo elige el alumno en «Datos» (f'c sale del H; acero ADN 420)</td></tr>
+<tr><td>Datos del viento CIRSOC (21/11)</td><td>Cubrir todas las situaciones: las tres categorías de riesgo, exposiciones B, C y D, factor topográfico, todas las ciudades de la tabla y viento de servicio con recurrencia elegible (10, 25, 50 o 100 años)</td></tr>
 </table>
 
-<h3>Abiertas (ninguna frena la etapa 1)</h3>
+<h3>Abiertas (ninguna frena la etapa 1; las respondidas el 21/11 pasaron arriba)</h3>
 <div class="preg"><b class="q">1. PDF del CIRSOC 201-2005.</b> No está en el repo. Hace falta para la etapa 4.</div>
 <div class="preg"><b class="q">2. Versión de la planilla.</b> ¿Siguen las dos (anterior y 2025), solo en el método Planilla virgen?<div class="prop">Propuesta: sí.</div></div>
 <div class="preg"><b class="q">3. Excel del combinado.</b><div class="prop">Propuesta: un reporte «Comparación de métodos» con la tabla y gráficos superpuestos, y un botón para descargar los cuatro libros juntos.</div></div>
-<div class="preg"><b class="q">4. Gráficos vivos y dibujos fijos.</b> ¿Te sirve la regla de la sección 4: lo que depende de datos va como gráfico de Excel y lo demás como imagen marcada?</div>
-<div class="preg"><b class="q">5. Reabrir la virgen en la app.</b><div class="prop">Propuesta: mandan las hojas de la cátedra para lo que tienen; las tablas completan la geometría, y la app avisa si no coinciden.</div></div>
-<div class="preg"><b class="q">6. Deriva en CIRSOC.</b> El 102-25 orienta entre 1/600 y 1/400.<div class="prop">Propuesta: 1/500, para que coincida con la guía, con la banda 1/600 a 1/400 a la vista.</div></div>
-<div class="preg"><b class="q">7. Sismo y CIRSOC 103 Parte III.</b> ¿Para qué la subiste? ¿El sismo queda fuera, por estar Mar del Plata en la zona de menor peligrosidad?</div>
-<div class="preg"><b class="q">8. Simple y completa.</b> ¿Son solo para la verificación CIRSOC 201, o también querés un viento CIRSOC «simple» (sin los casos de torsión)?</div>
-<div class="preg"><b class="q">9. Materiales en CIRSOC.</b> ¿f'c sale del H (H-30 → 30 MPa) y el acero es ADN 420, con recubrimiento en «Datos»?</div>
-<div class="preg"><b class="q">10. Datos del viento CIRSOC.</b> ¿Categoría de riesgo II (62,5 m/s en Mar del Plata) y exposición B por defecto? ¿Viento de servicio con 10 años de recurrencia?</div>
-
+<div class="preg"><b class="q">5. Reabrir la virgen en la app.</b> La planilla virgen guarda la torre dos veces: en las hojas de la cátedra (lo que el alumno ve y puede cambiar: alturas, viento, medidas de las piezas en las hojas J) y en las tablas «T3D» (la geometría completa de la planta, que la cátedra no tiene). Si el alumno cambia algo en las hojas de la cátedra con Excel y después abre el archivo en la app, las dos copias no coinciden. Hoy mandan las tablas «T3D»: lo que cambió en las hojas de la cátedra se pierde.<div class="prop">Propuesta: para lo que está en las hojas de la cátedra (alturas, datos del viento, área de influencia) manda la hoja de la cátedra; las tablas «T3D» completan lo que la cátedra no tiene (posición de los muros en planta), y la app muestra la lista de diferencias que encontró.</div></div>
+<div class="preg"><b class="q">6. Límite de deriva en CIRSOC.</b> La guía verifica que la flecha arriba de todo sea ≤ h/500. El CIRSOC 102-25 no fija un límite obligatorio: su comentario dice que lo habitual es entre 1/600 y 1/400 de la altura, y con un viento de servicio (más chico que el de cálculo). En la torre de la guía (64 m) eso es 10,7 cm, 12,8 cm (h/500) o 16 cm; en un piso de 3 m, 5, 6 o 7,5 mm.<div class="prop">Propuesta: que el alumno elija el límite (1/400, 1/500 o 1/600), con 1/500 por defecto para que coincida con la guía, y se verifique la deriva total y la de cada piso.</div></div>
+<div class="preg"><b class="q">7. Sismo en toda la Argentina.</b> Para usar la app en zonas sísmicas (Mendoza, San Juan, Salta…) hace falta el <b>INPRES-CIRSOC 103 Parte I</b> (construcciones en general: zonas, espectro, método estático) y la <b>Parte II</b> (hormigón armado). La Parte III que subiste es de mampostería y no aplica a tabiques de hormigón. ¿Los subís? El sismo entraría en CIRSOC y FEM como otro caso de carga (método estático equivalente), en una etapa nueva después de la 4.</div>
 <div class="preg"><b class="q">11. Sheets.</b> ¿Los alumnos entregan por Google Sheets? Si sí, el hallazgo 3 pasa a la etapa 0.</div>
 <div class="preg"><b class="q">12. Plantillas de la cátedra.</b> ¿La cátedra autorizó distribuirlas públicamente? Si no, el alumno sube su copia al exportar (hallazgo 7).</div>
 
