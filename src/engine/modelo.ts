@@ -301,6 +301,8 @@ export interface Proyecto {
   cirsoc102?: import('./cargas/cirsoc102').DatosCirsoc102 | null;
   /** cargas gravitatorias según CIRSOC 101-25 (métodos CIRSOC y FEM); vacío = por defecto */
   cirsoc101?: import('./cargas/cirsoc101').DatosCirsoc101 | null;
+  /** datos del hormigón para la verificación CIRSOC 201 (recubrimiento, exposición) y el límite de deriva; vacío = por defecto */
+  cirsoc201?: import('./metodos/cirsoc').DatosCirsoc201 | null;
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }

@@ -164,6 +164,16 @@ export function leerProyecto(x: unknown): Lectura {
       for (const k of ['D', 'Lmanual'] as const) if (!nulo(c[k]) && !(num(c[k]) && (c[k] as number) >= 0)) error(`CIRSOC 101-25: «${k}» tiene que ser un número ≥ 0.`);
     }
   }
+  if (!nulo(q.cirsoc201)) {
+    const c = q.cirsoc201;
+    if (!esObj(c)) error('Los datos del hormigón (CIRSOC 201) están dañados.');
+    else {
+      if (!nulo(c.recubrimiento) && c.recubrimiento !== 'interior' && c.recubrimiento !== 'exterior') error('CIRSOC 201: recubrimiento «interior» o «exterior».');
+      if (!nulo(c.exposicion) && !['A1-A2', 'A3-Q1-C1', 'marina-agresiva'].includes(c.exposicion as string)) error('CIRSOC 201: clase de exposición desconocida.');
+      if (!nulo(c.recManual) && !(num(c.recManual) && (c.recManual as number) > 0)) error('CIRSOC 201: el recubrimiento a mano tiene que ser un número mayor que 0.');
+      if (!nulo(c.limiteDeriva) && ![400, 500, 600].includes(c.limiteDeriva as number)) error('CIRSOC 201: el límite de deriva tiene que ser 400, 500 o 600.');
+    }
+  }
   // cómo se calcula (método, versión de la planilla, armado): valores conocidos o vacío
   if (!nulo(q.calculo)) {
     const c = q.calculo;
@@ -173,6 +183,7 @@ export function leerProyecto(x: unknown): Lectura {
       if (!nulo(c.version) && c.version !== 'actual' && c.version !== 'nuevo') error(`Versión de la planilla desconocida («${String(c.version)}»).`);
       if (!nulo(c.armado) && c.armado !== 'catedra' && c.armado !== 'app') error(`Armado de piezas desconocido («${String(c.armado)}»).`);
       if (!nulo(c.formulas) && typeof c.formulas !== 'string') error('La versión de las fórmulas tiene que ser texto.');
+      if (!nulo(c.verificacion) && c.verificacion !== 'simple' && c.verificacion !== 'completa') error('La verificación tiene que ser «simple» o «completa».');
       if (!nulo(c.metodo) && IDS_METODO.includes(c.metodo as IdMetodo) && !METODOS[c.metodo as IdMetodo].disponible) {
         avisos.push(`El proyecto se calculó con el método «${METODOS[c.metodo as IdMetodo].nombre}», que todavía no está en esta versión de la app: se usa «${METODOS.planilla.nombre}».`);
         c.metodo = 'planilla';

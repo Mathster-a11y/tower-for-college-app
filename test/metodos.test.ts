@@ -16,7 +16,7 @@ const conCalculo = (c: Parameters<typeof configDe>[0]['calculo']) => { const p =
 describe('el método va dentro del proyecto', () => {
   it('sin configuración: la de siempre (no cambia ningún número)', () => {
     expect(configDe(ejemploGuia())).toEqual(CONFIG_POR_DEFECTO);
-    expect(CONFIG_POR_DEFECTO).toEqual({ metodo: 'planilla', version: 'actual', armado: 'app' });
+    expect(CONFIG_POR_DEFECTO).toEqual({ metodo: 'planilla', version: 'actual', armado: 'app', verificacion: 'completa' });
   });
 
   it('el caso del informe: la carga total del viento A depende de la versión guardada en el proyecto, no del navegador', () => {
@@ -47,7 +47,7 @@ describe('el método va dentro del proyecto', () => {
     expect(r.ok && r.proyecto.calculo).toEqual({ metodo: 'guia', version: 'nuevo', armado: 'catedra', formulas: '2026.11' });
     const malo = leerProyecto(conCalculo({ metodo: 'magia' as never }));
     expect(malo.ok ? [] : malo.errores).toEqual(['Método de cálculo desconocido («magia»).']);
-    const futuro = leerProyecto(conCalculo({ metodo: 'cirsoc' }));
+    const futuro = leerProyecto(conCalculo({ metodo: 'fem' }));
     expect(futuro.ok && futuro.proyecto.calculo?.metodo).toBe('planilla');
     expect(futuro.ok && futuro.avisos[0]).toMatch(/todavía no está/);
   });
@@ -59,7 +59,7 @@ describe('el método va dentro del proyecto', () => {
   });
 
   it('se describe en informes y láminas', () => {
-    expect(describirConfig({ metodo: 'planilla', version: 'nuevo', armado: 'catedra' })).toBe('Planilla virgen · planilla 2025 · armado de la cátedra');
-    expect(describirConfig({ metodo: 'guia', version: 'actual', armado: 'app' })).toBe('Guía · armado de la app');
+    expect(describirConfig({ metodo: 'planilla', version: 'nuevo', armado: 'catedra', verificacion: 'completa' })).toBe('Planilla virgen · planilla 2025 · armado de la cátedra');
+    expect(describirConfig({ metodo: 'guia', version: 'actual', armado: 'app', verificacion: 'completa' })).toBe('Guía · armado de la app');
   });
 });

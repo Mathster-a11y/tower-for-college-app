@@ -23,6 +23,7 @@ import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
 import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
 import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
+import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -87,7 +88,7 @@ const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => 
 /** Tabla de controles: planilla, guía y estado. */
 export function tablaControles(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', estado.config.metodo === 'cirsoc' ? 'CIRSOC' : 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
   cs.forEach(k => {
     // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
@@ -625,6 +626,7 @@ const flexion: Etapa = {
   icono: '<path d="M6 4v16M6 4l14 16H6"/>',
   globo: 'Flexocompresión|Cada muro se verifica en PB con σ = −N/F ± M/W: sin sobrecarga para ver si tracciona (y cuánta armadura lleva), con sobrecarga para la compresión máxima del hormigón.',
   panel(c) {
+    if (estado.config.metodo === 'cirsoc') { panelFlexCirsoc(c); return; }
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
     const vs = verifs();
@@ -682,6 +684,7 @@ const flexion: Etapa = {
     });
   },
   centro(c, tam) {
+    if (estado.config.metodo === 'cirsoc') { centroFlexCirsoc(c, tam); return; }
     const vs = verifs();
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
@@ -711,7 +714,7 @@ const flexion: Etapa = {
     c.append(t, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
   },
   nombreCentro: () => `Flexocompresión · viento ${estado.dir}`,
-  estado: () => peor(grupoControles(['Flexocompresión'])),
+  estado: () => peor(grupoControles(estado.config.metodo === 'cirsoc' ? ['CIRSOC 201'] : ['Flexocompresión'])),
 };
 
 // ------------------------------------------------------------------ Carta (la hoja M,NyQ dibujada)

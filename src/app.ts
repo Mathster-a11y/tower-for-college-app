@@ -129,6 +129,15 @@ function dibujarTira(e: Etapa) {
     });
     t.append(segV);
   }
+  if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem') {
+    const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
+    ([['simple', 'Simple'], ['completa', 'Completa']] as const).forEach(([k, txt]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(cfg.verificacion === k) }, txt);
+      b.addEventListener('click', () => { if (cfg.verificacion !== k) estado.cambiarCalculo({ verificacion: k }); });
+      segN.append(b);
+    });
+    t.append(h('span', { class: 'nota chica' }, 'Verificación'), segN);
+  }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
     ([['catedra', 'Cátedra'], ['app', 'App']] as const).forEach(([k, txt]) => {
