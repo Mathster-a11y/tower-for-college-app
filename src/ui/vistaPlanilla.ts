@@ -6,7 +6,8 @@
  */
 import plantillaURL from '../assets/planilla_virgen.xlsx';
 import plantilla2025URL from '../assets/planilla_catedra_2025.xlsx';
-import { normalizarProyecto, ejemploGuia, type Proyecto } from '../engine/modelo';
+import { ejemploGuia, type Proyecto } from '../engine/modelo';
+import { leerProyecto } from '../engine/lector';
 import { aPlanilla } from '../engine/mapping';
 import { calcularPlanilla } from '../engine/planilla';
 import { config, usarConfig, type Metodo, type Motor } from '../engine/config';
@@ -26,8 +27,9 @@ const h = <K extends keyof HTMLElementTagNameMap>(t: K, a: Attrs = {}, ...hijos:
   return e;
 };
 
-function leerProyecto(): Proyecto {
-  try { const t = localStorage.getItem(CLAVE); if (t) { const p = JSON.parse(t) as Proyecto; if (p.version === 1) return normalizarProyecto(p); } } catch { /* nada guardado */ }
+/** el proyecto guardado por la pestaña principal, pasado por el lector único (si está dañado, el ejemplo) */
+function leerGuardado(): Proyecto {
+  try { const t = localStorage.getItem(CLAVE); if (t) { const l = leerProyecto(t); if (l.ok) return l.proyecto; } } catch { /* nada guardado */ }
   return ejemploGuia();
 }
 function leerConfig(): { motor: Motor; metodo: Metodo } {
@@ -141,7 +143,7 @@ export function montarVistaPlanilla() {
   const plantilla = async (m: Motor) => (plantillas[m] ??= await (await fetch(m === 'nuevo' ? plantilla2025URL : plantillaURL)).arrayBuffer());
   const armar = () => {
     const c = leerConfig(), motor: Motor = elegido === 'igual' ? c.motor : elegido;
-    const p = leerProyecto();
+    const p = leerGuardado();
     const { asig, res } = usarConfig({ motor, metodo: c.metodo }, () => { const asig = aPlanilla(p); return { asig, res: calcularPlanilla(asig.datos, { motor }) }; });
     return { p, motor, asig, res, metodo: c.metodo };
   };

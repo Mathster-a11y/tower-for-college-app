@@ -1,5 +1,5 @@
 import { envolverPiezas } from '../engine/grupos';
-import { ejemploGuia, normalizarProyecto, type Proyecto } from '../engine/modelo';
+import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { aPlanilla, type Asignacion } from '../engine/mapping';
 import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
 import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
@@ -7,6 +7,7 @@ import { controles, type Control } from '../engine/verificaciones';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
 import { config, type Metodo, type Motor } from '../engine/config';
+import { leerProyecto, textoErrores } from '../engine/lector';
 
 // motor y método elegidos (se recuerdan en el navegador); el motor nuevo es el de la planilla de la cátedra 2025
 const CLAVE_CONFIG = 'torre3d.config.v1';
@@ -17,7 +18,13 @@ try {
   if (c.metodo === 'app' || c.metodo === 'planilla') config.metodo = c.metodo;
 } catch { /* sin almacenamiento: quedan los valores por defecto */ }
 
-export interface Calculo { asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[]; error?: string; }
+export interface Calculo {
+  asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[];
+  /** el último cálculo falló: los resultados que quedan son los del último cálculo bueno (de la revisión «revision») */
+  error?: string;
+  /** revisión del proyecto con la que se calcularon estos resultados (ver Estado.revision) */
+  revision: number;
+}
 
 const CLAVE = 'torre3d.proyecto.v1';
 
@@ -27,7 +34,7 @@ export function calcularProyecto(proyecto: Proyecto): Calculo {
   const res = calcularPlanilla(asig.datos);
   const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const corr = calcularCorregido(asig.datos, asig.filaNivel[iPB] ?? 50, { proyecto, piezas: asig.piezas });
-  return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel) };
+  return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0 };
 }
 type Oyente = () => void;
 
@@ -78,14 +85,38 @@ class Estado {
   private atras: string[] = [];
   private adelante: string[] = [];
   private ultimo = '';
+  /**
+   * revisión del proyecto: sube con cada cambio de datos (editar, deshacer, abrir otro). Los resultados son «vigentes»
+   * solo si se calcularon con la revisión actual y sin error (ver vigente)
+   */
+  revision = 0;
+  /** el último intento de guardar en el navegador falló (sin lugar, modo privado…): el proyecto solo está en memoria */
+  guardadoFallo = false;
+  /** al arrancar: el proyecto guardado en el navegador estaba dañado (se abrió el ejemplo; el texto quedó aparte) */
+  avisoInicio = '';
+  private oyentesGuardado: ((fallo: boolean) => void)[] = [];
 
   constructor() {
     let p: Proyecto | null = null;
-    try { const t = localStorage.getItem(CLAVE); if (t) p = JSON.parse(t) as Proyecto; } catch { p = null; }
-    this.proyecto = p && p.version === 1 ? normalizarProyecto(p) : ejemploGuia();
+    let t: string | null = null;
+    try { t = localStorage.getItem(CLAVE); } catch { t = null; }
+    if (t) {
+      const l = leerProyecto(t);
+      if (l.ok) { p = l.proyecto; if (l.avisos.length) this.avisoInicio = `Proyecto guardado reparado al abrir: ${l.avisos[0]}`; }
+      else {
+        // no se pisa: el texto dañado queda en otra clave para poder recuperarlo a mano
+        try { localStorage.setItem(`${CLAVE}.danado`, t); } catch { /* sin lugar */ }
+        this.avisoInicio = `El proyecto guardado en este navegador estaba dañado y se abrió el ejemplo (${textoErrores(l.errores)}). El texto original quedó guardado aparte.`;
+      }
+    }
+    this.proyecto = p ?? ejemploGuia();
     this.recalcular();
     this.ultimo = JSON.stringify(this.proyecto);
   }
+  /** los resultados que se muestran corresponden al proyecto actual y el cálculo no falló */
+  get vigente(): boolean { return !!this.calculo && !this.calculo.error && this.calculo.revision === this.revision; }
+  /** avisa cuando el guardado automático en el navegador falla (true) o vuelve a andar (false) */
+  suscribirGuardado(f: (fallo: boolean) => void) { this.oyentesGuardado.push(f); }
   suscribir(f: Oyente) { this.oyentes.push(f); }
   /** solo cambia el muro elegido: redibuja las vistas (planta, 3D) sin rearmar el panel */
   private oyentesSel: Oyente[] = [];
@@ -126,9 +157,11 @@ class Estado {
   asegurarCalculo() { if (this.pendiente) this.calcularAhora(); }
   recalcular() {
     try {
-      this.calculo = calcularProyecto(this.proyecto);
+      this.calculo = { ...calcularProyecto(this.proyecto), revision: this.revision };
     } catch (e) {
-      this.calculo = { ...(this.calculo ?? {}), error: String(e) } as Calculo;
+      // se conservan los resultados del último cálculo bueno (con su revisión) para que las vistas no se rompan,
+      // pero quedan marcados: no son vigentes y no se exportan
+      this.calculo = { ...(this.calculo ?? {}), error: e instanceof Error ? e.message : String(e), revision: this.calculo?.revision ?? -1 } as Calculo;
     }
   }
   /** cambia el proyecto, recalcula, guarda en el navegador y avisa a las vistas */
@@ -154,6 +187,7 @@ class Estado {
     const nuevo = JSON.stringify(this.proyecto);
     const cambio = nuevo !== this.ultimo;
     if (cambio) {
+      this.revision++;
       this.atras.push(this.ultimo);
       if (this.atras.length > 100) this.atras.shift();
       this.adelante = [];
@@ -165,8 +199,16 @@ class Estado {
   private actualizar(cambio = true) {
     if (this.modo === 'vivo') { this.recalcular(); this.pendiente = false; this.cambiosPendientes = 0; }
     else if (cambio) { this.pendiente = true; this.cambiosPendientes++; }
-    try { localStorage.setItem(CLAVE, this.ultimo); } catch { /* sin almacenamiento: no pasa nada */ }
+    this.guardar();
     this.oyentes.forEach(o => o());
+  }
+  /** guarda el proyecto en el navegador; si falla, avisa (una vez, hasta que vuelva a andar) */
+  private guardar() {
+    let ok = true;
+    try { localStorage.setItem(CLAVE, this.ultimo); } catch { ok = false; }
+    if (ok === !this.guardadoFallo) return;
+    this.guardadoFallo = !ok;
+    this.oyentesGuardado.forEach(f => f(!ok));
   }
   get puedeDeshacer() { return this.atras.length > 0; }
   get puedeRehacer() { return this.adelante.length > 0; }
@@ -177,13 +219,29 @@ class Estado {
     if (t === undefined) return;
     a.push(this.ultimo);
     this.ultimo = t;
+    this.revision++;
     this.proyecto = JSON.parse(t) as Proyecto;
     if (this.seleccion && !this.proyecto.muros.some(m => m.id === this.seleccion)) this.seleccion = null;
     this.limpiarGrupos();
     this.actualizar();
   }
-  /** otro proyecto (ejemplo, archivo abierto): se calcula siempre, también en el modo con botón */
-  reemplazar(p: Proyecto) { this.proyecto = normalizarProyecto(p); envolverPiezas(this.proyecto, nombrePieza); this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] }; this.cambiar(); if (this.pendiente) this.calcularAhora(); }
+  /**
+   * otro proyecto (ejemplo, archivo abierto, Sheets, «Mis proyectos»): pasa por el lector único; si no es válido tira un
+   * error con lo que está mal y el proyecto abierto queda como estaba. Se calcula siempre, también en el modo con botón.
+   * Devuelve los avisos de las reparaciones.
+   */
+  reemplazar(p: unknown): string[] {
+    const l = leerProyecto(p);
+    if (!l.ok) throw new Error(textoErrores(l.errores));
+    const nuevo = l.proyecto;
+    envolverPiezas(nuevo, nombrePieza);          // sobre la copia: si falla, no se tocó nada
+    this.proyecto = nuevo;
+    this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] };
+    this.revision++;
+    this.cambiar();
+    if (this.pendiente) this.calcularAhora();
+    return l.avisos;
+  }
   /** saca de la selección y del contexto los grupos que ya no existen */
   limpiarGrupos() {
     const ids = new Set((this.proyecto.grupos ?? []).map(g => g.id));

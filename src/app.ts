@@ -17,6 +17,8 @@ import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } fro
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable } from './ui/comp';
+import { leerProyecto, textoErrores } from './engine/lector';
+import { tarjeta } from './ui/tarjeta';
 import { resaltarFilas } from './ui/grilla';
 import { abrirVistaPlanilla } from './ui/vistaPlanilla';
 import plantillaURL from './assets/planilla_virgen.xlsx';
@@ -24,7 +26,7 @@ import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
 import { config, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
-import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio, type Proyecto } from './engine/modelo';
+import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
@@ -299,8 +301,7 @@ function fallo(titulo: string, e: unknown) {
 }
 
 async function exportar() {
-  estado.asegurarCalculo();
-  if (estado.calculo.error) { fallo('No se puede escribir la planilla', `El cálculo tiene un error: ${estado.calculo.error}`); return; }
+  if (!resultadosListos('escribir la planilla')) return;
   const { asig, res } = estado.calculo;
   const celdas = celdasAEscribir(asig.datos, res);
   const filas = Object.entries(celdas).map(([hoja, cs]) => `<li><b>${hoja}</b>: ${Object.keys(cs).length} celdas</li>`).join('');
@@ -367,10 +368,6 @@ async function exportar() {
   ]);
 }
 
-function proyectoValido(x: unknown): x is Proyecto {
-  const p = x as Proyecto;
-  return !!p && p.version === 1 && Array.isArray(p.niveles) && Array.isArray(p.muros) && !!p.sitio && !!p.fundacion;
-}
 
 async function abrir(f: File) {
   try { await abrirArchivo(f); } catch (e) { fallo(`No se pudo abrir «${f.name}»`, e); }
@@ -378,17 +375,16 @@ async function abrir(f: File) {
 async function abrirArchivo(f: File) {
   const buf = await f.arrayBuffer();
   if (f.name.toLowerCase().endsWith('.json')) {
-    const p: unknown = JSON.parse(new TextDecoder().decode(buf));
-    if (!proyectoValido(p)) throw new Error('El archivo no es un proyecto de Torre 3D.');
-    plantillaAbierta = null; reemplazarConCopia(p); return;
+    // el lector único valida antes de tocar nada: si el archivo está dañado, el proyecto abierto queda como estaba
+    if (await reemplazarConCopia(new TextDecoder().decode(buf))) plantillaAbierta = null;
+    return;
   }
   const nombre = f.name.toLowerCase();
   if (/\.(csv|tsv|txt)$/.test(nombre)) { dialogoImportar(interpretar(leerTexto(new TextDecoder().decode(buf), f.name)), f.name, null); return; }
   const leido = await leerPlanilla(buf);
   if (leido.proyecto) {
-    if (!proyectoValido(leido.proyecto)) throw new Error('La hoja «T3D» de la planilla está dañada.');
+    if (!(await reemplazarConCopia(leido.proyecto))) return;
     plantillaAbierta = buf;
-    reemplazarConCopia(leido.proyecto);
     if (leido.avisos.length) mensaje(`Planilla abierta · ${leido.avisos.length} aviso${leido.avisos.length > 1 ? 's' : ''}: ${leido.avisos[0]}`);
     return;
   }
@@ -508,16 +504,16 @@ $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null;
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
-$('b-guardar').addEventListener('click', () => { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); cerrarMenus(); });
+$('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });
-$('b-informe').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirInforme(); });
-$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirCartaPdf(); });
-$('b-desglose').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
-$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
+$('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme(); });
+$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf(); });
+$('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
+$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
-$('b-lamina').addEventListener('click', () => { cerrarMenus(); estado.asegurarCalculo(); imprimirLaminas(); });
+$('b-lamina').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la lámina')) return; imprimirLaminas(); });
 
 // «Mis proyectos»: versiones en el navegador
 function armarMis() {
@@ -536,7 +532,12 @@ function armarMis() {
   vs.forEach(v => {
     const fila = h('div', { class: 'mis-fila' });
     const abrir = h('button', { type: 'button', role: 'menuitem', title: 'Abrir esta versión (la actual se guarda antes como copia automática)' }, v.nombre, h('span', { class: 'pista' }, `${fechaCorta(v.fecha)} · ${v.pisos} niveles · ${v.muros} muros${v.auto ? ' · copia automática' : ''}`));
-    abrir.addEventListener('click', () => { const p = leerVersion(v.id); if (!p) return; reemplazarConCopia(p); cerrarMenus(); mensaje(`Abierta la versión «${v.nombre}».`); });
+    abrir.addEventListener('click', async () => {
+      cerrarMenus();
+      const p = leerVersion(v.id);
+      if (!p) { fallo(`No se pudo abrir «${v.nombre}»`, new Error('La versión guardada está dañada.')); return; }
+      try { if (await reemplazarConCopia(p)) mensaje(`Abierta la versión «${v.nombre}».`); } catch (e) { fallo(`No se pudo abrir «${v.nombre}»`, e); }
+    });
     const cmp = h('button', { type: 'button', class: 'glifo', title: `Comparar «${v.nombre}» con el proyecto actual`, 'aria-label': `Comparar ${v.nombre}` }, '⇄');
     cmp.addEventListener('click', ev => {
       ev.stopPropagation(); cerrarMenus();
@@ -551,10 +552,35 @@ function armarMis() {
     fila.append(abrir, cmp, borrar); m.append(fila);
   });
 }
-/** antes de cambiar de proyecto, el actual queda guardado como copia automática */
-function reemplazarConCopia(p: Proyecto) {
-  guardarVersion(estado.proyecto, `${estado.proyecto.nombre || 'Proyecto'} (antes de abrir otro)`, true);
-  estado.reemplazar(p);
+/**
+ * Abre otro proyecto. Primero lo valida el lector único (si está dañado tira un error y no se toca nada); después el
+ * actual queda guardado como copia automática. Si el navegador no tiene lugar para esa copia, pregunta antes de seguir.
+ * Devuelve true si se abrió.
+ */
+async function reemplazarConCopia(p: unknown): Promise<boolean> {
+  const l = leerProyecto(p);
+  if (!l.ok) throw new Error(textoErrores(l.errores));
+  if (!guardarVersion(estado.proyecto, `${estado.proyecto.nombre || 'Proyecto'} (antes de abrir otro)`, true)) {
+    const r = await tarjeta({ tipo: 'pregunta', titulo: 'No se pudo guardar una copia del proyecto abierto',
+      texto: 'El navegador no tiene lugar para la copia automática. Si abrís el otro, el proyecto actual se pierde salvo que lo descargues.',
+      botones: ['Descargar el actual y abrir', 'Abrir sin copia', 'Cancelar'] });   // Escape = el último (Cancelar)
+    if (r.boton === 2) return false;
+    if (r.boton === 0) descargarProyecto();
+  }
+  const avisos = estado.reemplazar(l.proyecto);
+  if (avisos.length) mensaje(`Proyecto reparado al abrir: ${avisos.join(' ')}`);
+  return true;
+}
+/** descarga el proyecto abierto como .json */
+function descargarProyecto() { descargar(nombreArchivo('.json'), JSON.stringify(estado.proyecto, null, 1), 'application/json'); }
+/** antes de exportar: los resultados tienen que ser los del proyecto actual y el cálculo no tiene que haber fallado */
+function resultadosListos(que: string): boolean {
+  estado.asegurarCalculo();
+  if (estado.vigente) return true;
+  fallo(`No se puede ${que}`, new Error(estado.calculo.error
+    ? `El cálculo tiene un error: ${estado.calculo.error}. Lo que se ve en pantalla es del último cálculo que anduvo; corregí el proyecto y volvé a intentar.`
+    : 'Los resultados no corresponden al proyecto actual. Calculá (F9) y volvé a intentar.'));
+  return false;
 }
 // menús desplegables (tarjetas)
 function cerrarMenus() { document.querySelectorAll('.menu.abierto').forEach(m => { m.classList.remove('abierto'); (m.previousElementSibling as HTMLElement | null)?.setAttribute('aria-expanded', 'false'); }); }
@@ -642,10 +668,13 @@ const paqueteActual = () => paquete(estado.proyecto, celdasAEscribir(estado.calc
 function pistaSheets(t: string) { const e = document.getElementById('b-sheets-pista'); if (e) e.textContent = t; }
 function traerDeLaHoja(l: Lectura) {
   let base = estado.proyecto;
-  if (l.t3d) { try { const p = JSON.parse(l.t3d) as unknown; if (proyectoValido(p)) base = p; } catch { /* el proyecto de la hoja está dañado: se usa el de la app */ } }
+  if (l.t3d) { const lp = leerProyecto(l.t3d); if (lp.ok) base = lp.proyecto; /* si está dañado se usa el de la app */ }
   const { proyecto, avisos } = proyectoDesdeHoja(base, l);
   aplicandoRemoto = true;
-  try { estado.reemplazar(proyecto); } finally { aplicandoRemoto = false; }
+  // lo que llega de la hoja pasa por el lector único: si está dañado no se aplica y la app sigue con su proyecto
+  try { avisos.push(...estado.reemplazar(proyecto)); }
+  catch (e) { mensaje(`Los cambios de Google Sheets no se aplicaron: ${e instanceof Error ? e.message : String(e)}`); return; }
+  finally { aplicandoRemoto = false; }
   mensaje(`Cambios traídos de Google Sheets (versión ${l.version})${avisos.length ? ` · ${avisos.length} aviso${avisos.length > 1 ? 's' : ''}: ${avisos[0]}` : ''}.`);
 }
 async function conectarSheets(url: string) {
@@ -663,7 +692,7 @@ function desconectarSheets() {
   pistaSheets('Editar el edificio desde la planilla o desde la app');
   mensaje('Desconectado de Google Sheets.');
 }
-estado.suscribir(() => { if (sincro && !aplicandoRemoto && !estado.pendiente && !estado.calculo.error) sincro.programar(paqueteActual); });
+estado.suscribir(() => { if (sincro && !aplicandoRemoto && estado.vigente) sincro.programar(paqueteActual); });
 $('b-sheets').addEventListener('click', () => {
   cerrarMenus();
   const actual = sincro?.url ?? '';
@@ -706,6 +735,17 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !impo
 
 // solo en desarrollo: acceso para las pruebas automáticas (no va en la app publicada)
 if (import.meta.env.DEV) import('./ui/etapas').then(m => { (window as unknown as Record<string, unknown>).__torre = { estado, datosRoto3D: m.datosRoto3D }; });
+
+// guardado automático: si el navegador no deja guardar, se avisa y se ofrece descargar el proyecto
+estado.suscribirGuardado(async falla => {
+  if (!falla) { mensaje('El guardado automático en el navegador volvió a andar.'); return; }
+  mensaje('⚠ El proyecto NO se está guardando en el navegador: descargalo (.json) para no perderlo.');
+  const r = await tarjeta({ tipo: 'aviso', titulo: 'El navegador no deja guardar el proyecto',
+    texto: 'El guardado automático falló (el navegador no tiene lugar o está en modo privado). Los cambios están solo en esta pestaña: si la cerrás, se pierden. Descargá el proyecto para guardarlo.',
+    botones: ['Descargar el proyecto', 'Seguir sin descargar'] });   // Escape = el último
+  if (r.boton === 0) descargarProyecto();
+});
+if (estado.avisoInicio) void tarjeta({ tipo: 'aviso', titulo: 'Proyecto guardado', texto: estado.avisoInicio, botones: ['Entendido'] });
 
 // la app arrancó: se saca el cartel de «Cargando…»
 (window as unknown as { __torreLista?: boolean }).__torreLista = true;
