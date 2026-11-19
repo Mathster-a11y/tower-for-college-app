@@ -728,9 +728,16 @@ try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).cat
   pasar();
 }
 
-// instalar como app (tablet o compu): con el link publicado se guarda una copia para usarla sin internet
+// instalar como app (tablet o compu): con el link publicado se guarda una copia completa para usarla sin internet.
+// La primera vez se avisa cuando terminó de guardarse todo (antes, sin red no abriría).
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !import.meta.env.DEV) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* sin copia: la app igual funciona en línea */ }); });
+  const primeraVez = !navigator.serviceWorker.controller;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => navigator.serviceWorker.ready)
+      .then(() => { if (primeraVez) mensaje('Lista para usar sin conexión: la app quedó guardada completa en este dispositivo.'); })
+      .catch(() => { /* sin copia: la app igual funciona en línea */ });
+  });
 }
 
 // solo en desarrollo: acceso para las pruebas automáticas (no va en la app publicada)
