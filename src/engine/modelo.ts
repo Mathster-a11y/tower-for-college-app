@@ -291,6 +291,12 @@ export interface Proyecto {
   clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
+  /**
+   * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
+   * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados
+   * en cualquier computadora; vacío = lo que la app usaba antes (ver metodos/tipos.ts, CONFIG_POR_DEFECTO)
+   */
+  calculo?: (Partial<import('./metodos/tipos').ConfigCalculo> & { formulas?: string }) | null;
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }

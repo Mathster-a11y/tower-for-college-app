@@ -15,6 +15,7 @@ import type { Guia } from '../engine/guias';
 import type { MedidasPieza, TipoPieza } from '../engine/piezasTipo';
 import type { Hoja, Valor } from './tablas';
 import { EXO_POR_DEFECTO, type TipoExo } from '../engine/exo';
+import { IDS_METODO, type IdMetodo } from '../engine/metodos/tipos';
 
 export interface Tabla { nombre: string; filas: Valor[][]; anchos: number[] }
 export const T = {
@@ -44,6 +45,15 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ...(['V', 'Kd', 'I', 'zg', 'alfa', 'Kzt', 'G', 'Cpb', 'Cps', 'GCpi'] as const).map(k => [
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  // cómo se calcula (va con el proyecto: el archivo da lo mismo en cualquier computadora). Vacío = la configuración de siempre
+  ['Método', 'método de cálculo: planilla (planilla virgen) o guia', p => p.calculo?.metodo ?? null,
+    (p, v) => { const t = norm(v); if (IDS_METODO.includes(t as IdMetodo)) p.calculo = { ...(p.calculo ?? {}), metodo: t as IdMetodo }; }],
+  ['Versión de la planilla', 'anterior o 2025', p => (p.calculo?.version ? (p.calculo.version === 'nuevo' ? '2025' : 'anterior') : null),
+    (p, v) => { const t = norm(v); if (t === '2025' || t === 'anterior') p.calculo = { ...(p.calculo ?? {}), version: t === '2025' ? 'nuevo' : 'actual' }; }],
+  ['Armado de piezas', 'catedra (método simplificado de la cátedra) o app', p => p.calculo?.armado ?? null,
+    (p, v) => { const t = norm(v); if (t === 'catedra' || t === 'app') p.calculo = { ...(p.calculo ?? {}), armado: t }; }],
+  ['Versión de las fórmulas', 'con qué versión de la app se calculó (informativo)', p => p.calculo?.formulas ?? null,
+    (p, v) => { const t = txt(v); if (t) p.calculo = { ...(p.calculo ?? {}), formulas: t }; }],
   ['Parapeto (m)', 'parapeto o baranda sobre la última losa: se suma a la altura de influencia de la azotea (vacío = 0)', p => p.sitio.parapeto ?? null, (p, v) => { const x = num(v); if (x && x > 0) p.sitio.parapeto = x; else delete p.sitio.parapeto; }],
   ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil (vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
     (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],

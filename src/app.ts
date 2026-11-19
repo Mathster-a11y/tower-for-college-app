@@ -18,12 +18,13 @@ import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable } from './ui/comp';
 import { leerProyecto, textoErrores } from './engine/lector';
+import { IDS_METODO, METODOS, VERSION_FORMULAS, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
 import { resaltarFilas } from './ui/grilla';
 import { abrirVistaPlanilla } from './ui/vistaPlanilla';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
-import { config, type Motor } from './engine/config';
+import { usarConfig, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
@@ -108,30 +109,35 @@ function dibujarPanel() {
 function dibujarTira(e: Etapa) {
   const t = $('tira-centro');
   t.replaceChildren(h('span', { class: 'nombre' }, e.nombreCentro()), h('span', { class: 'espacio' }));
-  if (e.conFuente) {
-    const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Valores', 'data-globo': 'Valores|«Planilla»: lo que calcula el Excel original, tal cual. «Guía/CIRSOC»: con Kz mínimo de 5 m, sin viento en PB ni en los subsuelos, el J completo y el momento de rotación en unidades correctas.' });
-    ([['planilla', 'Planilla'], ['guia', 'Guía/CIRSOC']] as const).forEach(([k, txt]) => {
-      const b = h('button', { type: 'button', 'aria-pressed': String(estado.fuente === k) }, txt);
-      b.addEventListener('click', () => { estado.fuente = k; dibujarTodo(); });
-      seg.append(b);
-    });
-    t.append(h('span', { class: 'nota chica' }, 'Valores'), seg);
-  }
-  // motor de cálculo (planilla anterior o planilla de la cátedra 2025) y método de armado de piezas
-  const segM = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Motor de cálculo', 'data-globo': 'Motor de cálculo|«Actual»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «Planilla 2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificada celda por celda con LibreOffice.' });
-  ([['actual', 'Actual'], ['nuevo', 'Planilla 2025']] as const).forEach(([k, txt]) => {
-    const b = h('button', { type: 'button', 'aria-pressed': String(config.motor === k) }, txt);
-    b.addEventListener('click', () => { if (config.motor !== k) estado.cambiarConfig({ motor: k }); });
-    segM.append(b);
+  // método de cálculo (uno solo, guardado en el proyecto) y sus opciones: versión de la planilla y armado de piezas
+  const cfg = estado.config;
+  const segMet = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Método de cálculo', 'data-globo': `Método de cálculo|Cada método sigue sus reglas y se guarda con el proyecto (el archivo da lo mismo en cualquier computadora). ${METODOS[cfg.metodo].nombre}: ${METODOS[cfg.metodo].reglas}` });
+  IDS_METODO.forEach(k => {
+    const m = METODOS[k];
+    const b = h('button', { type: 'button', 'aria-pressed': String(cfg.metodo === k), 'data-globo': `${m.nombre}|${m.reglas}${m.disponible ? '' : ` Llega en la ${m.etapa} del plan.`}` }, m.corto);
+    if (!m.disponible) { b.setAttribute('disabled', ''); b.classList.add('proximamente'); }
+    b.addEventListener('click', () => { if (m.disponible && cfg.metodo !== k) estado.cambiarCalculo({ metodo: k }); });
+    segMet.append(b);
   });
-  const planilla = config.metodo === 'planilla';
-  const bMet = h('button', { type: 'button', class: 'chico' + (planilla ? ' primario' : ''), 'aria-pressed': String(planilla),
-    'data-globo': planilla
-      ? 'Método planilla (activo)|Piezas armadas con el método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino, simétrica si el baricentro cae dentro del material. Tocá para volver al armado de la app.'
-      : 'Método planilla|Arma las piezas con el método simplificado de la cátedra (sección 7) en lugar del armado de la app. No cambia los muros: se puede volver atrás.' },
-    planilla ? 'Cambiar a método app' : 'Cambiar a método planilla');
-  bMet.addEventListener('click', () => estado.cambiarConfig({ metodo: planilla ? 'app' : 'planilla' }));
-  t.append(h('span', { class: 'nota chica' }, 'Motor'), segM, bMet);
+  t.append(h('span', { class: 'nota chica' }, 'Método'), segMet);
+  if (cfg.metodo === 'planilla') {
+    const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
+    ([['actual', 'Anterior'], ['nuevo', '2025']] as const).forEach(([k, txt]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(cfg.version === k) }, txt);
+      b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
+      segV.append(b);
+    });
+    t.append(segV);
+  }
+  if (cfg.metodo === 'planilla' || cfg.metodo === 'guia') {
+    const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
+    ([['catedra', 'Cátedra'], ['app', 'App']] as const).forEach(([k, txt]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(cfg.armado === k) }, txt);
+      b.addEventListener('click', () => { if (cfg.armado !== k) estado.cambiarCalculo({ armado: k }); });
+      segA.append(b);
+    });
+    t.append(h('span', { class: 'nota chica' }, 'Armado'), segA);
+  }
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Dirección del viento', 'data-globo': 'Viento A y B|El viento A empuja la cara mayor (ancho B) y lo toman los tabiques paralelos (hoja «J Tabiques paralelos»). El viento B empuja la cara menor y lo toman los ortogonales.' });
   (['A', 'B'] as const).forEach(dd => {
     const b = h('button', { type: 'button', 'aria-pressed': String(estado.dir === dd) }, `Viento ${dd}`);
@@ -206,12 +212,16 @@ function dibujarEstadoCalculo() {
     el.onclick = () => estado.calcularAhora();
     return;
   }
+  // resumen honesto (hallazgo 6 del informe técnico): dice cuántos controles se calcularon, cuáles quedan a revisar y
+  // cuáles son solo informativos (dependen de datos que la app no tiene, como el estudio de suelos), y con qué método
   const cs = estado.calculo.controles ?? [];
   const malos = cs.filter(c => c.estado === 'no verifica').length, revisar = cs.filter(c => c.estado === 'atención').length;
+  const info = cs.filter(c => c.estado === 'informativo').length, calculados = cs.length - info;
   const el = $('estado-calculo');
   el.className = `chip-estado ${estado.calculo.error || malos ? 'no-verifica' : revisar ? 'revisar' : 'verifica'}`;
-  el.textContent = estado.calculo.error ? 'Error en el cálculo' : malos ? `${malos} control${malos > 1 ? 'es' : ''} no verifica${malos > 1 ? 'n' : ''}` : revisar ? `Verifica · ${revisar} a revisar` : 'Todo verifica';
-  el.setAttribute('data-globo', 'Estado del cálculo|Cuenta los controles de todas las etapas. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.');
+  el.textContent = estado.calculo.error ? 'Error en el cálculo' : malos ? `${malos} control${malos > 1 ? 'es' : ''} no verifica${malos > 1 ? 'n' : ''}`
+    : `Verifican los ${calculados} calculados${revisar ? ` · ${revisar} a revisar` : ''}`;
+  el.setAttribute('data-globo', `Estado del cálculo · ${describirConfig(estado.config)}|Cuenta los ${calculados} controles calculados de todas las etapas con el método elegido. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.${info ? ` Además hay ${info} control${info > 1 ? 'es' : ''} solo informativo${info > 1 ? 's' : ''} (por ejemplo la tensión en el suelo, que se compara con el estudio de suelos): no entran en «verifican».` : ''}`);
   el.style.cursor = 'pointer';
   el.onclick = () => irA('resumen');
 }
@@ -311,12 +321,12 @@ async function exportar() {
     `<label class="campo-linea"><input type="radio" name="${name}" value="${value}"${checked ? ' checked' : ''}> ${txt} <small>${nota}</small></label>`;
   dialogo(`<h2>Escribir la planilla</h2>
     <p><b>Planilla</b></p>
-    ${radio('exp-plan', 'nuevo', config.motor === 'nuevo', 'Planilla de la cátedra 2025', '(EDIFICIO_TORRE_1; calculada con el motor «Planilla 2025»)')}
-    ${radio('exp-plan', 'actual', config.motor === 'actual', `Planilla anterior${plantillaAbierta ? ' (la que abriste)' : ''}`, '(calculada con el motor «Actual»)')}
+    ${radio('exp-plan', 'nuevo', estado.config.version === 'nuevo', 'Planilla de la cátedra 2025', '(EDIFICIO_TORRE_1; calculada con el motor «Planilla 2025»)')}
+    ${radio('exp-plan', 'actual', estado.config.version === 'actual', `Planilla anterior${plantillaAbierta ? ' (la que abriste)' : ''}`, '(calculada con el motor «Actual»)')}
     <p><b>Contenido</b></p>
     ${radio('exp-cont', 'virgen', true, 'Planilla virgen', '(solo los datos en las 7 hojas de la cátedra, más las tablas «T3D» para volver a abrirla en la app)')}
     ${radio('exp-cont', 'renovada', false, 'Planilla renovada', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos)')}
-    <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${config.motor === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}${conPar.length ? `, y B31:B50 de ${conPar.join(' y ')}, que van en 0 porque elegiste dos tabiques perpendiculares (filas 28–29) en vez del bloque general` : ''}.</p>
+    <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${estado.config.version === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}${conPar.length ? `, y B31:B50 de ${conPar.join(' y ')}, que van en 0 porque elegiste dos tabiques perpendiculares (filas 28–29) en vez del bloque general` : ''}.</p>
     <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Flexocompresión PB</b>: la verificación de la guía en PB, pieza por pieza y en los dos vientos, paso a paso y con los coeficientes a la vista (la «Flex comp PB paralelos» de la cátedra queda como estaba).</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo en la renovada; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
@@ -325,14 +335,17 @@ async function exportar() {
     ['Vista previa ↗', () => { abrirVistaPlanilla(); }],
     ['Escribir y descargar', async () => {
       const dlg = $('dialogo');
-      const motor = (dlg.querySelector<HTMLInputElement>('input[name="exp-plan"]:checked')?.value ?? config.motor) as Motor;
+      const motor = (dlg.querySelector<HTMLInputElement>('input[name="exp-plan"]:checked')?.value ?? estado.config.version) as Motor;
       const virgen = dlg.querySelector<HTMLInputElement>('input[name="exp-cont"]:checked')?.value !== 'renovada';
-      // se calcula con el motor de la planilla elegida (la distribución de filas de cada planilla es distinta)
-      const motorAntes = config.motor;
-      config.motor = motor;
+      // se calcula con la planilla elegida (la distribución de filas de cada una es distinta) y el armado del proyecto.
+      // Todo lo que depende de la configuración se calcula acá, de una vez y sin esperas: la configuración global no
+      // cambia mientras se arma el archivo (hallazgo 5 del informe técnico)
+      const conf = { ...configMotor(estado.config), motor };
       try {
-        const asig = aPlanilla(estado.proyecto);
-        const res = calcularPlanilla(asig.datos);
+        const { asig, res, g } = usarConfig(conf, () => {
+          const asig = aPlanilla(estado.proyecto);
+          return { asig, res: calcularPlanilla(asig.datos), g: virgen ? null : opcionesG(estado.proyecto) };
+        });
         const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
         if (virgen) {
           const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true, asig });
@@ -341,7 +354,7 @@ async function exportar() {
           return;
         }
         // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
-        const g = opcionesG(estado.proyecto);
+        if (!g) return;
         if (estado.proyecto.exo) {
           const hoja = (dir: 'A' | 'B') => { const d = datosExo(dir); if (!d) return null; return {
             ficha: `${d.def.tipo} · ${TIPOS_EXO[d.def.tipo].nombre}`, ancho: d.ancho, t: d.tCaras[1], Eh: d.Eh, Eacero: d.def.E, colA: propsSeccion(d.def.columna).A,
@@ -363,12 +376,17 @@ async function exportar() {
         const bytes = await escribirPlanilla(base, asig.datos, res, estado.proyecto, g, figuras, { motor, virgen: false, asig });
         descargar(nombreArchivo('.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $<HTMLDialogElement>('dialogo').close();
-      } catch (e) { fallo('No se pudo escribir la planilla', e); } finally { config.motor = motorAntes; }
+      } catch (e) { fallo('No se pudo escribir la planilla', e); }
     }, true],
   ]);
 }
 
 
+/** archivo de antes de que el método fuera parte del proyecto: se abre con la configuración de siempre y se avisa */
+function avisarSinMetodo(texto: string | null) {
+  if (texto !== null) { try { if ((JSON.parse(texto) as { calculo?: unknown }).calculo) return; } catch { return; } }
+  mensaje(`El archivo no decía con qué método se calculó: se abrió con «${describirConfig(estado.config)}», lo que la app usaba antes. Si lo calculaste de otra forma, cambialo arriba (Método); queda guardado en el proyecto.`);
+}
 async function abrir(f: File) {
   try { await abrirArchivo(f); } catch (e) { fallo(`No se pudo abrir «${f.name}»`, e); }
 }
@@ -376,15 +394,18 @@ async function abrirArchivo(f: File) {
   const buf = await f.arrayBuffer();
   if (f.name.toLowerCase().endsWith('.json')) {
     // el lector único valida antes de tocar nada: si el archivo está dañado, el proyecto abierto queda como estaba
-    if (await reemplazarConCopia(new TextDecoder().decode(buf))) plantillaAbierta = null;
+    const texto = new TextDecoder().decode(buf);
+    if (await reemplazarConCopia(texto)) { plantillaAbierta = null; avisarSinMetodo(texto); }
     return;
   }
   const nombre = f.name.toLowerCase();
   if (/\.(csv|tsv|txt)$/.test(nombre)) { dialogoImportar(interpretar(leerTexto(new TextDecoder().decode(buf), f.name)), f.name, null); return; }
   const leido = await leerPlanilla(buf);
   if (leido.proyecto) {
+    const sinMetodo = !leido.proyecto?.calculo;
     if (!(await reemplazarConCopia(leido.proyecto))) return;
     plantillaAbierta = buf;
+    if (sinMetodo) avisarSinMetodo(null);
     if (leido.avisos.length) mensaje(`Planilla abierta · ${leido.avisos.length} aviso${leido.avisos.length > 1 ? 's' : ''}: ${leido.avisos[0]}`);
     return;
   }
@@ -503,7 +524,8 @@ $('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null
 $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
-$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(proyectoVacio()); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
+// proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
+$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });

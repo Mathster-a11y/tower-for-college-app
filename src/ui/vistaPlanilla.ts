@@ -10,13 +10,14 @@ import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { leerProyecto } from '../engine/lector';
 import { aPlanilla } from '../engine/mapping';
 import { calcularPlanilla } from '../engine/planilla';
-import { config, usarConfig, type Metodo, type Motor } from '../engine/config';
+import { usarConfig, type Motor } from '../engine/config';
+import { configDe, configMotor } from '../engine/metodos/tipos';
 import { vistaPrevia, type HojaVista } from '../xlsx/vistaPrevia';
 import { escribirPlanilla } from '../xlsx/planilla';
 import { numACol } from '../xlsx/formulas';
 import '../estilo.css';
 
-const CLAVE = 'torre3d.proyecto.v1', CLAVE_CONFIG = 'torre3d.config.v1';
+const CLAVE = 'torre3d.proyecto.v1';
 const CLAVE_VISTA = 'torre3d.vistaPlanilla';
 
 type Attrs = Record<string, string>;
@@ -31,12 +32,6 @@ const h = <K extends keyof HTMLElementTagNameMap>(t: K, a: Attrs = {}, ...hijos:
 function leerGuardado(): Proyecto {
   try { const t = localStorage.getItem(CLAVE); if (t) { const l = leerProyecto(t); if (l.ok) return l.proyecto; } } catch { /* nada guardado */ }
   return ejemploGuia();
-}
-function leerConfig(): { motor: Motor; metodo: Metodo } {
-  try {
-    const c = JSON.parse(localStorage.getItem(CLAVE_CONFIG) ?? '{}') as { motor?: Motor; metodo?: Metodo };
-    return { motor: c.motor === 'nuevo' ? 'nuevo' : 'actual', metodo: c.metodo === 'planilla' ? 'planilla' : 'app' };
-  } catch { return { motor: config.motor, metodo: config.metodo }; }
 }
 
 export function montarVistaPlanilla() {
@@ -56,7 +51,7 @@ export function montarVistaPlanilla() {
   const nombre = h('span', { class: 'vp-nombre' });
   const estadoTxt = h('span', { class: 'vp-estado' }, 'Calculando…');
   const selMotor = h('select', { 'aria-label': 'Planilla' }) as HTMLSelectElement;
-  [['igual', 'la del motor elegido en la app'], ['nuevo', 'cátedra 2025'], ['actual', 'anterior']].forEach(([v, t]) => selMotor.append(new Option(t, v)));
+  [['igual', 'la del proyecto'], ['nuevo', 'cátedra 2025'], ['actual', 'anterior']].forEach(([v, t]) => selMotor.append(new Option(t, v)));
   selMotor.value = elegido;
   selMotor.addEventListener('change', () => { elegido = selMotor.value as Motor | 'igual'; guardar(); void rehacer(); });
   const chkRes = h('input', { type: 'checkbox' }) as HTMLInputElement; chkRes.checked = resaltar;
@@ -142,8 +137,8 @@ export function montarVistaPlanilla() {
   const plantillas: Partial<Record<Motor, ArrayBuffer>> = {};
   const plantilla = async (m: Motor) => (plantillas[m] ??= await (await fetch(m === 'nuevo' ? plantilla2025URL : plantillaURL)).arrayBuffer());
   const armar = () => {
-    const c = leerConfig(), motor: Motor = elegido === 'igual' ? c.motor : elegido;
-    const p = leerGuardado();
+    // la configuración sale del proyecto guardado (no de una preferencia del navegador)
+    const p = leerGuardado(), c = configMotor(configDe(p)), motor: Motor = elegido === 'igual' ? c.motor : elegido;
     const { asig, res } = usarConfig({ motor, metodo: c.metodo }, () => { const asig = aPlanilla(p); return { asig, res: calcularPlanilla(asig.datos, { motor }) }; });
     return { p, motor, asig, res, metodo: c.metodo };
   };
@@ -179,7 +174,7 @@ export function montarVistaPlanilla() {
   let espera: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener('storage', ev => {
     if (ev.key === 'torre3d.tema') { tema(); return; }
-    if (ev.key !== CLAVE && ev.key !== CLAVE_CONFIG && ev.key !== null) return;
+    if (ev.key !== CLAVE && ev.key !== null) return;
     clearTimeout(espera); espera = setTimeout(() => void rehacer(), 250);
   });
   void rehacer();

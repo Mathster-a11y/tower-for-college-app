@@ -152,8 +152,8 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
   if (!def) return null;
   ultimoError = '';
   try {
-    const { asig, res, corr } = estado.calculo, p = estado.proyecto;
-    const R: PlanillaRes = estado.fuente === 'guia' ? corr.guia : res;
+    const { asig } = estado.calculo, p = estado.proyecto;
+    const R: PlanillaRes = estado.calculo.valores;
     const alt = datosAltura(p, R.viento, R.mnyq, asig.filaNivel, dir);
     const iPB = p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1);
     const zPB = p.niveles[iPB]?.cota ?? 0;

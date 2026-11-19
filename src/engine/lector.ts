@@ -16,6 +16,7 @@
  * Es código puro (sin DOM), así se prueba con vitest.
  */
 import { normalizarProyecto, type Muro, type Nivel, type Proyecto } from './modelo';
+import { IDS_METODO, METODOS, type IdMetodo } from './metodos/tipos';
 
 export type Lectura = { ok: true; proyecto: Proyecto; avisos: string[] } | { ok: false; errores: string[] };
 
@@ -141,6 +142,21 @@ export function leerProyecto(x: unknown): Lectura {
   for (const k of ['juntas', 'parPerp', 'clasesPieza'] as const) if (!nulo(q[k]) && !esObj(q[k])) error(`«${k}» está dañado.`);
   if (!nulo(q.areasAuto) && !num(q.areasAuto)) error('«areasAuto» tiene que ser una cota o quedar vacío.');
   if (!nulo(q.exo) && !esObj(q.exo)) error('El exoesqueleto está dañado.');
+  // cómo se calcula (método, versión de la planilla, armado): valores conocidos o vacío
+  if (!nulo(q.calculo)) {
+    const c = q.calculo;
+    if (!esObj(c)) error('La configuración del cálculo está dañada.');
+    else {
+      if (!nulo(c.metodo) && !IDS_METODO.includes(c.metodo as IdMetodo)) error(`Método de cálculo desconocido («${String(c.metodo)}»).`);
+      if (!nulo(c.version) && c.version !== 'actual' && c.version !== 'nuevo') error(`Versión de la planilla desconocida («${String(c.version)}»).`);
+      if (!nulo(c.armado) && c.armado !== 'catedra' && c.armado !== 'app') error(`Armado de piezas desconocido («${String(c.armado)}»).`);
+      if (!nulo(c.formulas) && typeof c.formulas !== 'string') error('La versión de las fórmulas tiene que ser texto.');
+      if (!nulo(c.metodo) && IDS_METODO.includes(c.metodo as IdMetodo) && !METODOS[c.metodo as IdMetodo].disponible) {
+        avisos.push(`El proyecto se calculó con el método «${METODOS[c.metodo as IdMetodo].nombre}», que todavía no está en esta versión de la app: se usa «${METODOS.planilla.nombre}».`);
+        c.metodo = 'planilla';
+      }
+    }
+  }
 
   if (errores.length) return { ok: false, errores };
 

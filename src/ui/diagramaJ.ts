@@ -19,9 +19,9 @@ const el = (tag: string, a: Record<string, string | number> = {}, txt?: string) 
 
 /** los datos del diagrama (también para las pruebas): niveles de abajo arriba con su ΣJ y el J del exo */
 export function datosDiagramaJ(dir: 'A' | 'B' = estado.dir) {
-  const { asig, res, corr } = estado.calculo, p = estado.proyecto;
+  const { asig, res } = estado.calculo, p = estado.proyecto;
   if (!asig || !res) return null;
-  const R: PlanillaRes = estado.fuente === 'guia' ? corr.guia : res;
+  const R: PlanillaRes = estado.calculo.valores;
   const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir);
   if (!rg) return null;
   const niv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);

@@ -34,6 +34,19 @@ describe('estado: proyecto válido y resultados vigentes', () => {
     estado.deshacer();
     expect(estado.vigente).toBe(true);
   });
+  it('cambiar de método es un cambio del proyecto: se guarda con él y se deshace', () => {
+    estado.reemplazar(ejemploGuia());
+    expect(estado.proyecto.calculo).toMatchObject({ metodo: 'planilla', version: 'actual', armado: 'app' });
+    expect(estado.fuente).toBe('planilla');
+    const rev = estado.revision;
+    estado.cambiarCalculo({ metodo: 'guia' });
+    expect(estado.proyecto.calculo?.metodo).toBe('guia');
+    expect(estado.fuente).toBe('guia');
+    expect(estado.revision).toBeGreaterThan(rev);
+    expect(estado.vigente).toBe(true);
+    estado.deshacer();
+    expect(estado.fuente).toBe('planilla');
+  });
   it('en el modo con botón, un cambio deja los resultados pendientes (no vigentes) hasta calcular', () => {
     estado.cambiarModo('boton');
     try {

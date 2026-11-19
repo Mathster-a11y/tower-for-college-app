@@ -3,6 +3,7 @@
  * 06 Rototraslación · 07 Flexión, más Resumen y Ayuda. Cada etapa tiene su color de rol, su panel (datos, indicadores,
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
+import { describirConfig } from '../engine/metodos/tipos';
 import { estado, fmt } from './estado';
 import { textoDiferencia } from '../engine/desglose';
 import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, type EstadoChip } from './comp';
@@ -42,7 +43,7 @@ function datos() {
   const dir = estado.dir;
   const iPB = p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1);
   const filaPB = asig.filaNivel[iPB] ?? 50;
-  const R: PlanillaRes = estado.fuente === 'guia' ? corr.guia : res;
+  const R: PlanillaRes = estado.calculo.valores;
   const alt = datosAltura(p, R.viento, R.mnyq, asig.filaNivel, dir);
   const W = dir === 'A' ? R.mnyq.H61 : alt.reduce((s, x) => s + x.F, 0);
   const Mv = dir === 'A' ? R.mnyq.J61 : R.mnyq.O61;
@@ -77,7 +78,7 @@ function recuadroJ(c: HTMLElement) {
   c.append(caja.el);
 }
 
-const fuenteTxt = () => (estado.fuente === 'guia' ? 'Valores «Guía/CIRSOC»: Kz con z mínimo de 5 m, sin viento en PB ni en los subsuelos.' : 'Valores de la planilla original, tal como los calcula.');
+const fuenteTxt = () => (estado.fuente === 'guia' ? 'Método «Guía»: Kz constante por debajo de 5 m, sin viento en PB ni en los subsuelos.' : 'Valores de la planilla original, tal como los calcula.');
 const peor = (cs: Control[]): EstadoChip => (cs.some(c => c.estado === 'no verifica') ? 'no verifica' : cs.some(c => c.estado === 'atención') ? 'revisar' : cs.length ? 'verifica' : 'pendiente');
 const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => pre.some(g => c.grupo.startsWith(g))) ?? [];
 
@@ -723,7 +724,7 @@ export function datosCarta(): DatosCarta | null {
   const PB = niveles.find(n => Math.abs(n.z) < 1e-6) ?? niveles.filter(n => n.z >= 0).pop() ?? null;
   const cs = (estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo');
   return {
-    dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla',
+    dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: describirConfig(estado.config),
     niveles, T: plano.T, S: plano.S, zTop: d.p.niveles[0]?.cota ?? 0, zFondo: d.p.niveles[d.p.niveles.length - 1]?.cota ?? 0,
     W: d.W, Mv: d.Mv, hw: d.hw, PB, plano, roto: datosRoto3D(), vuelco,
     controles: cs.map(c => ({ nombre: c.nombre, valor: c.guia !== null ? `${fmt(c.guia, 1)} ${c.unidad}` : c.planilla !== null ? `${fmt(c.planilla, 1)} ${c.unidad}` : '', estado: c.estado })),

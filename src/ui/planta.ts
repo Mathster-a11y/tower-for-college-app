@@ -1620,7 +1620,7 @@ export function montarPlanta(cont: HTMLElement) {
     svg.appendChild(el('line', { x1: X(-n), y1: Y(0), x2: X(n), y2: Y(0), class: 'eje' }));
     // ejes de inercia y centro de rigidez (con los valores elegidos: planilla o guía/CIRSOC)
     const c0 = estado.calculo;
-    const r = estado.fuente === 'guia' ? c0.corr?.guia : c0.res;
+    const r = c0.valores;
     const xA = r?.rotA.J7, yB = r?.rotB.J7;
     if (xA !== undefined && isFinite(xA) && estado.dir === 'A') svg.appendChild(el('line', { x1: X(xA), y1: Y(-n), x2: X(xA), y2: Y(n), class: 'inercia' }));
     if (yB !== undefined && isFinite(yB) && estado.dir === 'B') svg.appendChild(el('line', { x1: X(-n), y1: Y(yB), x2: X(n), y2: Y(yB), class: 'inercia' }));
