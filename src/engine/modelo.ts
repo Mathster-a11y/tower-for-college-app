@@ -297,6 +297,10 @@ export interface Proyecto {
    * en cualquier computadora; vacío = lo que la app usaba antes (ver metodos/tipos.ts, CONFIG_POR_DEFECTO)
    */
   calculo?: (Partial<import('./metodos/tipos').ConfigCalculo> & { formulas?: string }) | null;
+  /** datos del viento según CIRSOC 102-25 (métodos CIRSOC y FEM): ciudad, categoría de riesgo, exposición…; vacío = por defecto */
+  cirsoc102?: import('./cargas/cirsoc102').DatosCirsoc102 | null;
+  /** cargas gravitatorias según CIRSOC 101-25 (métodos CIRSOC y FEM); vacío = por defecto */
+  cirsoc101?: import('./cargas/cirsoc101').DatosCirsoc101 | null;
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }

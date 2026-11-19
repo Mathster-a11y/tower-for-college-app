@@ -88,7 +88,7 @@ function dibujarPanel() {
   const sub = estado.sub[e.id] ?? e.sub?.[0] ?? '';
   sp.replaceChildren(...(e.sub ?? []).map((s, i) => {
     const b = h('button', { type: 'button', 'aria-pressed': String(s === sub) }, `${i + 1} · ${s}${s === 'Avisos' && cantidadAvisos() ? ` (${cantidadAvisos()})` : ''}`);
-    b.addEventListener('click', () => { estado.sub[e.id] = s; dibujarPanel(); $('panel').scrollTop = 0; });
+    b.addEventListener('click', () => { estado.sub[e.id] = s; dibujarPanel(); if (e.id === 'viento') dibujarCentro(); $('panel').scrollTop = 0; });
     return b;
   }));
   sp.hidden = !e.sub?.length;

@@ -17,6 +17,7 @@
  */
 import { normalizarProyecto, type Muro, type Nivel, type Proyecto } from './modelo';
 import { IDS_METODO, METODOS, type IdMetodo } from './metodos/tipos';
+import { CIUDADES, GCPI } from './cargas/cirsoc102';
 
 export type Lectura = { ok: true; proyecto: Proyecto; avisos: string[] } | { ok: false; errores: string[] };
 
@@ -142,6 +143,27 @@ export function leerProyecto(x: unknown): Lectura {
   for (const k of ['juntas', 'parPerp', 'clasesPieza'] as const) if (!nulo(q[k]) && !esObj(q[k])) error(`«${k}» está dañado.`);
   if (!nulo(q.areasAuto) && !num(q.areasAuto)) error('«areasAuto» tiene que ser una cota o quedar vacío.');
   if (!nulo(q.exo) && !esObj(q.exo)) error('El exoesqueleto está dañado.');
+  // datos del viento CIRSOC 102-25 y de las cargas CIRSOC 101-25 (opcionales: vacío = por defecto)
+  if (!nulo(q.cirsoc102)) {
+    const c = q.cirsoc102;
+    if (!esObj(c)) error('Los datos del viento CIRSOC 102-25 están dañados.');
+    else {
+      if (!nulo(c.ciudad) && !(typeof c.ciudad === 'string' && c.ciudad in CIUDADES)) error(`CIRSOC 102-25: ciudad desconocida («${String(c.ciudad)}»).`);
+      if (!nulo(c.categoria) && !['I', 'II', 'III-IV'].includes(c.categoria as string)) error('CIRSOC 102-25: la categoría de riesgo tiene que ser I, II o III-IV.');
+      if (!nulo(c.exposicion) && !['B', 'C', 'D'].includes(c.exposicion as string)) error('CIRSOC 102-25: la exposición tiene que ser B, C o D.');
+      if (!nulo(c.cerramiento) && !((c.cerramiento as string) in GCPI)) error('CIRSOC 102-25: cerramiento desconocido.');
+      if (!nulo(c.frecuencia) && !['tabiques', 'otros', 'manual'].includes(c.frecuencia as string)) error('CIRSOC 102-25: forma de calcular la frecuencia desconocida.');
+      for (const k of ['Vmanual', 'Kzt', 'altitud', 'n1manual', 'beta', 'recurrenciaServicio'] as const) if (!nulo(c[k]) && !num(c[k])) error(`CIRSOC 102-25: «${k}» tiene que ser un número.`);
+    }
+  }
+  if (!nulo(q.cirsoc101)) {
+    const c = q.cirsoc101;
+    if (!esObj(c)) error('Las cargas CIRSOC 101-25 están dañadas.');
+    else {
+      if (!nulo(c.destino) && !['vivienda', 'oficinas', 'otro'].includes(c.destino as string)) error('CIRSOC 101-25: destino desconocido.');
+      for (const k of ['D', 'Lmanual'] as const) if (!nulo(c[k]) && !(num(c[k]) && (c[k] as number) >= 0)) error(`CIRSOC 101-25: «${k}» tiene que ser un número ≥ 0.`);
+    }
+  }
   // cómo se calcula (método, versión de la planilla, armado): valores conocidos o vacío
   if (!nulo(q.calculo)) {
     const c = q.calculo;

@@ -22,6 +22,7 @@ import { alturaDesde, fibrasDireccion } from '../engine/fibras';
 import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
 import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
+import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -151,7 +152,9 @@ const viento: Etapa = {
   id: 'viento', nro: '02', nombre: 'Viento', rol: '--r-viento', dependeDir: true, conFuente: true,
   icono: '<path d="M3 8h12a3 3 0 1 0-3-3M3 13h17a3 3 0 1 1-3 3M3 18h8"/>',
   globo: 'Viento|La presión del viento según el CIRSOC 102, método analítico: crece con la altura en la cara de barlovento y es constante (con qh) en sotavento.',
-  panel(c) {
+  sub: ['Planilla y guía (102-2005)', 'CIRSOC 102-25'],
+  panel(c, sub) {
+    if (sub === 'CIRSOC 102-25') { panelCirsoc102(c); return; }
     const d = datos();
     const R = d.R, s = d.p.sitio;
     c.append(seccionViento());
@@ -174,6 +177,7 @@ const viento: Etapa = {
     c.append(h('p', { class: 'nota' }, fuenteTxt()));
   },
   centro(c, tam) {
+    if (estado.sub.viento === 'CIRSOC 102-25') { centroCirsoc102(c, tam, anchos, fila); return; }
     const d = datos();
     const sobre = d.alt.filter(x => x.z > 0);
     const a = anchos(tam);
