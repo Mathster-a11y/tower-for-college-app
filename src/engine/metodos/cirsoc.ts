@@ -12,12 +12,12 @@
  */
 import type { PlanillaDatos } from '../planilla';
 import { EXPOSICIONES, KN_POR_T, type Viento102 } from '../cargas/cirsoc102';
-import type { Proyecto, Muro } from '../modelo';
+import { tipoDe, type Proyecto, type Muro } from '../modelo';
 import type { PiezaEquivalente } from '../mapping';
 import type { RotoGuia } from '../correcciones';
 import { datosAlturaDe, partesDePieza, verificarPieza } from '../flexocompresion';
-import { fcDe, verificarMuro201, type Solicitacion, type VerifMuro201 } from '../verificacion/cirsoc201';
-import { armarTabique, textoBarras } from './guia';
+import { corteDintel201, fcDe, verificarMuro201, type Solicitacion, type VerifMuro201 } from '../verificacion/cirsoc201';
+import { armarTabique, estaticoCorte, textoBarras } from './guia';
 import { combinaciones, datos101De, sobrecarga } from '../cargas/cirsoc101';
 import type { Control } from '../verificaciones';
 import type { PlanillaRes } from '../planilla';
@@ -91,6 +91,8 @@ export interface VerifPieza201 {
   /** parte del viento de la dirección que toma la pieza en cada caso de carga (1 = todo) */
   partes: number[];
   M: number; V: number;
+  /** corte de la pieza en PB en cada caso de carga (t) */
+  Vcasos: number[];
   muros: (VerifMuro201 & { armado: string })[];
   verifica: boolean;
 }
@@ -155,7 +157,8 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
       const arm = armarTabique(As, 0, lw);
       return { ...v, armado: `${textoBarras(arm.vertical)}, horizontal ρ = ${(v.rhoH * 100).toFixed(2).replace('.', ',')} %` };
     });
-    return { nombre: pz.nombre, dir, partes: frac, M: frac[0] * MPB, V: frac[0] * QPB, muros: out, verifica: out.every(x => x.verifica) };
+    const Vcasos = frac.map((f, ci) => (fem ? Math.abs(fem[ci].V) : Math.abs(f * QPB)));
+    return { nombre: pz.nombre, dir, partes: frac, M: frac[0] * MPB, V: frac[0] * QPB, Vcasos, muros: out, verifica: out.every(x => x.verifica) };
   });
 }
 
@@ -225,6 +228,28 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     out.push({ grupo: 'Rigidez', nombre: `Deriva de servicio, viento ${dir}`, criterio: `azotea ≤ h/${lim} y cada piso ≤ entrepiso/${lim}`, fuente: `CIRSOC 102-25, comentario C B.4.2 (orientativo: 1/600 a 1/400)${fem ? '; desplazamientos del modelo FEM, borde más desfavorable' : ''}`,
       planilla: null, guia: top, unidad: 'm', estado: est(top <= def.h / lim && peorPiso <= 1 / lim),
       nota: `Viento de servicio de ${w.servicio.recurrencia} años (${nf(f * 100, 0)} % de la presión de cálculo). Azotea ${nf(top * 1000, 1)} mm (límite ${nf((def.h / lim) * 1000, 1)} mm); peor piso ${dondePiso}: 1/${peorPiso > 0 ? Math.round(1 / peorPiso) : '∞'}.` });
+  }
+  // dinteles por resistencia (201-2005, cap. 11): el resbalamiento de la guía, t = Qj·S/J, por la altura del piso, con el
+  // corte de la pieza en el peor caso de carga y 1,0 W
+  const iPBd = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
+  const hPiso = iPBd > 0 ? p.niveles[iPBd - 1].cota - p.niveles[iPBd].cota : 0;
+  const fcD = fcDe(p.hormigon || 'H30');
+  for (const v of verif) {
+    const ids = new Set(v.muros.map(x => x.id));
+    const ms = p.muros.filter(m => ids.has(m.id));
+    const conAb = ms.filter(m => tipoDe(m) === 'tabique' && m.aberturas?.length && (m.dir === 'Y') === (v.dir === 'A'));
+    if (!conAb.length || !(hPiso > 0)) continue;
+    const Vp = Math.max(0, ...v.Vcasos);
+    const Jp = ms.filter(m => (m.dir === 'Y') === (v.dir === 'A')).reduce((x, m) => x + (m.espesor * m.largo ** 3) / 12, 0) || 1;
+    conAb.forEach(m => m.aberturas!.forEach((ab, k) => {
+      const Jm = (m.espesor * m.largo ** 3) / 12;
+      const t = (Vp * (Jm / Jp) * estaticoCorte(m.espesor, m.largo, ab.s)) / Jm;          // t/m
+      const hd = hPiso - (ab.desde + ab.alto);
+      const cd = corteDintel201(t * hPiso, m.espesor, hd, ab.ancho, fcD);
+      out.push({ grupo: `CIRSOC 201, viento ${v.dir}`, nombre: `${m.id}${m.aberturas!.length > 1 ? ` · abertura ${k + 1}` : ''}: dintel en PB`, criterio: "Vu ≤ φ·Vn, con Vn ≤ ⅚ √f'c b d (estribos para lo que no toma el hormigón)", fuente: 'CIRSOC 201-2005, 11.1, 11.3 y 11.5',
+        planilla: null, guia: cd.phiVnMax > 0 ? cd.Vu / cd.phiVnMax : Infinity, unidad: 'Vu/φVn,máx', estado: est(cd.verifica),
+        nota: `${hd > 0 ? `Vu = ${nf(cd.Vu, 2)} t (t = ${nf(t, 2)} t/m × ${nf(hPiso, 2)} m) · dintel ${nf(hd, 2)} × ${nf(m.espesor, 2)} m, d = ${nf(cd.d, 2)} m · φVc = ${nf(cd.phiVc, 2)} t · estribos ${cd.Avs > 0 ? `${nf(cd.Avs, 2)} cm²/m${cd.AvsNec > cd.AvsMin ? ' (por corte)' : ' (mínimos, 11-13)'}` : 'no hacen falta por corte'}${cd.granAltura ? ` · luz/alto = ${nf(ab.ancho / hd, 2)} < 4: viga de gran altura (11.8), con armadura en las dos direcciones` : ''}.` : 'La abertura llega al piso de arriba: no hay dintel.'}` });
+    }));
   }
   // durabilidad: el f'c mínimo de la clase de exposición (CIRSOC 200-24, Tabla 2.5)
   const d2 = datos201De(p), cl = CLASES_EXPOSICION[d2.exposicion], fcP = fcDe(p.hormigon || 'H30');

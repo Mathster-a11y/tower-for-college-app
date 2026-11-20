@@ -116,3 +116,32 @@ describe('CIRSOC 200-24: recubrimiento y clase de exposición', () => {
     expect(c.estado).toBe('no verifica');                                                   // H30 < 40 MPa
   });
 });
+
+import { corteDintel201 } from '../src/engine/verificacion/cirsoc201';
+describe('dinteles por resistencia (CIRSOC 201-2005, cap. 11)', () => {
+  it('el dintel de la guía (0,90 × 0,20 m, H30): Vc = ⅙ √f\'c b d y el límite ⅚ √f\'c b d', () => {
+    const c = corteDintel201(8.81, 0.2, 0.9, 0.6, 30);
+    const d = 810, Vc = (Math.sqrt(30) / 6) * 200 * d;
+    expect(c.d).toBeCloseTo(0.81, 9);
+    expect(c.Vc).toBeCloseTo(Vc / N_POR_T, 9);
+    expect(c.phiVnMax).toBeCloseTo((0.75 * 5 / 6 * Math.sqrt(30) * 200 * d) / N_POR_T, 9);
+    expect(c.verifica).toBe(true);
+    expect(c.granAltura).toBe(true);                                // 0,60 / 0,90 < 4
+    // 8,81 t > φVc = 0,75 · 14,8 t ≈ 11,1 t? no: alcanza con el hormigón, pero pide el mínimo porque Vu > φVc/2
+    expect(c.AvsNec).toBe(0);
+    expect(c.AvsMin).toBeGreaterThan(0);
+  });
+  it('con más corte hacen falta estribos, y pasado ⅚ √f\'c b d no verifica', () => {
+    const c = corteDintel201(40, 0.2, 0.9, 0.6, 30);
+    expect(c.AvsNec).toBeCloseTo(((40 * N_POR_T / 0.75 - (Math.sqrt(30) / 6) * 200 * 810) / (420 * 810)) * 10, 6);
+    expect(corteDintel201(80, 0.2, 0.9, 0.6, 30).verifica).toBe(false);
+  });
+  it('en el método CIRSOC aparece el control del dintel de un tabique con abertura', () => {
+    const p = ejemploGuia();
+    const m = p.muros.find(x => x.id === 'M1')!;
+    m.aberturas = [{ s: 0, ancho: 0.6, desde: 0, alto: 2.1 }];
+    const c = calcularProyecto({ ...p, calculo: { metodo: 'cirsoc' } }).controles.find(x => /dintel en PB/.test(x.nombre))!;
+    expect(c.fuente).toMatch(/201-2005/);
+    expect(c.guia).toBeGreaterThan(0);
+  });
+});

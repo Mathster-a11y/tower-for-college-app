@@ -98,6 +98,30 @@ export function corteTabique(Vu: number, Nu: number, Mu: number, lw: number, h: 
   return { Vu: Math.abs(Vu), d: d / 1000, Vc: Vc / N_POR_T, VnMax: VnMax / N_POR_T, phiVc: (PHI_CORTE * Vc) / N_POR_T, rhoT, Vs: Vs / N_POR_T, phiVn: phiVn / N_POR_T, verifica: V <= phiVn, necesitaArmaduraCorte: V > (PHI_CORTE * Vc) / 2 };
 }
 
+// ---------------------------------------------------------------------------------------------------- dinteles
+export interface CorteDintel201 {
+  Vu: number; d: number; Vc: number; phiVc: number; VnMax: number; phiVnMax: number;
+  /** estribos (cm²/m, las dos ramas): los necesarios por corte y el mínimo (11-13) si Vu > φVc/2 */
+  AvsNec: number; AvsMin: number; Avs: number;
+  /** luz libre / alto < 4: viga de gran altura (11.8) */
+  granAltura: boolean;
+  verifica: boolean;
+}
+/**
+ * Dintel (viga de acople entre dos tramos de tabique) por resistencia, CIRSOC 201-2005, capítulo 11: Vu (t) mayorado,
+ * b espesor (m), hd alto del dintel (m), ln luz libre (ancho de la abertura, m). d = 0,9 hd; Vc = ⅙ √f'c b d (11-3);
+ * Vs = Av fy d / s ≤ ⅔ √f'c b d, o sea Vn ≤ ⅚ √f'c b d (11.5.7.9); φ = 0,75.
+ */
+export function corteDintel201(Vu: number, b: number, hd: number, ln: number, fc: number): CorteDintel201 {
+  const bb = b * 1000, d = 0.9 * hd * 1000, sq = Math.sqrt(fc), V = Math.abs(Vu) * N_POR_T;
+  const Vc = (sq / 6) * bb * d, VnMax = (5 / 6) * sq * bb * d;
+  const Vs = Math.max(0, V / PHI_CORTE - Vc);
+  const AvsNec = (Vs / (FY * d)) * 10;                                                        // mm²/mm → cm²/m
+  const AvsMin = V > (PHI_CORTE * Vc) / 2 ? Math.max((sq / 16) * bb / FY, (0.33 * bb) / FY) * 10 : 0;
+  return { Vu: Math.abs(Vu), d: d / 1000, Vc: Vc / N_POR_T, phiVc: (PHI_CORTE * Vc) / N_POR_T, VnMax: VnMax / N_POR_T, phiVnMax: (PHI_CORTE * VnMax) / N_POR_T,
+    AvsNec, AvsMin, Avs: Math.max(AvsNec, AvsMin), granAltura: hd > 0 && ln / hd < 4, verifica: hd > 0 && V <= PHI_CORTE * VnMax };
+}
+
 // ---------------------------------------------------------------------------------------------------- cuantías
 /** 14.3 y 11.10.9: cuantías mínimas vertical (ρl) y horizontal (ρt) */
 export function cuantiasMinimas(corteAlto: boolean, hw: number, lw: number): { rhoV: number; rhoH: number } {
