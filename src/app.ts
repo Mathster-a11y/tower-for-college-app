@@ -564,27 +564,42 @@ $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenu
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-comparacion').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la comparación de métodos')) void descargarComparacion(); });
 /** comparación de métodos (etapa 7): la tabla del método Combinado con sus gráficos */
+async function bytesComparacion(): Promise<Uint8Array> {
+  const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'combinado' as const } };
+  const cmp = estado.calculo.combinado ?? calcularProyecto(p).combinado;
+  if (!cmp) throw new Error('La comparación no se pudo hacer.');
+  return libroCombinado(cmp, estado.proyecto).xlsx();
+}
 async function descargarComparacion() {
   try {
-    const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'combinado' as const } };
-    const cmp = estado.calculo.combinado ?? calcularProyecto(p).combinado;
-    if (!cmp) throw new Error('La comparación no se pudo hacer.');
-    descargar(nombreArchivo('_comparacion.xlsx'), await libroCombinado(cmp, estado.proyecto).xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    descargar(nombreArchivo('_comparacion.xlsx'), await bytesComparacion(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     mensaje('Comparación de métodos descargada: la tabla de los cuatro métodos, con las diferencias y sus gráficos.');
   } catch (e) { fallo('No se pudo armar la comparación', e); }
 }
 $('b-reporte-fem').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir el reporte FEM')) void descargarReporteFem(); });
 /** reporte FEM (etapa 6b): los números del modelo y sus diagramas (no es una calculadora: el modelo no cabe en fórmulas) */
+async function bytesReporteFem(): Promise<Uint8Array> {
+  const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'fem' as const } };
+  const c = calcularProyecto(p);
+  if (!c.fem || !c.cirsoc) throw new Error(c.error ?? 'El cálculo del modelo no se pudo hacer.');
+  return reporteFem({ p, fem: c.fem, verif: c.cirsoc.verif, controles: c.controles, rects: datosGuia(p, c.asig.piezas).rects, teoria: configDe(p).teoria, limiteDeriva: datos201De(p).limiteDeriva }).xlsx();
+}
 async function descargarReporteFem() {
   try {
     const cfg = estado.config;
     const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'fem' as const } };
-    const c = calcularProyecto(p);
-    if (!c.fem || !c.cirsoc) throw new Error(c.error ?? 'El cálculo del modelo no se pudo hacer.');
-    const libro = reporteFem({ p, fem: c.fem, verif: c.cirsoc.verif, controles: c.controles, rects: datosGuia(p, c.asig.piezas).rects, teoria: configDe(p).teoria, limiteDeriva: datos201De(p).limiteDeriva });
-    descargar(nombreArchivo('_reporte_fem.xlsx'), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    descargar(nombreArchivo('_reporte_fem.xlsx'), await bytesReporteFem(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     mensaje(`Reporte FEM descargado (piezas ${configDe(p).teoria === 'euler' ? 'Euler' : 'Timoshenko'}).${cfg.metodo !== 'fem' ? ` El método elegido es «${METODOS[cfg.metodo].nombre}»: el reporte da los números del método FEM.` : ''}`);
   } catch (e) { fallo('No se pudo armar el reporte FEM', e); }
+}
+/** la planilla renovada con el método CIRSOC y ese nivel, aunque el proyecto tenga otro método (no se cambia el proyecto) */
+async function bytesRenovada(nivel: 'simple' | 'completa'): Promise<{ bytes: Uint8Array; avisos: string[] }> {
+  const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'cirsoc' as const, verificacion: nivel } };
+  const c = calcularProyecto(p);
+  if (!c.cirsoc) throw new Error(c.error ?? 'El cálculo CIRSOC no se pudo hacer.');
+  const R = datosRenovada(p, c.asig.piezas, c.cirsoc.verif, nivel);
+  const { libro } = libroRenovada(R, estado.proyecto);
+  return { bytes: await libro.xlsx(), avisos: [...R.geo.avisos] };
 }
 $('b-libro-renovada').addEventListener('click', () => { cerrarMenus(); void descargarRenovada(); });
 /** planilla renovada (etapa 5b): el método CIRSOC como calculadora cerrada, con la verificación del 201 simple o completa */
@@ -598,25 +613,53 @@ async function descargarRenovada() {
   // se calcula con el método CIRSOC y ese nivel aunque el proyecto tenga otro método elegido (no se cambia el proyecto)
   if (!resultadosListos('escribir la planilla renovada')) return;
   try {
-    const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'cirsoc' as const, verificacion: nivel } };
-    const c = calcularProyecto(p);
-    if (!c.cirsoc) throw new Error(c.error ?? 'El cálculo CIRSOC no se pudo hacer.');
-    const R = datosRenovada(p, c.asig.piezas, c.cirsoc.verif, nivel);
-    const { libro } = libroRenovada(R, estado.proyecto);
-    descargar(nombreArchivo(`_renovada_${nivel}.xlsx`), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const avisos = [...R.geo.avisos];
+    const { bytes, avisos } = await bytesRenovada(nivel);
+    descargar(nombreArchivo(`_renovada_${nivel}.xlsx`), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     if (cfg.metodo !== 'cirsoc') avisos.push(`El método elegido es «${METODOS[cfg.metodo].nombre}»: la planilla renovada da los números del método CIRSOC (elegilo arriba para verlos en pantalla).`);
     mensaje(`Planilla renovada (${nivel}) descargada: los datos van en la hoja «Datos» y se recalcula sola.${avisos.length ? ' ' + avisos.join(' ') : ''}`);
   } catch (e) { fallo('No se pudo armar la planilla renovada', e); }
+}
+async function bytesGuia(): Promise<{ bytes: Uint8Array; avisos: string[] }> {
+  const p = estado.proyecto, d = datosGuia(p, estado.calculo.asig.piezas);
+  return { bytes: await libroGuia(d, p).libro.xlsx(), avisos: [...d.avisos] };
+}
+/** la planilla virgen (solo datos en las hojas de la cátedra), con la versión del proyecto */
+async function bytesVirgen(): Promise<Uint8Array> {
+  const motor = estado.config.version;
+  const conf = { ...configMotor(estado.config), motor };
+  const { asig, res } = usarConfig(conf, () => { const asig = aPlanilla(estado.proyecto); return { asig, res: calcularPlanilla(asig.datos) }; });
+  const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
+  return escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true, asig });
+}
+$('b-libros-zip').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('armar los libros')) void descargarLibrosZip(); });
+/** todos los libros juntos: uno por método más la comparación, y un léame con lo que no se pudo armar */
+async function descargarLibrosZip() {
+  mensaje('Armando los libros de los cuatro métodos…');
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip(), notas: string[] = [], faltan: string[] = [];
+  const nivel: 'simple' | 'completa' = estado.config.verificacion === 'completa' ? 'completa' : 'simple';
+  const partes: [string, string, () => Promise<Uint8Array>][] = [
+    ['1_planilla_virgen.xlsx', 'Planilla virgen (método Planilla): solo los datos en las hojas de la cátedra', bytesVirgen],
+    ['2_guia.xlsx', 'Planilla de la guía (método Guía): calculadora paso a paso', async () => (await bytesGuia()).bytes],
+    [`3_renovada_${nivel}.xlsx`, `Planilla renovada CIRSOC, ${nivel} (método CIRSOC)`, async () => (await bytesRenovada(nivel)).bytes],
+    ['4_reporte_fem.xlsx', 'Reporte FEM (método FEM): los números del modelo', bytesReporteFem],
+    ['5_comparacion.xlsx', 'Comparación de métodos (Combinado)', bytesComparacion],
+  ];
+  for (const [nombre, texto, armar] of partes) {
+    try { zip.file(nombre, await armar()); notas.push(`${nombre}: ${texto}`); }
+    catch (e) { faltan.push(`${nombre}: no se pudo armar (${e instanceof Error ? e.message : String(e)})`); }
+  }
+  if (!notas.length) { fallo('No se pudo armar ningún libro', new Error(faltan.join(' · '))); return; }
+  zip.file('LEAME.txt', [`${estado.proyecto.nombre || 'Proyecto'}: los libros de los cuatro métodos, armados con la misma torre.`, '', ...notas, ...(faltan.length ? ['', 'Faltan:', ...faltan] : []), '', 'Al abrirlos, Excel o LibreOffice recalculan todo.'].join('\r\n'));
+  descargar(nombreArchivo('_libros.zip'), await zip.generateAsync({ type: 'uint8array' }), 'application/zip');
+  mensaje(`Libros descargados en un .zip (${notas.length} de ${partes.length}).${faltan.length ? ' ' + faltan.join(' · ') : ''}`);
 }
 $('b-libro-guia').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la planilla de la guía')) void descargarLibroGuia(); });
 /** planilla de la guía (etapa 5a): una calculadora cerrada con el procedimiento de la guía, que la app solo llena en «Datos» */
 async function descargarLibroGuia() {
   try {
-    const p = estado.proyecto, d = datosGuia(p, estado.calculo.asig.piezas);
-    const { libro } = libroGuia(d, p);
-    descargar(nombreArchivo('_guia.xlsx'), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const avisos = [...d.avisos];
+    const { bytes, avisos } = await bytesGuia();
+    descargar(nombreArchivo('_guia.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const cfg = estado.config;
     if (cfg.metodo !== 'guia') avisos.push(`El método elegido es «${METODOS[cfg.metodo].nombre}»: la planilla de la guía da los números del método Guía (elegilo arriba para comparar en pantalla).`);
     else if (cfg.armado === 'catedra') avisos.push('Con el armado de la cátedra la app usa el J simplificado de cada pieza; la planilla de la guía calcula el J de la sección real (como el armado de la app).');
