@@ -66,6 +66,11 @@ describe('hoja de dinteles', () => {
     for (const v of c.cirsoc!.verif) v.partes.forEach((f, k) => expect(Math.abs(val(`f${k + 1}_${v.dir}_${v.nombre}`) - f), `${v.nombre} caso ${k + 1}`).toBeLessThan(1e-9));
   });
 
+  it('la planilla original no cambia: el calado va entero en la hoja J (por defecto)', () => {
+    const pz = aPlanilla(conAberturas()).piezas.find(z => z.nombre === 'T2')!;
+    expect(pz.fila).toEqual({ B: 0.2, C: 4.5 });
+  });
+
   it('sin aberturas, la hoja lo dice y no rompe nada', () => {
     const p = ejemploGuia();
     const { libro, claves } = libroGuia(datosGuia(p, aPlanilla(p).piezas), p);

@@ -77,8 +77,9 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
       if (Jotra > Jesta) perp.push({ nombre: m.id, pos: A ? m.y : m.x, posT: A ? m.x : m.y, J: Jotra, muros: [m.id] });
       return;
     }
-    // tabique calado: con el J de su corte débil, igual que cuando trabaja paralelo al viento
-    const deb = tipoDe(m) === 'tabique' && m.aberturas?.length ? (seccionDebil(m) ?? []).filter(pg => pg.length >= 3) : [];
+    // tabique calado, sólo con el armado de la app (J real): con el J de su corte débil, igual que cuando trabaja paralelo
+    // al viento; con la planilla original va entero, como siempre
+    const deb = config.metodo === 'app' && tipoDe(m) === 'tabique' && m.aberturas?.length ? (seccionDebil(m) ?? []).filter(pg => pg.length >= 3) : [];
     const kD = deb.length ? propsPoligonos(deb) : null;
     rectangulos(m).forEach((r, k, todos) => {
       const largoT = A ? r.ax : r.ay, largoS = A ? r.ay : r.ax;              // transversal y en el sentido del viento
