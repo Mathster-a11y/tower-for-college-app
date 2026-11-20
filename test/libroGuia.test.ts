@@ -77,3 +77,16 @@ describe.each(torres.map(p => ({ p, nombre: p.nombre })))('planilla de la guía 
     expect(Object.keys(zip.files).filter(f => f.startsWith('xl/charts/')).length).toBeGreaterThanOrEqual(7);
   });
 });
+
+describe('la planilla de la guía se vuelve a abrir en la app', () => {
+  it('las tablas T3D ocultas devuelven el mismo proyecto (muros, niveles y método)', async () => {
+    const { leerPlanilla } = await import('../src/xlsx/planilla');
+    const p = { ...ejemploGuia(), calculo: { metodo: 'guia' as const } };
+    const { libro } = libroGuia(datosGuia(p, aPlanilla(p).piezas), p);
+    const l = await leerPlanilla(await libro.xlsx());
+    expect(l.proyecto).not.toBeNull();
+    expect(l.proyecto!.muros.length).toBe(p.muros.length);
+    expect(l.proyecto!.niveles.map(n => n.cota)).toEqual(p.niveles.map(n => n.cota));
+    expect(l.proyecto!.calculo?.metodo).toBe('guia');
+  });
+});

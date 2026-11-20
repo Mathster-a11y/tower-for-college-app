@@ -33,6 +33,8 @@ import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from 
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
+import { libroGuia } from './xlsx/libros/libroGuia';
+import { datosGuia } from './engine/metodos/guiaPasos';
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
 import { montarDiagramaJ } from './ui/diagramaJ';
@@ -546,6 +548,20 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
+$('b-libro-guia').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la planilla de la guía')) void descargarLibroGuia(); });
+/** planilla de la guía (etapa 5a): una calculadora cerrada con el procedimiento de la guía, que la app solo llena en «Datos» */
+async function descargarLibroGuia() {
+  try {
+    const p = estado.proyecto, d = datosGuia(p, estado.calculo.asig.piezas);
+    const { libro } = libroGuia(d, p);
+    descargar(nombreArchivo('_guia.xlsx'), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const avisos = [...d.avisos];
+    const cfg = estado.config;
+    if (cfg.metodo !== 'guia') avisos.push(`El método elegido es «${METODOS[cfg.metodo].nombre}»: la planilla de la guía da los números del método Guía (elegilo arriba para comparar en pantalla).`);
+    else if (cfg.armado === 'catedra') avisos.push('Con el armado de la cátedra la app usa el J simplificado de cada pieza; la planilla de la guía calcula el J de la sección real (como el armado de la app).');
+    mensaje(`Planilla de la guía descargada: completá o cambiá los datos en la hoja «Datos» y se recalcula sola.${avisos.length ? ' ' + avisos.join(' ') : ''}`);
+  } catch (e) { fallo('No se pudo armar la planilla de la guía', e); }
+}
 $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme(); });
 $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf(); });
