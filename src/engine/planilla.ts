@@ -110,6 +110,19 @@ export interface Opciones {
   kzMin5?: boolean;
   /** planilla a replicar (por defecto, la elegida en la app: config.motor) */
   motor?: Motor;
+  /**
+   * J de la sección real de cada pieza (índice = fila de la hoja J, viento A y B) en lugar del J del molde: el método
+   * Guía calcula el J con los muros reales (Steiner), no con la simplificación de la hoja
+   */
+  Jreal?: { A: (number | null | undefined)[]; B: (number | null | undefined)[] };
+}
+
+/** la hoja J con el J de algunas filas reemplazado (el total AY24 se corrige con la diferencia) */
+function conJ(h: HojaJRes, J: (number | null | undefined)[] | undefined): HojaJRes {
+  if (!J?.some(x => x != null)) return h;
+  let dif = 0;
+  const filas = h.filas.map((f, i) => { const j = J[i]; if (j == null || !isFinite(j)) return f; dif += j - f.AY; return { ...f, AY: j }; });
+  return { ...h, filas, AY24: h.AY24 + dif };
 }
 
 export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
@@ -370,8 +383,8 @@ export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaR
   const motor = op.motor ?? config.motor, nuevo = motor === 'nuevo';
   const viento = calcViento(d.viento, { ...op, motor });
   const mnyq = calcMNyQ(d.viento, viento, d.mnyq);
-  const jpar = nuevo ? calcParalelosNuevo(d.jpar) : calcHojaJ(d.jpar, false);
-  const jort = calcHojaJ(d.jort, true, nuevo);
+  const jpar = conJ(nuevo ? calcParalelosNuevo(d.jpar) : calcHojaJ(d.jpar, false), op.Jreal?.A);
+  const jort = conJ(calcHojaJ(d.jort, true, nuevo), op.Jreal?.B);
   const AYp = jpar.filas.map(f => f.AY), AYo = jort.filas.map(f => f.AY);
   // cara mayor: D5 = M,NyQ!I55, F5 = M,NyQ!J55 (fila del 1º subsuelo); cara menor: N55 y O55
   const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[51], mnyq.J[51], false, nuevo, d.rotA.par ?? null);

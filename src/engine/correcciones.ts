@@ -6,6 +6,7 @@ import { calcularPlanilla, DIVISORES, type JMinimo, type PlanillaDatos, type Pla
 import { entraEnCalculo, rectangulos, tipoDe, dInterior, type Proyecto } from './modelo';
 import { propiedades } from './perfil';
 import type { PiezaEquivalente } from './mapping';
+import { config } from './config';
 
 export interface ResultadoCorregido {
   /** viento con Kz mínimo 5 m (CIRSOC), J completo en todas las filas y viento en PB con el criterio C: fuera del corte de los tabiques, dentro del vuelco y del suelo */
@@ -144,7 +145,13 @@ export function vientoEnPB(m: PlanillaRes['mnyq'], d: PlanillaDatos, filaPB: num
 }
 
 export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[] }): ResultadoCorregido {
-  const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true });
+  // con el armado de la app, el J de cada pieza es el de su sección real (Steiner con los muros), como la guía; con el
+  // de la cátedra, el de su método simplificado (el molde de la hoja)
+  const Jreal = extra && config.metodo === 'app' ? (['A', 'B'] as const).reduce((o, dir) => {
+    extra.piezas.forEach(pz => { if (pz.dir === dir && pz.filaHoja !== null && pz.Jreal != null && pz.Jreal > 0) o[dir][pz.filaHoja] = pz.Jreal; });
+    return o;
+  }, { A: [] as number[], B: [] as number[] }) : undefined;
+  const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true, Jreal });
   guia.jminA = jMinimoConAlturaTotal(guia.jminA, guia.mnyq.G69);
   vientoEnPB(guia.mnyq, d, filaPB);
   if (!extra) return { guia, rotA: repartoCorregido(guia.rotA), rotB: repartoCorregido(guia.rotB) };

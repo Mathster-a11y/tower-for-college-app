@@ -1,7 +1,8 @@
 /**
  * Evaluador de fórmulas de Excel, lo justo para las planillas de la cátedra (vista previa de la exportación):
  * números, textos, referencias (A1, $A$1, 'Hoja'!A1, rangos), + − * / ^ &, comparaciones, y las funciones que usan
- * las planillas: SUM, MAX, MIN, IF, POWER, PI, ABS, SQRT, SIGN, AVERAGE. Sigue las reglas de Excel: una celda vacía vale 0
+ * las planillas: SUM, MAX, MIN, IF, POWER, PI, ABS, SQRT, SIGN, AVERAGE; y las de los libros nuevos: AND, OR, NOT,
+ * IFERROR, INT, ROUND y SUMPRODUCT (con cuentas elemento por elemento). Sigue las reglas de Excel: una celda vacía vale 0
  * en una cuenta, los errores se propagan (#DIV/0!, #NUM!, #VALUE!, #REF!, #NAME?) y SUM y MAX saltean textos en rangos.
  */
 
@@ -19,7 +20,7 @@ export const numACol = (n: number) => { let s = ''; while (n > 0) { const r = (n
 export const partirRef = (ref: string) => { const m = /^\$?([A-Z]+)\$?(\d+)$/.exec(ref)!; return { c: colANum(m[1]), r: Number(m[2]) }; };
 
 // ------------------------------------------------------------------ tokens
-type Tok = { t: 'num'; v: number } | { t: 'str'; v: string } | { t: 'ref'; hoja: string | null; a: string; b?: string } | { t: 'fn'; v: string } | { t: 'op'; v: string } | { t: '(' } | { t: ')' } | { t: ',' } | { t: 'bool'; v: boolean } | { t: 'err'; v: string };
+type Tok = { t: 'name'; v: string } | { t: 'num'; v: number } | { t: 'str'; v: string } | { t: 'ref'; hoja: string | null; a: string; b?: string } | { t: 'fn'; v: string } | { t: 'op'; v: string } | { t: '(' } | { t: ')' } | { t: ',' } | { t: 'bool'; v: boolean } | { t: 'err'; v: string };
 
 function tokens(f: string): Tok[] {
   const out: Tok[] = [];
@@ -62,7 +63,7 @@ function tokens(f: string): Tok[] {
       const nombre = mf[0].toUpperCase(); i += mf[0].length;
       if (f[i] === '(') out.push({ t: 'fn', v: nombre });
       else if (nombre === 'TRUE' || nombre === 'FALSE') out.push({ t: 'bool', v: nombre === 'TRUE' });
-      else out.push({ t: 'err', v: '#NAME?' });
+      else out.push({ t: 'name', v: mf[0] });                                         // nombre definido
       continue;
     }
     out.push({ t: 'err', v: '#VALUE!' }); i++;
@@ -72,7 +73,7 @@ function tokens(f: string): Tok[] {
 
 // ------------------------------------------------------------------ árbol
 type Nodo =
-  | { k: 'val'; v: Valor } | { k: 'ref'; hoja: string | null; a: string; b?: string }
+  | { k: 'val'; v: Valor } | { k: 'ref'; hoja: string | null; a: string; b?: string } | { k: 'name'; n: string }
   | { k: 'un'; op: string; x: Nodo } | { k: 'bin'; op: string; a: Nodo; b: Nodo } | { k: 'fn'; n: string; args: Nodo[] } | { k: 'pct'; x: Nodo };
 
 const PREC: Record<string, number> = { '=': 1, '<>': 1, '<': 1, '>': 1, '<=': 1, '>=': 1, '&': 2, '+': 3, '-': 3, '*': 4, '/': 4, '^': 5 };
@@ -86,6 +87,7 @@ function parsear(ts: Tok[]): Nodo {
     if (t.t === 'str') return { k: 'val', v: t.v };
     if (t.t === 'bool') return { k: 'val', v: t.v };
     if (t.t === 'err') return { k: 'val', v: ERR(t.v) };
+    if (t.t === 'name') return { k: 'name', n: t.v };
     if (t.t === 'ref') return { k: 'ref', hoja: t.hoja, a: t.a, b: t.b };
     // en Excel el signo va antes que todo, también que ^: -2^2 = 4
     if (t.t === 'op' && (t.v === '-' || t.v === '+')) return { k: 'un', op: t.v, x: expr(5) };
@@ -126,7 +128,14 @@ export class Evaluador {
   private memo = new Map<string, Valor>();
   private enCurso = new Set<string>();
   private arboles = new Map<string, Nodo | null>();
-  constructor(private libro: Libro) {}
+  /** @param nombres nombres definidos del libro: nombre → hoja y celda (o rango «A1:B2») */
+  constructor(private libro: Libro, private nombres: Map<string, { hoja: string; ref: string }> = new Map()) {}
+  private nombre(n: string): Nodo {
+    const d = this.nombres.get(n) ?? [...this.nombres.entries()].find(([k]) => k.toLowerCase() === n.toLowerCase())?.[1];
+    if (!d) return { k: 'val', v: ERR('#NAME?') };
+    const [a, b] = d.ref.replace(/\$/g, '').split(':');
+    return { k: 'ref', hoja: d.hoja, a, b };
+  }
 
   /** valor de una celda (evalúa su fórmula si tiene) */
   celda(hoja: string, ref: string): Valor {
@@ -168,7 +177,8 @@ export class Evaluador {
   /** valores sueltos de los argumentos (los rangos se abren; dentro de un rango, los textos no cuentan) */
   private lista(args: Nodo[], hoja: string): { nums: number[]; error: { error: string } | null } {
     const nums: number[] = [];
-    for (const a of args) {
+    for (const a0 of args) {
+      const a = a0.k === 'name' ? this.nombre(a0.n) : a0;
       if (a.k === 'ref' && a.b) {
         for (const v of this.rango(a.hoja ?? hoja, a.a, a.b)) { if (esError(v)) return { nums, error: v }; if (typeof v === 'number') nums.push(v); }
         continue;
@@ -183,9 +193,34 @@ export class Evaluador {
     return { nums, error: null };
   }
 
+  /** evaluación en arreglo (para SUMPRODUCT): un rango es un arreglo y las cuentas van elemento por elemento */
+  private arr(n: Nodo, hoja: string): Valor[] | { error: string } {
+    if (n.k === 'name') return this.arr(this.nombre(n.n), hoja);
+    if (n.k === 'ref' && n.b) return this.rango(n.hoja ?? hoja, n.a, n.b);
+    if (n.k === 'bin') {
+      const a = this.arr(n.a, hoja), b = this.arr(n.b, hoja);
+      if (!Array.isArray(a)) return a;
+      if (!Array.isArray(b)) return b;
+      const len = Math.max(a.length, b.length), out: Valor[] = [];
+      for (let i = 0; i < len; i++) {
+        const x = a.length === 1 ? a[0] : a[i], y = b.length === 1 ? b[0] : b[i];
+        out.push(this.ev({ k: 'bin', op: n.op, a: { k: 'val', v: x }, b: { k: 'val', v: y } }, hoja));
+      }
+      return out;
+    }
+    if (n.k === 'un') {
+      const a = this.arr(n.x, hoja);
+      if (!Array.isArray(a)) return a;
+      return a.map(x => this.ev({ k: 'un', op: n.op, x: { k: 'val', v: x } }, hoja));
+    }
+    const v = this.ev(n, hoja);
+    return esError(v) ? v : [v];
+  }
+
   private ev(n: Nodo, hoja: string): Valor {
     switch (n.k) {
       case 'val': return n.v;
+      case 'name': return this.ev(this.nombre(n.n), hoja);
       case 'ref': return n.b ? ERR('#VALUE!') : this.celda(n.hoja ?? hoja, n.a);
       case 'pct': { const x = this.num(this.ev(n.x, hoja)); return typeof x === 'number' ? x / 100 : x; }
       case 'un': { const x = this.num(this.ev(n.x, hoja)); return typeof x !== 'number' ? x : n.op === '-' ? -x : x; }
@@ -232,6 +267,38 @@ export class Evaluador {
         const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja));
         if (typeof x !== 'number') return x;
         return nombre === 'ABS' ? Math.abs(x) : x < 0 ? ERR('#NUM!') : Math.sqrt(x);
+      }
+      case 'AND': case 'OR': {
+        const l = this.lista(args, hoja);
+        if (l.error) return l.error;
+        return nombre === 'AND' ? l.nums.every(x => x !== 0) : l.nums.some(x => x !== 0);
+      }
+      case 'NOT': { const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja)); return typeof x !== 'number' ? x : x === 0; }
+      case 'IFERROR': { const x = this.ev(args[0] ?? { k: 'val', v: null }, hoja); return esError(x) || (typeof x === 'number' && !Number.isFinite(x)) ? this.ev(args[1] ?? { k: 'val', v: null }, hoja) : x; }
+      case 'INT': { const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja)); return typeof x !== 'number' ? x : Math.floor(x); }
+      case 'ROUND': {
+        const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja)), d = this.num(this.ev(args[1] ?? { k: 'val', v: 0 }, hoja));
+        if (typeof x !== 'number') return x;
+        if (typeof d !== 'number') return d;
+        const f = 10 ** Math.trunc(d);
+        return (Math.sign(x) * Math.round(Math.abs(x) * f + 1e-9)) / f;              // la mitad, lejos del cero (Excel)
+      }
+      case 'SUMPRODUCT': {
+        // cada argumento es un arreglo (los rangos se abren y las cuentas van elemento por elemento); se multiplican y se suman
+        const arrs = args.map(a => this.arr(a, hoja));
+        for (const x of arrs) if (!Array.isArray(x)) return x;
+        const n = Math.max(...(arrs as Valor[][]).map(x => x.length));
+        let s = 0;
+        for (let i = 0; i < n; i++) {
+          let prod = 1;
+          for (const x of arrs as Valor[][]) {
+            const v = x.length === 1 ? x[0] : x[i];
+            if (esError(v)) return v;
+            prod *= typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : 0;   // textos y vacíos: 0
+          }
+          s += prod;
+        }
+        return s;
       }
       case 'IF': {
         const c = this.ev(args[0] ?? { k: 'val', v: null }, hoja);

@@ -196,8 +196,8 @@ function piezaPorClase(nombre: string, dir: Direccion, muros: Muro[], papeles: A
   const avisos: string[] = [];
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
   const area = muros.reduce((q, m) => q + (m.aberturas?.length ? propsPoligonos(seccionDebil(m) ?? []).A : areaMuro(m)), 0);
-  const xg = r4(muros.reduce((q, m) => q + areaMuro(m) * m.x, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0)));
-  const yg = r4(muros.reduce((q, m) => q + areaMuro(m) * m.y, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0)));
+  const xg = muros.reduce((q, m) => q + areaMuro(m) * m.x, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
+  const yg = muros.reduce((q, m) => q + areaMuro(m) * m.y, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
   const base = { nombre, dir, muros: muros.map(m => m.id), area, areaInf: muros.reduce((q, m) => q + m.areaInf, 0), filaHoja: null, avisos, posicion: dir === 'A' ? xg : yg, clase };
   if (clase === 'singular' && muros.length === 1 && tipoDe(muros[0]) === 'tabique' && !muros[0].aberturas?.length) {
     const m = muros[0];
@@ -223,7 +223,8 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const t = (m: Muro) => (dir === 'A' ? m.x : m.y);            // coordenada transversal
   const avisos: string[] = [];
   const area = muros.reduce((a, m) => a + areaMuro(m), 0);
-  const posicion = r4(muros.reduce((a, m) => a + areaMuro(m) * t(m), 0) / area);
+  // posición del baricentro de las áreas, sin redondear (la planilla de la guía la calcula con fórmulas y tiene que dar igual)
+  const posicion = muros.reduce((a, m) => a + areaMuro(m) * t(m), 0) / area;
   const areaInf = muros.reduce((a, m) => a + m.areaInf, 0);
   const base = { nombre, dir, muros: muros.map(m => m.id), posicion, area, areaInf, filaHoja: null, avisos };
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
