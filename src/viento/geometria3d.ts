@@ -1,0 +1,145 @@
+/**
+ * Túnel de viento 3D (etapa V3 de docs/plan_viento.html): la torre del proyecto en celdas, con el viento hacia +x de
+ * la red. Cada altura toma la silueta del nivel que la cubre (los retiros y los cambios de planta se ven), el suelo
+ * es la fila z = 0 y la entrada lleva el perfil de velocidad del CIRSOC 102-25 (u ∝ √Kz, con el Kz del método).
+ * Didáctico: no dimensiona.
+ */
+import { Kz, EXPOSICIONES, CP_BARLOVENTO, CP_LATERAL, cpSotavento, type Exposicion } from '../engine/cargas/cirsoc102';
+
+export interface P { x: number; y: number }
+export interface NivelPlanta { cota: number; silueta: P[] }
+
+export interface OpcionesGeo3 {
+  /** niveles sobre PB (cota sobre PB, m) con su silueta en planta (m), en cualquier orden */
+  niveles: NivelPlanta[];
+  dir: 'A' | 'B'; angulo?: number;
+  /** grilla: celdas en x, y, z */
+  nx: number; ny: number; nz: number;
+  /** alto del dominio en múltiplos de la altura de la torre (1,5 por defecto) */
+  altoRel?: number;
+}
+
+export interface Geometria3D {
+  nx: number; ny: number; nz: number; solido: Uint8Array;
+  /** celdas por metro, altura de la torre (m) y en celdas */
+  escala: number; H: number; hC: number;
+  /** ancho transversal al viento y largo en el sentido del viento (m), en el nivel más ancho */
+  B: number; L: number;
+  /** caja de la torre en la red (para la cámara y las caras) */
+  caja: { x0: number; x1: number; y0: number; y1: number };
+  /** celdas sólidas de la torre (sin el suelo) */
+  celdas: number;
+}
+
+function dentro(p: P[], x: number, y: number): boolean {
+  let s = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const a = p[i], b = p[j];
+    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) s = !s;
+  }
+  return s;
+}
+
+export function geometria3D(o: OpcionesGeo3): Geometria3D {
+  const { nx, ny, nz } = o;
+  const niv = o.niveles.filter(n => n.cota > 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
+  if (!niv.length) throw new Error('No hay niveles con planta sobre PB.');
+  const H = niv[niv.length - 1].cota;
+  // giro: el viento pasa a +x (viento A sopla hacia +y: −90°; viento B, hacia +x: 0°), más el giro extra
+  const th = ((o.dir === 'A' ? -90 : 0) - (o.angulo ?? 0)) * (Math.PI / 180), co = Math.cos(th), si = Math.sin(th);
+  const rot = niv.map(n => ({ cota: n.cota, pol: n.silueta.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
+  const todos = rot.flatMap(n => n.pol);
+  const xMin = Math.min(...todos.map(q => q.x)), xMax = Math.max(...todos.map(q => q.x));
+  const yMin = Math.min(...todos.map(q => q.y)), yMax = Math.max(...todos.map(q => q.y));
+  const B = yMax - yMin, L = xMax - xMin;
+  // escala: la torre ocupa 1/altoRel del alto; y entra con lugar en x (4 L delante como mínimo) y en y (1,5 B a cada lado)
+  const altoRel = o.altoRel ?? 1.5;
+  const escala = Math.min((nz - 1) / (altoRel * H), (nx * 0.55) / (L + 3 * B), (ny * 0.6) / B);
+  const hC = Math.max(1, Math.round(H * escala));
+  // la torre a un cuarto del largo (más lugar para la estela), centrada en y
+  const ox = Math.round(nx * 0.25) - xMin * escala, oy = (ny - B * escala) / 2 - yMin * escala;
+  const pols = rot.map(n => ({ cota: n.cota, pol: n.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
+  const solido = new Uint8Array(nx * ny * nz);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) solido[y * nx + x] = 1;      // suelo
+  let celdas = 0;
+  const caja = { x0: nx, x1: 0, y0: ny, y1: 0 };
+  for (let z = 1; z < nz; z++) {
+    const h = (z - 0.5) / escala;                                            // altura del centro de la celda (m)
+    if (h > H) break;
+    // la losa que cubre esta altura: el primer nivel con cota ≥ h
+    const n = pols.find(q => q.cota >= h - 1e-9);
+    if (!n) continue;
+    const bx0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...n.pol.map(q => q.x))));
+    const by0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...n.pol.map(q => q.y))));
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+      if (!dentro(n.pol, x + 0.5, y + 0.5)) continue;
+      solido[(z * ny + y) * nx + x] = 1; celdas++;
+      caja.x0 = Math.min(caja.x0, x); caja.x1 = Math.max(caja.x1, x); caja.y0 = Math.min(caja.y0, y); caja.y1 = Math.max(caja.y1, y);
+    }
+  }
+  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas };
+}
+
+/**
+ * perfil de entrada del 102-25: u(z) = uH · √(Kz(z) / Kz(H)), con z ≥ 5 m (Kz constante abajo); uH en la altura de la
+ * torre. Limitado a 1,3 uH arriba (estabilidad de la red).
+ */
+export function perfil102(nz: number, escala: number, H: number, exp: Exposicion, uH: number): Float32Array {
+  const u = new Float32Array(nz), kH = Kz(H, exp);
+  for (let z = 1; z < nz; z++) u[z] = Math.min(1.3 * uH, uH * Math.sqrt(Kz((z - 0.5) / escala, exp) / kH));
+  return u;
+}
+export const exponentePerfil = (exp: Exposicion) => 1 / EXPOSICIONES[exp].alfa;
+
+/** la celda de referencia de la presión: 2 celdas después de la entrada, en el borde lateral, a la altura de la torre */
+export const celdaReferencia = (g: Geometria3D) => (Math.min(g.nz - 1, g.hC) * g.ny + 0) * g.nx + 2;
+
+export type Cara = 'barlovento' | 'sotavento' | 'lateral' | 'cubierta';
+/**
+ * las celdas de fluido pegadas a la torre y la cara a la que miran (con la normal de la celda sólida vecina): un sólido
+ * en +x es una cara de barlovento (su normal mira hacia −x, contra el viento), en −x sotavento, en ±y lateral y abajo
+ * (−z, sin contar el suelo) cubierta.
+ */
+export function celdasDeCara(g: Geometria3D): { celda: number; cara: Cara; x: number; y: number; z: number; nx: number; ny: number; nz: number }[] {
+  const { nx, ny, nz, solido } = g, out: ReturnType<typeof celdasDeCara> = [];
+  const s = (x: number, y: number, z: number) => x >= 0 && x < nx && y >= 0 && y < ny && z >= 1 && z < nz && solido[(z * ny + y) * nx + x] === 1;
+  for (let z = 1; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const c = (z * ny + y) * nx + x;
+    if (solido[c]) continue;
+    if (s(x + 1, y, z)) out.push({ celda: c, cara: 'barlovento', x, y, z, nx: -1, ny: 0, nz: 0 });
+    if (s(x - 1, y, z)) out.push({ celda: c, cara: 'sotavento', x, y, z, nx: 1, ny: 0, nz: 0 });
+    if (s(x, y + 1, z)) out.push({ celda: c, cara: 'lateral', x, y, z, nx: 0, ny: -1, nz: 0 });
+    if (s(x, y - 1, z)) out.push({ celda: c, cara: 'lateral', x, y, z, nx: 0, ny: 1, nz: 0 });
+    if (z >= 2 && s(x, y, z - 1)) out.push({ celda: c, cara: 'cubierta', x, y, z, nx: 0, ny: 0, nz: 1 });
+  }
+  return out;
+}
+
+/** el Cp del reglamento para comparar (Tabla 2.4-1 y Fig. 2.4-1; la cubierta depende de h/L: se deja sin valor) */
+export function cpReglamento(g: Geometria3D): Record<Cara, number | null> {
+  return { barlovento: CP_BARLOVENTO, sotavento: cpSotavento(g.B > 0 ? g.L / g.B : 1), lateral: CP_LATERAL, cubierta: null };
+}
+
+/**
+ * Cp promediado en el tiempo: se van sumando las densidades de las celdas de cara en cada muestra. Cp = (ρ − ρ∞)/3 /
+ * (½ uH²), con la velocidad de entrada a la altura de la torre (como qh del reglamento) y la presión de referencia
+ * ρ∞ de una celda lejos, aguas arriba y a la altura de la torre (como la toma estática de un túnel).
+ */
+export class PromedioCp {
+  readonly suma: Float64Array; muestras = 0; sumaRef = 0;
+  constructor(readonly caras: ReturnType<typeof celdasDeCara>, readonly uH: number, readonly celdaRef = -1) { this.suma = new Float64Array(caras.length); }
+  /** rho: la densidad de cada celda (o un campo de 4 valores por celda con ρ en el 4.º, si paso = 4) */
+  sumar(rho: ArrayLike<number>, paso = 1, desplaz = 0) {
+    for (let k = 0; k < this.caras.length; k++) this.suma[k] += rho[this.caras[k].celda * paso + desplaz];
+    this.sumaRef += this.celdaRef >= 0 ? rho[this.celdaRef * paso + desplaz] : 1;
+    this.muestras++;
+  }
+  cp(k: number): number { return this.muestras ? ((this.suma[k] - this.sumaRef) / this.muestras) / 3 / (0.5 * this.uH * this.uH) : NaN; }
+  /** el promedio de cada cara (pesado por celda) */
+  porCara(): Record<Cara, number> {
+    const s: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 }, n: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 };
+    this.caras.forEach((c, k) => { s[c.cara] += this.cp(k); n[c.cara]++; });
+    (Object.keys(s) as Cara[]).forEach(k => { s[k] = n[k] ? s[k] / n[k] : NaN; });
+    return s;
+  }
+}

@@ -21,11 +21,15 @@ try {
     const fg = await gpu.leer();
     let peor = 0, nan = 0;
     for (let q = 0; q < fg.length; q++) { if (!Number.isFinite(fg[q])) nan++; peor = Math.max(peor, Math.abs(fg[q] - cpu.f[q])); }
-    const c = await gpu.corte(Math.round(k.hT / 2));
-    res.push({ grilla: `${k.nx}×${k.ny}×${k.nz}`, pasos: k.pasos, peorDiferencia: peor, noFinitos: nan, corteCeldas: c.length / 4, adaptador: gpu.adaptador });
+    const c = await gpu.corte(Math.round(k.hT / 2)), campo = await gpu.campo();
+    // el campo y el corte tienen que ser los del último paso (los compara con la referencia)
+    let peorCampo = 0, peorCorte = 0; const zc = Math.round(k.hT / 2), N = k.nx * k.ny * k.nz;
+    for (let q = 0; q < N; q++) { if (o.solido[q]) continue; const m = cpu.macro(q); peorCampo = Math.max(peorCampo, Math.abs(campo[4 * q] - m.u), Math.abs(campo[4 * q + 2] - m.w), Math.abs(campo[4 * q + 3] - m.r)); }
+    for (let y = 0; y < k.ny; y++) for (let x = 0; x < k.nx; x++) { const q = (zc * k.ny + y) * k.nx + x; if (o.solido[q]) continue; const m = cpu.macro(q); peorCorte = Math.max(peorCorte, Math.abs(c[4 * (y * k.nx + x)] - m.u)); }
+    res.push({ grilla: `${k.nx}×${k.ny}×${k.nz}`, pasos: k.pasos, peorDiferencia: peor, peorCampo, peorCorte, noFinitos: nan, adaptador: gpu.adaptador });
     gpu.destruir();
   }
-  out.textContent = JSON.stringify({ ok: res.every(r => r.peorDiferencia < 1e-4 && r.noFinitos === 0), res }, null, 1);
+  out.textContent = JSON.stringify({ ok: res.every(r => r.peorDiferencia < 1e-4 && r.peorCampo < 1e-4 && r.peorCorte < 1e-4 && r.noFinitos === 0), res }, null, 1);
 } catch (e) { out.textContent = JSON.stringify({ ok: false, error: String(e?.message ?? e) }); }
 </script>
 </body></html>

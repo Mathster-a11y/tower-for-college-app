@@ -16,6 +16,7 @@ struct Param { nx: u32, ny: u32, nz: u32, n: u32, tau0: f32, cs2: f32, zc: u32, 
 @group(0) @binding(3) var<storage, read> sol: array<u32>;
 @group(0) @binding(4) var<storage, read> uin: array<f32>;
 @group(0) @binding(5) var<storage, read_write> vel: array<f32>;
+@group(0) @binding(6) var<storage, read_write> todo: array<f32>;
 
 var<private> EX: array<i32, 19> = ${lista(EX3, 'i32')};
 var<private> EY: array<i32, 19> = ${lista(EY3, 'i32')};
@@ -72,6 +73,20 @@ fn paso(@builtin(global_invocation_id) g: vec3<u32>) {
   for (var i = 0u; i < 19u; i++) { fo[i * n + c] = v[i] + om * (eq[i] - v[i]); }
 }
 
+// el campo entero: (u, v, w, ρ) de cada celda; ρ = 0 en los sólidos
+@compute @workgroup_size(64, 1, 1)
+fn campoEntero(@builtin(global_invocation_id) g: vec3<u32>) {
+  let x = g.x; let y = g.y; let z = g.z;
+  if (x >= p.nx || y >= p.ny || z >= p.nz) { return; }
+  let n = p.n;
+  let c = (z * p.ny + y) * p.nx + x;
+  let k = c * 4u;
+  if (sol[c] != 0u) { todo[k] = 0.0; todo[k + 1u] = 0.0; todo[k + 2u] = 0.0; todo[k + 3u] = 0.0; return; }
+  var r = 0.0; var jx = 0.0; var jy = 0.0; var jz = 0.0;
+  for (var i = 0u; i < 19u; i++) { let q = fi[i * n + c]; r += q; jx += q * f32(EX[i]); jy += q * f32(EY[i]); jz += q * f32(EZ[i]); }
+  todo[k] = jx / r; todo[k + 1u] = jy / r; todo[k + 2u] = jz / r; todo[k + 3u] = r;
+}
+
 // el corte horizontal en z = p.zc: (u, v, w, ρ) de cada celda; ρ = 0 en los sólidos
 @compute @workgroup_size(64, 1, 1)
 fn corte(@builtin(global_invocation_id) g: vec3<u32>) {
@@ -97,6 +112,10 @@ export interface Lbm3dGpu {
   leer(): Promise<Float32Array>;
   /** el corte horizontal en z: (u, v, w, ρ) por celda */
   corte(z: number): Promise<Float32Array>;
+  /** el campo entero: (u, v, w, ρ) por celda (ρ = 0 en los sólidos) */
+  campo(): Promise<Float32Array>;
+  /** millones de celdas por segundo de los últimos pasos (medido) */
+  mlups: number;
   destruir(): void;
   adaptador: string;
 }
@@ -131,6 +150,7 @@ export async function crearLbm3dGpu(o: OpcionesLbm3): Promise<Lbm3dGpu> {
   const uin = dev.createBuffer({ size: 4 * nz, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(uin, 0, o.uIn);
   const vel = dev.createBuffer({ size: 16 * nx * ny, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const todo = dev.createBuffer({ size: 16 * N, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
   const par = dev.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const tau0 = 3 * o.nu + 0.5, cs2 = (o.cs ?? 0) ** 2;
   const escribirPar = (zc: number) => { const ab = new ArrayBuffer(32), u = new Uint32Array(ab), f = new Float32Array(ab); u[0] = nx; u[1] = ny; u[2] = nz; u[3] = N; f[4] = tau0; f[5] = cs2; u[6] = zc; dev.queue.writeBuffer(par, 0, ab); };
@@ -142,13 +162,15 @@ export async function crearLbm3dGpu(o: OpcionesLbm3): Promise<Lbm3dGpu> {
     { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+    { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
   ] });
   const layout = dev.createPipelineLayout({ bindGroupLayouts: [bgl] });
   const pPaso = dev.createComputePipeline({ layout, compute: { module: mod, entryPoint: 'paso' } });
   const pCorte = dev.createComputePipeline({ layout, compute: { module: mod, entryPoint: 'corte' } });
+  const pMacro = dev.createComputePipeline({ layout, compute: { module: mod, entryPoint: 'campoEntero' } });
   const grupo = (a: GPUBuffer, b: GPUBuffer) => dev.createBindGroup({ layout: bgl, entries: [
     { binding: 0, resource: { buffer: par } }, { binding: 1, resource: { buffer: a } }, { binding: 2, resource: { buffer: b } },
-    { binding: 3, resource: { buffer: sol } }, { binding: 4, resource: { buffer: uin } }, { binding: 5, resource: { buffer: vel } }] });
+    { binding: 3, resource: { buffer: sol } }, { binding: 4, resource: { buffer: uin } }, { binding: 5, resource: { buffer: vel } }, { binding: 6, resource: { buffer: todo } }] });
   const gAB = grupo(bA, bB), gBA = grupo(bB, bA);
   let pasos = 0;
   const actual = () => (pasos % 2 === 0 ? bA : bB);                       // donde está el último estado
@@ -173,11 +195,18 @@ export async function crearLbm3dGpu(o: OpcionesLbm3): Promise<Lbm3dGpu> {
     async corte(z: number) {
       escribirPar(Math.max(0, Math.min(nz - 1, Math.round(z))));
       const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
-      pass.setPipeline(pCorte); pass.setBindGroup(0, pasos % 2 === 0 ? gBA : gAB);   // corte lee «fi»: el último estado
+      pass.setPipeline(pCorte); pass.setBindGroup(0, pasos % 2 === 0 ? gAB : gBA);   // corte lee «fi»: el último estado (bA con pasos pares)
       pass.dispatchWorkgroups(Math.ceil(nx / 64), ny, 1); pass.end(); dev.queue.submit([enc.finish()]);
       return leerBuffer(vel, 16 * nx * ny);
     },
-    destruir() { [bA, bB, sol, uin, vel, par].forEach(b => b.destroy()); dev.destroy(); },
+    async campo() {
+      const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
+      pass.setPipeline(pMacro); pass.setBindGroup(0, pasos % 2 === 0 ? gAB : gBA);
+      pass.dispatchWorkgroups(Math.ceil(nx / 64), ny, nz); pass.end(); dev.queue.submit([enc.finish()]);
+      return leerBuffer(todo, 16 * N);
+    },
+    mlups: 0,
+    destruir() { [bA, bB, sol, uin, vel, par, todo].forEach(b => b.destroy()); dev.destroy(); },
   };
   return gpuObj;
 }
