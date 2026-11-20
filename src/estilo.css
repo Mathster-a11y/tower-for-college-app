@@ -1281,6 +1281,16 @@ button.peligro { color: var(--mal); }
 .leyenda-tensiones3d .escala i.c { background: linear-gradient(90deg, var(--compresion), color-mix(in srgb, var(--compresion) 15%, #eceef0)); }
 .leyenda-tensiones3d .escala i.t { background: linear-gradient(90deg, color-mix(in srgb, var(--traccion) 15%, #eceef0), var(--traccion)); }
 .leyenda-tensiones3d small { color: var(--ink2); }
+.vista3d .leyenda-presiones3d { position: absolute; left: 8px; bottom: 8px; z-index: 3; max-width: 270px; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; background: color-mix(in srgb, var(--panel) 92%, transparent); font-size: 11px; line-height: 1.35; color: var(--ink); }
+.vista3d .leyenda-presiones3d[hidden] { display: none; }
+.vista3d .leyenda-presiones3d.arriba { top: 8px; bottom: auto; }
+.leyenda-presiones3d .escala { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.leyenda-presiones3d .escala i { flex: 1; height: 8px; border-radius: 4px; }
+.leyenda-presiones3d .escala i.s { background: linear-gradient(90deg, var(--compresion), color-mix(in srgb, var(--compresion) 15%, #eceef0)); }
+.leyenda-presiones3d .escala i.p { background: linear-gradient(90deg, color-mix(in srgb, var(--carga) 15%, #eceef0), var(--carga)); }
+.leyenda-presiones3d small { display: block; color: var(--ink2); }
+.leyenda-presiones3d .casos { display: flex; gap: 4px; margin: 5px 0 2px; }
+.leyenda-presiones3d .casos .mini[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .campo-nivel-flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 13px; }
 .campo-nivel-flex select { max-width: 100%; }
 .notas-fuentes { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }

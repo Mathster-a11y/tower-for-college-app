@@ -102,7 +102,7 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true, tensiones: false };
+  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true, tensiones: false, presiones: false, casoViento: 1 as 1 | 2 | 3 | 4 };
   /** grilla de discretización de 0,05 m en la planta: se ve y los puntos se ajustan a ella (apagada: ajuste a 0,01 m) */
   grillaFina = false;
   /** planta: los muros que se encuentran se dibujan unidos (juntas limpias) o cada uno con su rectángulo */

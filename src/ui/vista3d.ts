@@ -16,6 +16,7 @@ import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { capaPresiones, leyendaPresiones } from './presiones3d';
 
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
@@ -147,6 +148,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   leyT.className = 'leyenda-tensiones3d';
   leyT.hidden = true;
   cont.appendChild(leyT);
+  // leyenda de las presiones del viento (botón «p»), con los casos de carga para elegir
+  const leyP = document.createElement('div');
+  leyP.className = 'leyenda-presiones3d';
+  leyP.hidden = true;
+  cont.appendChild(leyP);
   const capaEt = new CSS2DRenderer();
   capaEt.domElement.className = 'etiquetas3d';
   if (op.etiquetas) cont.appendChild(capaEt.domElement);
@@ -318,6 +324,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
     }
     prismas.forEach(pr => { grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
+    // presiones del viento sobre las fachadas (simulador de viento, etapa V1): sin la deformada
+    const pres = estado.capas.presiones && !roto ? capaPresiones() : null;
+    leyP.hidden = !pres;
+    leyP.classList.toggle('arriba', !!tens);
+    if (pres) { pres.objetos.forEach(o => grupo.add(o)); leyendaPresiones(leyP, pres); }
     // viento
     const largo = 8;
     const dirV = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);

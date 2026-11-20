@@ -201,7 +201,8 @@ function dibujarAvance() {
 }
 function dibujarCapas() {
   const c = $('capas');
-  const capas: [keyof typeof estado.capas, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [keyof typeof estado.capas, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [keyof typeof estado.capas, string, string]] : [])];
+  type Interruptor = Exclude<keyof typeof estado.capas, 'casoViento'>;
+  const capas: [Interruptor, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [Interruptor, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [Interruptor, string, string]] : [])];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
     b.style.setProperty('--c', col);
@@ -792,7 +793,7 @@ montar3D($('vista-3d'), { deformada: () => estado.capas.deformada, roto: datosRo
 montarDiagramaJ($('vista-3d'), $<HTMLButtonElement>('b-j3d'));
 $('b-foto3d').addEventListener('click', () => {
   const n = vistas3D.length + 1;
-  const ok = capturar3D(`Vista del 3D ${n} · viento ${estado.dir}${estado.capas.tensiones ? ' · tensiones' : ''}${estado.capas.deformada ? ' · deformada' : ''}`);
+  const ok = capturar3D(`Vista del 3D ${n} · viento ${estado.dir}${estado.capas.tensiones ? ' · tensiones' : ''}${estado.capas.presiones && !estado.capas.deformada ? ` · presiones, caso ${estado.capas.casoViento}` : ''}${estado.capas.deformada ? ' · deformada' : ''}`);
   mensaje(ok ? `Vista del 3D guardada para el informe (${n}). Exportar → Informe la pone en la sección «Vistas, plantas y cortes».` : 'No se pudo guardar la vista del 3D.');
 });
 {
@@ -804,6 +805,19 @@ $('b-foto3d').addEventListener('click', () => {
     estado.capas.tensiones = !estado.capas.tensiones;
     bT.setAttribute('aria-pressed', String(estado.capas.tensiones));
     try { localStorage.setItem('torre3d.tensiones3d', estado.capas.tensiones ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    estado.avisarPanel();
+  });
+}
+{
+  // presiones del viento sobre las fachadas (botón p): simulador de viento, etapa V1
+  const bP = $<HTMLButtonElement>('b-p3d');
+  try { estado.capas.presiones = localStorage.getItem('torre3d.presiones3d') === '1'; } catch { /* sin almacenamiento */ }
+  bP.setAttribute('aria-pressed', String(estado.capas.presiones));
+  bP.addEventListener('click', () => {
+    estado.capas.presiones = !estado.capas.presiones;
+    bP.setAttribute('aria-pressed', String(estado.capas.presiones));
+    try { localStorage.setItem('torre3d.presiones3d', estado.capas.presiones ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    if (estado.capas.presiones && estado.capas.deformada) mensaje('Las presiones se ven con la torre sin deformar: apagá la deformada.');
     estado.avisarPanel();
   });
 }
