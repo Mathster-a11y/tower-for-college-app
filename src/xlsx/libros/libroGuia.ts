@@ -12,14 +12,14 @@
  */
 import { hojaRef, LibroK, rc, type Estilo, type HojaK } from '../kit/libro';
 import type { DatosGuia } from '../../engine/metodos/guiaPasos';
-import { escribirGeometria, hojaSecciones } from './comun';
+import { columnasDintel, escribirAberturas, escribirGeometria, hojaSecciones } from './comun';
 import { DIVISORES } from '../../engine/planilla';
 import { tablasProyecto } from '../proyectoTablas';
 import type { Proyecto } from '../../engine/modelo';
 
 export const HG = {
   leame: 'Léame', datos: 'Datos', diseno: '1 Diseño', viento: '2 Viento', cargas: '3 Cargas y vuelco', secciones: '4 Secciones',
-  rigidez: '5 Rigidez', roto: '6 Rototraslación', flexo: '7 Flexocompresión', resumen: 'Resumen',
+  rigidez: '5 Rigidez', roto: '6 Rototraslación', flexo: '7 Flexocompresión', dinteles: '8 Dinteles', resumen: 'Resumen',
 };
 /** dónde quedó cada resultado (para las pruebas y para la vista previa) */
 export type Claves = Record<string, { hoja: string; ref: string }>;
@@ -109,6 +109,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   filaDato(30, 'σt adm del suelo (estudio de suelos)', d.fund.sigmaAdm, 'sigmaSuelo', 'kg/cm²', 'CIRSOC 401, art. 7.4; la guía usa 2,5', dato('0.00'));
   const geo = escribirGeometria(L, da, d, 31);
   const { rM0, piezasDir, nivDato } = geo;
+  const abD = escribirAberturas(L, da, d.aberturas, geo.rPs + 3 + d.piezas.length);
   const D_ = hojaRef(HG.datos);
 
   // ============================================================================================ 2 Viento (se arma antes que 1 Diseño: Diseño lee sus cotas)
@@ -202,7 +203,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
     clave(`Q_A_${i}`, ca, rc(4, r)); clave(`M_A_${i}`, ca, rc(5, r)); clave(`Q_B_${i}`, ca, rc(7, r)); clave(`M_B_${i}`, ca, rc(8, r)); clave(`N_${i}`, ca, rc(11, r));
   }
   ca.verificaciones.push(`N${rcg(0)}:N${rc1}`, `Q${rcg(0)}:Q${rc1}`);
-  nombrar('c_cota', ca, `B${rcg(0)}:B${rc1}`); nombrar('c_MA', ca, `E${rcg(0)}:E${rc1}`); nombrar('c_MB', ca, `H${rcg(0)}:H${rc1}`);
+  nombrar('c_cota', ca, `B${rcg(0)}:B${rc1}`); nombrar('c_MA', ca, `E${rcg(0)}:E${rc1}`); nombrar('c_QA', ca, `D${rcg(0)}:D${rc1}`); nombrar('c_QB', ca, `G${rcg(0)}:G${rc1}`); nombrar('c_MB', ca, `H${rcg(0)}:H${rc1}`);
   // totales
   const rt = rc1 + 2;
   ca.seccion(rt, 'Viento en la franja de PB (de PB a medio entrepiso): va a la fundación, no a los tabiques', 17);
@@ -320,7 +321,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
       clave(`tras_${dir}_${pz.nombre}`, ro, rc(6, r)); clave(`rot_${dir}_${pz.nombre}`, ro, rc(7, r)); clave(`Mp_${dir}_${pz.nombre}`, ro, rc(10, r));
     });
     ro.put(4, f1 + 1, 'Σ paralelas', 'textoB'); ro.f(5, f1 + 1, `SUM(E${f0}:E${f1})`, num('0.000')); ro.f(6, f1 + 1, `SUM(F${f0}:F${f1})`, num('0.00')); ro.f(7, f1 + 1, `SUM(G${f0}:G${f1})`, num('0.00')); ro.f(8, f1 + 1, `SUM(H${f0}:H${f1})`, num('0.00'));
-    nombrar(`r${dir}_nombre`, ro, `A${f0}:A${f1}`); nombrar(`r${dir}_M`, ro, `J${f0}:J${f1}`);
+    nombrar(`r${dir}_nombre`, ro, `A${f0}:A${f1}`); nombrar(`r${dir}_M`, ro, `J${f0}:J${f1}`); nombrar(`r${dir}_Q`, ro, `H${f0}:H${f1}`);
     // perpendiculares: a la derecha
     ro.cabecera(r0 + 7, 12, ['Muro', `J propio en ${otro} (m⁴)`, `J propio en ${dir} (m⁴)`, '¿Perpendicular?', 'a = pos − Sr (m)', 'J · a² (m⁶)']);
     const q0 = f0, q1 = q0 + Math.max(R, 1) - 1;
@@ -413,6 +414,27 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   }
   fl.verificaciones.push(`AH6:AH${rf}`);
 
+  // ============================================================================================ 8 Dinteles
+  const dn = L.hoja(HG.dinteles, [8, 7, 8, 8, 7, 7, 8, 8, 7, 10, 11, 10, 8, 9, 10, 10, 10, 10, 10, 10, 14]);
+  dn.encabezado('Paso 8 · Corte en los dinteles (guía 5, «Esfuerzo de corte»)', 'Con una abertura el tabique trabaja entero, pero el dintel toma el resbalamiento entre los dos tramos: t = Qj·S / J por metro de altura; en un piso, T = t·h piso, y τ = T / (h dintel · b) ≤ τ adm. Qj: la parte del corte en PB que toma el muro, según su J dentro de la pieza.', 21);
+  const filasD = columnasDintel(dn, geo, abD, d.aberturas.length, 4);
+  dn.cabecera(4, 15, ['Q de la pieza en el piso de PB (t)', 'Qj del muro (t)', 't (t/m)', 'T (t)', 'τ (kg/cm²)', 'τ adm (kg/cm²)', 'Control']);
+  const vistosD = new Map<string, number>();
+  filasD.forEach((r, i) => {
+    dn.f(15, r, `IF(B${r}="A",IF(Q_A>0,SUMPRODUCT((rA_nombre=C${r})*rA_Q)*SUMPRODUCT((c_cota=zPB)*c_QA)/Q_A,0),IF(Q_B>0,SUMPRODUCT((rB_nombre=C${r})*rB_Q)*SUMPRODUCT((c_cota=zPB)*c_QB)/Q_B,0))`, num('0.00'));
+    dn.f(16, r, `IF(K${r}>0,O${r}*J${r}/K${r},0)`, num('0.00'));
+    dn.f(17, r, `IF(J${r}>0,P${r}*L${r}/J${r},0)`, num('0.000'));
+    dn.f(18, r, `Q${r}*M${r}`, num('0.00'));
+    dn.f(19, r, `IF(N${r}>0,R${r}*1000/(N${r}*100*E${r}*100),1E+99)`, res('0.00'));
+    dn.f(20, r, '0.08*Hormigon*10', num('0.0'));
+    dn.f(21, r, VER(`S${r}<=T${r}`), { papel: 'calc', centrar: true });
+    const a = d.aberturas[i], k = vistosD.get(a.muro) ?? 0; vistosD.set(a.muro, k + 1);
+    clave(`tau_${a.muro}_${k}`, dn, `S${r}`);
+  });
+  if (filasD.length) dn.verificaciones.push(`U${filasD[0]}:U${filasD[filasD.length - 1]}`);
+  else dn.put(1, 5, 'El proyecto no tiene tabiques con aberturas.', 'nota');
+  dn.put(1, 6 + d.aberturas.length, 'τ adm: 24 kg/cm² para H30 en la guía (el τ02 del CIRSOC 201 de 1982); para otros hormigones, proporcional (0,08·σbk): confirmar con la cátedra.', 'nota');
+
   // ============================================================================================ Resumen
   const re = L.hoja(HG.resumen, [16, 50, 13, 10, 16, 40]);
   re.encabezado('Resumen de los controles', 'Cada valor viene de su hoja. VERIFICA en verde, NO VERIFICA en rojo, ATENCIÓN en naranja (hay que mirarlo: armadura, presiones fuera del núcleo central).', 6);
@@ -437,6 +459,11 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   for (const [paso, nom, val, u, est, crit, fmt] of ctrl) {
     re.put(1, rr2, paso, 'texto'); re.put(2, rr2, nom, 'textoB'); re.f(3, rr2, val, res(fmt)); re.put(4, rr2, u, 'unidad'); re.f(5, rr2, est, { papel: 'calc', centrar: true }); re.put(6, rr2, crit, 'nota'); rr2++;
   }
+  filasD.forEach((r, i) => {
+    re.put(1, rr2, '8 Dinteles', 'texto'); re.put(2, rr2, `${d.aberturas[i].muro}: dintel en PB`, 'textoB');
+    re.f(3, rr2, `'${HG.dinteles}'!S${r}`, res('0.00')); re.put(4, rr2, 'kg/cm²', 'unidad');
+    re.f(5, rr2, VER(`'${HG.dinteles}'!S${r}<='${HG.dinteles}'!T${r}`), { papel: 'calc', centrar: true }); re.put(6, rr2, 'τ ≤ τ adm', 'nota'); rr2++;
+  });
   for (const g of rangosPieza) {
     const rg = `${g.r0}:${g.r1}`.split(':');
     re.put(1, rr2, `7 Flexo ${g.dir}`, 'texto'); re.put(2, rr2, `${g.nombre}: tracción máx (descargado)`, 'textoB');
@@ -454,7 +481,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
     t.filas.forEach((f, i) => f.forEach((x, j) => { if (x !== null && x !== '') h.put(j + 1, i + 1, x, 'vacio'); }));
   }
   // Léame primero, después Datos y los pasos en orden
-  const orden = [HG.leame, HG.datos, HG.diseno, HG.viento, HG.cargas, HG.secciones, HG.rigidez, HG.roto, HG.flexo, HG.resumen];
+  const orden = [HG.leame, HG.datos, HG.diseno, HG.viento, HG.cargas, HG.secciones, HG.rigidez, HG.roto, HG.flexo, HG.dinteles, HG.resumen];
   L.hojas.sort((a, b) => (orden.indexOf(a.nombre) + 1 || 99) - (orden.indexOf(b.nombre) + 1 || 99));
   return { libro: L, claves };
 }

@@ -41,6 +41,8 @@ export interface PiezaEquivalente {
   avisos: string[];
   /** J de la sección real (cada muro con su Steiner, respecto del baricentro) y J del molde de la hoja (m⁴) */
   Jreal?: number;
+  /** con calados: la posición del baricentro de la sección real (el corte débil), la que va con el J real */
+  posicionReal?: number;
   Jhoja?: number;
   /** alas en el medio del alma que la app sumó al ala superior (sin papel elegido a mano) */
   alasMedio?: string[];
@@ -713,6 +715,11 @@ export function aPlanilla(p: Proyecto): Asignacion {
     const ms = pz.muros.map(id => porId.get(id)!).filter(Boolean);
     pz.Jhoja = calcFilaJ({ S: 0.01, W: 0.01, X: 0.01, ...pz.fila }, pz.dir === 'B', false).AY;
     pz.Jreal = Jreal(ms, pz.dir);
+    if (ms.some(m => m.aberturas?.length)) {
+      const At = ms.reduce((q, m) => q + (m.aberturas?.length ? propsPoligonos(seccionDebil(m) ?? []).A : areaMuro(m)), 0);
+      const tA = ms.reduce((q, m) => { if (!m.aberturas?.length) return q + areaMuro(m) * (pz.dir === 'A' ? m.x : m.y); const k = propsPoligonos(seccionDebil(m) ?? []); return q + k.A * (pz.dir === 'A' ? k.xg : k.yg); }, 0);
+      if (At > 0) pz.posicionReal = tA / At;
+    }
     const dif = pz.Jreal > 0 ? (pz.Jhoja - pz.Jreal) / pz.Jreal : 0;
     if (Math.abs(dif) > 0.05) pz.avisos.push(`La simplificación al molde cambia el J: hoja ${String(r4(pz.Jhoja)).replace('.', ',')} m⁴ contra ${String(r4(pz.Jreal)).replace('.', ',')} m⁴ de la sección real (${dif > 0 ? '+' : '−'}${Math.abs(Math.round(dif * 100))} %).`);
   });

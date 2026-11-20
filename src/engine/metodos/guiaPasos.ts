@@ -15,6 +15,7 @@
  */
 import { areaMuro, dInterior, entraEnCalculo, factorPesoEspesor, rectangulos, tipoDe, type Proyecto } from '../modelo';
 import { propiedades } from '../perfil';
+import { propsPoligonos, seccionDebil } from '../aberturas';
 import { DIVISORES } from '../planilla';
 import type { PiezaEquivalente } from '../mapping';
 import { DIAMETROS, areaBarra } from './guia';
@@ -46,6 +47,8 @@ export interface DatosGuia {
   niveles: NivelG[];
   piezas: { nombre: string; dir: 'A' | 'B' }[];
   rects: RectG[];
+  /** aberturas de los tabiques (para el corte en los dinteles): posición del centro desde el centro del muro, ancho, desde y alto (m) */
+  aberturas: { muro: string; viento: 'A' | 'B'; L: number; e: number; s: number; ancho: number; desde: number; alto: number }[];
   avisos: string[];
 }
 
@@ -77,8 +80,18 @@ export function datosGuia(p: Proyecto, piezas: PiezaEquivalente[]): DatosGuia {
       rects.push({ ...base, ...primero, x: m.x, y: m.y, ax: 2 * k.cB, ay: 2 * k.cA, A: k.A, JA: k.JA, JB: k.JB });
       continue;
     }
-    if (m.aberturas?.length) avisos.push(`${m.id} tiene aberturas: la planilla de la guía lo toma entero (el dintel se verifica aparte).`);
-    rectangulos(m).forEach((r, i) => rects.push({ ...base, ...(i === 0 ? primero : {}), x: r.x, y: r.y, ax: r.ax, ay: r.ay }));
+    // tabique calado: como la app, su sección más débil (los pedazos del corte por las aberturas), cada uno con su área,
+    // su J propio y su baricentro; el dintel se verifica aparte
+    const deb = t === 'tabique' && m.aberturas?.length ? (seccionDebil(m) ?? []).filter(pg => pg.length >= 3) : [];
+    const rr = rectangulos(m);
+    if (deb.length && rr.length === 1) {
+      // un renglón: las medidas del muro entero (la frecuencia lo toma entero, como la app) y, para la sección, el área,
+      // el J y el baricentro del corte débil
+      const k = propsPoligonos(deb);
+      rects.push({ ...base, ...primero, x: k.xg, y: k.yg, ax: rr[0].ax, ay: rr[0].ay, A: k.A, JA: k.Jx, JB: k.Jy });
+      continue;
+    }
+    rr.forEach((r, i) => rects.push({ ...base, ...(i === 0 ? primero : {}), x: r.x, y: r.y, ax: r.ax, ay: r.ay }));
   }
   const piezasL = conPieza.map(pz => ({ nombre: pz.nombre, dir: pz.dir }));
   const s = p.sitio;
@@ -88,6 +101,7 @@ export function datosGuia(p: Proyecto, piezas: PiezaEquivalente[]): DatosGuia {
     coef: { gH: 2.4, qD: 0.7, qC: 0.9, sigE: 2400, cuantia: 0.008 },
     fund: { a1: p.fundacion.a1, b1: p.fundacion.b1, sigmaAdm: sigmaAdmDe(p) },
     niveles, piezas: piezasL, rects, avisos,
+    aberturas: p.muros.filter(m => entraEnCalculo(m, zFund, zTop) && tipoDe(m) === 'tabique' && m.aberturas?.length).flatMap(m => m.aberturas!.map(a => ({ muro: m.id, viento: (m.dir === 'Y' ? 'A' : 'B') as 'A' | 'B', L: m.largo, e: m.espesor, s: a.s, ancho: a.ancho, desde: a.desde, alto: a.alto }))),
   };
 }
 

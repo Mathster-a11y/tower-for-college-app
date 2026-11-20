@@ -63,6 +63,48 @@ export function escribirGeometria(L: LibroK, da: HojaK, d: Geometria, r0: number
   };
 }
 
+/** las aberturas de los tabiques en «Datos», desde la fila r0 (nombres ab_*) */
+export function escribirAberturas(L: LibroK, da: HojaK, ab: { muro: string; viento: 'A' | 'B'; L: number; e: number; s: number; ancho: number; desde: number; alto: number }[], r0: number, ancho = 14): { f0: number; f1: number } {
+  da.seccion(r0, 'Aberturas de los tabiques (puertas y ventanas): el dintel se verifica al corte; en la sección, el tabique va con su corte más débil', ancho);
+  da.cabecera(r0 + 1, 1, ['Muro', 'Trabaja en el viento', 'Largo del muro L (m)', 'Espesor e (m)', 'Centro de la abertura desde el centro del muro (m)', 'Ancho (m)', 'Desde el piso (m)', 'Alto (m)', 'Primera abertura del muro (1 = sí)', 'Pieza', 'J del muro entero, una vez por muro (m⁴)']);
+  const f0 = r0 + 2, f1 = f0 + Math.max(ab.length, 1) - 1;
+  ab.forEach((a, i) => {
+    const r = f0 + i, ix = `MATCH(A${r},m_muro,0)`;
+    da.put(1, r, a.muro, dato()); da.put(2, r, a.viento, dato()); da.put(3, r, a.L, dato('0.00')); da.put(4, r, a.e, dato('0.00')); da.put(5, r, a.s, dato('0.00')); da.put(6, r, a.ancho, dato('0.00')); da.put(7, r, a.desde, dato('0.00')); da.put(8, r, a.alto, dato('0.00'));
+    da.put(9, r, ab.findIndex(x => x.muro === a.muro) === i ? 1 : 0, dato('0'));
+    da.f(10, r, `IF(B${r}="A",INDEX(m_pA,${ix}),INDEX(m_pB,${ix}))`, { papel: 'calc' });
+    da.f(11, r, `I${r}*D${r}*C${r}^3/12`, num('0.0000'));
+  });
+  for (const [n, c] of [['ab_muro', 1], ['ab_dir', 2], ['ab_pieza', 10], ['ab_Jm', 11]] as const) L.nombrar(n, da.nombre, `${rc(c, f0)}:${rc(c, f1)}`);
+  if (!ab.length) da.put(1, f0, 'No hay aberturas en los tabiques.', 'nota');
+  return { f0, f1 };
+}
+/**
+ * columnas comunes de la hoja de dinteles (A a P): muro, viento, pieza, L, e, abertura, J del muro, J de la pieza (los
+ * tabiques paralelos al viento, cada uno con e·L³/12, como la guía), momento estático S = e·(L²/4 − s²)/2 y la altura
+ * del piso de PB (zArriba − zPB). Devuelve la fila de cada abertura.
+ */
+export function columnasDintel(h: HojaK, geo: Geo, ab: { f0: number }, n: number, r0: number) {
+  h.cabecera(r0, 1, ['Muro', 'Viento', 'Pieza', 'L (m)', 'e (m)', 's (m)', 'Ancho (m)', 'Desde (m)', 'Alto (m)', 'J del muro (m⁴)', 'J de la pieza (m⁴)', 'S (m³)', 'h piso (m)', 'h dintel (m)']);
+  const D = hojaRef(geo.hoja), filas: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = r0 + 1 + i, a = (c: number) => `${D}${rc(c, ab.f0 + i)}`;
+    const ix = `MATCH(A${r},m_muro,0)`;
+    h.f(1, r, a(1), { papel: 'calc' });
+    h.f(2, r, a(2), { papel: 'calc', centrar: true });
+    h.f(3, r, `IF(B${r}="A",INDEX(m_pA,${ix}),INDEX(m_pB,${ix}))`, { papel: 'calc' });
+    h.f(4, r, a(3), num('0.00')); h.f(5, r, a(4), num('0.00'));
+    h.f(6, r, a(5), num('0.00')); h.f(7, r, a(6), num('0.00')); h.f(8, r, a(7), num('0.00')); h.f(9, r, a(8), num('0.00'));
+    h.f(10, r, `E${r}*D${r}^3/12`, num('0.0000'));
+    h.f(11, r, `SUMPRODUCT((ab_pieza=C${r})*(ab_dir=B${r})*ab_Jm)+IF(B${r}="A",SUMPRODUCT((m_pA=C${r})*(m_ay>m_ax)*(m_tubo<>1)*(m_JA="")*m_ax*m_ay^3),SUMPRODUCT((m_pB=C${r})*(m_ax>m_ay)*(m_tubo<>1)*(m_JA="")*m_ay*m_ax^3))/12`, num('0.0000'));
+    h.f(12, r, `E${r}*(D${r}^2/4-F${r}^2)/2`, num('0.0000'));
+    h.f(13, r, 'zArriba-zPB', num('0.00'));
+    h.f(14, r, `M${r}-(H${r}+I${r})`, num('0.00'));
+    filas.push(r);
+  }
+  return filas;
+}
+
 export interface Secciones { bA: { f0: number; f1: number }; bB: { f0: number; f1: number }; tA: { f0: number; f1: number; fin: number }; tB: { f0: number; f1: number; fin: number } }
 /**
  * Hoja de secciones: cada rectángulo en las piezas de cada viento (J propio + Steiner), las piezas con su J y su

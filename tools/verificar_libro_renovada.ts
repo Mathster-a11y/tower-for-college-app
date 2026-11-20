@@ -10,9 +10,13 @@ import { Evaluador } from '../src/xlsx/formulas';
 
 const dir = process.argv[2] ?? 'libros';
 mkdirSync(dir, { recursive: true });
-const torres = [ejemploGuia(), ...torresPrueba()];
+// y el ejemplo de la guía con aberturas en T1 y T2 (los dinteles y el corte débil)
+const calado = ejemploGuia();
+calado.muros.find(m => m.id === 'M1')!.aberturas = [{ s: 0, ancho: 0.6, desde: 0, alto: 2.1 }];
+calado.muros.find(m => m.id === 'M2')!.aberturas = [{ s: -0.5, ancho: 0.8, desde: 0, alto: 2.2 }, { s: 0.6, ancho: 0.5, desde: 0.9, alto: 1.2 }];
+const torres = [ejemploGuia(), ...torresPrueba(), calado];
 for (const [i, p0] of torres.entries()) for (const nivel of ['simple', 'completa'] as const) {
-  if (nivel === 'completa' && ![0, 2, 6, 10].includes(i)) continue;
+  if (nivel === 'completa' && ![0, 2, 6, 10, torres.length - 1].includes(i)) continue;
   const p: Proyecto = { ...p0, calculo: { metodo: 'cirsoc', verificacion: nivel } };
   const c = calcularProyecto(p);
   const { libro } = libroRenovada(datosRenovada(p, c.asig.piezas, c.cirsoc!.verif, nivel), p);

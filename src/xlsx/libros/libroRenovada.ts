@@ -19,12 +19,12 @@ import { CLASES_EXPOSICION, datos201De, type DatosCirsoc201, type VerifPieza201 
 import { DIVISORES } from '../../engine/planilla';
 import { tablasProyecto } from '../proyectoTablas';
 import type { Proyecto } from '../../engine/modelo';
-import { coef, dato, escribirGeometria, hojaSecciones, num, res, VER } from './comun';
+import { coef, columnasDintel, dato, escribirAberturas, escribirGeometria, hojaSecciones, num, res, VER } from './comun';
 import { COMBOS_SUELO } from '../../engine/fundaciones';
 
 export const HR = {
   leame: 'Léame', datos: 'Datos', tablas: 'Tablas', viento: '1 Viento 102-25', cargas: '2 Cargas y vuelco', secciones: '3 Secciones',
-  reparto: '4 Reparto por caso', solic: '5 Solicitaciones', h201: '6 Hormigón 201', diag: '7 Diagramas N-M', deriva: '8 Deriva', resumen: 'Resumen',
+  reparto: '4 Reparto por caso', solic: '5 Solicitaciones', h201: '6 Hormigón 201', diag: '7 Diagramas N-M', deriva: '8 Deriva', dinteles: '9 Dinteles', resumen: 'Resumen',
 };
 export type Claves = Record<string, { hoja: string; ref: string }>;
 export interface DatosRenovada {
@@ -175,6 +175,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   filaD(38, 'a1: lado perpendicular al viento A', d.fund.a1, 'lado_a1', 'm', '', dato('0.00'));
   filaD(39, 'σt adm del suelo (estudio de suelos)', d.fund.sigmaAdm, 'sigmaSuelo', 'kg/cm²', 'CIRSOC 401, art. 7.4; la guía usa 2,5', dato('0.00'));
   const geo = escribirGeometria(L, da, d, 41);
+  const abD = escribirAberturas(L, da, d.aberturas, geo.rPs + 3 + d.piezas.length);
 
   // ============================================================================================ 1 Viento 102-25
   const vi = L.hoja(HR.viento, [34, 12, 12, 9, 7, 7, 8, 8, 8, 10, 10, 10, 10, 10, 11, 10, 10, 10, 10, 11, 10]);
@@ -242,7 +243,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
     const r = rf0 + k, m = (c: number) => geo.muroDato(c, k);
     vi.f(1, r, m(1), { papel: 'calc' });
     vi.f(2, r, `MAX(0.01,SUMPRODUCT((m_muro=A${r})*m_top)-zPB)`, num('0.00'));
-    vi.f(3, r, `IF(${m(9)}="",${m(6)}*${m(7)},${m(9)})`, num('0.0000'));
+    vi.f(3, r, `IF(OR(${m(9)}="",SUMPRODUCT((ab_muro=${m(1)})*1)>0),${m(6)}*${m(7)},${m(9)})`, num('0.0000'));   // un tabique calado, entero
     vi.f(4, r, `IF(AND(${m(8)}<>1,${m(7)}>${m(6)}),1,0)`, num('0'));
     vi.f(5, r, m(7), num('0.000'));
     vi.f(6, r, `D${r}*(h_PB/B${r})^2*C${r}/(1+0.83*(B${r}/E${r})^2)`, num('0.0000'));
@@ -650,6 +651,33 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
     nombrar(`deriva_${dir}`, de, top); clave(`deriva_${dir}`, de, top); clave(`peorPiso_${dir}`, de, K(1, ru + 2));
   }
 
+  // ============================================================================================ 9 Dinteles
+  const dn = L.hoja(HR.dinteles, [8, 7, 8, 8, 7, 7, 8, 8, 7, 10, 11, 10, 8, 9, 10, 10, 10, 10, 9, 10, 10, 10, 10, 10, 9, 14]);
+  dn.encabezado('Paso 9 · Dinteles por resistencia (CIRSOC 201-2005, capítulo 11)', "El resbalamiento de la guía, t = Qj·S/J, por la altura del piso, con el corte de la pieza en el peor de los cuatro casos de carga y 1,0 W: Vu = t·h piso. d = 0,9·h dintel; φVc = 0,75·⅙·√f'c·b·d (11-3); la sección resiste hasta φ·⅚·√f'c·b·d; estribos para lo que no toma el hormigón, y el mínimo (11-13) si Vu > φVc/2. Luz / alto < 4: viga de gran altura (11.8).", 26);
+  const filasD = columnasDintel(dn, geo, abD, d.aberturas.length, 4);
+  dn.cabecera(4, 15, ['V de la pieza, peor caso (t)', 'Qj del muro (t)', 't (t/m)', 'Vu (t)', 'd (m)', 'φVc (t)', 'φVn,máx (t)', 'Vu / φVn,máx', 'Estribos necesarios (cm²/m)', 'Estribos mínimos (cm²/m)', 'Gran altura', 'Control']);
+  const vistosD = new Map<string, number>();
+  const vMax = (dir: 'A' | 'B', r: number) => `MAX(${[1, 2, 3, 4].map(k => `ABS(SUMPRODUCT((r${dir}_nombre=C${r})*r${dir}_V${k}))`).join(',')})`;
+  filasD.forEach((r, i) => {
+    dn.f(15, r, `IF(B${r}="A",${vMax('A', r)},${vMax('B', r)})`, num('0.00'));
+    dn.f(16, r, `IF(K${r}>0,O${r}*J${r}/K${r},0)`, num('0.00'));
+    dn.f(17, r, `IF(J${r}>0,P${r}*L${r}/J${r},0)`, num('0.000'));
+    dn.f(18, r, `Q${r}*M${r}`, num('0.00'));
+    dn.f(19, r, `0.9*N${r}`, num('0.000'));
+    const bd = `(E${r}*1000)*(S${r}*1000)`;
+    dn.f(20, r, `phiV*SQRT(fc)/6*${bd}/Nt`, num('0.00'));
+    dn.f(21, r, `phiV*5/6*SQRT(fc)*${bd}/Nt`, num('0.00'));
+    dn.f(22, r, `IF(U${r}>0,R${r}/U${r},1E+99)`, res('0.000'));
+    dn.f(23, r, `MAX(0,R${r}*Nt/phiV-SQRT(fc)/6*${bd})/(fy*S${r}*1000)*10`, num('0.00'));
+    dn.f(24, r, `IF(R${r}*Nt>phiV*SQRT(fc)/6*${bd}/2,MAX(SQRT(fc)/16*E${r}*1000/fy,0.33*E${r}*1000/fy)*10,0)`, num('0.00'));
+    dn.f(25, r, `IF(AND(N${r}>0,G${r}/N${r}<4),"SÍ","no")`, { papel: 'calc', centrar: true });
+    dn.f(26, r, VER(`AND(N${r}>0,R${r}<=U${r})`), { papel: 'calc', centrar: true });
+    const a = d.aberturas[i], k = vistosD.get(a.muro) ?? 0; vistosD.set(a.muro, k + 1);
+    clave(`dint_${a.muro}_${k}`, dn, `V${r}`); clave(`dintAvs_${a.muro}_${k}`, dn, `W${r}`);
+  });
+  if (filasD.length) dn.verificaciones.push(`Z${filasD[0]}:Z${filasD[filasD.length - 1]}`);
+  else dn.put(1, 5, 'El proyecto no tiene tabiques con aberturas.', 'nota');
+
   // ============================================================================================ Resumen
   const rs = L.hoja(HR.resumen, [16, 52, 13, 12, 16, 40]);
   rs.encabezado('Resumen de los controles', 'VERIFICA en verde, NO VERIFICA en rojo, ATENCIÓN en naranja (hay que mirarlo).', 6);
@@ -661,6 +689,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   for (const dir of ['A', 'B'] as const) filas.push(['2 Cargas', `Presión en el suelo, viento ${dir}`, `sueloMax_${dir}`, 'kg/cm²', `sueloEst_${dir}`, 'σmáx ≤ σt adm; contacto parcial = atención', '0.000']);
   filas.push(['Datos', "f'c del hormigón (MPa)", 'fc', 'MPa', VER('fc>=INDEX(tFcMin,MATCH(expHorm,tClase,0))'), "≥ el f'c mínimo de la clase de exposición (200-24, Tabla 2.5)", '0']);
   for (const dir of ['A', 'B'] as const) filas.push(['8 Deriva', `Deriva de servicio en la azotea, viento ${dir}`, `deriva_${dir}`, 'm', `${hojaRef(HR.deriva)}${rc(dir === 'A' ? 2 : 9, 8 + sobre.length + 5)}`, 'h / límite y cada piso', '0.0000']);
+  filasD.forEach((r, i) => filas.push(['9 Dinteles', `${d.aberturas[i].muro}: dintel en PB`, `'${HR.dinteles}'!V${r}`, 'Vu/φVn,máx', `'${HR.dinteles}'!Z${r}`, "Vu ≤ φ·⅚·√f'c·b·d (estribos en la hoja 9)", '0.000']));
   let r2 = 5;
   for (const f of filas) { rs.put(1, r2, f[0], 'texto'); rs.put(2, r2, f[1], 'textoB'); rs.f(3, r2, f[2], res(f[6])); rs.put(4, r2, f[3], 'unidad'); rs.f(5, r2, f[4], { papel: 'calc', centrar: true }); rs.put(6, r2, f[5], 'nota'); r2++; }
   // por pieza: hormigón y corte
@@ -692,7 +721,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
     const h = L.hoja(t.nombre, t.anchos); h.oculta = true;
     t.filas.forEach((f, i) => f.forEach((x, j) => { if (x !== null && x !== '') h.put(j + 1, i + 1, x, 'vacio'); }));
   }
-  const orden = [HR.leame, HR.datos, HR.tablas, HR.viento, HR.cargas, HR.secciones, HR.reparto, HR.solic, HR.h201, HR.diag, HR.deriva, HR.resumen];
+  const orden = [HR.leame, HR.datos, HR.tablas, HR.viento, HR.cargas, HR.secciones, HR.reparto, HR.solic, HR.h201, HR.diag, HR.deriva, HR.dinteles, HR.resumen];
   L.hojas.sort((a, b) => (orden.indexOf(a.nombre) + 1 || 99) - (orden.indexOf(b.nombre) + 1 || 99));
   return { libro: L, claves };
 }

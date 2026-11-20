@@ -447,8 +447,10 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   };
   graf(gx, 'Viento de cada piso:\nquién lo toma', [{ v: r.Ftab, clase: 'tab', nombre: 'tabiques' }, { v: r.Fexo, clase: 'exo', nombre: 'exoesqueleto' }], 't', true);
   const conSin = r.uSin.every(x => isFinite(x));
-  graf(gx + gw + 48, 'Corrimiento\nde cada piso', [...(conSin ? [{ v: r.uSin.map(x => x * 1000), clase: 'sin', nombre: 'sin exo' }] : []), { v: r.u.map(x => x * 1000), clase: 'con', nombre: conSin ? 'con exo' : 'con exo (sin exo no hay tabiques arriba)' }], 'mm');
-  const nLim = d.def.limiteH ?? 500, lim = (d.h / nLim) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...(conSin ? r.uSin : r.u).map(x => x * 1000), lim);
+  // métodos CIRSOC y FEM: el corrimiento con el viento de servicio contra h/límite de deriva (lo que controla el panel)
+  const wR = vientoReglamento(), rel = wR ? wR.servicio.relacion : 1;
+  graf(gx + gw + 48, wR ? 'Corrimiento de servicio\nde cada piso' : 'Corrimiento\nde cada piso', [...(conSin ? [{ v: r.uSin.map(x => x * rel * 1000), clase: 'sin', nombre: 'sin exo' }] : []), { v: r.u.map(x => x * rel * 1000), clase: 'con', nombre: conSin ? 'con exo' : 'con exo (sin exo no hay tabiques arriba)' }], 'mm');
+  const nLim = wR ? datos201De(estado.proyecto).limiteDeriva : d.def.limiteH ?? 500, lim = (d.h / nLim) * 1000, xs0 = gx + gw + 48, vmx = Math.max(...(conSin ? r.uSin : r.u).map(x => x * rel * 1000), lim);
   const xl = xs0 + (lim / vmx) * gw;
   svg.append(el('line', { x1: xl, x2: xl, y1: Y(z0), y2: Y(zT), class: 'ex-limite' }));
   svg.append(el('text', { x: xl - 3, y: Y(zT) + 14, class: 'ex-nota', 'text-anchor': 'end' }, `h/${nLim} = ${fmt(lim, 0)} mm`));
