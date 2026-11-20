@@ -155,3 +155,37 @@ describe('ficha E como el Citicorp', () => {
     r.u.forEach(x => expect(isFinite(x)).toBe(true));
   });
 });
+
+import { COMBOS_101_25, limitesPared } from './exo';
+describe('etapa 8: CIRSOC 301/302 con las combinaciones del 101-25', () => {
+  const zs = Array.from({ length: 9 }, (_, i) => i * 3), W = zs.slice(1).map(() => 2);
+  const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'D', modulo: 4 };
+  it('límites de la pared del CIRSOC 302 (Tabla 2.2.1): con costura 1,05 y 1,30 √(E/Fy); sin costura 1,12 y 1,40', () => {
+    const k = Math.sqrt(def.E / FY_F24);
+    expect(limitesPared(def.E, FY_F24)).toEqual({ lp: 1.05 * k, lr: 1.3 * k });
+    expect(limitesPared(def.E, FY_F24, false)).toEqual({ lp: 1.12 * k, lr: 1.4 * k });
+  });
+  it('con 1,0 W del 102-25 las barras toman menos que con 1,6 W del curso, y la combinación que manda se informa', () => {
+    // con viento fuerte manda el viento (con viento débil manda 1,4 D, que es mayor que 1,2 D)
+    const Wf = W.map(x => x * 30);
+    const curso = cirsoc301(def, zs, Wf, () => 3e6 * 20, 18, [-10, 10], 3e6);
+    const regl = cirsoc301(def, zs, Wf, () => 3e6 * 20, 18, [-10, 10], 3e6, undefined, FY_F24, { combos: COMBOS_101_25 });
+    const peor = (v: typeof curso) => Math.max(...v.map(x => x.ratio));
+    expect(peor(regl)).toBeLessThan(peor(curso));
+    expect(new Set(regl.map(x => x.combinacion))).not.toContain('1,2 D + 1,6 W');
+    expect(regl.every(x => ['compacta', 'no compacta', 'esbelta'].includes(x.pared))).toBe(true);
+  });
+  it('una pared esbelta no verifica; la no compacta reduce el momento resistente entre Mp y Fy·S', () => {
+    const fino: ExoDef = { ...def, diagonal: { b: 0.4, e: 0.006 }, columna: { b: 0.4, e: 0.006 } };   // b/t ≈ 65 > 1,30·√(E/Fy) ≈ 38
+    const v = cirsoc301(fino, zs, W, () => 3e6 * 20, 18, [-10, 10], 3e6);
+    const col = v.find(x => x.clase === 'columna')!;
+    expect(col.pared).toBe('esbelta');
+    expect(col.verifica).toBe(false);
+    const medio: ExoDef = { ...def, columna: { b: 0.4, e: 0.0115 } };                                 // b/t ≈ 33: entre 1,05 y 1,30 √(E/Fy)
+    const c2 = cirsoc301(medio, zs, W, () => 3e6 * 20, 18, [-10, 10], 3e6).find(x => x.clase === 'columna')!;
+    const p = propsSeccion(medio.columna), bi = 0.4 - 2 * 0.0115, Z = (0.4 ** 3 - bi ** 3) / 4;
+    expect(c2.pared).toBe('no compacta');
+    expect(c2.phiMn).toBeLessThan(0.9 * Z * FY_F24);
+    expect(c2.phiMn).toBeGreaterThan(0.9 * p.W * FY_F24);
+  });
+});

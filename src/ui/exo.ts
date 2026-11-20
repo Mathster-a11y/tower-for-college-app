@@ -7,10 +7,12 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, vientoDeCuarto, cirsoc301, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
+import type { Viento102 } from '../engine/cargas/cirsoc102';
+import { datos201De } from '../engine/metodos/cirsoc';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, string | number> = {}, txt?: string) => {
@@ -159,8 +161,13 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const zPB = p.niveles[iPB]?.cota ?? 0;
     const sobre = alt.filter(x => x.z > zPB + 1e-6).sort((a, b) => a.z - b.z);
     if (sobre.length < 2) return null;
-    const zs = [zPB, ...sobre.map(x => x.z)], W = sobre.map(x => x.F);
-    const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
+    // métodos CIRSOC y FEM: el viento de resistencia del 102-25 (en FEM, con la frecuencia del modelo) y el ΣJ de la sección real
+    const w102 = vientoReglamento();
+    const zs = [zPB, ...sobre.map(x => x.z)];
+    const W = w102 ? sobre.map(x => w102[dir].niveles.find((n: { z: number }) => Math.abs(n.z - (x.z - zPB)) < 1e-6)?.W ?? 0) : sobre.map(x => x.F);
+    const rg0 = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
+    const roto = estado.calculo.cirsoc?.corr[dir === 'A' ? 'rotoA' : 'rotoB'];
+    const rg = w102 && roto ? { ...rg0, J: roto.SJ } : rg0;
     const E = moduloHormigon(p.hormigon || 'H30');
     const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
     // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
@@ -182,11 +189,28 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
 }
 let ultimoError = '';
 
+/** el viento del 102-25 si el método sigue las reglas del CIRSOC (CIRSOC o FEM); si no, null (el de la planilla o la guía) */
+export function vientoReglamento(): Viento102 | null {
+  const m = estado.config.metodo;
+  return m === 'cirsoc' || m === 'fem' ? estado.calculo.fem?.viento ?? estado.calculo.cirsoc?.viento ?? null : null;
+}
+/** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
+export function verif301(d: DatosExo & { entrada: EntradaExo }) {
+  const en = d.entrada, reglamento = !!vientoReglamento();
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos: reglamento ? COMBOS_101_25 : COMBOS_CURSO, costura: d.def.sinCostura ? false : true });
+}
+/** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
+export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {
+  const n = d.r.u.length - 1, w = vientoReglamento();
+  if (w) { const limD = datos201De(estado.proyecto).limiteDeriva; return { u: d.r.u[n] * w.servicio.relacion, lim: d.h / limD, texto: `deriva de servicio (${fmt(w.servicio.relacion * 100, 0)} % del viento de cálculo) ≤ h/${limD}` }; }
+  return { u: d.r.u[n], lim: d.h / (d.def.limiteH ?? 500), texto: `flecha ≤ h/${d.def.limiteH ?? 500}` };
+}
 export function estadoExo(): EstadoChip {
   if (!estado.proyecto.exo) return 'pendiente';
   const ds = (['A', 'B'] as const).map(d => datosExo(d));
   if (ds.some(d => !d)) return 'revisar';
-  return ds.every(d => d!.r.controles.every(c => c.estado === 'verifica') && d!.r.u[d!.r.u.length - 1] <= d!.h / (d!.def.limiteH ?? 500)) ? 'verifica' : 'no verifica';
+  const reglamento = !!vientoReglamento() && estado.proyecto.exo.material !== 'hormigon';
+  return ds.every(d => (reglamento ? verif301(d!).every(x => x.verifica) : d!.r.controles.every(c => c.estado === 'verifica')) && flechaExo(d!).u <= flechaExo(d!).lim) ? 'verifica' : 'no verifica';
 }
 
 // ------------------------------------------------------------------ panel
@@ -205,13 +229,15 @@ export function panelExo(c: H) {
   }
   const d = datosExo();
   if (d) {
-    const n = d.r.u.length - 1, lim = d.h / (def.limiteH ?? 500);
-    const malos = d.r.controles.filter(x => x.estado !== 'verifica').length;
+    const n = d.r.u.length - 1, fl = flechaExo(d), relS = fl.u / (d.r.u[n] || 1);
+    const reglamento = !!vientoReglamento() && def.material !== 'hormigon';
+    const malos = reglamento ? verif301(d).filter(x => !x.verifica).length : d.r.controles.filter(x => x.estado !== 'verifica').length;
+    if (vientoReglamento()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'fem' ? 'FEM' : 'CIRSOC'}: el viento de cada piso es el del CIRSOC 102-25 (de resistencia${estado.config.metodo === 'fem' ? ', con la frecuencia del modelo' : ''}), el ΣJ de los tabiques es el de la sección real, las barras se verifican con el CIRSOC 301/302 y las combinaciones del 101-25, y el desplazamiento se controla como deriva con el viento de servicio.`));
     c.append(h('div', { class: 'kpis' },
-      kpi('Flecha azotea', `${fmt(d.r.u[n] * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · límite ${fmt(lim * 1000, 0)}`, colorEstado(d.r.u[n] <= lim)),
+      kpi(vientoReglamento() ? 'Deriva de servicio' : 'Flecha azotea', `${fmt(fl.u * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * relS * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · ${fl.texto} = ${fmt(fl.lim * 1000, 0)}`, colorEstado(fl.u <= fl.lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi('J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
-      kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (tensión o pandeo)` : 'todas verifican', colorEstado(!malos))));
+      kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
     const ens = (['A', 'B'] as const).map(x => entradaExo(x, def)).filter(Boolean) as EntradaExo[];
     const peso = ens.length === 2 ? pesoExo(def, ens) : NaN;
     const bDim = h('button', { type: 'button', class: 'primario', title: 'Prueba los tubos del catálogo de menor a mayor y agranda solo la clase de barra que falla, con los dos vientos' }, 'Dimensionar: el más liviano que verifica');
@@ -263,6 +289,12 @@ export function panelExo(c: H) {
   const pp = h('label', { class: 'campo-linea' }); const cbp = h('input', { type: 'checkbox' }) as HTMLInputElement; cbp.checked = def.pesoPropio !== false;
   cbp.addEventListener('change', () => set(x => { x.pesoPropio = cbp.checked; })); pp.append(cbp, ' Peso propio del acero (carga repartida en cada barra)');
   fu.append(pp);
+  if (def.material !== 'hormigon') {
+    const sc = h('label', { class: 'campo-linea', title: 'CIRSOC 302, Tabla 2.2.1: los tubos sin costura admiten paredes un poco más esbeltas (1,12 y 1,40 √(E/Fy) en lugar de 1,05 y 1,30)' });
+    const cbs = h('input', { type: 'checkbox' }) as HTMLInputElement; cbs.checked = !!def.sinCostura;
+    cbs.addEventListener('change', () => set(x => { x.sinCostura = cbs.checked || undefined; })); sc.append(cbs, ' Tubos sin costura (CIRSOC 302)');
+    fu.append(sc);
+  }
   // ficha E como el Citicorp: columnas a los cuartos y columna de esquina que no llega al tope de cada módulo
   if (def.tipo === 'E') {
     const tilde = (txt: string, titulo: string, on: boolean, f: (x: ExoDef, v: boolean) => void) => { const l = h('label', { class: 'campo-linea', title: titulo }); const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = on; cb.addEventListener('change', () => set(x => { f(x, cb.checked); delete x.barras; })); l.append(cb, ' ', txt); return l; };
@@ -277,16 +309,19 @@ export function panelExo(c: H) {
     c.append(seccion('Barras más cargadas', tablaValores(['Barra', 'clase', 'N (t)', 'M (tm)', 'σ (kg/cm²)', 'λ', ''],
       peores.map(x => [`${x.cara} · ${x.id}`, x.clase, x.N, x.M, x.sigma / 10, x.lambda, x.estado === 'verifica' ? '✓' : '✗']), [0, 0, 1, 2, 0, 0, 0])).el);
     c.append(h('p', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'}: E = ${fmt(def.E / 10, 0)} kg/cm², σ adm = ${fmt(def.sigmaAdm / 10, 0)} kg/cm². Pandeo: N ≤ π²·E·I / (1,7·L²) y λ = L / i ≤ 200. Los valores con el viento ${d.dir}.`));
-    // CIRSOC 301 (estados límite): las barras de acero con 1,2·D + 1,6·W
+    // CIRSOC 301/302 (estados límite): en los métodos CIRSOC y FEM, con las combinaciones del 101-25 y el viento de
+    // resistencia del 102-25; en planilla y guía, de referencia, con 1,2·D + 1,6·W y el viento de la planilla
     if (def.material !== 'hormigon') {
-      const en = d.entrada;
-      const v = cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos);
+      const reglamento = !!vientoReglamento();
+      const v = verif301(d);
       const malas = v.filter(x => !x.verifica);
       const peores = [...v].sort((a, b) => b.ratio - a.ratio).slice(0, 10);
-      const sec = seccion(`CIRSOC 301 · ${v.length - malas.length} de ${v.length} barras verifican`,
-        h('p', { class: 'nota' }, 'Estados límite (LRFD), acero F-24 (Fy = 2400 kg/cm²): 1,2·D + 1,6·W, con el viento de los dos lados. Tracción φ·Pn = 0,9·Fy·A; compresión φ·Pn = 0,85·Fcr·A con λc = L/(r·π)·√(Fy/E); flexión φ·Mn = 0,9·Z·Fy; interacción H1-1a (Pu/φPn ≥ 0,2: Pu/φPn + 8/9·Mu/φMn ≤ 1) o H1-1b. La columna «σ adm» de arriba es el control simple del curso; este es el del reglamento.'),
-        tablaValores(['Barra', 'Pu (t)', 'Mu (tm)', 'φPn (t)', 'φMn (tm)', 'λc', 'interacción', ''],
-          peores.map(x => [`${x.cara} · ${x.id}`, x.Pu, x.Mu, x.Pu < 0 ? x.phiPc : x.phiPt, x.phiMn, x.lambdaC, x.ratio, `${x.ecuacion} ${x.verifica ? '✓' : '✗'}`]), [0, 1, 1, 0, 0, 2, 2, 0]));
+      const paredes = v.filter(x => x.pared !== 'compacta');
+      const sec = seccion(`CIRSOC 301/302 · ${v.length - malas.length} de ${v.length} barras verifican${reglamento ? '' : ' (referencia)'}`,
+        h('p', { class: 'nota' }, `Estados límite (LRFD), acero F-24 (Fy = 2400 kg/cm²). ${reglamento ? 'Combinaciones del CIRSOC 101-25 con el viento de resistencia del 102-25: 1,4 D; 1,2 D + 1,0 W; 0,9 D + 1,0 W' : 'Con el viento de la planilla (de servicio): 1,2·D + 1,6·W'}, con el viento de los dos lados. Tracción φ·Pn = 0,9·Fy·A; compresión φ·Pn = 0,85·Fcr·A con λc = L/(r·π)·√(Fy/E); flexión φ·Mn = 0,9·Mn (CIRSOC 302: Mp = Z·Fy si la pared es compacta, entre Mp y Fy·S si no); interacción H1-1a (Pu/φPn ≥ 0,2: Pu/φPn + 8/9·Mu/φMn ≤ 1) o H1-1b. Pared del tubo (302, Tabla 2.2.1, ${def.sinCostura ? 'sin' : 'con'} costura): compacta hasta ${def.sinCostura ? '1,12' : '1,05'}·√(E/Fy), esbelta (no verifica) desde ${def.sinCostura ? '1,40' : '1,30'}·√(E/Fy).${reglamento ? '' : ' El control de arriba (σ adm) es el simple del curso; este es el del reglamento.'}`),
+        tablaValores(['Barra', 'combinación', 'Pu (t)', 'Mu (tm)', 'φPn (t)', 'φMn (tm)', 'λc', 'b/t', 'pared', 'interacción', ''],
+          peores.map(x => [`${x.cara} · ${x.id}`, x.combinacion, x.Pu, x.Mu, x.Pu < 0 ? x.phiPc : x.phiPt, x.phiMn, x.lambdaC, x.bt, x.pared, x.ratio, `${x.ecuacion} ${x.verifica ? '✓' : '✗'}`]), [0, 0, 1, 1, 0, 0, 2, 1, 0, 2, 0]),
+        ...(paredes.length ? [h('p', { class: 'nota chica' }, `${paredes.length} barra${paredes.length > 1 ? 's' : ''} con la pared no compacta o esbelta: conviene un tubo de pared más gruesa.`)] : []));
       c.append(sec.el);
     }
     // viento de cuarto: 0,71·A + 0,71·B en las columnas de las esquinas (lo que se descubrió en el Citicorp en 1978)
