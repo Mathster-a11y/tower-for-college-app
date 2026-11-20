@@ -6,7 +6,7 @@
 import { estado, fmt } from './estado';
 import { formula, h, kpi, n, op, r, seccion, v, type H } from './comp';
 import { tablaValores, type Tam } from './diagramas';
-import { datos201De, recubrimientoMm, type DatosCirsoc201, type VerifPieza201 } from '../engine/metodos/cirsoc';
+import { CLASES_EXPOSICION, datos201De, recubrimientoMm, type DatosCirsoc201, type ExposicionHormigon, type VerifPieza201 } from '../engine/metodos/cirsoc';
 import { fcDe, N_POR_T, type VerifMuro201 } from '../engine/verificacion/cirsoc201';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -28,10 +28,12 @@ export function panelFlexCirsoc(c: H) {
   c.append(h('p', { class: 'nota' }, `Verificación por resistencia del CIRSOC 201-2005 (${cfg.verificacion}), en PB, muro por muro como la guía: almas a flexocompresión con su parte del momento, alas con la fuerza del par. Cargas mayoradas: combinaciones del 101-25 con el viento del 102-25 (1,0 W) en sus cuatro casos de carga${cfg.metodo === 'fem' ? ', con el momento y el corte de cada pieza que da el modelo FEM (no la rototraslación)' : ''}.`));
   const dat = seccion('Hormigón y armadura (CIRSOC 201)').cuerpo; c.append(dat.parentElement!);
   dat.append(h('div', { class: 'grilla2' },
-    elegir('Recubrimiento (Tabla 7.7.1)', [['interior', 'tabique interior · 20 mm'], ['exterior', 'al aire libre o contra el suelo · 30 mm']], d.recubrimiento, x => cambiar201({ recubrimiento: x })),
-    elegir('Clase de exposición (Tabla 2.1)', [['A1-A2', 'A1 o A2 · sin aumento'], ['A3-Q1-C1', 'A3, Q1 o C1 · +30 %'], ['marina-agresiva', 'costa (CL, M) o agresiva · +50 %']], d.exposicion, x => cambiar201({ exposicion: x })),
+    elegir('Tabique (200-24, Tabla 8.3)', [['interior', 'no expuesto al aire libre ni contra el suelo'], ['exterior', 'al aire libre o contra el suelo']], d.recubrimiento, x => cambiar201({ recubrimiento: x })),
+    elegir('Clase de exposición (200-24, Tablas 2.1 y 2.2)', Object.entries(CLASES_EXPOSICION).map(([k, v]) => [k as ExposicionHormigon, `${v.texto} · f'c ≥ ${v.fcMin} MPa`]), d.exposicion, x => cambiar201({ exposicion: x })),
+    elegir('Vida útil prevista', [['50', '50 años'], ['100', '100 años']], String(d.vidaUtil) as '50' | '100', x => cambiar201({ vidaUtil: +x as 50 | 100 })),
+    elegir('Control de ejecución (8.3.4)', [['con', 'con control · Δr = 5 mm'], ['sin', 'sin control · Δr = 10 mm']], d.control, x => cambiar201({ control: x })),
     elegir('Límite de deriva de servicio', [['400', 'h/400'], ['500', 'h/500 (como la guía)'], ['600', 'h/600']], String(d.limiteDeriva) as '400' | '500' | '600', x => cambiar201({ limiteDeriva: +x as 400 | 500 | 600 })),
-  ), h('p', { class: 'nota' }, `Recubrimiento ${recubrimientoMm(d)} mm · f'c = ${fcDe(p.hormigon || 'H30')} MPa (${p.hormigon || 'H30'}) · acero ADN 420.`));
+  ), h('p', { class: 'nota' }, `Recubrimiento nominal ${recubrimientoMm(d)} mm (CIRSOC 200-24, 8.3: Ref de la Tabla 8.3 + Δr) · f'c = ${fcDe(p.hormigon || 'H30')} MPa (${p.hormigon || 'H30'}; la clase ${d.exposicion} pide ${CLASES_EXPOSICION[d.exposicion].fcMin} MPa) · acero ADN 420.`));
   if (!vs.length) { c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.')); return; }
   const ok = vs.filter(x => x.verifica).length;
   c.append(h('div', { class: 'kpis' },

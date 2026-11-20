@@ -92,3 +92,27 @@ describe('método CIRSOC en la app', () => {
     expect(flex.muros[0].rhoNecesaria).toBeGreaterThan(rig.muros[0].rhoNecesaria);
   });
 });
+
+import { CLASES_EXPOSICION, datos201De, recubrimientoMm } from '../src/engine/metodos/cirsoc';
+import { leerProyecto } from '../src/engine/lector';
+describe('CIRSOC 200-24: recubrimiento y clase de exposición', () => {
+  it('Rnom = Ref (Tabla 8.3, tabiques in situ) + Δr (5 mm con control, 10 sin)', () => {
+    expect(recubrimientoMm({})).toBe(25);                                                  // interior, 50 años, con control
+    expect(recubrimientoMm({ recubrimiento: 'exterior' })).toBe(35);
+    expect(recubrimientoMm({ recubrimiento: 'exterior', vidaUtil: 100, control: 'sin' })).toBe(45);
+    expect(recubrimientoMm({ vidaUtil: 100 })).toBe(30);
+    expect(recubrimientoMm({ recManual: 40 })).toBe(40);
+  });
+  it('f\'c mínimo de la Tabla 2.5 (hormigón armado) y las clases viejas se migran', () => {
+    expect(CLASES_EXPOSICION.A3.fcMin).toBe(25);
+    expect(CLASES_EXPOSICION.M3.fcMin).toBe(40);
+    expect(datos201De({ cirsoc201: { exposicion: 'marina-agresiva' as never } }).exposicion).toBe('M1');
+    const p = { ...ejemploGuia(), cirsoc201: { exposicion: 'A3-Q1-C1' as never } };
+    expect(leerProyecto(JSON.parse(JSON.stringify(p))).ok).toBe(true);
+  });
+  it('el control de durabilidad aparece en el método CIRSOC', () => {
+    const p = { ...ejemploGuia(), calculo: { metodo: 'cirsoc' as const }, cirsoc201: { exposicion: 'M3' as const } };
+    const c = calcularProyecto(p).controles.find(x => x.nombre.startsWith("f'c mínimo"))!;
+    expect(c.estado).toBe('no verifica');                                                   // H30 < 40 MPa
+  });
+});

@@ -169,7 +169,10 @@ export function leerProyecto(x: unknown): Lectura {
     if (!esObj(c)) error('Los datos del hormigón (CIRSOC 201) están dañados.');
     else {
       if (!nulo(c.recubrimiento) && c.recubrimiento !== 'interior' && c.recubrimiento !== 'exterior') error('CIRSOC 201: recubrimiento «interior» o «exterior».');
-      if (!nulo(c.exposicion) && !['A1-A2', 'A3-Q1-C1', 'marina-agresiva'].includes(c.exposicion as string)) error('CIRSOC 201: clase de exposición desconocida.');
+      // clases del CIRSOC 200-24 y las tres que usaba la app antes (se migran al leer: datos201De)
+      if (!nulo(c.exposicion) && !['A1-A2', 'A3-Q1-C1', 'marina-agresiva', 'A1', 'A2', 'A3', 'CL1', 'CL2', 'M1', 'M2', 'M3', 'C1', 'C2', 'Q1', 'Q2', 'Q3'].includes(c.exposicion as string)) error('CIRSOC 201: clase de exposición desconocida.');
+      if (!nulo(c.vidaUtil) && c.vidaUtil !== 50 && c.vidaUtil !== 100) error('CIRSOC 200: la vida útil tiene que ser 50 o 100 años.');
+      if (!nulo(c.control) && c.control !== 'con' && c.control !== 'sin') error('CIRSOC 200: el control de ejecución es «con» o «sin».');
       if (!nulo(c.recManual) && !(num(c.recManual) && (c.recManual as number) > 0)) error('CIRSOC 201: el recubrimiento a mano tiene que ser un número mayor que 0.');
       if (!nulo(c.limiteDeriva) && ![400, 500, 600].includes(c.limiteDeriva as number)) error('CIRSOC 201: el límite de deriva tiene que ser 400, 500 o 600.');
     }

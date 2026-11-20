@@ -34,25 +34,56 @@ export function datosCirsoc(d: PlanillaDatos, w: Viento102): PlanillaDatos {
 // ---------------------------------------------------------------------------------------------------- verificación 201
 
 export type Recubrimiento = 'interior' | 'exterior';
-export type ExposicionHormigon = 'A1-A2' | 'A3-Q1-C1' | 'marina-agresiva';
+/** CIRSOC 200-24, Tablas 2.1 y 2.2: clases de exposición (generales que corroen la armadura y específicas) */
+export type ExposicionHormigon = 'A1' | 'A2' | 'A3' | 'CL1' | 'CL2' | 'M1' | 'M2' | 'M3' | 'C1' | 'C2' | 'Q1' | 'Q2' | 'Q3';
+export const CLASES_EXPOSICION: Record<ExposicionHormigon, { texto: string; fcMin: number; acMax: number }> = {
+  // Tabla 2.5: f'c mínimo y razón a/c máxima del hormigón armado
+  A1: { texto: 'A1: seco (interiores con HR < 65 %, revestidos, enterrados en suelo húmedo)', fcMin: 20, acMax: 0.6 },
+  A2: { texto: 'A2: húmedo (interiores con HR ≥ 65 %, exteriores protegidos de la lluvia)', fcMin: 20, acMax: 0.6 },
+  A3: { texto: 'A3: mojado y secado (exteriores expuestos a la lluvia)', fcMin: 25, acMax: 0.5 },
+  CL1: { texto: 'CL1: cloruros de origen no marino', fcMin: 30, acMax: 0.5 },
+  CL2: { texto: 'CL2: emanaciones de cloro', fcMin: 35, acMax: 0.45 },
+  M1: { texto: 'M1: ambiente marino a más de 1 km de la costa', fcMin: 30, acMax: 0.5 },
+  M2: { texto: 'M2: ambiente marino a menos de 1 km', fcMin: 35, acMax: 0.45 },
+  M3: { texto: 'M3: en contacto con el agua de mar', fcMin: 40, acMax: 0.4 },
+  C1: { texto: 'C1: congelación y deshielo sin sales', fcMin: 30, acMax: 0.45 },
+  C2: { texto: 'C2: congelación y deshielo con sales', fcMin: 35, acMax: 0.4 },
+  Q1: { texto: 'Q1: ataque químico moderado', fcMin: 30, acMax: 0.5 },
+  Q2: { texto: 'Q2: ataque químico fuerte', fcMin: 35, acMax: 0.45 },
+  Q3: { texto: 'Q3: ataque químico muy fuerte', fcMin: 40, acMax: 0.4 },
+};
+/** las clases que usaba la app antes del 200-24 */
+const CLASE_VIEJA: Record<string, ExposicionHormigon> = { 'A1-A2': 'A2', 'A3-Q1-C1': 'A3', 'marina-agresiva': 'M1' };
 export interface DatosCirsoc201 {
-  /** Tabla 7.7.1: tabique no expuesto (20 mm) o en contacto con el aire libre o el suelo (30 mm) */
+  /** tabique no expuesto al aire libre ni en contacto con el suelo (interior) o sí (exterior) */
   recubrimiento?: Recubrimiento;
-  /** clase de exposición (Tabla 2.1): A1/A2 sin aumento, A3/Q1/C1 +30 %, CL/M/C2/Q2/Q3 +50 % (costa, agresivos) */
+  /** clase de exposición (CIRSOC 200-24, Tablas 2.1 y 2.2): fija el f'c mínimo (Tabla 2.5) */
   exposicion?: ExposicionHormigon;
+  /** vida útil prevista (años): 50 o 100 (Tabla 8.3) */
+  vidaUtil?: 50 | 100;
+  /** control de ejecución (8.3.4): con control Δr = 5 mm; sin control, 10 mm */
+  control?: 'con' | 'sin';
   /** recubrimiento escrito a mano (mm), en lugar de la tabla */
   recManual?: number | null;
   /** límite de deriva de servicio: 400, 500 (como la guía) o 600 → h/límite */
   limiteDeriva?: 400 | 500 | 600;
 }
-export const DATOS_201_POR_DEFECTO: Required<DatosCirsoc201> = { recubrimiento: 'interior', exposicion: 'A1-A2', recManual: null, limiteDeriva: 500 };
-export const datos201De = (p: { cirsoc201?: DatosCirsoc201 | null }): Required<DatosCirsoc201> => ({ ...DATOS_201_POR_DEFECTO, ...(p.cirsoc201 ?? {}) });
-/** recubrimiento en mm (Tabla 7.7.1 con el aumento por exposición, o el escrito a mano) */
+export const DATOS_201_POR_DEFECTO: Required<DatosCirsoc201> = { recubrimiento: 'interior', exposicion: 'A2', vidaUtil: 50, control: 'con', recManual: null, limiteDeriva: 500 };
+export const datos201De = (p: { cirsoc201?: DatosCirsoc201 | null }): Required<DatosCirsoc201> => {
+  const d = { ...DATOS_201_POR_DEFECTO, ...(p.cirsoc201 ?? {}) };
+  const ex = d.exposicion as string;
+  return { ...d, exposicion: CLASE_VIEJA[ex] ?? (ex in CLASES_EXPOSICION ? (ex as ExposicionHormigon) : 'A2') };
+};
+/**
+ * recubrimiento nominal en mm (CIRSOC 200-24, 8.3): Rnom = Ref + Δr. Ref de la Tabla 8.3 para tabiques hormigonados
+ * in situ con barras de hasta Ø16: no expuesto 20 mm (50 años) o 25 (100); al aire libre o contra el suelo 30 o 35.
+ * Δr = 5 mm con control de ejecución y 10 sin control. O el escrito a mano.
+ */
 export function recubrimientoMm(d: DatosCirsoc201): number {
   const x = { ...DATOS_201_POR_DEFECTO, ...d };
   if (x.recManual && x.recManual > 0) return x.recManual;
-  const base = x.recubrimiento === 'exterior' ? 30 : 20;
-  return Math.round(base * (x.exposicion === 'A3-Q1-C1' ? 1.3 : x.exposicion === 'marina-agresiva' ? 1.5 : 1));
+  const ref = x.recubrimiento === 'exterior' ? (x.vidaUtil === 100 ? 35 : 30) : (x.vidaUtil === 100 ? 25 : 20);
+  return ref + (x.control === 'sin' ? 10 : 5);
 }
 
 export interface VerifPieza201 {
@@ -195,6 +226,10 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
       planilla: null, guia: top, unidad: 'm', estado: est(top <= def.h / lim && peorPiso <= 1 / lim),
       nota: `Viento de servicio de ${w.servicio.recurrencia} años (${nf(f * 100, 0)} % de la presión de cálculo). Azotea ${nf(top * 1000, 1)} mm (límite ${nf((def.h / lim) * 1000, 1)} mm); peor piso ${dondePiso}: 1/${peorPiso > 0 ? Math.round(1 / peorPiso) : '∞'}.` });
   }
+  // durabilidad: el f'c mínimo de la clase de exposición (CIRSOC 200-24, Tabla 2.5)
+  const d2 = datos201De(p), cl = CLASES_EXPOSICION[d2.exposicion], fcP = fcDe(p.hormigon || 'H30');
+  out.push({ grupo: 'Hormigón', nombre: `f'c mínimo de la clase de exposición ${d2.exposicion}`, criterio: `f'c ≥ ${cl.fcMin} MPa (y a/c ≤ ${String(cl.acMax).replace('.', ',')})`, fuente: 'CIRSOC 200-24, Tabla 2.5',
+    planilla: null, guia: fcP, unidad: 'MPa', estado: est(fcP >= cl.fcMin), nota: `${cl.texto}. Recubrimiento nominal ${recubrimientoMm(d2)} mm (Tabla 8.3 + Δr).` });
   // hormigón: CIRSOC 201, pieza por pieza
   for (const v of verif) {
     const grupo = `CIRSOC 201, viento ${v.dir}`;
