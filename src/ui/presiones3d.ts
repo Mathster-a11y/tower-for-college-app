@@ -56,7 +56,7 @@ export function capaPresiones(): { objetos: THREE.Object3D[]; maxP: number; minP
   const maxP = Math.max(0, ...caras.map(c => c.p)), minP = Math.min(0, ...caras.map(c => c.p));
   // la escala de colores es la del caso 1: así los casos con 75 % y 56,3 % se ven más claros
   const esc = { max: Math.max(maxP, ...caras.map(c => c.p1)), min: Math.min(minP, ...caras.map(c => c.p1)) };
-  const neutro = new THREE.Color(css('--tension-0', '#eceef0')), cPre = new THREE.Color(css('--carga', '#e07b00')), cSuc = new THREE.Color(css('--compresion', '#378add'));
+  const neutro = new THREE.Color(css('--tension-0', '#eceef0')), cPre = new THREE.Color(css('--compresion', '#378add')), cSuc = new THREE.Color(css('--traccion', '#e24b4a'));   // rojo tracción, azul compresión
   const pos: number[] = [], col: number[] = [];
   const c = new THREE.Color();
   for (const f of caras) {
@@ -151,8 +151,8 @@ export function leyendaPresiones(caja: HTMLElement, r: NonNullable<ReturnType<ty
   const i = (k: string) => { const x = document.createElement('i'); x.className = k; return x; };
   esc.append(s(fmt(r.escMin / 1000, 2)), i('s'), s('0'), i('p'), s(`+${fmt(r.escMax / 1000, 2)}`));
   caja.append(esc);
-  esc.title = `kN/m², escala del caso 1 · en este caso, de ${fmt(r.minP / 1000, 2)} a +${fmt(r.maxP / 1000, 2)} · + empuja (naranja), − succiona (azul) · ${r.mapa.fuente}${r.mapa.casos ? '' : ' · la planilla no tiene los casos de carga del 102-25'} · flechas: la fuerza de cada nivel`;
-  const nota = document.createElement('small'); nota.textContent = `kN/m² · ${r.mapa.fuente}`; caja.append(nota);
+  esc.title = `kN/m², escala del caso 1 · en este caso, de ${fmt(r.minP / 1000, 2)} a +${fmt(r.maxP / 1000, 2)} · + empuja: comprime la fachada (azul) · − succiona: la tracciona (rojo) · ${r.mapa.fuente}${r.mapa.casos ? '' : ' · la planilla no tiene los casos de carga del 102-25'} · flechas: la fuerza de cada nivel`;
+  const nota = document.createElement('small'); nota.textContent = `kN/m² · azul empuja · rojo succiona · ${r.mapa.fuente}`; caja.append(nota);
   // plano de corte en altura
   const sel = document.createElement('select'); sel.className = 'corte';
   sel.append(new Option('Sin corte', ''));

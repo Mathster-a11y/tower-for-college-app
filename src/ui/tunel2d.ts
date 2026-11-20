@@ -134,7 +134,10 @@ function dibujar() {
   const { nx, ny, solido } = c.geo, { ux, uy, rho } = c.campo;
   if (!imagen || imagen.width !== nx || imagen.height !== ny) { imagen = new ImageData(nx, ny); auxiliar = document.createElement('canvas'); auxiliar.width = nx; auxiliar.height = ny; }
   const px = imagen.data;
-  const fondo = rgb(css('--lienzo', '#ffffff')), neg = rgb(css('--compresion', '#378add')), pos = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
+  // convención de la app: rojo tracción, azul compresión. La presión que empuja (comprime) va en azul y la succión en
+  // rojo; el giro y la velocidad no son tracción ni compresión: van con otros colores (naranja/violeta y verde)
+  const fondo = rgb(css('--lienzo', '#ffffff')), comp = rgb(css('--compresion', '#378add')), trac = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
+  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd')), rapido = rgb(css('--deformada', '#1d9e75'));
   const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
   if (cfg.vista === 'vorticidad') {
     if (!vort || vort.length !== nx * ny) vort = new Float32Array(nx * ny);
@@ -150,9 +153,9 @@ function dibujar() {
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);           // y de la red hacia arriba
     if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
-    if (cfg.vista === 'vorticidad') { const w = vort![q] / escV; mezcla(fondo, w >= 0 ? pos : neg, Math.min(1, Math.abs(w)), k); }
-    else if (cfg.vista === 'velocidad') { const s = Math.hypot(ux[q], uy[q]) / U0; mezcla(neg, pos, Math.min(1, s / 1.6), k); }
-    else { const cp = (rho[q] - 1) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? pos : neg, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
+    if (cfg.vista === 'vorticidad') { const w = vort![q] / escV; mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k); }
+    else if (cfg.vista === 'velocidad') { const s = Math.hypot(ux[q], uy[q]) / U0; mezcla(fondo, rapido, Math.min(1, s / 1.6), k); }
+    else { const cp = (rho[q] - 1) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
   }
   auxiliar!.getContext('2d')!.putImageData(imagen, 0, 0);
   const g = cv.getContext('2d')!;
@@ -181,7 +184,7 @@ export function centroTunel(c: H, tam: Tam) {
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
     h('div', { class: 'tunel-marco' }, lienzo),
-    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no. ${cfg.vista === 'vorticidad' ? 'Color: giro del aire (rojo antihorario, azul horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de azul (quieto) a rojo (1,6 veces la de entrada).' : 'Color: presión (rojo empuja, azul succiona), en Cp.'}`),
+    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no. ${cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'}`),
   );
   if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2) { cr.cuadrosSinMirar = 0; correr(true); }
   dibujar();

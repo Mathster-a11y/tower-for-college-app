@@ -1167,24 +1167,26 @@ button.peligro { color: var(--mal); }
 .exo-dibujo .ex-subtitulo { font: 600 12.5px var(--fuente); fill: var(--ink); }
 .exo-dibujo .ex-nota { font: 11px var(--fuente); fill: var(--ink2); }
 .exo-dibujo .ex-valor { font: 600 11px var(--mono); }
-.exo-dibujo .ex-valor.traccion { fill: var(--compresion); } .exo-dibujo .ex-valor.compresion { fill: var(--traccion); }
+.exo-dibujo .ex-valor.traccion { fill: var(--traccion); } .exo-dibujo .ex-valor.compresion { fill: var(--compresion); }
 .exo-dibujo .ex-torre { fill: color-mix(in srgb, var(--ink2) 7%, transparent); stroke: var(--edge); }
 .exo-dibujo .ex-losa { stroke: var(--hair); stroke-width: .8; }
 .exo-dibujo .ex-barra { stroke-linecap: round; cursor: help; }
-.exo-dibujo .ex-barra.traccion { stroke: var(--compresion); } .exo-dibujo .ex-barra.compresion { stroke: var(--traccion); }
+.exo-dibujo .ex-barra.traccion { stroke: var(--traccion); } .exo-dibujo .ex-barra.compresion { stroke: var(--compresion); }
 .exo-dibujo .ex-barra:hover { stroke: var(--elegido); }
 .exo-dibujo .ex-momento { fill: color-mix(in srgb, var(--reaccion) 20%, transparent); stroke: var(--reaccion); stroke-width: .7; }
 .exo-dibujo .ex-apoyo { fill: var(--ink2); }
 .exo-dibujo .ex-viento { stroke: var(--carga); stroke-width: 1.4; } .exo-dibujo .ex-viento-punta { fill: var(--carga); }
 .exo-dibujo .ex-eje { stroke: var(--ink2); stroke-width: 1; }
 .exo-dibujo .ex-limite { stroke: var(--mal); stroke-dasharray: 5 3; stroke-width: 1.2; }
-.exo-dibujo .ex-serie.tab { fill: var(--accent); } .exo-dibujo .ex-serie.exo { fill: var(--carga); }
+/* quién toma el viento: no es tracción ni compresión, así que ni rojo ni azul (tabiques gris, exo violeta como en el 3D) */
+.exo-dibujo .ex-serie.tab { fill: var(--ink2); } .exo-dibujo .ex-serie.exo { fill: var(--reaccion); }
 .exo-dibujo .ex-serie.sin { fill: var(--dim); } .exo-dibujo .ex-serie.con { fill: var(--deformada); }
 .exo-dibujo .ex-linea { fill: none; stroke-width: 2.2; } .exo-dibujo .ex-linea.sin { stroke: var(--dim); stroke-dasharray: 5 3; } .exo-dibujo .ex-linea.con { stroke: var(--deformada); }
 .tarjeta-vacia { border: 1px dashed var(--edge); border-radius: 10px; padding: 18px; margin: 16px; background: var(--panel); }
 
 /* exoesqueleto: modos del alzado y detalle de barra */
-.exo-dibujo { --ex-trac: var(--compresion); --ex-comp: var(--traccion); --ex-neutro: color-mix(in srgb, var(--ink2) 18%, var(--lienzo)); }
+/* convención de toda la app: rojo tracción, azul compresión */
+.exo-dibujo { --ex-trac: var(--traccion); --ex-comp: var(--compresion); --ex-neutro: color-mix(in srgb, var(--ink2) 18%, var(--lienzo)); }
 .exo-dibujo .ex-barra.neutra { stroke: var(--dim); }
 .exo-dibujo .ex-toque { stroke: transparent; stroke-width: 14; cursor: pointer; }
 .exo-dibujo .ex-g-barra:hover .ex-barra, .exo-dibujo .ex-g-barra.elegida .ex-barra { stroke: var(--elegido); }
@@ -1286,8 +1288,8 @@ button.peligro { color: var(--mal); }
 .vista3d .leyenda-presiones3d.arriba { top: 8px; bottom: auto; }
 .leyenda-presiones3d .escala { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
 .leyenda-presiones3d .escala i { flex: 1; height: 8px; border-radius: 4px; }
-.leyenda-presiones3d .escala i.s { background: linear-gradient(90deg, var(--compresion), color-mix(in srgb, var(--compresion) 15%, #eceef0)); }
-.leyenda-presiones3d .escala i.p { background: linear-gradient(90deg, color-mix(in srgb, var(--carga) 15%, #eceef0), var(--carga)); }
+.leyenda-presiones3d .escala i.s { background: linear-gradient(90deg, var(--traccion), color-mix(in srgb, var(--traccion) 15%, #eceef0)); }
+.leyenda-presiones3d .escala i.p { background: linear-gradient(90deg, color-mix(in srgb, var(--compresion) 15%, #eceef0), var(--compresion)); }
 .leyenda-presiones3d small { display: block; color: var(--ink2); }
 .leyenda-presiones3d select.corte { display: block; margin: 5px 0 2px; font-size: 11px; max-width: 100%; }
 .leyenda-presiones3d .casos { display: flex; align-items: center; gap: 4px; margin: 4px 0 0; }

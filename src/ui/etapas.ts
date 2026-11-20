@@ -710,8 +710,8 @@ const flexion: Etapa = {
       const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
       c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
         series: [
-          { nombre: 'tracción máxima, descargado (0,7 t/m²)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t') },
-          { nombre: 'compresión máxima, cargado (0,9 t/m²)', color: 'compresion', tipo: 'linea', puntos: pts('c') },
+          { nombre: 'fibra más traccionada, descargado (0,7 t/m², punteada)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t'), porSigno: true },
+          { nombre: 'fibra más comprimida, cargado (0,9 t/m², llena)', color: 'compresion', tipo: 'linea', puntos: pts('c'), porSigno: true },
         ],
         referencias: Math.min(...pts('c').map(p => p.x)) < -adm * 0.5 ? [{ x: -adm, texto: `σbk −${adm}` }] : [],
         alturas: Math.abs(z - (f.niveles[0]?.z ?? 0)) > 1e-6 ? [{ z, texto: `se ve: ${nomNivel}` }] : [],

@@ -42,7 +42,8 @@ function dibujarCorte(c: Float32Array): HTMLCanvasElement {
     const k = (y * G.nx + x) * 4, p = ((G.ny - 1 - y) * G.nx + x) * 4;
     if (c[k + 3] === 0) { img.data[p] = 34; img.data[p + 1] = 34; img.data[p + 2] = 51; img.data[p + 3] = 255; continue; }
     const s = Math.min(1, Math.hypot(c[k], c[k + 1], c[k + 2]) / 0.1);
-    img.data[p] = 40 + 200 * s; img.data[p + 1] = 90 + 60 * (1 - Math.abs(s - 0.5) * 2); img.data[p + 2] = 220 - 180 * s; img.data[p + 3] = 255;
+    // velocidad: de blanco (quieto) a verde (rápido); el rojo y el azul quedan para tracción y compresión
+    img.data[p] = 255 - 226 * s; img.data[p + 1] = 255 - 97 * s; img.data[p + 2] = 255 - 138 * s; img.data[p + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   return cv;
@@ -65,7 +66,7 @@ export function seccionPruebaGpu(redibujar: () => void): H {
     ));
     const texto = `Placa: ${r.adaptador || 'sin nombre'} · ${fmt(r.mlups, 0)} millones de celdas por segundo · ${fmt(r.fps, 1)} cuadros por segundo (${r.pasos} pasos en ${fmt(r.seg, 1)} s de medición). ${alcanza ? 'Alcanza para el túnel 3D.' : 'No alcanza para el túnel 3D en esta computadora: el 2D funciona igual.'}`;
     caja.append(h('p', { class: 'nota' }, texto));
-    if (r.corte) caja.append(h('figure', { class: 'diagrama' }, dibujarCorte(r.corte), h('figcaption', {}, 'Corte horizontal a 0,6 de la altura de la torre (velocidad: azul quieto, rojo rápido). Es solo para ver que el cálculo anda; el túnel 3D completo es la etapa V3.')));
+    if (r.corte) caja.append(h('figure', { class: 'diagrama' }, dibujarCorte(r.corte), h('figcaption', {}, 'Corte horizontal a 0,6 de la altura de la torre (velocidad: blanco quieto, verde rápido). Es solo para ver que el cálculo anda; el túnel 3D completo es la etapa V3.')));
     const copiar = h('button', { type: 'button', class: 'mini' }, 'Copiar el resultado');
     copiar.addEventListener('click', () => { void navigator.clipboard?.writeText(texto); copiar.textContent = 'Copiado'; });
     caja.append(copiar);

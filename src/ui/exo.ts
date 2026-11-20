@@ -1,6 +1,6 @@
 /**
  * Etapa 08 · Exoesqueleto: ficha y perfiles en el panel; en el centro, el alzado de una cara con el flujo de fuerzas
- * (barras en tracción en azul y en compresión en rojo, el grosor según |N|), los diagramas de M de columnas y vigas,
+ * (barras en tracción en rojo y en compresión en azul, el grosor según |N|), los diagramas de M de columnas y vigas,
  * el reparto del viento entre tabiques y exoesqueleto piso por piso y la deformada con y sin exoesqueleto.
  */
 import { estado, fmt } from './estado';
@@ -30,7 +30,7 @@ let barraSel: string | null = null;
 let agregando: 'diagonal' | 'viga' | 'columna' | null = null;
 let nudoA: [number, number] | null = null;
 const MODOS: [ModoExo, string, string][] = [
-  ['N', 'Flujo de fuerzas (N)', 'Tracción en azul, compresión en rojo; el grosor según |N|.'],
+  ['N', 'Flujo de fuerzas (N)', 'Tracción en rojo, compresión en azul; el grosor según |N|.'],
   ['M', 'Momentos (M)', 'Diagrama de momento flector de columnas y vigas, del lado traccionado.'],
   ['Q', 'Cortes (Q)', 'Diagrama de corte de columnas y vigas.'],
   ['sigma', 'Tensión en las fibras (σ)', 'Las dos caras de cada barra pintadas con su tensión σ = N/A ± M/W, comparada con la admisible.'],

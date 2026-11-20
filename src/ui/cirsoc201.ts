@@ -99,7 +99,7 @@ function dibujoNM(m: VerifMuro201, W: number, H_: number): SVGSVGElement {
   el('text', { x: X(0) + 6, y: Y(y1) + 12, 'font-size': 12, fill: 'currentColor' }, 'φPn (t)');
   el('text', { x: X(xm * 0.35), y: Y(m.diagrama.phiPnMax / N_POR_T) - 6, 'font-size': 11, fill: 'currentColor' }, `φPn,máx = ${fmt(m.diagrama.phiPnMax / N_POR_T, 0)} t`);
   // cada solicitación (combinación · caso de viento · sentido); la peor, más grande y con su nombre
-  sol.forEach(q => el('circle', { cx: X(q.x), cy: Y(q.y), r: q.peor ? 6 : 3.5, fill: q.peor ? 'var(--mal, #c62828)' : 'var(--accent, #1a6bbd)', 'fill-opacity': q.peor ? 1 : 0.7 }));
+  sol.forEach(q => el('circle', { cx: X(q.x), cy: Y(q.y), r: q.peor ? 6 : 3.5, fill: q.peor ? 'var(--elegido, #ef9f27)' : 'var(--ink2, #5f6b76)', 'fill-opacity': q.peor ? 1 : 0.7 }));
   const pe = sol.find(q => q.peor);
   if (pe) { const der = X(pe.x) > W * 0.55; el('text', { x: X(pe.x) + (der ? -10 : 10), y: Y(pe.y) + 18, 'text-anchor': der ? 'end' : 'start', 'font-size': 11, fill: 'currentColor' }, `peor con ρ mín: ${m.peor.combinacion}`); }
   return svg;
