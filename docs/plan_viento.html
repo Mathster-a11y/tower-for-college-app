@@ -52,7 +52,7 @@ svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
 <body><div class="pag">
 
 <h1>Plan de trabajo · simulador de viento</h1>
-<p class="sub">Torre 3D · primera versión del plan · noviembre 2026 · <b>en curso: V1 y V2 hechas; V3 opcional</b>. Tres sistemas, de menor a mayor complejidad; cada uno sirve solo y prepara el siguiente.</p>
+<p class="sub">Torre 3D · primera versión del plan · noviembre 2026 · <b>en curso: V1 y V2 hechas; prototipo de V3 listo, falta medirlo en una notebook</b>. Tres sistemas, de menor a mayor complejidad; cada uno sirve solo y prepara el siguiente.</p>
 
 <div class="tarjeta gris">
 <b>En una frase.</b> Primero <b>V1</b>, las presiones del CIRSOC 102-25 pintadas sobre la torre en el 3D, sin simular nada.
@@ -219,6 +219,7 @@ números de ningún método, no van al Excel y no dimensionan. Sirven para <b>ve
     Tolerancias amplias y explicadas. Los estudios profesionales en 3D también se dispersan en los costados y en sotavento.</li>
   <li>Rendimiento: la meta es al menos 10 cuadros por segundo con el tamaño liviano en una notebook típica de estudiante con video integrado.</li>
 </ul>
+<p class="nota"><b>Prototipo hecho:</b> <code>src/viento/lbm3d.ts</code> (referencia en JavaScript, con pruebas en <code>test/lbm3d.test.ts</code>) y <code>src/viento/lbm3dGpu.ts</code> (WebGPU), que da lo mismo que la referencia (peor diferencia 1,3·10⁻⁶ después de 120 pasos: <code>tools/verificar_lbm3d_gpu.cjs</code> con <code>tools/gpu/</code>). En la app: Viento → Túnel 2D → «Túnel 3D: probar la placa de video», que corre la grilla liviana y dice si alcanza (10 cuadros por segundo a 20 pasos por cuadro, unos 164 millones de celdas por segundo). Falta correrla en una notebook típica de estudiante para decidir si se sigue con V3.</p>
 <h3>Riesgos</h3>
 <ul>
   <li>Rendimiento en notebooks con video integrado, y WebGPU incompleto en algunos navegadores (está V2 de respaldo).</li>
@@ -229,7 +230,7 @@ números de ningún método, no van al Excel y no dimensionan. Sirven para <b>ve
 <h2><span class="n">4</span>Orden y cuándo se pasa a la siguiente</h2>
 <div class="paso"><div class="b">1</div><div><b>V1 completa</b><small>Se cierra con los tests de W por nivel y de torsión, y con la vista entrando a la lámina.</small></div></div>
 <div class="paso"><div class="b">2</div><div><b>V2: primero el núcleo en JavaScript con los tests de Poiseuille y del cuadrado; después la versión en WebGL2 y la interfaz</b><small>Se cierra cuando el St del cuadrado da en rango y la vista va fluida en una notebook común.</small></div></div>
-<div class="paso"><div class="b">3</div><div><b>Prototipo de V3 (una sesión)</b><small>Solo el núcleo D3Q19 en WebGPU con un cubo, para medir la velocidad. Si da al menos 10 cuadros por segundo en tamaño liviano, se sigue; si no, V3 se deja y se mejora V2.</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Prototipo de V3 (una sesión) · hecho, falta medir</b><small>Solo el núcleo D3Q19 en WebGPU con un cubo, para medir la velocidad. Si da al menos 10 cuadros por segundo en tamaño liviano, se sigue; si no, V3 se deja y se mejora V2.</small></div></div>
 <div class="paso"><div class="b">4</div><div><b>V3 completa</b><small>Perfil de entrada del 102-25, la torre del proyecto, Cp medio, vereda, y los tests del cubo y del prisma.</small></div></div>
 
 <table>

@@ -12,6 +12,7 @@ import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
+import { seccionPruebaGpu } from './pruebaGpu';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
 const RE: Record<string, { Re: number; cs: number; texto: string }> = {
@@ -222,6 +223,9 @@ export function panelTunel(c: H) {
   panelMed = h('div', {});
   m.append(panelMed);
   actualizarMediciones();
+  const gp = seccion('Túnel 3D: probar la placa de video').cuerpo; c.append(gp.parentElement!);
+  const ponerGpu = () => { gp.replaceChildren(seccionPruebaGpu(ponerGpu)); };
+  ponerGpu();
 }
 
 let ultimaMed = 0;
