@@ -794,12 +794,25 @@ function traerDeLaHoja(l: Lectura) {
   finally { aplicandoRemoto = false; }
   mensaje(`Cambios traídos de Google Sheets (versión ${l.version})${avisos.length ? ` · ${avisos.length} aviso${avisos.length > 1 ? 's' : ''}: ${avisos[0]}` : ''}.`);
 }
-async function conectarSheets(url: string) {
+/** la planilla cambió mientras la app quería escribir (otro editor o una edición a mano): que decida el alumno */
+async function conflictoSheets(version: number) {
+  const s = sincro;
+  if (!s) return;
+  const r = await tarjeta({ tipo: 'pregunta', titulo: 'La planilla de Google Sheets cambió',
+    texto: `Mientras editabas en la app, la planilla pasó a la versión ${version} (otra persona o una edición a mano). No se pisó nada. ¿Con cuál te quedás?`,
+    botones: ['Traer la de la planilla', 'Escribir la de la app encima', 'Decidir después'] });
+  try {
+    if (r.boton === 0) await s.traer();
+    else if (r.boton === 1) await s.escribir(paqueteActual(), true);
+    else mensaje('Sincronización en pausa hasta que elijas (Exportar → Sincronizar con Google Sheets).');
+  } catch (e) { fallo('No se pudo resolver el cambio de la planilla', e); }
+}
+async function conectarSheets(url: string, clave: string) {
   sincro?.detener();
-  const s = new SincroSheets(url, { remoto: traerDeLaHoja, estado: (t, error) => { mensaje(t); if (error) pistaSheets('Sin conexión: revisá la dirección'); } });
+  const s = new SincroSheets(url, { remoto: traerDeLaHoja, estado: (t, error) => { mensaje(t); if (error) pistaSheets('Sin conexión: revisá la dirección y la clave'); }, conflicto: v => { void conflictoSheets(v); } }, undefined, clave);
   const r = await s.conectar(paqueteActual);
   sincro = s; s.iniciar(5000);
-  try { localStorage.setItem(CLAVE_SHEETS, url); } catch { /* sin almacenamiento: hay que volver a conectar la próxima vez */ }
+  try { localStorage.setItem(CLAVE_SHEETS, JSON.stringify({ url, clave })); } catch { /* sin almacenamiento: hay que volver a conectar la próxima vez */ }
   pistaSheets('Conectado: los cambios van y vienen solos');
   mensaje(r === 'leido' ? 'Conectado con Google Sheets: se trajo el edificio de la planilla.' : 'Conectado con Google Sheets: se escribió el edificio en la planilla.');
 }
@@ -818,24 +831,33 @@ $('b-sheets').addEventListener('click', () => {
     <ol class="nota">
       <li>Subí la planilla a Google Drive y abrila con Google Sheets.</li>
       <li>Extensiones → Apps Script: pegá el código de <a href="https://github.com/mathster-a11y/tower-for-college-app/blob/main/docs/sheets/Codigo.gs" target="_blank" rel="noopener">docs/sheets/Codigo.gs</a> y guardá.</li>
+      <li>Elegí la función <b>configurar</b> y tocá Ejecutar: en el registro aparece la <b>clave</b>.</li>
       <li>Implementar → Nueva implementación → Aplicación web · Ejecutar como: yo · Acceso: cualquier persona.</li>
-      <li>Pegá acá la dirección que termina en <code>/exec</code>.</li>
+      <li>Pegá acá la dirección que termina en <code>/exec</code> y la clave.</li>
     </ol>
     <label class="campo"><span>Dirección de la aplicación web</span><input id="sh-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(actual)}"></label>
-    <p class="nota">Desde la planilla se editan las hojas «T3D Niveles», «T3D Muros» y los datos de la hoja «viento». Si la planilla ya tiene un edificio, al conectar se trae ese; si está vacía, se escribe el de la app. La dirección es la llave: no la compartas.</p>`, [
+    <label class="campo"><span>Clave (la que muestra «configurar»)</span><input id="sh-clave" type="password" autocomplete="off" value="${esc(sincro?.clave ?? '')}"></label>
+    <p class="nota">Desde la planilla se editan las hojas «T3D Niveles», «T3D Muros» y los datos de la hoja «viento». Si la planilla ya tiene un edificio, al conectar se trae ese; si está vacía, se escribe el de la app. Si la planilla cambia mientras editás en la app, no se pisa nada: la app te pregunta con cuál quedarte. La clave no se comparte: sin ella, la dirección sola no lee ni escribe.</p>`, [
     ...(sincro ? [['Desconectar', () => { desconectarSheets(); $<HTMLDialogElement>('dialogo').close(); }] as [string, () => void]] : []),
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
     ['Conectar', async () => {
-      const url = ($('sh-url') as HTMLInputElement).value.trim();
+      const url = ($('sh-url') as HTMLInputElement).value.trim(), clave = ($('sh-clave') as HTMLInputElement).value.trim();
+      if (!/^[0-9a-f]{32}$/i.test(clave)) { await avisar('error', 'Falta la clave', 'Ejecutá «configurar» en el editor de Apps Script de la planilla y copiá la clave que aparece en el registro (32 letras y números). Si la planilla tiene el script viejo, pegale el código nuevo.'); return; }
       if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { await avisar('error', 'Dirección no válida', 'Tiene que ser la dirección de la aplicación web de Apps Script: empieza con https://script.google.com/ y termina en /exec.'); return; }
       $<HTMLDialogElement>('dialogo').close();
       mensaje('Conectando con Google Sheets…');
-      try { await conectarSheets(url); } catch (e) { fallo('No se pudo conectar con Google Sheets', e); }
+      try { await conectarSheets(url, clave); } catch (e) { fallo('No se pudo conectar con Google Sheets', e); }
     }, true],
   ]);
 });
 // si la última vez quedó conectada, se vuelve a conectar sola
-try { const u = localStorage.getItem(CLAVE_SHEETS); if (u) conectarSheets(u).catch(e => { mensaje(`Google Sheets no responde: ${(e as Error).message}`); pistaSheets('Sin conexión: revisá la dirección'); }); } catch { /* sin almacenamiento */ }
+try {
+  const g = localStorage.getItem(CLAVE_SHEETS);
+  // antes se guardaba solo la dirección (script sin clave): hay que volver a conectar con la clave
+  const d = g && g.startsWith('{') ? JSON.parse(g) as { url: string; clave: string } : null;
+  if (d?.url && d.clave) conectarSheets(d.url, d.clave).catch(e => { mensaje(`Google Sheets no responde: ${(e as Error).message}`); pistaSheets('Sin conexión: revisá la dirección y la clave'); });
+  else if (g) pistaSheets('Volvé a conectar: el script de la planilla ahora pide una clave');
+} catch { /* sin almacenamiento */ }
 
 // notación matemática en toda la interfaz (sistema de diseño 2.1): se aplica a lo que se va dibujando
 {
