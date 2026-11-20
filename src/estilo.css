@@ -1386,3 +1386,6 @@ body.vista-planilla { display: flex; flex-direction: column; height: 100vh; marg
 .menu-contextual .mc-sub { position: relative; }
 .menu-contextual .mc-sub > .mc-hijo { display: none; position: absolute; left: 100%; top: -5px; }
 .menu-contextual .mc-sub.abierto > .mc-hijo { display: block; }
+
+/* método Combinado: estado de cada método en la tabla de comparación */
+.tabla td.n.ok { color: var(--ok); font-weight: 600; } .tabla td.n.mal { color: var(--mal); font-weight: 600; } .tabla td.n.revisar { color: var(--revisar); font-weight: 600; }

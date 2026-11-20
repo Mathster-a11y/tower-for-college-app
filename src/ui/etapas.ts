@@ -25,6 +25,7 @@ import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
 import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
 import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
 import { centroRigidezFem, panelRigidezFem, seccionRepartoFem } from './fem';
+import { centroCombinado, panelCombinado } from './combinado';
 
 /** los métodos que verifican el hormigón con el CIRSOC 201 (CIRSOC y FEM) */
 const usaCirsoc201 = () => estado.config.metodo === 'cirsoc' || estado.config.metodo === 'fem';
@@ -794,9 +795,10 @@ const resumen: Etapa = {
   id: 'resumen', nro: '✓', nombre: 'Resumen', rol: '--r-resumen', conFuente: false,
   icono: '<path d="M5 6l1.5 1.5L9 5M5 12l1.5 1.5L9 11M5 18l1.5 1.5L9 17M12 6h9M12 12h9M12 18h9"/>',
   globo: 'Resumen|Todos los controles juntos, con el valor de la planilla y el corregido, y los avisos del proyecto.',
-  sub: ['Controles', 'Avisos'],
-  panel(c, sub) { if (sub === 'Avisos') panelAvisos(c); else { panelResultados(c, false); c.append(h('p', { class: 'nota' }, 'Todos los controles están en el centro, agrupados; cada etapa muestra además los suyos con sus fórmulas.')); } },
+  get sub() { return estado.config.metodo === 'combinado' ? ['Comparación', 'Controles', 'Avisos'] : ['Controles', 'Avisos']; },
+  panel(c, sub) { if (sub === 'Avisos') panelAvisos(c); else if (sub === 'Comparación' && estado.config.metodo === 'combinado') panelCombinado(c); else { panelResultados(c, false); c.append(h('p', { class: 'nota' }, 'Todos los controles están en el centro, agrupados; cada etapa muestra además los suyos con sus fórmulas.')); } },
   centro(c) {
+    if (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación') { centroCombinado(c); return; }
     const cs = estado.calculo.controles ?? [];
     const grupos = [...new Set(cs.map(x => x.grupo))];
     c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const e = peor(cs.filter(x => x.grupo === g && x.estado !== 'informativo')); return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
@@ -808,7 +810,7 @@ const resumen: Etapa = {
       c.append(seccion('Diferencias con el texto de la guía', h('p', { class: 'nota' }, 'Números del texto de la guía «Edificio en torre» 2024 que no cierran con su propio procedimiento. El método «Guía» sigue el procedimiento.'), h('div', { class: 'scroll' }, t)).el);
     }
   },
-  nombreCentro: () => 'Resumen de controles',
+  nombreCentro: () => (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación' ? 'Comparación de los cuatro métodos' : 'Resumen de controles'),
   estado: () => peor((estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo')),
 };
 const ayuda: Etapa = {

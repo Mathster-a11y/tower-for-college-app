@@ -36,6 +36,7 @@ import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla
 import { libroGuia } from './xlsx/libros/libroGuia';
 import { datosRenovada, libroRenovada } from './xlsx/libros/libroRenovada';
 import { reporteFem } from './xlsx/libros/reporteFem';
+import { libroCombinado } from './xlsx/libros/libroCombinado';
 import { datos201De } from './engine/metodos/cirsoc';
 import { datosGuia } from './engine/metodos/guiaPasos';
 import { opcionesG } from './xlsx/opcionesG';
@@ -125,7 +126,7 @@ function dibujarTira(e: Etapa) {
     segMet.append(b);
   });
   t.append(h('span', { class: 'nota chica' }, 'Método'), segMet);
-  if (cfg.metodo === 'planilla') {
+  if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
     ([['actual', 'Anterior'], ['nuevo', '2025']] as const).forEach(([k, txt]) => {
       const b = h('button', { type: 'button', 'aria-pressed': String(cfg.version === k) }, txt);
@@ -134,7 +135,7 @@ function dibujarTira(e: Etapa) {
     });
     t.append(segV);
   }
-  if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem') {
+  if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
     ([['simple', 'Simple'], ['completa', 'Completa']] as const).forEach(([k, txt]) => {
       const b = h('button', { type: 'button', 'aria-pressed': String(cfg.verificacion === k) }, txt);
@@ -143,7 +144,7 @@ function dibujarTira(e: Etapa) {
     });
     t.append(h('span', { class: 'nota chica' }, 'Verificación'), segN);
   }
-  if (cfg.metodo === 'fem') {
+  if (cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
     ([['timoshenko', 'Timoshenko'], ['euler', 'Euler']] as const).forEach(([k, txt]) => {
       const b = h('button', { type: 'button', 'aria-pressed': String(cfg.teoria === k) }, txt);
@@ -152,7 +153,7 @@ function dibujarTira(e: Etapa) {
     });
     t.append(h('span', { class: 'nota chica' }, 'Piezas'), segT);
   }
-  if (cfg.metodo === 'planilla' || cfg.metodo === 'guia') {
+  if (cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
     ([['catedra', 'Cátedra'], ['app', 'App']] as const).forEach(([k, txt]) => {
       const b = h('button', { type: 'button', 'aria-pressed': String(cfg.armado === k) }, txt);
@@ -237,6 +238,16 @@ function dibujarEstadoCalculo() {
   }
   // resumen honesto (hallazgo 6 del informe técnico): dice cuántos controles se calcularon, cuáles quedan a revisar y
   // cuáles son solo informativos (dependen de datos que la app no tiene, como el estudio de suelos), y con qué método
+  const cmp = estado.calculo.combinado;
+  if (cmp && !estado.calculo.error) {
+    const el = $('estado-calculo');
+    const peor = Math.max(...Object.values(cmp.resumen).map(r => r.noVerifican));
+    el.className = `chip-estado ${peor ? 'no-verifica' : 'verifica'}`;
+    el.textContent = `No verifican: ${(['planilla', 'guia', 'cirsoc', 'fem'] as const).map(m => `${METODOS[m].corto} ${cmp.resumen[m].noVerifican}`).join(' · ')}`;
+    el.setAttribute('data-globo', 'Método Combinado|Los cuatro métodos con la misma torre: cuántos controles no verifican con cada uno. La comparación está en Resumen.');
+    el.style.cursor = 'pointer'; el.onclick = () => irA('resumen');
+    return;
+  }
   const cs = estado.calculo.controles ?? [];
   const malos = cs.filter(c => c.estado === 'no verifica').length, revisar = cs.filter(c => c.estado === 'atención').length;
   const info = cs.filter(c => c.estado === 'informativo').length, calculados = cs.length - info;
@@ -551,6 +562,17 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
+$('b-comparacion').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la comparación de métodos')) void descargarComparacion(); });
+/** comparación de métodos (etapa 7): la tabla del método Combinado con sus gráficos */
+async function descargarComparacion() {
+  try {
+    const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'combinado' as const } };
+    const cmp = estado.calculo.combinado ?? calcularProyecto(p).combinado;
+    if (!cmp) throw new Error('La comparación no se pudo hacer.');
+    descargar(nombreArchivo('_comparacion.xlsx'), await libroCombinado(cmp, estado.proyecto).xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    mensaje('Comparación de métodos descargada: la tabla de los cuatro métodos, con las diferencias y sus gráficos.');
+  } catch (e) { fallo('No se pudo armar la comparación', e); }
+}
 $('b-reporte-fem').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir el reporte FEM')) void descargarReporteFem(); });
 /** reporte FEM (etapa 6b): los números del modelo y sus diagramas (no es una calculadora: el modelo no cabe en fórmulas) */
 async function descargarReporteFem() {

@@ -6,7 +6,7 @@
  *  - «guia»: el procedimiento analítico de la guía «Edificio en torre» 2024 (hoy, los valores «Guía/CIRSOC» de la app);
  *  - «cirsoc»: CIRSOC 101-25, 102-25 y 201 (etapas 3 y 4, todavía no disponible);
  *  - «fem»: las reglas del CIRSOC con el reparto de un modelo de la torre (etapa 6, todavía no disponible);
- *  - «combinado»: corre todos y los compara (etapa 7, todavía no disponible).
+ *  - «combinado»: corre todos y los compara (etapa 7).
  *
  * El método elegido se guarda DENTRO del proyecto (campo «calculo»): el mismo archivo da los mismos resultados en
  * cualquier computadora (hallazgo 5 del informe técnico, docs/informes/analisis-tecnico-torre-3d.html).
@@ -37,7 +37,7 @@ export const METODOS: Record<IdMetodo, InfoMetodo> = {
   guia: { nombre: 'Guía', corto: 'Guía', disponible: true, reglas: 'El procedimiento analítico de la guía «Edificio en torre» 2024: Kz constante por debajo de 5 m, sin viento en PB ni en los subsuelos, J completo, rotación muro por muro y momento de rotación con las unidades bien.' },
   cirsoc: { nombre: 'CIRSOC', corto: 'CIRSOC', disponible: true, reglas: 'Cargas del CIRSOC 101-25 y 102-25 (viento por categoría de riesgo, frecuencia, G o Gf, cuatro casos de carga con torsión, combinaciones con 1,0 W), reparto de la guía y verificación por resistencia del CIRSOC 201-2005 (simple o completa).' },
   fem: { nombre: 'FEM', corto: 'FEM', disponible: true, reglas: 'Las reglas del CIRSOC con el reparto de un modelo de la torre: pseudo-3D con losas rígidas (Euler o Timoshenko), análisis modal para la frecuencia del viento y los cuatro casos de carga resueltos con el modelo.' },
-  combinado: { nombre: 'Combinado', corto: 'Combinado', disponible: false, reglas: 'Corre todos los métodos con la misma torre y los compara en una tabla.', etapa: 'etapa 7' },
+  combinado: { nombre: 'Combinado', corto: 'Combinado', disponible: true, reglas: 'Corre los cuatro métodos con la misma torre y los compara en una tabla (Resumen), con la diferencia contra la planilla y la capa de la que sale. Las etapas muestran la Planilla virgen.' },
 };
 export const IDS_METODO = Object.keys(METODOS) as IdMetodo[];
 
@@ -59,6 +59,7 @@ export const configMotor = (c: ConfigCalculo): { motor: Motor; metodo: ArmadoMot
 /** texto para informes, láminas y el resumen: «Planilla virgen · versión anterior · armado de la app» */
 export function describirConfig(c: ConfigCalculo): string {
   const partes = [METODOS[c.metodo].nombre];
+  if (c.metodo === 'combinado') return 'Combinado: Planilla virgen, Guía, CIRSOC y FEM';
   if (c.metodo === 'planilla') partes.push(c.version === 'nuevo' ? 'planilla 2025' : 'planilla anterior');
   if (c.metodo === 'planilla' || c.metodo === 'guia') partes.push(c.armado === 'catedra' ? 'armado de la cátedra' : 'armado de la app');
   if (c.metodo === 'cirsoc' || c.metodo === 'fem') partes.push(`verificación ${c.verificacion}`);

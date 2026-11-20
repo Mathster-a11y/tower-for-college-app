@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { calcularProyecto } from '../src/ui/estado';
 import { config, usarConfig } from '../src/engine/config';
 import { ejemploAsimetrico, ejemploGuia } from '../src/engine/modelo';
-import { CONFIG_POR_DEFECTO, configDe, describirConfig } from '../src/engine/metodos/tipos';
+import { CONFIG_POR_DEFECTO, METODOS, configDe, describirConfig } from '../src/engine/metodos/tipos';
 import { leerProyecto } from '../src/engine/lector';
 import { proyectoDesdeTablas, tablasProyecto } from '../src/xlsx/proyectoTablas';
 import { escribirLibro, leerLibro } from '../src/xlsx/tablas';
@@ -47,9 +47,13 @@ describe('el método va dentro del proyecto', () => {
     expect(r.ok && r.proyecto.calculo).toEqual({ metodo: 'guia', version: 'nuevo', armado: 'catedra', formulas: '2026.11' });
     const malo = leerProyecto(conCalculo({ metodo: 'magia' as never }));
     expect(malo.ok ? [] : malo.errores).toEqual(['Método de cálculo desconocido («magia»).']);
-    const futuro = leerProyecto(conCalculo({ metodo: 'combinado' }));
-    expect(futuro.ok && futuro.proyecto.calculo?.metodo).toBe('planilla');
-    expect(futuro.ok && futuro.avisos[0]).toMatch(/todavía no está/);
+    // un método que esta versión de la app no tiene habilitado (se simula con el Combinado)
+    METODOS.combinado.disponible = false;
+    try {
+      const futuro = leerProyecto(conCalculo({ metodo: 'combinado' }));
+      expect(futuro.ok && futuro.proyecto.calculo?.metodo).toBe('planilla');
+      expect(futuro.ok && futuro.avisos[0]).toMatch(/todavía no está/);
+    } finally { METODOS.combinado.disponible = true; }
   });
 
   it('viaja en las tablas «T3D» del Excel', async () => {

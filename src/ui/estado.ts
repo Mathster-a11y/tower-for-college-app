@@ -10,6 +10,7 @@ import { config, usarConfig } from '../engine/config';
 import { leerProyecto, textoErrores } from '../engine/lector';
 import { viento102, type Viento102 } from '../engine/cargas/cirsoc102';
 import { calcularFem, type ResultadoMetodoFem } from '../engine/metodos/fem';
+import { compararMetodos, type Comparacion } from '../engine/metodos/combinado';
 import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201 } from '../engine/metodos/cirsoc';
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
 
@@ -41,6 +42,8 @@ export interface Calculo {
   cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[] };
   /** método FEM: modelo, modos, casos de carga resueltos y reparto (cirsoc lleva el viento con las frecuencias del modelo) */
   fem?: ResultadoMetodoFem;
+  /** método Combinado: los cuatro métodos con la misma torre, comparados (las etapas muestran la Planilla virgen) */
+  combinado?: Comparacion;
   /** el último cálculo falló: los resultados que quedan son los del último cálculo bueno (de la revisión «revision») */
   error?: string;
   /** revisión del proyecto con la que se calcularon estos resultados (ver Estado.revision) */
@@ -58,6 +61,10 @@ export function calcularProyecto(proyecto: Proyecto): Calculo {
   return usarConfig(configMotor(c), () => calcularConConfig(proyecto, c));
 }
 function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
+  if (c.metodo === 'combinado') {
+    const base = calcularConConfig(proyecto, { ...c, metodo: 'planilla' });
+    return { ...base, config: c, combinado: compararMetodos(proyecto, calcularProyecto) };
+  }
   const asig = aPlanilla(proyecto);
   const res = calcularPlanilla(asig.datos);
   const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
