@@ -18,7 +18,7 @@ import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable } from './ui/comp';
 import { leerProyecto, textoErrores } from './engine/lector';
-import { IDS_METODO, METODOS, VERSION_FORMULAS, configMotor, describirConfig } from './engine/metodos/tipos';
+import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
 import { resaltarFilas } from './ui/grilla';
 import { abrirVistaPlanilla } from './ui/vistaPlanilla';
@@ -35,6 +35,8 @@ import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { libroGuia } from './xlsx/libros/libroGuia';
 import { datosRenovada, libroRenovada } from './xlsx/libros/libroRenovada';
+import { reporteFem } from './xlsx/libros/reporteFem';
+import { datos201De } from './engine/metodos/cirsoc';
 import { datosGuia } from './engine/metodos/guiaPasos';
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
@@ -549,6 +551,19 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
+$('b-reporte-fem').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir el reporte FEM')) void descargarReporteFem(); });
+/** reporte FEM (etapa 6b): los números del modelo y sus diagramas (no es una calculadora: el modelo no cabe en fórmulas) */
+async function descargarReporteFem() {
+  try {
+    const cfg = estado.config;
+    const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'fem' as const } };
+    const c = calcularProyecto(p);
+    if (!c.fem || !c.cirsoc) throw new Error(c.error ?? 'El cálculo del modelo no se pudo hacer.');
+    const libro = reporteFem({ p, fem: c.fem, verif: c.cirsoc.verif, controles: c.controles, rects: datosGuia(p, c.asig.piezas).rects, teoria: configDe(p).teoria, limiteDeriva: datos201De(p).limiteDeriva });
+    descargar(nombreArchivo('_reporte_fem.xlsx'), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    mensaje(`Reporte FEM descargado (piezas ${configDe(p).teoria === 'euler' ? 'Euler' : 'Timoshenko'}).${cfg.metodo !== 'fem' ? ` El método elegido es «${METODOS[cfg.metodo].nombre}»: el reporte da los números del método FEM.` : ''}`);
+  } catch (e) { fallo('No se pudo armar el reporte FEM', e); }
+}
 $('b-libro-renovada').addEventListener('click', () => { cerrarMenus(); void descargarRenovada(); });
 /** planilla renovada (etapa 5b): el método CIRSOC como calculadora cerrada, con la verificación del 201 simple o completa */
 async function descargarRenovada() {
