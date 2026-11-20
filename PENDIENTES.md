@@ -107,7 +107,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Mover con precisión: nodo de referencia, llevar a x, y o correr dx, dy
 - [x] Piezas tipo editables: doble clic abre las medidas (alma, ala sup. e inf. por separado) con J en vivo
 - [x] Áreas de influencia de la losa (botón «Áreas» en la planta) y copiarlas a «Área inf.» de los muros
-- [ ] Simulador de viento: **V1 hecha** (botón «p» del 3D: presiones del método elegido sobre las fachadas, flechas por nivel y los cuatro casos del 102-25; la planilla y la guía, solo el caso 1; falta el plano de corte en altura). V2 y V3, más adelante: plan en `docs/plan_viento.html` y `.pdf`, en tres etapas, V1 presiones del 102-25 en el 3D, V2 túnel 2D (Lattice Boltzmann, WebGL2) y V3 túnel 3D (WebGPU, opcional). Didáctico: no es un método ni va al Excel
+- [ ] Simulador de viento: **V1 hecha** (botón «p» del 3D: presiones del método elegido sobre las fachadas, flechas por nivel y los cuatro casos del 102-25; la planilla y la guía, solo el caso 1; con el plano de corte en altura). V2 y V3, más adelante: plan en `docs/plan_viento.html` y `.pdf`, en tres etapas, V1 presiones del 102-25 en el 3D, V2 túnel 2D (Lattice Boltzmann, WebGL2) y V3 túnel 3D (WebGPU, opcional). Didáctico: no es un método ni va al Excel
 - [ ] Exoesqueletos (diagrid, tubo arriostrado, megapórtico, torre inclinada): propuesta 5b, esperando qué tipos van primero
 
 ## Esperando a la cátedra

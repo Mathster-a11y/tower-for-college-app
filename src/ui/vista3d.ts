@@ -327,7 +327,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     // presiones del viento sobre las fachadas (simulador de viento, etapa V1): sin la deformada
     const pres = estado.capas.presiones && !roto ? capaPresiones() : null;
     leyP.hidden = !pres;
-    leyP.classList.toggle('arriba', !!tens);
+    leyP.classList.add('arriba');                       // arriba: abajo quedan el corte y la base, y la leyenda de σ
     if (pres) { pres.objetos.forEach(o => grupo.add(o)); leyendaPresiones(leyP, pres); }
     // viento
     const largo = 8;

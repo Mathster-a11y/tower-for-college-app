@@ -201,7 +201,7 @@ function dibujarAvance() {
 }
 function dibujarCapas() {
   const c = $('capas');
-  type Interruptor = Exclude<keyof typeof estado.capas, 'casoViento'>;
+  type Interruptor = Exclude<keyof typeof estado.capas, 'casoViento' | 'corteViento'>;
   const capas: [Interruptor, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [Interruptor, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [Interruptor, string, string]] : [])];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
