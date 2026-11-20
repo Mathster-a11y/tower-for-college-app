@@ -13,6 +13,7 @@
 import type { PlanillaDatos } from '../planilla';
 import { EXPOSICIONES, KN_POR_T, type Viento102 } from '../cargas/cirsoc102';
 import { tipoDe, type Proyecto, type Muro } from '../modelo';
+import { sueloCirsoc } from '../fundaciones';
 import type { PiezaEquivalente } from '../mapping';
 import type { RotoGuia } from '../correcciones';
 import { datosAlturaDe, partesDePieza, verificarPieza } from '../flexocompresion';
@@ -187,7 +188,8 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
   SJ: { A: number; B: number } | undefined,
   /** método FEM: la deformada de servicio del modelo (ya escalada al viento de servicio), en lugar de la ménsula equivalente */
   derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>): Control[] {
-  const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula/.test(c.nombre);
+  // fuera los de la guía que el reglamento hace distinto (y los del suelo y la resultante, que acá salen del 102-25)
+  const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula|^Excentricidad|^Tensión máxima en el suelo|^Tensión mínima en el suelo|^Resultante W \+ G/.test(c.nombre);
   // el J mínimo de la cátedra (h/500 con el viento de cálculo) queda como referencia: lo que manda es la deriva de servicio
   const out = base.filter(c => !fuera(c)).map(c => (/≥ J mínimo \(h\/500\)/.test(c.nombre)
     ? { ...c, estado: 'informativo' as Control['estado'], nota: `${c.estado === 'verifica' ? 'Cumple' : 'No cumple'} el criterio de la cátedra (h/500 con el viento de cálculo). En el CIRSOC manda la deriva de servicio (más abajo).${c.nota ? ` ${c.nota}` : ''}` }
@@ -206,6 +208,15 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
   out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con 0,9 D + 1,0 W', criterio: '0,9 · Me ≥ 1,0 · Mv (Me / Mv ≥ 1,11)', fuente: 'CIRSOC 101-25, art. 1.3.5 y 2.3.2',
     planilla: null, guia: vu.Me / vu.Mv, unidad: '', estado: est(0.9 * vu.Me >= vu.Mv),
     nota: `Mv = ${nf(vu.Mv, 0)} tm (M en PB + (Q en PB + franja de PB) · ${nf(vu.brazo, 2)} m) · Me = G · b1/2 = ${nf(vu.G, 0)} t · ${nf(p.fundacion.b1 / 2, 2)} m` });
+  // suelo (sección D del plan): platea rígida, combinaciones de servicio del 102-25 (Apéndice B.4.2) contra σt adm
+  const su = sueloCirsoc(p, w);
+  for (const d of su.dirs) {
+    const x = d.peor, ok = !x.vuelca && x.sMax <= su.sigmaAdm;
+    const parcial = d.combos.some(c => c.parcial && !c.vuelca);
+    out.push({ grupo: 'Estabilidad', nombre: `Presión en el suelo, viento ${d.dir}`, criterio: `σmáx ≤ σt adm = ${nf(su.sigmaAdm, 2)} kg/cm²; resultante en el núcleo central (si no, contacto parcial)`, fuente: 'CIRSOC 401, art. 7.4 · 101-25, C 2.2 · 102-25, B.4.2',
+      planilla: null, guia: x.sMax, unidad: 'kg/cm²', estado: !ok ? 'no verifica' : parcial ? 'atención' : 'verifica',
+      nota: d.combos.map(c => `${c.nombre}: ${c.vuelca ? 'la resultante sale de la platea' : `σ ${nf(c.sMax, 2)} / ${nf(c.sMin, 2)} kg/cm², e = ${nf(c.e, 2)} m${c.parcial ? ` > b/6 = ${nf(c.nucleo, 2)} m (contacto parcial en ${nf(c.contacto, 2)} m)` : ''}`}`).join(' · ') + `. G = ${nf(su.G, 0)} t, L = ${nf(su.Lt, 0)} t, M del viento en la fundación = ${nf(d.Mw, 0)} tm.` });
+  }
   // deriva de servicio: la deformada con el viento de servicio (Wa), contra h/límite y entrepiso/límite
   const lim = datos201De(p).limiteDeriva;
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0);

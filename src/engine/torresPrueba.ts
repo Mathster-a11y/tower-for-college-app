@@ -20,6 +20,8 @@ interface TorreDef {
   subsuelos?: number;
   sitio?: Partial<Sitio>;
   hormigon?: string;
+  /** tensión admisible del suelo (kg/cm²); vacío = 2,5 como la guía */
+  sigmaAdm?: number;
   piezas: PiezaDef[];
   /** retiros: desde el piso indicado (inclusive) hacia arriba la planta pasa a B × L */
   retiros?: { desde: number; B: number; L: number }[];
@@ -58,7 +60,7 @@ export function armarTorre(d: TorreDef): Proyecto {
   const p: Proyecto = {
     version: 1, nombre: d.nombre, alumno: '',
     sitio: { ...SITIO, ...d.sitio },
-    niveles, fundacion: { b1: d.L + 2, a1: d.B + 2 }, hormigon: d.hormigon ?? 'H30', muros,
+    niveles, fundacion: { b1: d.L + 2, a1: d.B + 2, ...(d.sigmaAdm ? { sigmaAdm: d.sigmaAdm } : {}) }, hormigon: d.hormigon ?? 'H30', muros,
   };
   // áreas de influencia de la losa de PB, como el botón «Copiar a los muros» de la herramienta Áreas
   const iPB = niveles.findIndex(n => n.cota === 0);
@@ -75,7 +77,7 @@ export const TORRES_PRUEBA: TorreDef[] = [
       { tipo: 'C', med: { h: 6, b: 4, e: 0.3 }, x: -4, y: 0 }, { tipo: 'C', med: { h: 6, b: 4, e: 0.3, espejo: true }, x: 4, y: 0 },
       { tipo: 'tabique', med: { h: 6, e: 0.3, giro: 90 }, x: -6, y: 8.5 }, { tipo: 'tabique', med: { h: 6, e: 0.3, giro: 90 }, x: 6, y: -8.5 },
     ] },
-  { nombre: 'P2 · Esbelta 18 × 18, 32 pisos, núcleo y cuatro L', B: 18, L: 18, pisos: 32, hPiso: 3, hPB: 4, hormigon: 'H40',
+  { nombre: 'P2 · Esbelta 18 × 18, 32 pisos, núcleo y cuatro L', B: 18, L: 18, pisos: 32, hPiso: 3, hPB: 4, hormigon: 'H40', sigmaAdm: 4,
     piezas: [
       { tipo: 'núcleo', med: { h: 8, b: 8, e: 0.4 }, x: 0, y: 0 },
       { tipo: 'L', med: { h: 5, b: 5, e: 0.35 }, x: -6.5, y: 6.5, }, { tipo: 'L', med: { h: 5, b: 5, e: 0.35, espejo: true }, x: 6.5, y: 6.5 },
@@ -117,7 +119,7 @@ export const TORRES_PRUEBA: TorreDef[] = [
       { tipo: 'tabique', med: { h: 7, e: 0.3, giro: 90 }, x: -9, y: 7.5 }, { tipo: 'tabique', med: { h: 7, e: 0.3, giro: 90 }, x: 9, y: 7.5 },
       { tipo: 'tabique', med: { h: 7, e: 0.3, giro: 90 }, x: -9, y: -7.5 }, { tipo: 'tabique', med: { h: 7, e: 0.3, giro: 90 }, x: 9, y: -7.5 },
     ] },
-  { nombre: 'P8 · Vientos fuertes (60 m/s, exposición C) y 3 subsuelos', B: 22, L: 22, pisos: 25, hPiso: 3.2, hPB: 4.5, subsuelos: 3, hormigon: 'H40',
+  { nombre: 'P8 · Vientos fuertes (60 m/s, exposición C) y 3 subsuelos', B: 22, L: 22, pisos: 25, hPiso: 3.2, hPB: 4.5, subsuelos: 3, hormigon: 'H40', sigmaAdm: 4,
     sitio: { V: 60, ...EXPOSICION.C },
     piezas: [
       { tipo: 'núcleo', med: { h: 8, b: 8, e: 0.45 }, x: 0, y: 0 },

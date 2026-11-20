@@ -73,6 +73,16 @@ export function seccionMateriales(): H {
   campo(fo, 'Hormigón', 's-horm', p.hormigon, v => set(() => (p.hormigon = v)), { lista: ['H20', 'H25', 'H30', 'H35', 'H40', 'H45', 'H50'], ayuda: `resistencia característica σbk = ${TENSION_ADM(p.hormigon)} kg/cm² (H30 → 30 MPa); es el límite de compresión que usa la guía` });
   campo(fo, 'b1', 's-b1', p.fundacion.b1, v => set(() => (p.fundacion.b1 = num(v) ?? p.fundacion.b1)), { tipo: 'number', unidad: 'm', ayuda: 'lado de la fundación paralelo al viento A · M,NyQ!N80' });
   campo(fo, 'a1', 's-a1', p.fundacion.a1, v => set(() => (p.fundacion.a1 = num(v) ?? p.fundacion.a1)), { tipo: 'number', unidad: 'm', ayuda: 'lado perpendicular al viento A · M,NyQ!N81' });
+  campo(fo, 'σt adm', 's-sadm', p.fundacion.sigmaAdm ?? '', v => set(() => { const x = num(v); p.fundacion.sigmaAdm = x && x > 0 ? x : null; }), { tipo: 'number', unidad: 'kg/cm²', ayuda: 'tensión admisible del suelo, del estudio geotécnico (CIRSOC 401); vacío = 2,5 como la guía' });
+  {
+    // platea por defecto: la planta del último subsuelo (sección D del plan)
+    let B = 0, L = 0; p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; });
+    if (B > 0 && L > 0 && (Math.abs(p.fundacion.b1 - L) > 1e-6 || Math.abs(p.fundacion.a1 - B) > 1e-6)) {
+      const bt = h('button', { type: 'button', class: 'mini' }, `Platea = planta del último subsuelo (${fmt(L, 2)} × ${fmt(B, 2)} m)`) as HTMLButtonElement;
+      bt.addEventListener('click', () => set(() => { p.fundacion.b1 = L; p.fundacion.a1 = B; }));
+      fo.append(bt);
+    }
+  }
   return seccion('Materiales y fundación', fo).el;
 }
 

@@ -259,7 +259,9 @@ export interface Proyecto {
   sitio: Sitio;
   niveles: Nivel[];
   /** b1: lado de la fundación paralelo al viento A · a1: perpendicular (M,NyQ N80 y N81) */
-  fundacion: { b1: number; a1: number };
+  fundacion: { b1: number; a1: number;
+    /** tensión admisible del suelo (kg/cm²), dato del estudio geotécnico (CIRSOC 401, art. 7.4); vacío = 2,5 como la guía */
+    sigmaAdm?: number | null };
   /** hormigón de los tabiques: su número es la resistencia característica σbk en MPa (H30 → 300 kg/cm²) */
   hormigon: string;
   muros: Muro[];

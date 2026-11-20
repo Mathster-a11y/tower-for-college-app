@@ -20,6 +20,7 @@ import { DIVISORES } from '../../engine/planilla';
 import { tablasProyecto } from '../proyectoTablas';
 import type { Proyecto } from '../../engine/modelo';
 import { coef, dato, escribirGeometria, hojaSecciones, num, res, VER } from './comun';
+import { COMBOS_SUELO } from '../../engine/fundaciones';
 
 export const HR = {
   leame: 'Léame', datos: 'Datos', tablas: 'Tablas', viento: '1 Viento 102-25', cargas: '2 Cargas y vuelco', secciones: '3 Secciones',
@@ -172,7 +173,8 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   da.seccion(36, 'Fundación (platea)', 14);
   filaD(37, 'b1: lado paralelo al viento A', d.fund.b1, 'lado_b1', 'm', '', dato('0.00'));
   filaD(38, 'a1: lado perpendicular al viento A', d.fund.a1, 'lado_a1', 'm', '', dato('0.00'));
-  const geo = escribirGeometria(L, da, d, 40);
+  filaD(39, 'σt adm del suelo (estudio de suelos)', d.fund.sigmaAdm, 'sigmaSuelo', 'kg/cm²', 'CIRSOC 401, art. 7.4; la guía usa 2,5', dato('0.00'));
+  const geo = escribirGeometria(L, da, d, 41);
 
   // ============================================================================================ 1 Viento 102-25
   const vi = L.hoja(HR.viento, [34, 12, 12, 9, 7, 7, 8, 8, 8, 10, 10, 10, 10, 10, 11, 10, 10, 10, 10, 11, 10]);
@@ -316,7 +318,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
     series: [{ nombre: 'viento A', x: `${VI}$N$${rv0}:$N$${rv1}`, y: `${VI}$B$${rv0}:$B$${rv1}`, color: 'C55A11' }, { nombre: 'viento B', x: `${VI}$S$${rv0}:$S$${rv1}`, y: `${VI}$B$${rv0}:$B$${rv1}`, color: '548235', punteada: true }], desde: [23, 25], hasta: [31, 45] });
 
   // ============================================================================================ 2 Cargas y vuelco
-  const ca = L.hoja(HR.cargas, [52, 13, 10, 50]);
+  const ca = L.hoja(HR.cargas, [52, 13, 10, 12, 12, 12, 10, 10, 12, 12, 11, 24]);
   ca.encabezado('Paso 2 · Cargas, combinaciones y vuelco', 'D: carga permanente de las losas (más el peso propio de cada tabique, hoja 6) · L: sobrecarga de uso (Tabla 4.1) · combinaciones por resistencia con el viento de resistencia del 102-25 (1,0 W) · vuelco: 0,9 · Me ≥ 1,0 · Mv.', 4);
   const fC = (r: number, rot: string, form: string, e: Estilo, u: string, nombre: string | null, nota = '') => {
     ca.put(1, r, rot, 'textoB'); const ref = ca.f(2, r, form, e); ca.put(3, r, u, 'unidad'); if (nota) ca.put(4, r, nota, 'nota');
@@ -335,6 +337,38 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   ca.seccion(15, 'Combinaciones (las de la hoja «Tablas»)', 4);
   ca.cabecera(16, 1, ['Combinación', 'D', 'L', 'W']);
   combos.forEach((_, i) => { ca.f(1, 17 + i, comboRef(i, 1), { papel: 'calc' }); ca.f(2, 17 + i, comboRef(i, 2), num('0.0')); ca.f(3, 17 + i, comboRef(i, 3), num('0.0')); ca.f(4, 17 + i, comboRef(i, 4), num('0.0')); });
+  // suelo: platea rígida con las combinaciones de servicio del 102-25 (B.4.2) contra σt adm (CIRSOC 401)
+  const rs0 = 17 + combos.length + 2;
+  ca.seccion(rs0, 'Presión en el suelo: platea rígida, combinaciones de servicio (102-25, B.4.2) contra σt adm', 12);
+  ca.put(4, rs0 + 1, 'Dentro del núcleo central (e ≤ b/6): σ = N/(a·b)·(1 ± 6e/b). Fuera: contacto parcial en 3·(b/2 − e), σmáx = 2N / (3·a·(b/2 − e)). e ≥ b/2: vuelca.', 'nota');
+  fC(rs0 + 2, 'L total = L · Σ B·L de todos los niveles', 'Lsob*SUMPRODUCT(niv_B,niv_L)', num('0.0'), 't', 'L_total');
+  let rr0 = rs0 + 4;
+  for (const dir of ['A', 'B'] as const) {
+    const bb = dir === 'A' ? 'lado_b1' : 'lado_a1', aa = dir === 'A' ? 'lado_a1' : 'lado_b1';
+    fC(rr0, `Viento ${dir}: M del viento en la fundación = M en PB + (Q en PB + franja) · brazo`, `MPB_${dir}+(QPB_${dir}+MAX(0,WPB_${dir}))*brazo`, num('0.0'), 'tm', `Mfund_${dir}`);
+    ca.cabecera(rr0 + 1, 1, ['Combinación', 'D', 'L', 'W', 'N (t)', 'M (tm)', 'e (m)', 'b/6 (m)', 'σmáx (kg/cm²)', 'σmín (kg/cm²)', 'Contacto (m)', '']);
+    const f0 = rr0 + 2;
+    COMBOS_SUELO.forEach((c, i) => {
+      const r = f0 + i;
+      ca.put(1, r, c.nombre, 'textoB'); ca.put(2, r, c.D, coef('0.00')); ca.put(3, r, c.L, coef('0.00')); ca.put(4, r, c.W, coef('0.00'));
+      ca.f(5, r, `B${r}*G_total+C${r}*L_total`, num('0.0'));
+      ca.f(6, r, `D${r}*Mfund_${dir}`, num('0.0'));
+      ca.f(7, r, `IF(E${r}>0,ABS(F${r})/E${r},1E+99)`, num('0.000'));
+      ca.f(8, r, `${bb}/6`, num('0.000'));
+      ca.f(9, r, `IF(G${r}>=${bb}/2,1E+99,IF(G${r}<=H${r}+1E-12,E${r}/(${aa}*${bb})/10*(1+6*G${r}/${bb}),2*E${r}/(3*${aa}*(${bb}/2-G${r}))/10))`, res('0.000'));
+      ca.f(10, r, `IF(G${r}>=${bb}/2,0,IF(G${r}<=H${r}+1E-12,E${r}/(${aa}*${bb})/10*(1-6*G${r}/${bb}),0))`, num('0.000'));
+      ca.f(11, r, `IF(G${r}>=${bb}/2,0,IF(G${r}<=H${r}+1E-12,${bb},3*(${bb}/2-G${r})))`, num('0.00'));
+      ca.f(12, r, `IF(G${r}>=${bb}/2,"NO VERIFICA: vuelca",IF(I${r}>sigmaSuelo,"NO VERIFICA",IF(G${r}>H${r}+1E-12,"ATENCIÓN: contacto parcial","VERIFICA")))`, { papel: 'calc', centrar: true });
+      clave(`suelo_${dir}_${i}`, ca, `I${r}`);
+    });
+    const f1 = f0 + COMBOS_SUELO.length - 1;
+    ca.verificaciones.push(`L${f0}:L${f1}`);
+    fC(f1 + 1, `Viento ${dir}: la peor σmáx`, `MAX(I${f0}:I${f1})`, res('0.000'), 'kg/cm²', `sueloMax_${dir}`);
+    ca.f(5, f1 + 1, `IF(MAX(G${f0}:G${f1})>=${bb}/2,"NO VERIFICA",IF(MAX(I${f0}:I${f1})>sigmaSuelo,"NO VERIFICA",IF(MAX(G${f0}:G${f1})>H${f0}+1E-12,"ATENCIÓN","VERIFICA")))`, { papel: 'calc', centrar: true });
+    ca.verificaciones.push(`E${f1 + 1}`);
+    nombrar(`sueloEst_${dir}`, ca, `E${f1 + 1}`);
+    rr0 = f1 + 3;
+  }
 
   // ============================================================================================ 3 Secciones
   const sec = hojaSecciones(L, HR.secciones, 'Paso 3 · Secciones: el J de cada pieza (J propio + Steiner) y el eje de inercia', geo, d, clave);
@@ -624,6 +658,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   for (const dir of ['A', 'B'] as const) filas.push(['1 Viento', `Frecuencia n1, viento ${dir}`, `frec_${dir}`, 'Hz', `IF(frec_${dir}>=1,"VERIFICA","ATENCIÓN")`, 'n1 ≥ 1 Hz: rígido; si no, Gf', '0.000']);
   for (const dir of ['A', 'B'] as const) filas.push(['1 Viento', `Carga del viento ${dir}`, `Wtot_${dir}`, 't', `IF(fmin_${dir}>1,"VERIFICA (manda la mínima)","VERIFICA")`, 'W ≥ 0,75 kN/m² · área de la pared (2.1.5)', '0.00']);
   filas.push(['2 Cargas', 'Vuelco Me / Mv', 'vuelco', '', VER('0.9*Me>=Mv'), '0,9 Me ≥ Mv', '0.00']);
+  for (const dir of ['A', 'B'] as const) filas.push(['2 Cargas', `Presión en el suelo, viento ${dir}`, `sueloMax_${dir}`, 'kg/cm²', `sueloEst_${dir}`, 'σmáx ≤ σt adm; contacto parcial = atención', '0.000']);
   filas.push(['Datos', "f'c del hormigón (MPa)", 'fc', 'MPa', VER('fc>=INDEX(tFcMin,MATCH(expHorm,tClase,0))'), "≥ el f'c mínimo de la clase de exposición (200-24, Tabla 2.5)", '0']);
   for (const dir of ['A', 'B'] as const) filas.push(['8 Deriva', `Deriva de servicio en la azotea, viento ${dir}`, `deriva_${dir}`, 'm', `${hojaRef(HR.deriva)}${rc(dir === 'A' ? 2 : 9, 8 + sobre.length + 5)}`, 'h / límite y cada piso', '0.0000']);
   let r2 = 5;

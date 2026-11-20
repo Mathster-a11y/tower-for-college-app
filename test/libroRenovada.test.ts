@@ -11,6 +11,7 @@ import { calcularProyecto } from '../src/ui/estado';
 import { datosRenovada, libroRenovada, HR } from '../src/xlsx/libros/libroRenovada';
 import { Evaluador, esError, seEntiende } from '../src/xlsx/formulas';
 import { vuelco102 } from '../src/engine/metodos/cirsoc';
+import { sueloCirsoc } from '../src/engine/fundaciones';
 
 const torres = [ejemploGuia(), ...torresPrueba()];
 const casos = [
@@ -58,6 +59,8 @@ describe.each(casos)('planilla renovada · $nombre', ({ p: p0, nivel }) => {
     const vu = vuelco102(p, w);
     igual('vuelco', vu.Me / vu.Mv); igual('Mv', vu.Mv);
     for (const dir of ['A', 'B'] as const) igual(`deriva_${dir}`, c.controles.find(x => x.nombre === `Deriva de servicio, viento ${dir}`)!.guia!);
+    const su = sueloCirsoc(p, w);
+    su.dirs.forEach(d => d.combos.forEach((x, i) => igual(`suelo_${d.dir}_${i}`, x.vuelca ? 1e99 : x.sMax)));
   });
   it('reparto por caso de carga', () => {
     for (const v of verif) v.partes.forEach((f, k) => igual(`f${k + 1}_${v.dir}_${v.nombre}`, f));

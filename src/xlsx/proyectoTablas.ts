@@ -42,6 +42,7 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Hormigón', 'tipo de hormigón de los tabiques (H30: σbk = 300 kg/cm²)', p => p.hormigon, (p, v) => (p.hormigon = txt(v))],
   ['Fundación b1 (m)', 'lado de la fundación paralelo al viento A', p => p.fundacion.b1, (p, v) => (p.fundacion.b1 = num(v) ?? 0)],
   ['Fundación a1 (m)', 'lado de la fundación perpendicular al viento A', p => p.fundacion.a1, (p, v) => (p.fundacion.a1 = num(v) ?? 0)],
+  ['σt adm del suelo (kg/cm²)', 'tensión admisible del estudio de suelos (vacío = 2,5, la de la guía)', p => p.fundacion.sigmaAdm ?? null, (p, v) => { const x = num(v); p.fundacion.sigmaAdm = x && x > 0 ? x : null; }],
   ...(['V', 'Kd', 'I', 'zg', 'alfa', 'Kzt', 'G', 'Cpb', 'Cps', 'GCpi'] as const).map(k => [
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),

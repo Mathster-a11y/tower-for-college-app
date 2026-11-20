@@ -23,6 +23,7 @@ const nf = (x: number, d: number) => x.toLocaleString('es-AR', { minimumFraction
 
 export const TENSION_ADM = (hormigon: string) => (parseFloat(hormigon.replace(/[^\d.]/g, '')) || 30) * 10; // H30 → 300 kg/cm²
 
+import { profundidadEstudio, sigmaAdmDe } from './fundaciones';
 export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: ResultadoCorregido, hormigon: string, piezas: PiezaEquivalente[] = [], filaNivel: number[] = []): Control[] {
   const out: Control[] = [];
   const m = r.mnyq, g = c.guia.mnyq;
@@ -42,7 +43,12 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
   out.push({ grupo: 'Viento', nombre: 'Carga mínima', criterio: 'W ≥ 0,50 kN/m² · B · h', fuente: 'CIRSOC 102, art. 1.4.1', planilla: m.H61, guia: g.H61, unidad: 't', estado: est(g.H61 >= minimo), nota: `mínimo ${minimo.toFixed(1)} t` });
   out.push({ grupo: 'Estabilidad', nombre: 'Vuelco Me / Mv', criterio: '≥ 1,5', fuente: 'guía 2.2 · M,NyQ L99', planilla: m.L99, guia: g.L99, unidad: '', estado: est(m.L99 >= 1.5 && g.L99 >= 1.5) });
   out.push({ grupo: 'Estabilidad', nombre: 'Excentricidad e = Mv / P', criterio: "e ≤ b'/6", fuente: 'guía 2.2 · M,NyQ M99', planilla: m.M99, guia: g.M99, unidad: 'm', estado: est(m.M99 <= m.N99 && g.M99 <= g.N99), nota: `b'/6 = ${m.N99.toFixed(2)} m` });
-  out.push({ grupo: 'Estabilidad', nombre: 'Tensión máxima en el suelo', criterio: '|σ| ≤ σ adm (dato del estudio de suelos)', fuente: 'guía 2.3 · M,NyQ N89', planilla: m.N89, guia: g.N89, unidad: 'kg/cm²', estado: 'informativo' });
+  const sAdm = sigmaAdmDe(p);
+  out.push({ grupo: 'Estabilidad', nombre: 'Tensión máxima en el suelo', criterio: `|σ| ≤ σt adm = ${nf(sAdm, 2)} kg/cm² (estudio de suelos)`, fuente: 'guía 2.3 · M,NyQ N89 · CIRSOC 401, art. 7.4', planilla: m.N89, guia: g.N89, unidad: 'kg/cm²', estado: est(Math.abs(m.N89) <= sAdm && Math.abs(g.N89) <= sAdm),
+    nota: p.fundacion.sigmaAdm ? undefined : 'σt adm = 2,5 kg/cm², la de la guía: cargá la del estudio de suelos en Diseño → Materiales y fundación.' });
+  const pe = profundidadEstudio(p);
+  out.push({ grupo: 'Estabilidad', nombre: 'Profundidad mínima del estudio de suelos', criterio: 'máx(6 m; Df + 2·ancho de la platea), desde el terreno', fuente: 'CIRSOC 401, art. 3.5.6.2', planilla: null, guia: pe.desdeTerreno, unidad: 'm', estado: 'informativo',
+    nota: `Fundación a ${nf(pe.Df, 2)} m de profundidad y platea de ${nf(pe.ancho, 2)} m de ancho: los sondeos tienen que llegar por lo menos a ${nf(pe.desdeTerreno, 1)} m bajo el terreno.` });
   out.push({ grupo: 'Estabilidad', nombre: 'Tensión mínima en el suelo', criterio: '≤ 0 (sin tracción)', fuente: 'M,NyQ N90', planilla: m.N90, guia: g.N90, unidad: 'kg/cm²', estado: est(m.N90 <= 0 && g.N90 <= 0) });
   // verificación funicular (guía 2.2): la resultante de W y G corta la base en el tercio medio; y la línea de presiones
   if (filaNivel.length) {

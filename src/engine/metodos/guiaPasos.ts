@@ -18,6 +18,7 @@ import { propiedades } from '../perfil';
 import { DIVISORES } from '../planilla';
 import type { PiezaEquivalente } from '../mapping';
 import { DIAMETROS, areaBarra } from './guia';
+import { sigmaAdmDe } from '../fundaciones';
 
 // ---------------------------------------------------------------------------------------------------- datos
 export interface NivelG { nombre: string; cota: number; B: number; L: number; pisos: number }
@@ -41,7 +42,7 @@ export interface DatosGuia {
   hormigon: string;
   viento: { V: number; Kd: number; I: number; zg: number; alfa: number; Kzt: number; G: number; Cpb: number; Cps: number; parapeto: number };
   coef: { gH: number; qD: number; qC: number; sigE: number; cuantia: number };
-  fund: { a1: number; b1: number };
+  fund: { a1: number; b1: number; sigmaAdm: number };
   niveles: NivelG[];
   piezas: { nombre: string; dir: 'A' | 'B' }[];
   rects: RectG[];
@@ -85,7 +86,7 @@ export function datosGuia(p: Proyecto, piezas: PiezaEquivalente[]): DatosGuia {
     nombre: p.nombre, hormigon: p.hormigon || 'H30',
     viento: { V: s.V, Kd: s.Kd, I: s.I, zg: s.zg, alfa: s.alfa, Kzt: s.Kzt, G: s.G, Cpb: s.Cpb, Cps: s.Cps, parapeto: Math.max(0, s.parapeto ?? 0) },
     coef: { gH: 2.4, qD: 0.7, qC: 0.9, sigE: 2400, cuantia: 0.008 },
-    fund: { a1: p.fundacion.a1, b1: p.fundacion.b1 },
+    fund: { a1: p.fundacion.a1, b1: p.fundacion.b1, sigmaAdm: sigmaAdmDe(p) },
     niveles, piezas: piezasL, rects, avisos,
   };
 }

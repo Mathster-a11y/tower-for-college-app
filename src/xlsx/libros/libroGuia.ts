@@ -106,6 +106,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   da.seccion(27, 'Fundación (platea)', 14);
   filaDato(28, 'b1: lado paralelo al viento A', d.fund.b1, 'lado_b1', 'm', 'el viento A vuelca alrededor del borde de este lado', dato('0.00'));
   filaDato(29, 'a1: lado perpendicular al viento A', d.fund.a1, 'lado_a1', 'm', '', dato('0.00'));
+  filaDato(30, 'σt adm del suelo (estudio de suelos)', d.fund.sigmaAdm, 'sigmaSuelo', 'kg/cm²', 'CIRSOC 401, art. 7.4; la guía usa 2,5', dato('0.00'));
   const geo = escribirGeometria(L, da, d, 31);
   const { rM0, piezasDir, nivDato } = geo;
   const D_ = hojaRef(HG.datos);
@@ -235,7 +236,8 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   filaCa(rt + 21, 'σ descargado = −G / (a1·b1)', `-G_total/(lado_a1*lado_b1)/10`, num('0.000'), 'kg/cm²', 'sD');
   filaCa(rt + 22, 'σ cargado = −G · qCarg/qDesc / (a1·b1)', `-G_total*qCarg/qDesc/(lado_a1*lado_b1)/10`, num('0.000'), 'kg/cm²', 'sC');
   filaCa(rt + 23, 'σ del momento = −6·Mv / (a1·b1²)', `-6*Mv/lado_a1/lado_b1^2/10`, num('0.000'), 'kg/cm²', 'sM');
-  filaCa(rt + 24, 'σ máxima (cargado): compararla con la del estudio de suelos', `E${rt + 22}+E${rt + 23}`, res('0.000'), 'kg/cm²', 'sMax');
+  filaCa(rt + 24, 'σ máxima (cargado): |σ| ≤ σt adm del estudio de suelos', `E${rt + 22}+E${rt + 23}`, res('0.000'), 'kg/cm²', 'sMax');
+  ca.f(7, rt + 24, VER(`ABS(E${rt + 24})<=sigmaSuelo`), { papel: 'calc', centrar: true }); ca.verificaciones.push(`G${rt + 24}`);
   filaCa(rt + 25, 'σ mínima (descargado): ≤ 0, sin tracción en el suelo', `E${rt + 21}-E${rt + 23}`, res('0.000'), 'kg/cm²', 'sMin');
   ca.f(7, rt + 25, VER(`E${rt + 25}<=0`), { papel: 'calc', centrar: true }); ca.verificaciones.push(`G${rt + 25}`);
   ca.graficos.push({ tipo: 'dispersion', titulo: 'Corte en altura', ejeX: 'Q (t)', ejeY: 'cota (m)',
@@ -423,7 +425,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
     ['3 Cargas', 'Excentricidad e = Mv / G, viento A', 'e_A', 'm', VER('e_A<=tercio_b1'), "≤ b1/6", '0.000'],
     ['3 Cargas', 'Excentricidad, viento B', 'e_B', 'm', VER('e_B<=tercio_a1'), '≤ a1/6', '0.000'],
     ['3 Cargas', 'Tensión mínima en el suelo', 'sMin', 'kg/cm²', VER('sMin<=0'), '≤ 0 (sin tracción)', '0.000'],
-    ['3 Cargas', 'Tensión máxima en el suelo', 'sMax', 'kg/cm²', '"INFORMATIVO"', 'compararla con la admisible del estudio de suelos', '0.000'],
+    ['3 Cargas', 'Tensión máxima en el suelo', 'sMax', 'kg/cm²', VER('ABS(sMax)<=sigmaSuelo'), '|σ| ≤ σt adm (Datos)', '0.000'],
     ['3 Cargas', 'Línea de presiones fuera del núcleo central, viento A', 'fueraA', 'niveles', 'IF(fueraA=0,"VERIFICA","ATENCIÓN")', 'en cada nivel |e| ≤ L/6', '0'],
     ['3 Cargas', 'Línea de presiones fuera del núcleo central, viento B', 'fueraB', 'niveles', 'IF(fueraB=0,"VERIFICA","ATENCIÓN")', 'en cada nivel |e| ≤ B/6', '0'],
     ['5 Rigidez', 'Σ J viento A ≥ J mínimo', 'SJ_A', 'm⁴', VER('SJ_A>=JminA'), 'J mín (h/500)', '0.00'],

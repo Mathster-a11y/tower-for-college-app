@@ -65,6 +65,8 @@ export function leerProyecto(x: unknown): Lectura {
   // --- fundación
   if (!esObj(q.fundacion) || !num(q.fundacion.b1) || !num(q.fundacion.a1) || q.fundacion.b1 < 0 || q.fundacion.a1 < 0) {
     error('La fundación tiene que tener b1 y a1 (números ≥ 0).');
+  } else if (!nulo((q.fundacion as Record<string, unknown>).sigmaAdm) && !(num((q.fundacion as Record<string, unknown>).sigmaAdm) && ((q.fundacion as Record<string, unknown>).sigmaAdm as number) > 0)) {
+    error('La tensión admisible del suelo tiene que ser un número mayor que 0 (kg/cm²).');
   }
 
   // --- niveles
