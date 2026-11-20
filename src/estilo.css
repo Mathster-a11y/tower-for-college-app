@@ -1401,3 +1401,8 @@ body.vista-planilla { display: flex; flex-direction: column; height: 100vh; marg
 
 /* método Combinado: estado de cada método en la tabla de comparación */
 .tabla td.n.ok { color: var(--ok); font-weight: 600; } .tabla td.n.mal { color: var(--mal); font-weight: 600; } .tabla td.n.revisar { color: var(--revisar); font-weight: 600; }
+
+/* túnel de viento 2D (simulador de viento, V2) */
+.tunel-marco { border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; background: var(--lienzo); }
+canvas.tunel2d { display: block; width: 100%; height: auto; }
+.cartel-tunel { margin: 0 0 6px; padding: 5px 10px; border-left: 4px solid var(--revisar, #b7791f); background: color-mix(in srgb, var(--revisar, #b7791f) 10%, transparent); border-radius: 0 6px 6px 0; font-size: 12px; }

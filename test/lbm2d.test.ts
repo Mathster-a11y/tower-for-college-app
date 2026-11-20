@@ -88,6 +88,11 @@ describe('mediciones', () => {
     const s = Array.from({ length: 5000 }, (_, i) => Math.sin(2 * Math.PI * 0.0123 * i) + 0.3);
     expect(frecuenciaCruces(s)!).toBeCloseTo(0.0123, 5);
   });
+  it('frecuencia de una senoidal con ruido de alta frecuencia', () => {
+    let z = 7; const azar = () => { z = (z * 1664525 + 1013904223) >>> 0; return z / 4294967296 - 0.5; };
+    const s = Array.from({ length: 20000 }, (_, i) => Math.sin(2 * Math.PI * 0.004 * i) + 0.5 * azar() + 0.2 * Math.sin(2 * Math.PI * 0.11 * i));
+    expect(frecuenciaCruces(s)!).toBeCloseTo(0.004, 4);
+  });
   it('V crítica = n1 · B / St', () => {
     expect(velocidadCritica(0.2, 20, 0.13)).toBeCloseTo(30.769, 3);
   });

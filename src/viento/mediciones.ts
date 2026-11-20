@@ -4,18 +4,32 @@
  * viento real a la que la torre entraría en resonancia: V crítica = n1 · B / St.
  */
 
-/** frecuencia de una señal (ciclos por paso) por sus cruces por la media; null si no hay al menos 3 cruces */
-export function frecuenciaCruces(s: ArrayLike<number>): number | null {
+/**
+ * frecuencia dominante de una señal (ciclos por paso): se promedia en bloques (filtra el ruido rápido) y se busca el
+ * pico del espectro hasta 0,02 ciclos por paso, afinado con una parábola. null si entran menos de 3 ciclos.
+ */
+export function frecuenciaCruces(s: ArrayLike<number>, fMax = 0.02): number | null {
   const n = s.length;
-  if (n < 8) return null;
-  let m = 0; for (let i = 0; i < n; i++) m += s[i]; m /= n;
-  const cruces: number[] = [];
-  for (let i = 1; i < n; i++) {
-    const a = s[i - 1] - m, b = s[i] - m;
-    if (a < 0 && b >= 0) cruces.push(i - 1 + a / (a - b));              // subidas, interpoladas
+  if (n < 16) return null;
+  const b = Math.max(1, Math.floor(n / 2000)), m = Math.floor(n / b);
+  const x = new Float64Array(m);
+  for (let i = 0; i < m; i++) { let a = 0; for (let k = 0; k < b; k++) a += s[i * b + k]; x[i] = a / b; }
+  let media = 0; for (let i = 0; i < m; i++) media += x[i]; media /= m;
+  for (let i = 0; i < m; i++) x[i] -= media;
+  // potencia en las frecuencias k/m (por bloque) → k/(m·b) por paso
+  const kMax = Math.min(Math.floor(m / 2), Math.ceil(fMax * b * m) + 1);
+  const pot = new Float64Array(kMax + 2);
+  for (let k = 1; k <= kMax + 1 && k < m / 2; k++) {
+    let re = 0, im = 0; const w = (2 * Math.PI * k) / m;
+    for (let i = 0; i < m; i++) { re += x[i] * Math.cos(w * i); im -= x[i] * Math.sin(w * i); }
+    pot[k] = re * re + im * im;
   }
-  if (cruces.length < 3) return null;
-  return (cruces.length - 1) / (cruces[cruces.length - 1] - cruces[0]);
+  let kp = 0; for (let k = 3; k <= kMax; k++) if (pot[k] > pot[kp] || kp === 0) kp = k;   // al menos 3 ciclos
+  if (kp < 3 || !(pot[kp] > 0)) return null;
+  // parábola sobre el logaritmo de los tres valores (pico de una ventana rectangular)
+  const a = Math.log(pot[kp - 1] || 1e-300), c0 = Math.log(pot[kp]), d = Math.log(pot[kp + 1] || 1e-300);
+  const den = a - 2 * c0 + d, delta = den !== 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - d)) / den)) : 0;
+  return (kp + delta) / (m * b);
 }
 
 export interface Mediciones {
