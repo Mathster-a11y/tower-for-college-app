@@ -50,7 +50,11 @@ function punto(s: Seccion, c: number, nb = 40): PuntoNM {
 }
 
 export interface Diagrama { puntos: PuntoNM[]; phiPnMax: number; phiPnMin: number; P0: number }
-/** diagrama de interacción φPn–φMn en el plano del tabique (sección rectangular simétrica: se da la rama Mn ≥ 0) */
+/**
+ * diagrama de interacción φPn–φMn en el plano del tabique (sección rectangular simétrica: se da la rama Mn ≥ 0).
+ * Los puntos van en el orden de la curva: tracción pura y después el eje neutro c creciendo (en la transición de φ
+ * de 0,90 a 0,65, φPn puede bajar al crecer c: ordenarlos por φPn juntaría puntos que no son vecinos).
+ */
 export function diagrama(s: Seccion): Diagrama {
   const L = s.lw * 1000, h = s.h * 1000, Ag = L * h, As = s.rho * Ag;
   const P0 = 0.85 * s.fc * (Ag - As) + FY * As;
@@ -59,11 +63,10 @@ export function diagrama(s: Seccion): Diagrama {
   const puntos: PuntoNM[] = [];
   for (let i = 1; i <= 120; i++) puntos.push(punto(s, (L * 1.6 * i) / 120));
   puntos.forEach(q => { if (q.phiPn > phiPnMax) { q.phiPn = phiPnMax; } });
-  puntos.push({ c: 0, Pn: -FY * As, Mn: 0, phi: 0.9, phiPn: phiPnMin, phiMn: 0, et: Infinity });
-  puntos.sort((x, y) => x.phiPn - y.phiPn);
+  puntos.unshift({ c: 0, Pn: -FY * As, Mn: 0, phi: 0.9, phiPn: phiPnMin, phiMn: 0, et: Infinity });
   return { puntos, phiPnMax, phiPnMin, P0 };
 }
-/** φMn (N·mm) que resiste la sección con la carga axial φPn = Pu (N); 0 si Pu está fuera del diagrama */
+/** φMn (N·mm) que resiste la sección con la carga axial φPn = Pu (N): el mayor de los tramos de la curva que cruzan Pu; 0 si Pu está fuera del diagrama */
 export function momentoResistente(dg: Diagrama, Pu: number): number {
   if (Pu > dg.phiPnMax + 1e-6 || Pu < dg.phiPnMin - 1e-6) return 0;
   let mejor = 0;
@@ -103,6 +106,19 @@ export function cuantiasMinimas(corteAlto: boolean, hw: number, lw: number): { r
   return { rhoV: Math.max(0.0025, 0.0025 + 0.5 * (2.5 - hw / lw) * (rhoH - 0.0025)), rhoH };
 }
 
+/**
+ * cuantía horizontal por corte: la mínima, o la que da Vs = Vu/φ − Vc (con Vs = ρt·h·d·fy), redondeada hacia arriba
+ * de a 0,0005 desde la mínima; no pasa de 0,02. Vu y Vc en t.
+ */
+export function rhoHorizontal(Vu: number, Vc: number, lw: number, h: number, rhoMin: number, fc: number): number {
+  const d = 0.8 * lw * 1000, hh = h * 1000;
+  if ((Vu * N_POR_T) / PHI_CORTE > (5 / 6) * Math.sqrt(fc) * hh * d) return Math.max(rhoMin, 0.02);   // ni con armadura: la sección no alcanza
+  const nec = ((Vu / PHI_CORTE - Vc) * N_POR_T) / (hh * d * FY);
+  if (!(nec > rhoMin)) return rhoMin;
+  const pasos = Math.ceil((nec - rhoMin) / 0.0005 - 1e-9);
+  return Math.min(0.02, Math.round((rhoMin + pasos * 0.0005) * 1e6) / 1e6);
+}
+
 // ---------------------------------------------------------------------------------------------------- empírico
 /** 14.5 (14-1): resistencia axial de diseño (t) de un tabique macizo; lc altura libre (m), k factor de longitud efectiva */
 export function axialEmpirico(lw: number, h: number, lc: number, fc: number, k = 0.8): number {
@@ -122,6 +138,8 @@ export interface VerifMuro201 {
   /** simple: compresión con el método empírico y cordones de borde */
   axialEmp: number; NuMax: number; cordon: { T: number; AsBorde: number; C: number; Cadm: number };
   verifica: boolean; diagrama: Diagrama;
+  /** relación de uso con la cuantía necesaria (≤ 1 si alcanzó) */
+  relacionNecesaria: number;
   /** todas las solicitaciones (combinaciones × casos de viento × sentido) */
   solicitaciones: Solicitacion[];
 }
@@ -139,9 +157,10 @@ export function verificarMuro201(id: string, papel: string, lw: number, h: numbe
   const c0 = corteTabique(Vmax, NuCorte, Math.max(...sol.map(s => Math.abs(s.Mu))), lw, h, 0, fc);
   const min = cuantiasMinimas(c0.necesitaArmaduraCorte, hw, lw);
   // horizontal: la mínima o la que pide el corte
-  let rhoH = min.rhoH;
+  // la que pide Vs = Vu/φ − Vc, redondeada hacia arriba de a 0,0005 (sin pasar de 0,02); si ni así alcanza (Vu > φ·5/6
+  // √f'c h d) queda en 0,02 y no verifica
   const conVs = (rh: number) => corteTabique(Vmax, NuCorte, Math.max(...sol.map(s => Math.abs(s.Mu))), lw, h, rh, fc);
-  while (!conVs(rhoH).verifica && rhoH < 0.02) rhoH += 0.0005;
+  const rhoH = rhoHorizontal(Vmax, c0.Vc, lw, h, min.rhoH, fc);
   const corte = conVs(rhoH);
   // vertical: la menor cuantía que deja todas las combinaciones adentro del diagrama
   const relacionCon = (rho: number) => {
@@ -168,6 +187,6 @@ export function verificarMuro201(id: string, papel: string, lw: number, h: numbe
   const cordon = { T: peorT, AsBorde: Math.max(0, (peorT * N_POR_T) / (0.9 * FY)) / 100, C: peorC, Cadm: (0.65 * 0.85 * fc * Acord * 1e6) / N_POR_T };
   return {
     id, papel, lw, h, peor: conMin.peor, phiMn: conMin.mR, relacion: conMin.rel, rhoMin: min.rhoV, rhoNecesaria: rho,
-    corte, rhoH, axialEmp, NuMax, cordon, verifica: res.rel <= 1 && corte.verifica, diagrama: res.dg, solicitaciones: sol,
+    corte, rhoH, axialEmp, NuMax, cordon, verifica: res.rel <= 1 && corte.verifica, diagrama: res.dg, solicitaciones: sol, relacionNecesaria: res.rel,
   };
 }

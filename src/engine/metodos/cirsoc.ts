@@ -21,7 +21,7 @@ import { armarTabique, textoBarras } from './guia';
 import { combinaciones, datos101De, sobrecarga } from '../cargas/cirsoc101';
 import type { Control } from '../verificaciones';
 import type { PlanillaRes } from '../planilla';
-import { datosAltura, deformada, moduloHormigon, rigidez } from '../diagramas';
+import { deformada, moduloHormigon, rigidez, type PuntoAltura } from '../diagramas';
 import type { NivelVerificacion } from './tipos';
 
 /** los datos de la planilla con la hoja de viento traducida al 102-25 */
@@ -130,6 +130,17 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
 
 // ---------------------------------------------------------------------------------------------------- controles
 
+/** vuelco con las fuerzas del 102-25 (viento A): Mv en la fundación y Me = G · b1/2 con el peso D de las losas */
+export function vuelco102(p: Proyecto, w: Viento102): { Mv: number; Me: number; G: number; brazo: number } {
+  const D = datos101De(p).D;
+  let B = 0, L = 0, G = 0;
+  p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; G += D * B * L; });
+  const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0), zFund = p.niveles[p.niveles.length - 1]?.cota ?? zPB;
+  const brazo = zPB - zFund;
+  const Mv = w.A.MPB + (w.A.QPB + Math.max(0, w.A.WPB)) * brazo;
+  return { Mv, Me: (G * p.fundacion.b1) / 2, G, brazo };
+}
+
 const nf = (x: number, d: number) => x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pc = (x: number) => `${nf(x * 100, 2)} %`;
 
@@ -137,7 +148,9 @@ const pc = (x: number) => `${nf(x * 100, 2)} %`;
  * Los controles del método CIRSOC: reemplazan a los de la guía donde el reglamento dice otra cosa (vuelco con
  * 0,9 D + 1,0 W, frecuencia y carga mínima del 102-25, deriva de servicio, hormigón por resistencia del 201).
  */
-export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaRes, w: Viento102, verif: VerifPieza201[], filaNivel: number[], nivel: NivelVerificacion,
+export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaRes, w: Viento102, verif: VerifPieza201[], _filaNivel: number[], nivel: NivelVerificacion,
+  /** ΣJ de cada dirección (la rototraslación de la guía, con el J de la sección real) */
+  SJ: { A: number; B: number } | undefined,
   /** método FEM: la deformada de servicio del modelo (ya escalada al viento de servicio), en lugar de la ménsula equivalente */
   derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>): Control[] {
   const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula/.test(c.nombre);
@@ -153,18 +166,22 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     out.push({ grupo: 'Viento', nombre: `Carga mínima, viento ${d.dir}`, criterio: 'W ≥ 0,75 kN/m² · área de la pared', fuente: 'CIRSOC 102-25, art. 2.1.5',
       planilla: null, guia: d.W, unidad: 't', estado: 'verifica', nota: d.mandaMinimo ? 'Manda la mínima: las fuerzas se escalaron.' : `mínima ${nf(d.Wmin, 1)} t` });
   }
-  // vuelco: la resistencia (0,9 D) iguala o supera al efecto (1,0 W): 0,9 · Me ≥ Mv ⇔ Me / Mv ≥ 1,11
-  const m = valores.mnyq;
+  // vuelco: la resistencia (0,9 D) iguala o supera al efecto (1,0 W): 0,9 · Me ≥ Mv ⇔ Me / Mv ≥ 1,11, con las fuerzas
+  // del 102-25 (viento A) llevadas a la fundación y el peso D de las losas del 101-25
+  const vu = vuelco102(p, w);
   out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con 0,9 D + 1,0 W', criterio: '0,9 · Me ≥ 1,0 · Mv (Me / Mv ≥ 1,11)', fuente: 'CIRSOC 101-25, art. 1.3.5 y 2.3.2',
-    planilla: null, guia: m.L99, unidad: '', estado: est(0.9 * m.L99 >= 1) });
+    planilla: null, guia: vu.Me / vu.Mv, unidad: '', estado: est(0.9 * vu.Me >= vu.Mv),
+    nota: `Mv = ${nf(vu.Mv, 0)} tm (M en PB + (Q en PB + franja de PB) · ${nf(vu.brazo, 2)} m) · Me = G · b1/2 = ${nf(vu.G, 0)} t · ${nf(p.fundacion.b1 / 2, 2)} m` });
   // deriva de servicio: la deformada con el viento de servicio (Wa), contra h/límite y entrepiso/límite
   const lim = datos201De(p).limiteDeriva;
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0);
   const E = moduloHormigon(p.hormigon || 'H30');
   for (const dir of ['A', 'B'] as const) {
-    const alt = datosAltura(p, valores.viento, valores.mnyq, filaNivel, dir);
-    const J = rigidez(valores, p.hormigon || 'H30').find(x => x.dir === dir)!.J;
-    const W = alt.reduce((s, x) => s + x.F, 0);
+    // la torre como ménsula empotrada en PB con el momento del 102-25 en cada nivel y el ΣJ de la dirección
+    const d102 = w[dir];
+    const alt = [{ nivel: 'PB', z: 0, M: d102.MPB }, ...d102.niveles.map(n => ({ nivel: n.nivel, z: n.z, M: n.M }))] as unknown as PuntoAltura[];
+    const J = SJ?.[dir] ?? rigidez(valores, p.hormigon || 'H30').find(x => x.dir === dir)!.J;
+    const W = d102.QPB;
     const fem = derivaFem?.[dir];
     const def = fem
       ? { puntos: fem.z.map((z, i) => ({ z, d: fem.d[i] / w.servicio.relacion, nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: fem.d[fem.d.length - 1] / w.servicio.relacion, h: fem.h }

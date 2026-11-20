@@ -3,7 +3,7 @@ import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
 import { montarDivisores } from './ui/divisores';
 import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
-import { estado } from './ui/estado';
+import { estado, calcularProyecto } from './ui/estado';
 import { montarPlanta } from './ui/planta';
 import { montar3D, ultimaDeformada } from './ui/vista3d';
 import { imprimirInforme } from './ui/informe';
@@ -34,6 +34,7 @@ import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
 import { libroGuia } from './xlsx/libros/libroGuia';
+import { datosRenovada, libroRenovada } from './xlsx/libros/libroRenovada';
 import { datosGuia } from './engine/metodos/guiaPasos';
 import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
@@ -345,10 +346,10 @@ async function exportar() {
     ${radio('exp-plan', 'actual', estado.config.version === 'actual', `Planilla anterior${plantillaAbierta ? ' (la que abriste)' : ''}`, '(calculada con el motor «Actual»)')}
     <p><b>Contenido</b></p>
     ${radio('exp-cont', 'virgen', true, 'Planilla virgen', '(solo los datos en las 7 hojas de la cátedra, más las tablas «T3D» para volver a abrirla en la app)')}
-    ${radio('exp-cont', 'renovada', false, 'Planilla renovada', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos)')}
+    ${radio('exp-cont', 'renovada', false, 'Planilla de la cátedra con las hojas de la app', '(además, las hojas «G ·» de la app con fórmulas, gráficos y dibujos; la planilla renovada del CIRSOC está en Exportar)')}
     <p>La app escribe solo celdas de datos. No cambia ninguna fórmula, salvo las del último piso (C y D de M,NyQ), que se escriben a mano como indica la planilla${estado.config.version === 'nuevo' ? ', y la columna B de M,NyQ, donde vuelve a poner el vínculo con «viento»' : ''}${conPar.length ? `, y B31:B50 de ${conPar.join(' y ')}, que van en 0 porque elegiste dos tabiques perpendiculares (filas 28–29) en vez del bloque general` : ''}.</p>
-    <ul>${filas}<li><b>Hojas «G ·»</b> (solo en la renovada): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Flexocompresión PB</b>: la verificación de la guía en PB, pieza por pieza y en los dos vientos, paso a paso y con los coeficientes a la vista (la «Flex comp PB paralelos» de la cátedra queda como estaba).</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
-    <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo en la renovada; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
+    <ul>${filas}<li><b>Hojas «G ·»</b> (solo con las hojas de la app): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Flexocompresión PB</b>: la verificación de la guía en PB, pieza por pieza y en los dos vientos, paso a paso y con los coeficientes a la vista (la «Flex comp PB paralelos» de la cátedra queda como estaba).</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
+    <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo con las hojas de la app; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
     <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en otra pestaña y se actualiza sola mientras editás).</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
@@ -548,6 +549,29 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 $('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
+$('b-libro-renovada').addEventListener('click', () => { cerrarMenus(); void descargarRenovada(); });
+/** planilla renovada (etapa 5b): el método CIRSOC como calculadora cerrada, con la verificación del 201 simple o completa */
+async function descargarRenovada() {
+  const cfg = estado.config;
+  const r = await tarjeta({ tipo: 'pregunta', titulo: 'Planilla renovada (CIRSOC)',
+    texto: 'Simple: compresión con el método empírico y flexión con cordones de borde (para hacer a mano). Completa: el diagrama de interacción de cada muro con la cuantía mínima y con la adoptada (más grande: unas 50 000 fórmulas).',
+    botones: cfg.verificacion === 'simple' ? ['Simple', 'Completa', 'Cancelar'] : ['Completa', 'Simple', 'Cancelar'] });
+  if (r.boton === 2) return;
+  const nivel: 'simple' | 'completa' = (cfg.verificacion === 'simple') === (r.boton === 0) ? 'simple' : 'completa';
+  // se calcula con el método CIRSOC y ese nivel aunque el proyecto tenga otro método elegido (no se cambia el proyecto)
+  if (!resultadosListos('escribir la planilla renovada')) return;
+  try {
+    const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'cirsoc' as const, verificacion: nivel } };
+    const c = calcularProyecto(p);
+    if (!c.cirsoc) throw new Error(c.error ?? 'El cálculo CIRSOC no se pudo hacer.');
+    const R = datosRenovada(p, c.asig.piezas, c.cirsoc.verif, nivel);
+    const { libro } = libroRenovada(R, estado.proyecto);
+    descargar(nombreArchivo(`_renovada_${nivel}.xlsx`), await libro.xlsx(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const avisos = [...R.geo.avisos];
+    if (cfg.metodo !== 'cirsoc') avisos.push(`El método elegido es «${METODOS[cfg.metodo].nombre}»: la planilla renovada da los números del método CIRSOC (elegilo arriba para verlos en pantalla).`);
+    mensaje(`Planilla renovada (${nivel}) descargada: los datos van en la hoja «Datos» y se recalcula sola.${avisos.length ? ' ' + avisos.join(' ') : ''}`);
+  } catch (e) { fallo('No se pudo armar la planilla renovada', e); }
+}
 $('b-libro-guia').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la planilla de la guía')) void descargarLibroGuia(); });
 /** planilla de la guía (etapa 5a): una calculadora cerrada con el procedimiento de la guía, que la app solo llena en «Datos» */
 async function descargarLibroGuia() {

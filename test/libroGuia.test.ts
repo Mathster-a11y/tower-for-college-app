@@ -50,7 +50,7 @@ describe.each(torres.map(p => ({ p, nombre: p.nombre })))('planilla de la guía 
   it('secciones, rigidez y rototraslación: igual que el motor', () => {
     for (const dir of ['A', 'B'] as const) {
       const r = g.roto[dir];
-      igual(`SJ_${dir}`, r.SJ); igual(`Xr_${dir}`, r.Xr); igual(`SJa2_${dir}`, r.SJa2);
+      igual(`SJ_${dir}`, r.SJ); igual(`Xr_${dir}`, r.Xr); igual(`SJaa_${dir}`, r.SJa2);
       r.piezas.forEach(x => { igual(`J_${dir}_${x.nombre}`, x.J); igual(`tras_${dir}_${x.nombre}`, x.tras); igual(`rot_${dir}_${x.nombre}`, x.rot); igual(`Mp_${dir}_${x.nombre}`, x.M); });
     }
     igual('JminA', g.rigidez.JminA); igual('JminB', g.rigidez.JminB); igual('flechaA', g.rigidez.flechaA.f); igual('flechaB', g.rigidez.flechaB.f);

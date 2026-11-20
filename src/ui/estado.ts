@@ -74,7 +74,7 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
       ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB, w.B.MPB, w.A.B, w.A.QPB, esf('B'))];
     const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel);
     return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif }, fem,
-      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, fem?.deriva) };
+      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, { A: corrC.rotoA?.SJ ?? 0, B: corrC.rotoB?.SJ ?? 0 }, fem?.deriva) };
   }
   return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,
     config: c, valores: c.metodo === 'guia' ? corr.guia : res };

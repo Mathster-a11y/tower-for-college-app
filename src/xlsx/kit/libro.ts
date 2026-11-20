@@ -29,10 +29,10 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** papel de la celda: define el color de fondo y la letra */
 export type Papel = 'titulo' | 'subtitulo' | 'seccion' | 'cab' | 'texto' | 'textoB' | 'nota' | 'unidad' | 'dato' | 'coef' | 'calc' | 'res' | 'clave' | 'vacio';
 /** formato de número */
-export type Fmt = 'g' | '0' | '0.0' | '0.00' | '0.000' | '0.0000' | '0.00000' | '%' | 'e';
+export type Fmt = 'g' | '0' | '0.0' | '0.00' | '0.000' | '0.0000' | '0.00000' | '0.000000' | '%' | 'e';
 export interface Estilo { papel: Papel; fmt?: Fmt; centrar?: boolean; ajustar?: boolean }
-const CODIGOS: Record<Exclude<Fmt, 'g'>, string> = { '0': '0', '0.0': '0.0', '0.00': '0.00', '0.000': '0.000', '0.0000': '0.0000', '0.00000': '0.00000', '%': '0.0%', e: '0.00E+00' };
-const FMT_ID: Record<Fmt, number> = { g: 0, '0': 164, '0.0': 165, '0.00': 166, '0.000': 167, '0.0000': 168, '0.00000': 169, '%': 170, e: 171 };
+const CODIGOS: Record<Exclude<Fmt, 'g'>, string> = { '0': '0', '0.0': '0.0', '0.00': '0.00', '0.000': '0.000', '0.0000': '0.0000', '0.00000': '0.00000', '0.000000': '0.000000', '%': '0.0%', e: '0.00E+00' };
+const FMT_ID: Record<Fmt, number> = { g: 0, '0': 164, '0.0': 165, '0.00': 166, '0.000': 167, '0.0000': 168, '0.00000': 169, '0.000000': 172, '%': 170, e: 171 };
 /** colores de la cátedra (azul de los encabezados, amarillo de los coeficientes) */
 const AZUL = '1F4E79', CELESTE = 'DDEBF7', AMARILLO = 'FFF2CC', GRIS = 'F2F2F2', VERDE = 'E2EFDA', BORDE = 'BFBFBF';
 const FUENTES = [
@@ -205,8 +205,9 @@ export class LibroK {
   hoja(nombre: string, anchos: number[] = []): HojaK { const h = new HojaK(nombre, anchos); this.hojas.push(h); return h; }
   nombrar(nombre: string, hoja: string, ref: string) {
     // un nombre que se parece a una celda (b6, H1, XFD10) o a R1C1 Excel y LibreOffice lo leen como la celda
-    if (/^[A-Za-z]{1,3}\d+$/.test(nombre) || /^[RrCc]\d*$/.test(nombre) || /^[RrCc]\d*[RrCc]\d*$/.test(nombre) || !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(nombre)) throw new Error(`Nombre definido inválido (se confunde con una celda): ${nombre}`);
-    if (this.nombres.has(nombre)) throw new Error(`Nombre definido repetido: ${nombre}`);
+    // (también uno que empieza como una celda: «n1_A»); y Excel no distingue mayúsculas: «n1_A» y «N1_A» son el mismo
+    if (/^[A-Za-z]{1,3}\d/.test(nombre) || /^[RrCc]\d*$/.test(nombre) || /^[RrCc]\d*[RrCc]\d*$/.test(nombre) || !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(nombre)) throw new Error(`Nombre definido inválido (se confunde con una celda): ${nombre}`);
+    if ([...this.nombres.keys()].some(k => k.toLowerCase() === nombre.toLowerCase())) throw new Error(`Nombre definido repetido (sin distinguir mayúsculas): ${nombre}`);
     this.nombres.set(nombre, { hoja, ref });
   }
 

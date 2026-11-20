@@ -12,6 +12,7 @@
  */
 import { hojaRef, LibroK, rc, type Estilo, type HojaK } from '../kit/libro';
 import type { DatosGuia } from '../../engine/metodos/guiaPasos';
+import { escribirGeometria, hojaSecciones } from './comun';
 import { DIVISORES } from '../../engine/planilla';
 import { tablasProyecto } from '../proyectoTablas';
 import type { Proyecto } from '../../engine/modelo';
@@ -105,37 +106,9 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   da.seccion(27, 'Fundación (platea)', 14);
   filaDato(28, 'b1: lado paralelo al viento A', d.fund.b1, 'lado_b1', 'm', 'el viento A vuelca alrededor del borde de este lado', dato('0.00'));
   filaDato(29, 'a1: lado perpendicular al viento A', d.fund.a1, 'lado_a1', 'm', '', dato('0.00'));
-  // niveles
-  da.seccion(31, 'Niveles, de la azotea a la fundación (PB = el último con cota ≥ 0)', 14);
-  da.cabecera(32, 1, ['Nivel', 'Cota (m)', 'B: ancho que recibe el viento A (m)', 'L: ancho que recibe el viento B (m)', 'Pisos que representa']);
-  const rN0 = 33, rN1 = rN0 + N - 1;
-  d.niveles.forEach((n, i) => { const r = rN0 + i; da.put(1, r, n.nombre, dato()); da.put(2, r, n.cota, dato('0.00')); da.put(3, r, n.B, dato('0.00')); da.put(4, r, n.L, dato('0.00')); da.put(5, r, n.pisos, dato('0')); });
-  const rngD = (c: number, r0: number, r1: number) => `${rc(c, r0)}:${rc(c, r1)}`;
-  nombrar('niv_cota', da, rngD(2, rN0, rN1)); nombrar('niv_B', da, rngD(3, rN0, rN1)); nombrar('niv_L', da, rngD(4, rN0, rN1)); nombrar('niv_pisos', da, rngD(5, rN0, rN1));
-  // muros
-  const rMs = rN1 + 2;
-  da.seccion(rMs, 'Muros: un renglón por rectángulo (un tubo rectangular son 4; un tubo circular o un perfil, 1 con su área y su J)', 14);
-  da.cabecera(rMs + 1, 1, ['Muro', 'Pieza en el viento A', 'Pieza en el viento B', 'x: centro (m)', 'y: centro (m)', 'ax: medida en x (m)', 'ay: medida en y (m)', 'Tubo circular (1 = sí)', 'A propia (m²)', 'J propio viento A (m⁴)', 'J propio viento B (m⁴)', 'Área de influencia (m²)', 'Llega hasta la cota (m)', 'Factor de peso']);
-  const rM0 = rMs + 2, rM1 = rM0 + Math.max(R, 1) - 1;
-  d.rects.forEach((x, i) => {
-    const r = rM0 + i;
-    da.put(1, r, x.muro, dato()); da.put(2, r, x.piezaA ?? '', dato()); da.put(3, r, x.piezaB ?? '', dato());
-    da.put(4, r, x.x, dato('0.000')); da.put(5, r, x.y, dato('0.000')); da.put(6, r, x.ax, dato('0.000')); da.put(7, r, x.ay, dato('0.000'));
-    da.put(8, r, x.tubo ? 1 : null, dato('0')); da.put(9, r, x.A, dato('0.0000')); da.put(10, r, x.JA, dato('0.0000')); da.put(11, r, x.JB, dato('0.0000'));
-    const primero = x.zHasta !== null;
-    da.put(12, r, primero ? x.areaInf ?? 0 : null, dato('0.00')); da.put(13, r, primero ? x.zHasta : null, dato('0.00')); da.put(14, r, primero ? x.factor ?? 1 : null, dato('0.000'));
-  });
-  ['m_muro', 'm_pA', 'm_pB', 'm_x', 'm_y', 'm_ax', 'm_ay', 'm_tubo', 'm_A', 'm_JA', 'm_JB', 'm_inf', 'm_top', 'm_fac'].forEach((n, i) => nombrar(n, da, rngD(i + 1, rM0, rM1)));
-  da.put(1, rM1 + 1, 'Área de influencia, cota y factor de peso van en el primer rectángulo de cada muro; los demás rectángulos del muro los comparten.', 'nota');
-  // piezas
-  const rPs = rM1 + 3;
-  da.seccion(rPs, 'Piezas (cómo se arma cada una: los rectángulos de arriba que llevan su nombre)', 14);
-  da.cabecera(rPs + 1, 1, ['Pieza', 'Viento']);
-  const piezasDir = (dir: 'A' | 'B') => d.piezas.map((pz, i) => ({ ...pz, r: rPs + 2 + i })).filter(pz => pz.dir === dir);
-  d.piezas.forEach((pz, i) => { da.put(1, rPs + 2 + i, pz.nombre, dato()); da.put(2, rPs + 2 + i, pz.dir, dato()); });
-
+  const geo = escribirGeometria(L, da, d, 31);
+  const { rM0, piezasDir, nivDato } = geo;
   const D_ = hojaRef(HG.datos);
-  const nivDato = (c: number, i: number) => `${D_}${rc(c, rN0 + i)}`;
 
   // ============================================================================================ 2 Viento (se arma antes que 1 Diseño: Diseño lee sus cotas)
   const vi = L.hoja(HG.viento, [14, 9, 9, 9, 7, 8, 11, 8, 9, 11, 11, 11, 11, 11, 11, 3, 10, 10]);
@@ -276,90 +249,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
   filaCa(rt + 28, 'M en PB, viento B', 'SUMPRODUCT((c_cota=zPB)*c_MB)', res('0.0'), 'tm', 'MPB_B');
 
   // ============================================================================================ 4 Secciones
-  const se = L.hoja(HG.secciones, [8, 10, 7, 9, 8, 8, 9, 9, 10, 9, 9, 10, 10, 3, 9, 9, 9]);
-  se.encabezado('Paso 4 · Secciones: el J de cada pieza (J propio + Steiner) y el eje de inercia', 'Cada rectángulo de «Datos» en las piezas de cada viento: h = su medida en el sentido del viento, b = la transversal; J propio = b·h³/12 (o el dato, para tubos y perfiles); s = posición en el sentido del viento; s̄ = baricentro de la pieza = Σ A·s / Σ A; Steiner = A·(s − s̄)². J de la pieza = Σ (J propio + A·d²). Eje de inercia = Σ J·t / Σ J (t: posición transversal de la pieza).', 13);
-  const bloque = (dir: 'A' | 'B', r0: number) => {
-    const A = dir === 'A';
-    se.seccion(r0, `Viento ${dir}: rectángulos (flexión ${A ? 'en y' : 'en x'})`, 13);
-    se.cabecera(r0 + 1, 1, ['Muro', 'Pieza', 'Papel', 'A (m²)', 'b (m)', 'h (m)', 's (m)', 't (m)', 'J propio (m⁴)', 's̄ pieza (m)', 'd = s − s̄ (m)', 'A·d² (m⁴)', 'J + A·d² (m⁴)']);
-    const f0 = r0 + 2, f1 = f0 + Math.max(R, 1) - 1;
-    for (let k = 0; k < R; k++) {
-      const r = f0 + k, m = (c: number) => `${D_}${rc(c, rM0 + k)}`;
-      const pz = m(A ? 2 : 3), hh = m(A ? 7 : 6), bb = m(A ? 6 : 7), Jd = m(A ? 10 : 11), s = m(A ? 5 : 4), t = m(A ? 4 : 5);
-      se.f(1, r, `${m(1)}`, { papel: 'calc' });
-      se.f(2, r, `IF(${pz}="","",${pz})`, { papel: 'calc' });
-      se.f(3, r, `IF(${m(8)}=1,"tubo",IF(F${r}>=E${r},"alma","ala"))`, { papel: 'calc', centrar: true });
-      se.f(4, r, `IF(${m(9)}="",${m(6)}*${m(7)},${m(9)})`, num('0.0000'));
-      se.f(5, r, `IF(${m(9)}="",${bb},D${r}/F${r})`, num('0.000'));
-      se.f(6, r, `${hh}`, num('0.000'));
-      se.f(7, r, `${s}`, num('0.000'));
-      se.f(8, r, `${t}`, num('0.000'));
-      se.f(9, r, `IF(${Jd}="",E${r}*F${r}^3/12,${Jd})`, num('0.0000'));
-      se.f(10, r, `IF(B${r}="",0,SUMPRODUCT((B$${f0}:B$${f1}=B${r})*D$${f0}:D$${f1}*G$${f0}:G$${f1})/SUMPRODUCT((B$${f0}:B$${f1}=B${r})*D$${f0}:D$${f1}))`, num('0.000'));
-      se.f(11, r, `IF(B${r}="",0,G${r}-J${r})`, num('0.000'));
-      se.f(12, r, `IF(B${r}="",0,D${r}*K${r}^2)`, num('0.0000'));
-      se.f(13, r, `IF(B${r}="",0,I${r}+L${r})`, res('0.0000'));
-    }
-    return { f0, f1 };
-  };
-  const bA = bloque('A', 4), bB = bloque('B', bA.f1 + 3);
-  nombrar('sA_pieza', se, `B${bA.f0}:B${bA.f1}`); nombrar('sA_muro', se, `A${bA.f0}:A${bA.f1}`); nombrar('sA_A', se, `D${bA.f0}:D${bA.f1}`); nombrar('sA_Jt', se, `M${bA.f0}:M${bA.f1}`); nombrar('sA_s', se, `G${bA.f0}:G${bA.f1}`); nombrar('sA_t', se, `H${bA.f0}:H${bA.f1}`);
-  nombrar('sB_pieza', se, `B${bB.f0}:B${bB.f1}`); nombrar('sB_muro', se, `A${bB.f0}:A${bB.f1}`); nombrar('sB_A', se, `D${bB.f0}:D${bB.f1}`); nombrar('sB_Jt', se, `M${bB.f0}:M${bB.f1}`); nombrar('sB_s', se, `G${bB.f0}:G${bB.f1}`); nombrar('sB_t', se, `H${bB.f0}:H${bB.f1}`);
-  // piezas de cada viento
-  const tablaPiezas = (dir: 'A' | 'B', r0: number) => {
-    const pfx = dir === 'A' ? 'sA_' : 'sB_';
-    se.seccion(r0, `Piezas del viento ${dir} y eje de inercia`, 13);
-    se.cabecera(r0 + 1, 1, ['Pieza', 'A (m²)', 's̄ (m)', 't̄: posición transversal (m)', 'J (m⁴)', 'J · t̄ (m⁵)']);
-    const ps = piezasDir(dir), f0 = r0 + 2, f1 = f0 + Math.max(ps.length, 1) - 1;
-    ps.forEach((pz, k) => {
-      const r = f0 + k;
-      se.f(1, r, `${D_}A${pz.r}`, { papel: 'calc' });
-      se.f(2, r, `SUMPRODUCT((${pfx}pieza=A${r})*${pfx}A)`, num('0.0000'));
-      se.f(3, r, `IF(B${r}>0,SUMPRODUCT((${pfx}pieza=A${r})*${pfx}A*${pfx}s)/B${r},0)`, num('0.000'));
-      se.f(4, r, `IF(B${r}>0,SUMPRODUCT((${pfx}pieza=A${r})*${pfx}A*${pfx}t)/B${r},0)`, num('0.000'));
-      se.f(5, r, `SUMPRODUCT((${pfx}pieza=A${r})*${pfx}Jt)`, res('0.0000'));
-      se.f(6, r, `E${r}*D${r}`, num('0.0000'));
-      clave(`J_${dir}_${pz.nombre}`, se, rc(5, r)); clave(`t_${dir}_${pz.nombre}`, se, rc(4, r));
-    });
-    se.put(4, f1 + 1, 'Σ', 'textoB');
-    const SJ = se.f(5, f1 + 1, `SUM(E${f0}:E${f1})`, res('0.000')); se.f(6, f1 + 1, `SUM(F${f0}:F${f1})`, num('0.000'));
-    se.put(1, f1 + 2, `Eje de inercia del viento ${dir}: Σ J·t̄ / Σ J`, 'textoB'); se.combinar(1, f1 + 2, 4, f1 + 2);
-    const Xr = se.f(5, f1 + 2, `IF(E${f1 + 1}>0,F${f1 + 1}/E${f1 + 1},0)`, res('0.000')); se.put(6, f1 + 2, 'm', 'unidad');
-    nombrar(`SJ_${dir}`, se, SJ); nombrar(`Xr_${dir}`, se, Xr); clave(`SJ_${dir}`, se, SJ); clave(`Xr_${dir}`, se, Xr);
-    nombrar(`p${dir}_nombre`, se, `A${f0}:A${f1}`); nombrar(`p${dir}_J`, se, `E${f0}:E${f1}`); nombrar(`p${dir}_t`, se, `D${f0}:D${f1}`);
-    return { f0, f1, fin: f1 + 2 };
-  };
-  const tA = tablaPiezas('A', bB.f1 + 3), tB = tablaPiezas('B', tA.fin + 2);
-  // planta: contorno de cada rectángulo (5 vértices y un renglón vacío) para el gráfico
-  const rPl = tB.fin + 3;
-  se.seccion(rPl, 'Planta (para el gráfico): vértices de cada rectángulo y de la planta de PB', 13);
-  se.cabecera(rPl + 1, 1, ['x (m)', 'y (m)']);
-  let rr = rPl + 2;
-  const p0 = rr;
-  for (let k = 0; k < R; k++) {
-    const m = (c: number) => `${D_}${rc(c, rM0 + k)}`;
-    const vert: [string, string][] = [[`-1`, `-1`], [`1`, `-1`], [`1`, `1`], [`-1`, `1`], [`-1`, `-1`]];
-    for (const [sx, sy] of vert) { se.f(1, rr, `${m(4)}+${sx}*${m(6)}/2`, num('0.00')); se.f(2, rr, `${m(5)}+${sy}*${m(7)}/2`, num('0.00')); rr++; }
-    rr++;
-  }
-  const p1 = rr - 1;
-  const c0 = rr;
-  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]]) { se.f(1, rr, `${sx}*B_PB/2`, num('0.00')); se.f(2, rr, `${sy}*L_PB/2`, num('0.00')); rr++; }
-  const c1 = rr - 1;
-  const e0 = rr + 1;
-  se.put(3, e0 - 1, 'ejes de inercia', 'nota');
-  se.f(1, e0, 'Xr_A', num('0.00')); se.f(2, e0, '-L_PB/2', num('0.00')); se.f(1, e0 + 1, 'Xr_A', num('0.00')); se.f(2, e0 + 1, 'L_PB/2', num('0.00'));
-  se.f(1, e0 + 3, '-B_PB/2', num('0.00')); se.f(2, e0 + 3, 'Xr_B', num('0.00')); se.f(1, e0 + 4, 'B_PB/2', num('0.00')); se.f(2, e0 + 4, 'Xr_B', num('0.00'));
-  const SE = hojaRef(HG.secciones);
-  se.graficos.push({ tipo: 'dispersion', titulo: 'Planta de PB, muros y ejes de inercia', ejeX: 'x (m)', ejeY: 'y (m)',
-    series: [
-      { nombre: 'planta', x: `${SE}$A$${c0}:$A$${c1}`, y: `${SE}$B$${c0}:$B$${c1}`, color: 'A6A6A6', sinMarcas: true, ancho: 12700 },
-      { nombre: 'muros', x: `${SE}$A$${p0}:$A$${p1}`, y: `${SE}$B$${p0}:$B$${p1}`, color: '1F4E79', sinMarcas: true, ancho: 19050 },
-      { nombre: 'eje de inercia A', x: `${SE}$A$${e0}:$A$${e0 + 1}`, y: `${SE}$B$${e0}:$B$${e0 + 1}`, color: 'C55A11', sinMarcas: true, punteada: true },
-      { nombre: 'eje de inercia B', x: `${SE}$A$${e0 + 3}:$A$${e0 + 4}`, y: `${SE}$B$${e0 + 3}:$B$${e0 + 4}`, color: '548235', sinMarcas: true, punteada: true },
-    ], desde: [15, 4], hasta: [26, 30] });
-  se.graficos.push({ tipo: 'barras', titulo: 'J de cada pieza', ejeX: 'pieza', ejeY: 'J (m⁴)',
-    series: [{ nombre: 'viento A', x: `${SE}$A$${tA.f0}:$A$${tA.f1}`, y: `${SE}$E$${tA.f0}:$E$${tA.f1}`, color: 'C55A11' }], desde: [15, 31], hasta: [26, 48], sinLeyenda: true });
+  const { bA, bB, tA, tB } = hojaSecciones(L, HG.secciones, 'Paso 4 · Secciones: el J de cada pieza (J propio + Steiner) y el eje de inercia', geo, d, clave);
 
   // ============================================================================================ 5 Rigidez
   const ri = L.hoja(HG.rigidez, [52, 13, 10, 13, 13, 50]);
@@ -421,7 +311,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
       ro.f(4, r, `C${r}-XrR_${dir}`, num('0.000'));
       ro.f(5, r, `B${r}*D${r}^2`, num('0.000'));
       ro.f(6, r, `IF(SJ_${dir}>0,Q_${dir}*B${r}/SJ_${dir},0)`, num('0.000'));
-      ro.f(7, r, `IF(SJa2_${dir}>0,-Q_${dir}*eR_${dir}*B${r}*D${r}/SJa2_${dir},0)`, num('0.000'));
+      ro.f(7, r, `IF(SJaa_${dir}>0,-Q_${dir}*eR_${dir}*B${r}*D${r}/SJaa_${dir},0)`, num('0.000'));
       ro.f(8, r, `F${r}+G${r}`, res('0.000'));
       ro.f(9, r, `IF(Q_${dir}>0,H${r}/Q_${dir},0)`, num('%'));
       ro.f(10, r, `MPB_${dir}*I${r}`, res('0.0'));
@@ -446,7 +336,7 @@ export function libroGuia(d: DatosGuia, p?: Proyecto): { libro: LibroK; claves: 
     const fin = Math.max(f1, q1) + 3;
     ro.put(1, fin, 'Σ J·a² = paralelas + perpendiculares', 'textoB'); ro.combinar(1, fin, 3, fin);
     const ref = ro.f(4, fin, `E${f1 + 1}+Q${q1 + 1}`, res('0.0')); ro.put(5, fin, 'm⁶', 'unidad');
-    nombrar(`SJa2_${dir}`, ro, ref); clave(`SJa2_${dir}`, ro, ref);
+    nombrar(`SJaa_${dir}`, ro, ref); clave(`SJaa_${dir}`, ro, ref);
     ro.graficos.push({ tipo: 'barras', titulo: `Corte que toma cada pieza, viento ${dir}`, ejeX: 'pieza', ejeY: 't',
       series: [{ nombre: 'traslación', x: `${RO}$A$${f0}:$A$${f1}`, y: `${RO}$F$${f0}:$F$${f1}`, color: '2E75B6' }, { nombre: 'rotación', x: `${RO}$A$${f0}:$A$${f1}`, y: `${RO}$G$${f0}:$G$${f1}`, color: '7030A0' }],
       desde: [19, r0], hasta: [27, r0 + 18] });

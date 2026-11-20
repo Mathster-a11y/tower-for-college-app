@@ -193,6 +193,15 @@ export class Evaluador {
     return { nums, error: null };
   }
 
+  /** rango de un argumento (referencia o nombre) */
+  private rangoDe(n: Nodo | undefined, hoja: string): { hoja: string; r0: number; c0: number; filas: number; cols: number } | null {
+    if (!n) return null;
+    const x = n.k === 'name' ? this.nombre(n.n) : n;
+    if (x.k !== 'ref') return null;
+    const p = partirRef(x.a), q = partirRef(x.b ?? x.a);
+    return { hoja: x.hoja ?? hoja, r0: Math.min(p.r, q.r), c0: Math.min(p.c, q.c), filas: Math.abs(q.r - p.r) + 1, cols: Math.abs(q.c - p.c) + 1 };
+  }
+
   /** evaluación en arreglo (para SUMPRODUCT): un rango es un arreglo y las cuentas van elemento por elemento */
   private arr(n: Nodo, hoja: string): Valor[] | { error: string } {
     if (n.k === 'name') return this.arr(this.nombre(n.n), hoja);
@@ -207,6 +216,22 @@ export class Evaluador {
         out.push(this.ev({ k: 'bin', op: n.op, a: { k: 'val', v: x }, b: { k: 'val', v: y } }, hoja));
       }
       return out;
+    }
+    if (n.k === 'fn' && ['ABS', 'SQRT', 'EXP', 'LN', 'INT'].includes(n.n)) {
+      // funciones de un número: elemento por elemento
+      const a = this.arr(n.args[0] ?? { k: 'val', v: null }, hoja);
+      if (!Array.isArray(a)) return a;
+      return a.map(x => this.ev({ k: 'fn', n: n.n, args: [{ k: 'val', v: x }] }, hoja));
+    }
+    if (n.k === 'fn' && (n.n === 'MAX' || n.n === 'MIN' || n.n === 'SUM')) {
+      // dentro de SUMPRODUCT, MAX de un arreglo: el mayor de todos sus elementos (como Excel)
+      const todos: number[] = [];
+      for (const a0 of n.args) {
+        const a = this.arr(a0, hoja);
+        if (!Array.isArray(a)) return a;
+        for (const x of a) { if (esError(x)) return x; if (typeof x === 'number') todos.push(x); else if (typeof x === 'boolean') todos.push(x ? 1 : 0); }
+      }
+      return [n.n === 'SUM' ? todos.reduce((s, x) => s + x, 0) : todos.length ? (n.n === 'MAX' ? Math.max(...todos) : Math.min(...todos)) : 0];
     }
     if (n.k === 'un') {
       const a = this.arr(n.x, hoja);
@@ -272,6 +297,34 @@ export class Evaluador {
         const l = this.lista(args, hoja);
         if (l.error) return l.error;
         return nombre === 'AND' ? l.nums.every(x => x !== 0) : l.nums.some(x => x !== 0);
+      }
+      case 'EXP': case 'LN': {
+        const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja));
+        if (typeof x !== 'number') return x;
+        return nombre === 'EXP' ? Math.exp(x) : x <= 0 ? ERR('#NUM!') : Math.log(x);
+      }
+      case 'INDEX': {
+        // INDEX(rango, fila, [columna]) con fila y columna desde 1
+        const a = this.rangoDe(args[0], hoja);
+        if (!a) return ERR('#REF!');
+        const f = this.num(this.ev(args[1] ?? { k: 'val', v: 1 }, hoja)), c = this.num(this.ev(args[2] ?? { k: 'val', v: 1 }, hoja));
+        if (typeof f !== 'number') return f;
+        if (typeof c !== 'number') return c;
+        const fi = (a.filas === 1 && args.length < 3) ? 1 : Math.trunc(f), co = (a.filas === 1 && args.length < 3) ? Math.trunc(f) : Math.trunc(c);
+        if (fi < 1 || co < 1 || fi > a.filas || co > a.cols) return ERR('#REF!');
+        return this.celda(a.hoja, `${numACol(a.c0 + co - 1)}${a.r0 + fi - 1}`);
+      }
+      case 'MATCH': {
+        // MATCH(valor, rango, 0) exacto (textos sin distinguir mayúsculas) o 1 (el mayor ≤ valor, rango creciente)
+        const v = this.ev(args[0] ?? { k: 'val', v: null }, hoja);
+        if (esError(v)) return v;
+        const a = this.rangoDe(args[1], hoja);
+        if (!a) return ERR('#N/A');
+        const tipo = args[2] ? this.num(this.ev(args[2], hoja)) : 1;
+        const vals = this.rango(a.hoja, `${numACol(a.c0)}${a.r0}`, `${numACol(a.c0 + a.cols - 1)}${a.r0 + a.filas - 1}`);
+        if (tipo === 0) { const i = vals.findIndex(x => x !== null && comparar(x, v, '=') === true); return i >= 0 ? i + 1 : ERR('#N/A'); }
+        let k = -1; vals.forEach((x, i) => { if (typeof x === typeof v && comparar(x, v, '<=') === true) k = i; });
+        return k >= 0 ? k + 1 : ERR('#N/A');
       }
       case 'NOT': { const x = this.num(this.ev(args[0] ?? { k: 'val', v: null }, hoja)); return typeof x !== 'number' ? x : x === 0; }
       case 'IFERROR': { const x = this.ev(args[0] ?? { k: 'val', v: null }, hoja); return esError(x) || (typeof x === 'number' && !Number.isFinite(x)) ? this.ev(args[1] ?? { k: 'val', v: null }, hoja) : x; }

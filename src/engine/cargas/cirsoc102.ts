@@ -15,7 +15,8 @@
  * Unidades: m, N/m² para las presiones (como el reglamento) y t para las fuerzas (1 t = 9,80665 kN, exacto: no se
  * redondea a 10 como la planilla).
  */
-import { entraEnCalculo, rectangulos, type Proyecto } from '../modelo';
+import { entraEnCalculo, rectangulos, tipoDe, type Proyecto } from '../modelo';
+import { propiedades } from '../perfil';
 
 export const KN_POR_T = 9.80665;
 
@@ -211,9 +212,14 @@ export function viento102(p: Proyecto, n1?: { A: number; B: number }): Viento102
     else if (d.frecuencia === 'manual' && d.n1manual && d.n1manual > 0) { n1 = d.n1manual; metodo = 'n1 de un análisis (dato)'; }
     else if (d.frecuencia === 'otros') { n1 = naOtros(h); metodo = 'na = 22,86 / h (1.9-4)'; }
     else {
-      const muros = p.muros.filter(m => entraEnCalculo(m, zFund, zTop)).flatMap(m => rectangulos(m).map(r => ({ r, m })))
-        .filter(({ r }) => (A ? r.ay > r.ax : r.ax > r.ay))   // paralelos al viento
-        .map(({ r, m }) => ({ A: r.ax * r.ay, D: A ? r.ay : r.ax, h: Math.max(0.01, Math.min(m.zHasta ?? zTop, zTop) - Math.max(m.zDesde ?? zPB, zPB)) }));
+      // los tabiques paralelos al viento: los rectángulos de cada muro (un perfil, su caja con su área; los tubos
+      // circulares no son tabiques), como la hoja «Datos» de la planilla renovada
+      const muros = p.muros.filter(m => entraEnCalculo(m, zFund, zTop) && tipoDe(m) !== 'tubo-circ').flatMap(m => {
+        const hi = Math.max(0.01, Math.min(m.zHasta ?? zTop, zTop) - Math.max(m.zDesde ?? zPB, zPB));
+        if (tipoDe(m) === 'perfil') { const k = propiedades(m.perfil!); return [{ ax: 2 * k.cB, ay: 2 * k.cA, A: k.A, hi }]; }
+        return rectangulos(m).map(r => ({ ax: r.ax, ay: r.ay, A: r.ax * r.ay, hi }));
+      }).filter(r => (A ? r.ay > r.ax : r.ax > r.ay))   // paralelos al viento
+        .map(r => ({ A: r.A, D: A ? r.ay : r.ax, h: r.hi }));
       const t = naTabiques(h, BPB * LPB, muros);
       n1 = t.na; Cw = t.Cw; metodo = 'na = 117,3 · √Cw / h (1.9-5, tabiques)';
     }
