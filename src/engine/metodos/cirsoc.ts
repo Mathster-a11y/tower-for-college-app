@@ -85,8 +85,10 @@ export function partesPorCaso(rg: RotoGuia, nombre: string, B: number, Qdir: num
  * cuatro casos de carga del viento.
  */
 export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], rg: RotoGuia | undefined, dir: 'A' | 'B',
-  QPB: number, MPB: number, Botro: number, QotroPB: number): VerifPieza201[] {
-  if (!rg) return [];
+  QPB: number, MPB: number, Botro: number, QotroPB: number,
+  /** método FEM: el corte y el momento en la base de cada pieza en los cuatro casos (manda sobre la rototraslación) */
+  esfuerzosFem?: (nombre: string) => { M: number; V: number }[] | null): VerifPieza201[] {
+  if (!rg && !esfuerzosFem) return [];
   const alt = datosAlturaDe(p), d1 = datos101De(p), L = sobrecarga(d1), fc = fcDe(p.hormigon || 'H30');
   const rec = (recubrimientoMm(datos201De(p)) + 12) / 1000;                     // al eje de las barras: + Ø6 horizontal + Ø12/2
   const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
@@ -99,7 +101,8 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
     const muros = pz.muros.map(id => porId.get(id)).filter((m): m is Muro => !!m);
     const { partes, J } = partesDePieza(muros, dir);
     const base = verificarPieza(pz.nombre, dir, muros, 1, alt, 300).muros;      // pesos de cada parte (D y L)
-    const frac = partesPorCaso(rg, pz.nombre, Bdir, QPB, torsionOtro);
+    const fem = esfuerzosFem?.(pz.nombre) ?? null;
+    const frac = fem ? fem.map(x => (MPB > 0 ? Math.abs(x.M) / MPB : 0)) : partesPorCaso(rg!, pz.nombre, Bdir, QPB, torsionOtro);
     const areaAlmas = partes.filter(x => x.h >= x.b).reduce((s, x) => s + x.A, 0) || 1;
     const out = partes.map((pt, k) => {
       const b0 = base[k];
@@ -110,7 +113,7 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
       for (const c of combos) {
         if (c.W === 0) { sol.push({ combinacion: c.nombre, Nu: c.D * D + c.L * Lm, Mu: 0, Vu: 0 }); continue; }
         frac.forEach((f, ci) => {
-          const M = f * MPB, V = f * QPB;
+          const M = fem ? Math.abs(fem[ci].M) : f * MPB, V = fem ? Math.abs(fem[ci].V) : f * QPB;
           const Nw = J > 0 ? (M * pt.A * pt.d) / J : 0, Mw = esAlma && J > 0 ? (M * (pt.b * pt.h ** 3) / 12) / J : 0;
           const Vw = esAlma ? (V * pt.A) / areaAlmas : 0;
           for (const sg of [1, -1]) sol.push({ combinacion: `${c.nombre} · caso ${ci + 1}${sg > 0 ? '' : ' (viento al revés)'}`, Nu: c.D * D + c.L * Lm + sg * c.W * Nw, Mu: c.W * Mw, Vu: c.W * Vw });
@@ -134,9 +137,14 @@ const pc = (x: number) => `${nf(x * 100, 2)} %`;
  * Los controles del método CIRSOC: reemplazan a los de la guía donde el reglamento dice otra cosa (vuelco con
  * 0,9 D + 1,0 W, frecuencia y carga mínima del 102-25, deriva de servicio, hormigón por resistencia del 201).
  */
-export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaRes, w: Viento102, verif: VerifPieza201[], filaNivel: number[], nivel: NivelVerificacion): Control[] {
+export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaRes, w: Viento102, verif: VerifPieza201[], filaNivel: number[], nivel: NivelVerificacion,
+  /** método FEM: la deformada de servicio del modelo (ya escalada al viento de servicio), en lugar de la ménsula equivalente */
+  derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>): Control[] {
   const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula/.test(c.nombre);
-  const out = base.filter(c => !fuera(c));
+  // el J mínimo de la cátedra (h/500 con el viento de cálculo) queda como referencia: lo que manda es la deriva de servicio
+  const out = base.filter(c => !fuera(c)).map(c => (/≥ J mínimo \(h\/500\)/.test(c.nombre)
+    ? { ...c, estado: 'informativo' as Control['estado'], nota: `${c.estado === 'verifica' ? 'Cumple' : 'No cumple'} el criterio de la cátedra (h/500 con el viento de cálculo). En el CIRSOC manda la deriva de servicio (más abajo).${c.nota ? ` ${c.nota}` : ''}` }
+    : c));
   const est = (ok: boolean) => (ok ? 'verifica' : 'no verifica') as Control['estado'];
   for (const d of [w.A, w.B]) {
     out.push({ grupo: 'Viento', nombre: `Frecuencia n1, viento ${d.dir}`, criterio: 'n1 ≥ 1 Hz: rígido (G = 0,85); si no, Gf', fuente: 'CIRSOC 102-25, art. 1.9',
@@ -151,18 +159,22 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     planilla: null, guia: m.L99, unidad: '', estado: est(0.9 * m.L99 >= 1) });
   // deriva de servicio: la deformada con el viento de servicio (Wa), contra h/límite y entrepiso/límite
   const lim = datos201De(p).limiteDeriva;
+  const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0);
   const E = moduloHormigon(p.hormigon || 'H30');
   for (const dir of ['A', 'B'] as const) {
     const alt = datosAltura(p, valores.viento, valores.mnyq, filaNivel, dir);
     const J = rigidez(valores, p.hormigon || 'H30').find(x => x.dir === dir)!.J;
     const W = alt.reduce((s, x) => s + x.F, 0);
-    const def = deformada(alt, W, E, J);
+    const fem = derivaFem?.[dir];
+    const def = fem
+      ? { puntos: fem.z.map((z, i) => ({ z, d: fem.d[i] / w.servicio.relacion, nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: fem.d[fem.d.length - 1] / w.servicio.relacion, h: fem.h }
+      : deformada(alt, W, E, J);
     const f = w.servicio.relacion;
     const pts = [...def.puntos].sort((a, b) => a.z - b.z);
     let peorPiso = 0, dondePiso = '';
     for (let i = 1; i < pts.length; i++) { const dz = pts[i].z - pts[i - 1].z; if (dz > 0) { const r = ((pts[i].d - pts[i - 1].d) * f) / dz; if (r > peorPiso) { peorPiso = r; dondePiso = pts[i].nivel; } } }
     const top = def.dTop * f;
-    out.push({ grupo: 'Rigidez', nombre: `Deriva de servicio, viento ${dir}`, criterio: `azotea ≤ h/${lim} y cada piso ≤ entrepiso/${lim}`, fuente: 'CIRSOC 102-25, comentario C B.4.2 (orientativo: 1/600 a 1/400)',
+    out.push({ grupo: 'Rigidez', nombre: `Deriva de servicio, viento ${dir}`, criterio: `azotea ≤ h/${lim} y cada piso ≤ entrepiso/${lim}`, fuente: `CIRSOC 102-25, comentario C B.4.2 (orientativo: 1/600 a 1/400)${fem ? '; desplazamientos del modelo FEM, borde más desfavorable' : ''}`,
       planilla: null, guia: top, unidad: 'm', estado: est(top <= def.h / lim && peorPiso <= 1 / lim),
       nota: `Viento de servicio de ${w.servicio.recurrencia} años (${nf(f * 100, 0)} % de la presión de cálculo). Azotea ${nf(top * 1000, 1)} mm (límite ${nf((def.h / lim) * 1000, 1)} mm); peor piso ${dondePiso}: 1/${peorPiso > 0 ? Math.round(1 / peorPiso) : '∞'}.` });
   }

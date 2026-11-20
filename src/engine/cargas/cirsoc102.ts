@@ -180,7 +180,9 @@ function plantas(p: Proyecto) {
   return p.niveles.map(n => { B = n.B ?? B; L = n.L ?? L; return { ...n, B, L }; });
 }
 
-export function viento102(p: Proyecto): Viento102 {
+/** @param n1 frecuencias de un análisis (el modal del FEM), por dirección: mandan sobre los datos */
+export function viento102(p: Proyecto, n1?: { A: number; B: number }): Viento102 {
+  const n1Fem = n1;
   const d = datos102De(p);
   const cat = d.categoria, exp = d.exposicion;
   const fila = d.ciudad ? CIUDADES[d.ciudad] : undefined;
@@ -205,7 +207,8 @@ export function viento102(p: Proyecto): Viento102 {
     const Lef = hs.reduce((s, x) => s + x.h * x.L, 0) / (hs.reduce((s, x) => s + x.h, 0) || 1);
     const aproximadaValida = h < 90 && h < 4 * Lef;
     let n1: number, metodo: string, Cw: number | undefined;
-    if (d.frecuencia === 'manual' && d.n1manual && d.n1manual > 0) { n1 = d.n1manual; metodo = 'n1 de un análisis (dato)'; }
+    if (n1Fem && n1Fem[dir] > 0) { n1 = n1Fem[dir]; metodo = 'n1 del análisis modal (FEM)'; }
+    else if (d.frecuencia === 'manual' && d.n1manual && d.n1manual > 0) { n1 = d.n1manual; metodo = 'n1 de un análisis (dato)'; }
     else if (d.frecuencia === 'otros') { n1 = naOtros(h); metodo = 'na = 22,86 / h (1.9-4)'; }
     else {
       const muros = p.muros.filter(m => entraEnCalculo(m, zFund, zTop)).flatMap(m => rectangulos(m).map(r => ({ r, m })))

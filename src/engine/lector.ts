@@ -184,6 +184,7 @@ export function leerProyecto(x: unknown): Lectura {
       if (!nulo(c.armado) && c.armado !== 'catedra' && c.armado !== 'app') error(`Armado de piezas desconocido («${String(c.armado)}»).`);
       if (!nulo(c.formulas) && typeof c.formulas !== 'string') error('La versión de las fórmulas tiene que ser texto.');
       if (!nulo(c.verificacion) && c.verificacion !== 'simple' && c.verificacion !== 'completa') error('La verificación tiene que ser «simple» o «completa».');
+      if (!nulo(c.teoria) && c.teoria !== 'timoshenko' && c.teoria !== 'euler') error('La teoría del FEM tiene que ser «timoshenko» o «euler».');
       if (!nulo(c.metodo) && IDS_METODO.includes(c.metodo as IdMetodo) && !METODOS[c.metodo as IdMetodo].disponible) {
         avisos.push(`El proyecto se calculó con el método «${METODOS[c.metodo as IdMetodo].nombre}», que todavía no está en esta versión de la app: se usa «${METODOS.planilla.nombre}».`);
         c.metodo = 'planilla';

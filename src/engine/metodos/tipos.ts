@@ -21,10 +21,12 @@ export type Armado = 'catedra' | 'app';
 
 /** verificación del hormigón en los métodos CIRSOC y FEM: «simple» (a mano) o «completa» (diagrama de interacción) */
 export type NivelVerificacion = 'simple' | 'completa';
-export interface ConfigCalculo { metodo: IdMetodo; version: VersionPlanilla; armado: Armado; verificacion: NivelVerificacion }
+/** método FEM: las piezas como vigas de Euler-Bernoulli (solo flexión) o de Timoshenko (con la deformación por corte) */
+export type TeoriaFem = 'timoshenko' | 'euler';
+export interface ConfigCalculo { metodo: IdMetodo; version: VersionPlanilla; armado: Armado; verificacion: NivelVerificacion; teoria: TeoriaFem }
 
 /** lo que se usa cuando el proyecto no dice nada: lo que la app calculaba hasta noviembre de 2026 (no cambia números) */
-export const CONFIG_POR_DEFECTO: Readonly<ConfigCalculo> = { metodo: 'planilla', version: 'actual', armado: 'app', verificacion: 'completa' };
+export const CONFIG_POR_DEFECTO: Readonly<ConfigCalculo> = { metodo: 'planilla', version: 'actual', armado: 'app', verificacion: 'completa', teoria: 'timoshenko' };
 
 /** versión de las fórmulas: sube cuando cambia algún resultado, para saber con qué cálculo se hizo una entrega */
 export const VERSION_FORMULAS = '2026.11';
@@ -34,7 +36,7 @@ export const METODOS: Record<IdMetodo, InfoMetodo> = {
   planilla: { nombre: 'Planilla virgen', corto: 'Planilla', disponible: true, reglas: 'La planilla de la cátedra tal cual, con sus simplificaciones (G = 0,85, rototraslación de la planilla, pieza entera).' },
   guia: { nombre: 'Guía', corto: 'Guía', disponible: true, reglas: 'El procedimiento analítico de la guía «Edificio en torre» 2024: Kz constante por debajo de 5 m, sin viento en PB ni en los subsuelos, J completo, rotación muro por muro y momento de rotación con las unidades bien.' },
   cirsoc: { nombre: 'CIRSOC', corto: 'CIRSOC', disponible: true, reglas: 'Cargas del CIRSOC 101-25 y 102-25 (viento por categoría de riesgo, frecuencia, G o Gf, cuatro casos de carga con torsión, combinaciones con 1,0 W), reparto de la guía y verificación por resistencia del CIRSOC 201-2005 (simple o completa).' },
-  fem: { nombre: 'FEM', corto: 'FEM', disponible: false, reglas: 'Las reglas del CIRSOC con el reparto de un modelo de la torre (pseudo-3D con losa rígida y análisis modal).', etapa: 'etapa 6' },
+  fem: { nombre: 'FEM', corto: 'FEM', disponible: true, reglas: 'Las reglas del CIRSOC con el reparto de un modelo de la torre: pseudo-3D con losas rígidas (Euler o Timoshenko), análisis modal para la frecuencia del viento y los cuatro casos de carga resueltos con el modelo.' },
   combinado: { nombre: 'Combinado', corto: 'Combinado', disponible: false, reglas: 'Corre todos los métodos con la misma torre y los compara en una tabla.', etapa: 'etapa 7' },
 };
 export const IDS_METODO = Object.keys(METODOS) as IdMetodo[];
@@ -47,6 +49,7 @@ export function configDe(p: { calculo?: (Partial<ConfigCalculo> & { formulas?: s
     version: c.version === 'nuevo' || c.version === 'actual' ? c.version : CONFIG_POR_DEFECTO.version,
     armado: c.armado === 'catedra' || c.armado === 'app' ? c.armado : CONFIG_POR_DEFECTO.armado,
     verificacion: c.verificacion === 'simple' ? 'simple' : 'completa',
+    teoria: c.teoria === 'euler' ? 'euler' : 'timoshenko',
   };
 }
 
@@ -59,5 +62,6 @@ export function describirConfig(c: ConfigCalculo): string {
   if (c.metodo === 'planilla') partes.push(c.version === 'nuevo' ? 'planilla 2025' : 'planilla anterior');
   if (c.metodo === 'planilla' || c.metodo === 'guia') partes.push(c.armado === 'catedra' ? 'armado de la cátedra' : 'armado de la app');
   if (c.metodo === 'cirsoc' || c.metodo === 'fem') partes.push(`verificación ${c.verificacion}`);
+  if (c.metodo === 'fem') partes.push(c.teoria === 'euler' ? 'Euler-Bernoulli' : 'Timoshenko');
   return partes.join(' · ');
 }

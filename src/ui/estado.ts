@@ -9,6 +9,7 @@ import { areasInfluencia } from '../engine/areas';
 import { config, usarConfig } from '../engine/config';
 import { leerProyecto, textoErrores } from '../engine/lector';
 import { viento102, type Viento102 } from '../engine/cargas/cirsoc102';
+import { calcularFem, type ResultadoMetodoFem } from '../engine/metodos/fem';
 import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201 } from '../engine/metodos/cirsoc';
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
 
@@ -22,7 +23,7 @@ const CLAVE_MODO = 'torre3d.modoCalculo';
 function configViejaDelNavegador(): ConfigCalculo {
   try {
     const c = JSON.parse(localStorage.getItem(CLAVE_CONFIG_VIEJA) ?? '{}') as { motor?: string; metodo?: string };
-    return { metodo: 'planilla', version: c.motor === 'nuevo' ? 'nuevo' : 'actual', armado: c.metodo === 'planilla' ? 'catedra' : 'app', verificacion: 'completa' };
+    return { metodo: 'planilla', version: c.motor === 'nuevo' ? 'nuevo' : 'actual', armado: c.metodo === 'planilla' ? 'catedra' : 'app', verificacion: 'completa', teoria: 'timoshenko' };
   } catch { return { ...CONFIG_POR_DEFECTO }; }
 }
 
@@ -38,6 +39,8 @@ export interface Calculo {
   valores: PlanillaRes;
   /** método CIRSOC: viento del 102-25, cálculo con ese viento y verificación del 201 de cada pieza */
   cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[] };
+  /** método FEM: modelo, modos, casos de carga resueltos y reparto (cirsoc lleva el viento con las frecuencias del modelo) */
+  fem?: ResultadoMetodoFem;
   /** el último cálculo falló: los resultados que quedan son los del último cálculo bueno (de la revisión «revision») */
   error?: string;
   /** revisión del proyecto con la que se calcularon estos resultados (ver Estado.revision) */
@@ -60,15 +63,18 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
   const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const filaPB = asig.filaNivel[iPB] ?? 50;
   const corr = calcularCorregido(asig.datos, filaPB, { proyecto, piezas: asig.piezas });
-  if (c.metodo === 'cirsoc') {
-    // método CIRSOC: el motor de la planilla con el viento del 102-25, el reparto de la guía y el hormigón del 201
-    const w = viento102(proyecto);
+  if (c.metodo === 'cirsoc' || c.metodo === 'fem') {
+    // método CIRSOC: el motor de la planilla con el viento del 102-25, el reparto de la guía y el hormigón del 201.
+    // método FEM: lo mismo, pero la frecuencia sale del análisis modal y el reparto de los casos de carga, del modelo.
+    const fem = c.metodo === 'fem' ? calcularFem(proyecto, c.teoria) : undefined;
+    const w = fem?.viento ?? viento102(proyecto);
     const corrC = calcularCorregido(datosCirsoc(asig.datos, w), filaPB, { proyecto, piezas: asig.piezas });
-    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB, w.A.MPB, w.B.B, w.B.QPB),
-      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB, w.B.MPB, w.A.B, w.A.QPB)];
+    const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n) : undefined);
+    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB, w.A.MPB, w.B.B, w.B.QPB, esf('A')),
+      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB, w.B.MPB, w.A.B, w.A.QPB, esf('B'))];
     const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel);
-    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif },
-      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion) };
+    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif }, fem,
+      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, fem?.deriva) };
   }
   return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,
     config: c, valores: c.metodo === 'guia' ? corr.guia : res };

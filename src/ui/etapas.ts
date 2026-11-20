@@ -24,6 +24,10 @@ import type { PlanillaRes } from '../engine/planilla';
 import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
 import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
 import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
+import { centroRigidezFem, panelRigidezFem, seccionRepartoFem } from './fem';
+
+/** los métodos que verifican el hormigón con el CIRSOC 201 (CIRSOC y FEM) */
+const usaCirsoc201 = () => estado.config.metodo === 'cirsoc' || estado.config.metodo === 'fem';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -88,7 +92,7 @@ const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => 
 /** Tabla de controles: planilla, guía y estado. */
 export function tablaControles(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', estado.config.metodo === 'cirsoc' ? 'CIRSOC' : 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
   cs.forEach(k => {
     // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
@@ -283,6 +287,7 @@ const rigidezE: Etapa = {
   icono: '<path d="M6 4h14M6 20h14M13 4v16"/>',
   globo: 'Rigidez|La suma de los J de las piezas tiene que alcanzar para que la azotea no se corra más de h/500 con el viento.',
   panel(c) {
+    if (estado.config.metodo === 'fem' && estado.calculo.fem) panelRigidezFem(c);
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
@@ -310,6 +315,7 @@ const rigidezE: Etapa = {
     c.append(seccion('J de cada pieza', t).el);
   },
   centro(c, tam) {
+    if (estado.config.metodo === 'fem' && estado.calculo.fem) { centroRigidezFem(c, tam); return; }
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
@@ -364,6 +370,7 @@ const rototrasl: Etapa = {
     c.append(seccion('Tabiques paralelos al viento (t)', tabla(dp.paralelos, false)).el);
     if (dp.perpendiculares.some(x => Math.abs(x.rot) > 1e-9) || dp.perpendiculares.length) c.append(seccion(guia ? 'Muros perpendiculares: solo rotación (t)' : 'Piezas perpendiculares: solo rotación (t)', tabla(dp.perpendiculares, true)).el);
     if (!guia) c.append(seccionParPerp(d));
+    const rf = seccionRepartoFem(); if (rf) c.append(rf);
     const aviso = avisoCRCaraMenor(d);
     if (aviso) c.append(h('p', { class: 'aviso-linea' }, aviso));
     c.append(h('p', { class: 'nota' }, guia
@@ -626,7 +633,7 @@ const flexion: Etapa = {
   icono: '<path d="M6 4v16M6 4l14 16H6"/>',
   globo: 'Flexocompresión|Cada muro se verifica en PB con σ = −N/F ± M/W: sin sobrecarga para ver si tracciona (y cuánta armadura lleva), con sobrecarga para la compresión máxima del hormigón.',
   panel(c) {
-    if (estado.config.metodo === 'cirsoc') { panelFlexCirsoc(c); return; }
+    if (usaCirsoc201()) { panelFlexCirsoc(c); return; }
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
     const vs = verifs();
@@ -684,7 +691,7 @@ const flexion: Etapa = {
     });
   },
   centro(c, tam) {
-    if (estado.config.metodo === 'cirsoc') { centroFlexCirsoc(c, tam); return; }
+    if (usaCirsoc201()) { centroFlexCirsoc(c, tam); return; }
     const vs = verifs();
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
@@ -714,7 +721,7 @@ const flexion: Etapa = {
     c.append(t, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
   },
   nombreCentro: () => `Flexocompresión · viento ${estado.dir}`,
-  estado: () => peor(grupoControles(estado.config.metodo === 'cirsoc' ? ['CIRSOC 201'] : ['Flexocompresión'])),
+  estado: () => peor(grupoControles(usaCirsoc201() ? ['CIRSOC 201'] : ['Flexocompresión'])),
 };
 
 // ------------------------------------------------------------------ Carta (la hoja M,NyQ dibujada)

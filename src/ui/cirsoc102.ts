@@ -13,6 +13,7 @@ import { graficoAltura, tablaValores, type Tam } from './diagramas';
 /** el cálculo del 102-25 del proyecto abierto (se rehace solo cuando cambia la revisión) */
 let cache: { rev: number; v: Viento102 } | null = null;
 export function vientoCirsoc(): Viento102 {
+  if (estado.calculo.fem) return estado.calculo.fem.viento;           // método FEM: con las frecuencias del modal
   if (!cache || cache.rev !== estado.revision) cache = { rev: estado.revision, v: viento102(estado.proyecto) };
   return cache.v;
 }

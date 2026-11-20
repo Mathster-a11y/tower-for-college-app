@@ -25,7 +25,7 @@ const pc = (x: number) => `${fmt(x * 100, 2)} %`;
 export function panelFlexCirsoc(c: H) {
   const p = estado.proyecto, d = datos201De(p), cfg = estado.config;
   const vs = piezasDir();
-  c.append(h('p', { class: 'nota' }, `Verificación por resistencia del CIRSOC 201-2005 (${cfg.verificacion}), en PB, muro por muro como la guía: almas a flexocompresión con su parte del momento, alas con la fuerza del par. Cargas mayoradas: combinaciones del 101-25 con el viento del 102-25 (1,0 W) en sus cuatro casos de carga.`));
+  c.append(h('p', { class: 'nota' }, `Verificación por resistencia del CIRSOC 201-2005 (${cfg.verificacion}), en PB, muro por muro como la guía: almas a flexocompresión con su parte del momento, alas con la fuerza del par. Cargas mayoradas: combinaciones del 101-25 con el viento del 102-25 (1,0 W) en sus cuatro casos de carga${cfg.metodo === 'fem' ? ', con el momento y el corte de cada pieza que da el modelo FEM (no la rototraslación)' : ''}.`));
   const dat = seccion('Hormigón y armadura (CIRSOC 201)').cuerpo; c.append(dat.parentElement!);
   dat.append(h('div', { class: 'grilla2' },
     elegir('Recubrimiento (Tabla 7.7.1)', [['interior', 'tabique interior · 20 mm'], ['exterior', 'al aire libre o contra el suelo · 30 mm']], d.recubrimiento, x => cambiar201({ recubrimiento: x })),

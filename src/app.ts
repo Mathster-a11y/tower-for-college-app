@@ -138,6 +138,15 @@ function dibujarTira(e: Etapa) {
     });
     t.append(h('span', { class: 'nota chica' }, 'Verificación'), segN);
   }
+  if (cfg.metodo === 'fem') {
+    const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
+    ([['timoshenko', 'Timoshenko'], ['euler', 'Euler']] as const).forEach(([k, txt]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(cfg.teoria === k) }, txt);
+      b.addEventListener('click', () => { if (cfg.teoria !== k) estado.cambiarCalculo({ teoria: k }); });
+      segT.append(b);
+    });
+    t.append(h('span', { class: 'nota chica' }, 'Piezas'), segT);
+  }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
     ([['catedra', 'Cátedra'], ['app', 'App']] as const).forEach(([k, txt]) => {

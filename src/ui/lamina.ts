@@ -66,7 +66,7 @@ function verificaciones(svg: SVGSVGElement, x: number, y: number, w: number, h: 
   svg.append(el('text', { x, y: y + 30, class: 'lm-tit' }, 'Verificaciones'));
   const fila = 50, entran = Math.max(1, Math.floor((h - 110) / fila));
   const cols = [x, x + w - 520, x + w - 330, x + w - 150];
-  ['Control', 'Planilla', estado.config.metodo === 'cirsoc' ? 'CIRSOC' : 'Guía', ''].forEach((t, i) => svg.append(el('text', { x: cols[i] + (i === 1 || i === 2 ? 150 : 0), y: y + 80, class: 'lm-cab', 'text-anchor': i === 1 || i === 2 ? 'end' : 'start' }, t)));
+  ['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', ''].forEach((t, i) => svg.append(el('text', { x: cols[i] + (i === 1 || i === 2 ? 150 : 0), y: y + 80, class: 'lm-cab', 'text-anchor': i === 1 || i === 2 ? 'end' : 'start' }, t)));
   lista.slice(0, entran).forEach((c, i) => {
     const yy = y + 130 + i * fila;
     if (i % 2 === 0) svg.append(el('rect', { x: x - 8, y: yy - 34, width: w + 8, height: fila, class: 'lm-cebra' }));

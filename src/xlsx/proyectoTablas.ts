@@ -46,12 +46,16 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   // cómo se calcula (va con el proyecto: el archivo da lo mismo en cualquier computadora). Vacío = la configuración de siempre
-  ['Método', 'método de cálculo: planilla (planilla virgen) o guia', p => p.calculo?.metodo ?? null,
+  ['Método', 'método de cálculo: planilla (planilla virgen), guia, cirsoc o fem', p => p.calculo?.metodo ?? null,
     (p, v) => { const t = norm(v); if (IDS_METODO.includes(t as IdMetodo)) p.calculo = { ...(p.calculo ?? {}), metodo: t as IdMetodo }; }],
   ['Versión de la planilla', 'anterior o 2025', p => (p.calculo?.version ? (p.calculo.version === 'nuevo' ? '2025' : 'anterior') : null),
     (p, v) => { const t = norm(v); if (t === '2025' || t === 'anterior') p.calculo = { ...(p.calculo ?? {}), version: t === '2025' ? 'nuevo' : 'actual' }; }],
   ['Armado de piezas', 'catedra (método simplificado de la cátedra) o app', p => p.calculo?.armado ?? null,
     (p, v) => { const t = norm(v); if (t === 'catedra' || t === 'app') p.calculo = { ...(p.calculo ?? {}), armado: t }; }],
+  ['Verificación', 'métodos CIRSOC y FEM: simple o completa', p => p.calculo?.verificacion ?? null,
+    (p, v) => { const t = norm(v); if (t === 'simple' || t === 'completa') p.calculo = { ...(p.calculo ?? {}), verificacion: t }; }],
+  ['Piezas del FEM', 'método FEM: timoshenko o euler', p => p.calculo?.teoria ?? null,
+    (p, v) => { const t = norm(v); if (t === 'timoshenko' || t === 'euler') p.calculo = { ...(p.calculo ?? {}), teoria: t }; }],
   ['Versión de las fórmulas', 'con qué versión de la app se calculó (informativo)', p => p.calculo?.formulas ?? null,
     (p, v) => { const t = txt(v); if (t) p.calculo = { ...(p.calculo ?? {}), formulas: t }; }],
   // viento CIRSOC 102-25 y cargas CIRSOC 101-25 (métodos CIRSOC y FEM); vacío = por defecto

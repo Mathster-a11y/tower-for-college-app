@@ -495,7 +495,7 @@ export function panelResultados(c: H, completo = true) {
   const m = res.mnyq, g = corr.guia.mnyq;
   c.append(h('p', { class: 'nota' }, 'Columna «Planilla»: lo que calcula la planilla de la cátedra, sin cambios. Columna «Guía»: el procedimiento de la guía (Kz constante por debajo de 5 m, sin viento en PB, J completo, rotación muro por muro y momento de rotación con las unidades bien). El método elegido arriba decide qué valores usan las etapas y los dibujos.'));
   const resumen = h('table', { class: 'tabla' });
-  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, estado.config.metodo === 'cirsoc' ? 'CIRSOC' : 'Guía'))));
+  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía'))));
   const tb = h('tbody');
   ([['W total (t)', m.H61, g.H61, 1], ['Mv en la fundación (tm)', m.J61, g.J61, 0], ['hW (m)', m.G66, g.G66, 2], ['P sin sobrecarga (t)', m.M61, g.M61, 0],
     ['Me / Mv', m.L99, g.L99, 2], ['e = Mv/P (m)', m.M99, g.M99, 2], ["b'/6 (m)", m.N99, g.N99, 2], ['σ máx. suelo (kg/cm²)', m.N89, g.N89, 2], ['σ mín. suelo (kg/cm²)', m.N90, g.N90, 2],
@@ -506,7 +506,7 @@ export function panelResultados(c: H, completo = true) {
   if (!completo) return;
   c.append(h('h3', {}, 'Verificaciones'));
   const t = h('table', { class: 'tabla compacta' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', estado.config.metodo === 'cirsoc' ? 'CIRSOC' : 'Guía', 'Estado'].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', 'Estado'].map(x => h('th', {}, x)))));
   const tb2 = h('tbody');
   let grupo = '';
   controles.forEach(k => {
