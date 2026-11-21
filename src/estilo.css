@@ -1409,3 +1409,4 @@ body.vista-planilla { display: flex; flex-direction: column; height: 100vh; marg
 canvas.tunel2d { display: block; width: 100%; height: auto; }
 .cartel-tunel { margin: 0 0 6px; padding: 5px 10px; border-left: 4px solid var(--revisar, #b7791f); background: color-mix(in srgb, var(--revisar, #b7791f) 10%, transparent); border-radius: 0 6px 6px 0; font-size: 12px; }
 canvas.corte-gpu { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 1px solid var(--edge); border-radius: 6px; }
+.tunel3d canvas { display: block; width: 100%; height: auto; cursor: grab; }

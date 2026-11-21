@@ -52,7 +52,7 @@ svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
 <body><div class="pag">
 
 <h1>Plan de trabajo · simulador de viento</h1>
-<p class="sub">Torre 3D · primera versión del plan · noviembre 2026 · <b>en curso: V1 y V2 hechas; prototipo de V3 listo, falta medirlo en una notebook</b>. Tres sistemas, de menor a mayor complejidad; cada uno sirve solo y prepara el siguiente.</p>
+<p class="sub">Torre 3D · primera versión del plan · noviembre 2026 · <b>V1, V2 y V3 hechas</b>. Tres sistemas, de menor a mayor complejidad; cada uno sirve solo y prepara el siguiente.</p>
 
 <div class="tarjeta gris">
 <b>En una frase.</b> Primero <b>V1</b>, las presiones del CIRSOC 102-25 pintadas sobre la torre en el 3D, sin simular nada.
@@ -187,7 +187,8 @@ números de ningún método, no van al Excel y no dimensionan. Sirven para <b>ve
 </ul>
 
 <h2 class="v3"><span class="n">V3</span>Túnel de viento en 3D</h2>
-<p><span class="chip v3">esfuerzo grande · 8 a 12 sesiones</span> <span class="chip warn">opcional · experimental</span></p>
+<p><span class="chip v3">esfuerzo grande · 8 a 12 sesiones</span> <span class="chip warn">opcional · experimental</span> <span class="chip ok">hecha</span></p>
+<p class="nota">Hecha: etapa Viento → «Túnel 3D» (<code>src/viento/geometria3d.ts</code>, <code>src/viento/lbm3dGpu.ts</code>, <code>src/ui/tunel3d.ts</code>). La torre del proyecto en celdas con sus retiros, el perfil del 102-25 (u ∝ √Kz), Cp promediado en el tiempo al lado del reglamento, cortes horizontal y vertical (velocidad o Cp), líneas de corriente y el viento en la vereda; tres grillas (rápida, liviana, fina). Con el ejemplo de la guía (grilla rápida, 2,2 pasadas): barlovento 0,72 a 0,74 contra 0,80; laterales −0,71 a −0,77 contra −0,70; sotavento −0,58 a −0,65 contra −0,50. Pruebas en <code>test/geometria3d.test.ts</code>; la placa contra la referencia, en <code>tools/verificar_lbm3d_gpu.cjs</code>.</p>
 <h3>Qué ve el alumno</h3>
 <ul>
   <li>La torre entera, con sus retiros y cambios de planta, dentro de un dominio 3D. La entrada lleva el <b>perfil de velocidad del 102-25</b> según la exposición B, C o D (el mismo Kz de la app).</li>

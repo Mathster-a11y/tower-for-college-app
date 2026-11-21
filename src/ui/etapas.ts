@@ -4,6 +4,7 @@
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
 import { centroTunel, panelTunel } from './tunel2d';
+import { centroTunel3d, panelTunel3d } from './tunel3d';
 import { describirConfig } from '../engine/metodos/tipos';
 import { armarTabique, ERRATAS_GUIA, textoBarras } from '../engine/metodos/guia';
 import { estado, fmt } from './estado';
@@ -159,10 +160,11 @@ const viento: Etapa = {
   id: 'viento', nro: '02', nombre: 'Viento', rol: '--r-viento', dependeDir: true, conFuente: true,
   icono: '<path d="M3 8h12a3 3 0 1 0-3-3M3 13h17a3 3 0 1 1-3 3M3 18h8"/>',
   globo: 'Viento|La presión del viento según el CIRSOC 102, método analítico: crece con la altura en la cara de barlovento y es constante (con qh) en sotavento.',
-  sub: ['Planilla y guía (102-2005)', 'CIRSOC 102-25', 'Túnel 2D'],
+  sub: ['Planilla y guía (102-2005)', 'CIRSOC 102-25', 'Túnel 2D', 'Túnel 3D'],
   panel(c, sub) {
     if (sub === 'CIRSOC 102-25') { panelCirsoc102(c); return; }
     if (sub === 'Túnel 2D') { panelTunel(c); return; }
+    if (sub === 'Túnel 3D') { panelTunel3d(c); return; }
     const d = datos();
     const R = d.R, s = d.p.sitio;
     c.append(seccionViento());
@@ -187,6 +189,7 @@ const viento: Etapa = {
   centro(c, tam) {
     if (estado.sub.viento === 'CIRSOC 102-25') { centroCirsoc102(c, tam, anchos, fila); return; }
     if (estado.sub.viento === 'Túnel 2D') { centroTunel(c, tam); return; }
+    if (estado.sub.viento === 'Túnel 3D') { centroTunel3d(c, tam); return; }
     const d = datos();
     const sobre = d.alt.filter(x => x.z > 0);
     const a = anchos(tam);
@@ -202,7 +205,7 @@ const viento: Etapa = {
     c.append(h('p', { class: 'nota' }, `Viento ${d.dir}: ${d.dir === 'A' ? 'sobre la cara mayor (ancho B, M,NyQ columna E)' : 'sobre la cara menor (ancho L, M,NyQ columna F)'}. Cada fuerza es la presión neta por el ancho de la cara y la altura de influencia del nivel: Wi = D · E · p (M,NyQ columna H). ${fuenteTxt()}`));
     c.append(tablaValores(['Nivel', 'Cota (m)', 'Barlovento (kN/m²)', 'Sotavento (kN/m²)', 'Wi (t)'], d.alt.map(x => [x.nivel, x.z, x.pBarlo, x.pSota, x.F]), [0, 2, 3, 3, 2]));
   },
-  nombreCentro: () => (estado.sub.viento === 'Túnel 2D' ? `Túnel de viento 2D · viento ${estado.dir}` : `Alzado · viento ${estado.dir}`),
+  nombreCentro: () => (estado.sub.viento === 'Túnel 2D' ? `Túnel de viento 2D · viento ${estado.dir}` : estado.sub.viento === 'Túnel 3D' ? `Túnel de viento 3D · viento ${estado.dir}` : `Alzado · viento ${estado.dir}`),
   estado: () => (estado.calculo.res?.mnyq.H61 > 0 ? 'completa' : 'pendiente'),
 };
 
