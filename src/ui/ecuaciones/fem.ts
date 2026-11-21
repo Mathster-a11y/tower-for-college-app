@@ -11,7 +11,7 @@
 import type { Proyecto } from '../../engine/modelo';
 import { calcularFem, type ResultadoMetodoFem } from '../../engine/metodos/fem';
 import { rigidezMensula } from '../../engine/fem/pseudo3d';
-import type { CapituloGrafo, Grafo, NodoGrafo, ParamGrafo } from '../grafo';
+import { sectorizar, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo } from '../grafo';
 import { h, type H } from '../comp';
 import { fmt } from '../estado';
 
@@ -158,6 +158,11 @@ export function grafoFem(p0: Proyecto, teoria: 'timoshenko' | 'euler', s: SelFem
     ],
   };
 
+  sectorizar(pieza, { 'Rigideces del tramo': ['EI', 'GA', 'Phi'], 'Matriz del tramo': ['k', 'ke'], 'Condensación': ['Kc'] });
+  sectorizar(ensamble, { 'Losa rígida': ['Kp2', 'T', 'Kyy', 'Kth'], 'Matriz de la torre': ['gdl', 'K'] });
+  sectorizar(vib, { 'Masas': ['mk', 'J0', 'M'], 'Autovalores': ['Km', 'eig', 'w', 'n1', 'part'] });
+  sectorizar(sol, { 'Cargas': ['W', 'F'], 'Solución': ['Ki', 'u', 'uh', 'th'], 'Deriva': ['der'] });
+  sectorizar(fz, { 'Corrimiento de la pieza': ['uy', 'th', 'dp'], 'Fuerzas': ['Kp', 'fp', 'V', 'Mb'], 'Reparto': ['Q', 'parte', 'prot'] });
   return { datos: () => structuredClone(p0), calcular, capitulos: [pieza, ensamble, vib, sol, fz] };
 }
 

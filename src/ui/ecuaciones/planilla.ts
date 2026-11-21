@@ -7,7 +7,7 @@
 import { calcularPlanilla, DIVISORES, type PlanillaDatos, type PlanillaRes } from '../../engine/planilla';
 import type { Motor } from '../../engine/config';
 import type { PiezaEquivalente } from '../../engine/mapping';
-import type { CapituloGrafo, Grafo, NodoGrafo, ParamGrafo } from '../grafo';
+import { sectorizar, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo } from '../grafo';
 import { h, type H } from '../comp';
 import { fmt } from '../estado';
 
@@ -157,6 +157,11 @@ export function grafoPlanilla(datos: PlanillaDatos, piezas: PiezaEquivalente[], 
     ] : [],
   };
 
+  sectorizar(viento, { 'Presión del viento': ['Kz', 'qz', 'pb', 'ps', 'p'], 'Fuerza en cada nivel': ['Wi'], 'Corte': ['Q'], 'Momento': ['M', 'Mv'] });
+  sectorizar(estab, { 'Peso': ['P'], 'Vuelco': ['Mv', 'Me', 'FS'], 'Excentricidad': ['e', 'b6'], 'Presión en el suelo': ['sN', 'sM', 'smax'] });
+  sectorizar(rig, { 'Inercia (molde)': ['Jj', 'SJ'], 'J mínimo': ['W', 'Jmin'] });
+  sectorizar(roto, { 'Centro de rigidez': ['Jj', 'SJ', 'Xr', 'a', 'SJa2'], 'Traslación': ['C', 'E', 'Mv', 'Gm'], 'Rotación': ['Q', 'Mt', 'N'], 'Momento de la pieza': ['O'] });
+  sectorizar(flex, { 'Cargas': ['Pp', 'Ai', 'H', 'I'], 'Tensiones': ['M', 'O', 'P'] });
   return {
     datos: () => structuredClone(datos),
     calcular: d => ({ res: calc(d), d }),

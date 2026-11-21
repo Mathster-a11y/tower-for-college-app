@@ -127,9 +127,10 @@ export async function abrirGuiaImprimible(metodo: MetodoEc, imprimir = true): Pr
     const w = v.el.offsetWidth, hh = v.el.offsetHeight;
     if (!(w > 0 && hh > 0)) return;
     // la hoja se gira según la forma del esquema: apaisada si es ancho, vertical si es alto
-    const vertical = hh > w * 1.1;
+    const zH = Math.min(1.7, ANCHO_A3 / w, ALTO_A3 / hh), zV = Math.min(1.7, (ALTO_A3 + 40) / w, (ANCHO_A3 - 30) / hh);
+    const vertical = zV > zH;                                         // la que deja el esquema más grande
     v.el.closest('.guia-diagrama')?.classList.toggle('vertical', vertical);
-    v.el.style.zoom = String(Math.min(1.7, (vertical ? ALTO_A3 + 40 : ANCHO_A3) / w, (vertical ? ANCHO_A3 - 30 : ALTO_A3) / hh));
+    v.el.style.zoom = String(vertical ? zV : zH);
     v.redibujar();
   });
   await new Promise(res => setTimeout(res, 250));

@@ -6,7 +6,7 @@
 import { calcularGuiaPasos, datosGuia, filaDivisor, type DatosGuia, type FlexoCalc, type ResultadoGuia } from '../../engine/metodos/guiaPasos';
 import type { PiezaEquivalente } from '../../engine/mapping';
 import type { Proyecto } from '../../engine/modelo';
-import type { CapituloGrafo, Grafo, NodoGrafo, ParamGrafo } from '../grafo';
+import { sectorizar, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo } from '../grafo';
 import { h, type H } from '../comp';
 import { fmt } from '../estado';
 
@@ -273,6 +273,11 @@ export function grafoGuia(p: Proyecto, piezas: PiezaEquivalente[], s: SelGuia): 
     ],
   };
 
+  sectorizar(viento, { 'Presión del viento': ['Kz', 'qh', 'pb', 'ps', 'p'], 'Fuerza en cada nivel': ['Wi', 'WPB'], 'Corte': ['Q'], 'Momento y resultante': ['MPB', 'hw', 'Mv'] });
+  sectorizar(estab, { 'Peso': ['P'], 'Vuelco': ['MvE', 'Me', 'FS'], 'Excentricidad': ['e', 'b6'], 'Presión en el suelo': ['sN', 'sM', 'smax'] });
+  sectorizar(rig, { 'Inercia de las piezas': ['Jj', 'SJ'], 'J mínimo': ['WR', 'Jmin'], 'Carga repartida': ['pT', 'p1', 'qs', 'qi', 'qv'], 'Flecha': ['fadm', 'fl'] });
+  sectorizar(roto, { 'Centro de rigidez': ['Jr', 'SJr', 'tj', 'Xr', 'a', 'SJa2'], 'Momento de rotación': ['Qr', 'Mt'], 'Traslación y rotación': ['tras', 'rot'], 'Corte y momento de la pieza': ['Qj', 'Mr', 'Mj'] });
+  sectorizar(flexo, { 'Cargas del muro': ['Am', 'alt', 'Ai', 'Pp', 'Nd', 'Nc'], 'Momento': ['Mf', 'Jf', 'y', 'sM'], 'Tensiones': ['st', 'sc', 'sbk'], 'Armadura': ['T', 'As', 'Asm', 'Asu'] });
   return {
     datos: () => structuredClone(d0),
     calcular: d => ({ g: calcularGuiaPasos(d), d }),

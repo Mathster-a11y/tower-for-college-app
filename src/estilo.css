@@ -1576,3 +1576,12 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
   .guia-impresion, .guia-impresion * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .guia-portada { break-after: page; }
 }
+
+/* sectores del procedimiento: polígonos ortogonales al 40 % debajo de tarjetas y flechas (ni rojo ni azul) */
+:root { --gs-0: #f2c94c; --gs-1: #6fcf97; --gs-2: #bb9bdc; --gs-3: #f2994a; --gs-4: #56ccc2; --gs-5: #c5d86d; --gs-6: #e8a0c8; }
+.gr-sectores { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.gr-sector { opacity: .4; }
+.gr-sector rect { fill: var(--gsc); stroke: none; }
+.gr-sector-nombre { font: 700 11px var(--fuente); fill: color-mix(in srgb, var(--gsc) 55%, var(--ink)); }
+.gs-0 { --gsc: var(--gs-0); } .gs-1 { --gsc: var(--gs-1); } .gs-2 { --gsc: var(--gs-2); } .gs-3 { --gsc: var(--gs-3); }
+.gs-4 { --gsc: var(--gs-4); } .gs-5 { --gsc: var(--gs-5); } .gs-6 { --gsc: var(--gs-6); }

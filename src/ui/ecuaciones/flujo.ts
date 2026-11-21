@@ -4,7 +4,7 @@
  * mide (presión, Cp, Strouhal) y cómo se conecta con la torre: la velocidad crítica de desprendimiento de remolinos.
  * Los números de la red son los del túnel 2D de la app (U0 = 0,1; la torre ocupa D celdas).
  */
-import type { CapituloGrafo, Grafo, NodoGrafo, ParamGrafo } from '../grafo';
+import { sectorizar, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo } from '../grafo';
 
 export interface DF { U0: number; D: number; Re: number; cs: number; St: number; V: number; B: number; n1: number; nuAire: number }
 export type RF = Record<string, number | null>;
@@ -69,5 +69,7 @@ export function grafoFlujo(d0: DF): Grafo<DF, RF> {
         nota: 'El viento al que la frecuencia de los remolinos iguala la de la torre.' },
     ],
   };
+  sectorizar(red, { 'Parámetros de la red': ['nu', 'tau', 'Ma'], 'Choque y equilibrio': ['feq', 'col', 'teff', 'macro'] });
+  sectorizar(med, { 'Coeficientes': ['Cp', 'Cd', 'Rer'], 'Remolinos': ['fd', 'Vcr'] });
   return { datos: () => ({ ...d0 }), calcular: calcularFlujo, capitulos: [red, med] };
 }

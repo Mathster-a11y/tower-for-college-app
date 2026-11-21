@@ -12,7 +12,7 @@ import { EXPOSICIONES, KN_POR_T, viento102, type Viento102 } from '../../engine/
 import { datos101De } from '../../engine/cargas/cirsoc101';
 import { vuelco102 } from '../../engine/metodos/cirsoc';
 import { fcDe, FY, N_POR_T } from '../../engine/verificacion/cirsoc201';
-import type { CapituloGrafo, Grafo, NodoGrafo, ParamGrafo } from '../grafo';
+import { sectorizar, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo } from '../grafo';
 
 export interface RC { c: Calculo; p: Proyecto; w: Viento102; vu: ReturnType<typeof vuelco102>; aprox: Viento102 | null }
 export interface SelCirsoc { dir: 'A' | 'B'; pieza: string; muro: string }
@@ -193,6 +193,11 @@ export function grafoCirsoc(p0: Proyecto, metodo: 'cirsoc' | 'fem', s: SelCirsoc
     ],
   };
 
+  sectorizar(modelo, { 'Masa y rigidez': ['m', 'K'], 'Vibración': ['w', 'n1', 'na', 'T'] });
+  sectorizar(viento, { 'Presión dinámica': ['Ke', 'Kh', 'qh'], 'Frecuencia y ráfaga': ['n1', 'Iz', 'Qf', 'R', 'gR', 'Gf', 'G'], 'Fuerzas': ['p', 'Wi'], 'Corte y momento': ['Q', 'M'], 'Torsión': ['Mt2'] });
+  sectorizar(vuelco, { 'Momento de vuelco': ['MA', 'QA', 'WPB', 'Mv'], 'Peso y estabilizante': ['P', 'Me'], 'Verificación': ['FS'] });
+  sectorizar(reparto, { 'Rigidez de las piezas': ['J', 'SJ', 'a', 'e', 'SJa2'], 'Parte de cada caso': ['p1', 'p2', 'p4', 'pf'], 'Momento de la pieza': ['Mr', 'Mj'] });
+  sectorizar(resist, { 'Cupla de los cordones': ['z', 'Mu', 'Nu'], 'Tracción': ['T', 'As'], 'Compresión': ['Ac', 'C', 'Cadm'], 'Diagrama de interacción': ['rho'] });
   return {
     datos: () => structuredClone(p0),
     calcular,
