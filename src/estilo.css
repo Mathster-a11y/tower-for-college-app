@@ -121,7 +121,7 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .riel .punto.no-verifica { background: var(--mal); }
 .riel .punto.revisar { background: var(--revisar); }
 .riel .riel-fin { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
-.riel button { min-width: 0; letter-spacing: -0.15px; overflow-wrap: anywhere; }
+.riel button { min-width: 0; letter-spacing: -0.2px; overflow: visible; }
 
 .lateral { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
 .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rolb); color: #fff; }
@@ -1585,3 +1585,15 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .gr-sector-nombre { font: 700 11px var(--fuente); fill: color-mix(in srgb, var(--gsc) 55%, var(--ink)); }
 .gs-0 { --gsc: var(--gs-0); } .gs-1 { --gsc: var(--gs-1); } .gs-2 { --gsc: var(--gs-2); } .gs-3 { --gsc: var(--gs-3); }
 .gs-4 { --gsc: var(--gs-4); } .gs-5 { --gsc: var(--gs-5); } .gs-6 { --gsc: var(--gs-6); }
+
+/* corte: altura de cada muro */
+.corte-muros .corte-nivel { stroke: var(--rule); stroke-width: 1; }
+.corte-muros .corte-nivel.pb { stroke: var(--ink2); stroke-width: 1.6; }
+.corte-muros .corte-nivel.fund { stroke: var(--ink); stroke-width: 2; }
+.corte-muros .barra { fill: color-mix(in srgb, var(--ink2) 55%, var(--lienzo)); stroke: var(--ink); stroke-width: 1; cursor: pointer; }
+.corte-muros .corte-muro.fuera .barra { fill: none; stroke-dasharray: 4 3; stroke: var(--ink2); }
+.corte-muros .corte-muro.sel .barra { fill: var(--elegido); }
+.corte-muros .mango { fill: var(--field); stroke: var(--ink2); stroke-width: 1; cursor: ns-resize; touch-action: none; }
+.corte-muros .mango:hover, .corte-muros .mango.activo { fill: var(--elegido); stroke: var(--ink); }
+.corte-muros .corte-id { font-size: 11px; }
+@media (pointer: coarse) { .corte-muros .mango { stroke-width: 6px; stroke: transparent; paint-order: stroke; } }

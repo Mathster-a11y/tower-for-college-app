@@ -15,6 +15,7 @@ import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { rototraslacionAnimada } from './rotoAnimada';
+import { centroCorte } from './corte';
 import { centroEcuaciones, panelEcuaciones, METODOS_ECUACIONES } from './ecuaciones/vista';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
@@ -172,8 +173,9 @@ const diseno: Etapa = {
     else if (sub === 'Piezas') panelPiezas(c);
     else panelProyecto(c);
   },
-  centro: 'planta',
-  nombreCentro: () => 'Planta',
+  // en «Niveles», el corte: desde dónde hasta dónde llega cada muro (se edita arrastrando)
+  get centro() { return estado.sub.diseno === 'Niveles' ? (c: H, tam: Tam) => centroCorte(c, tam) : 'planta' as const; },
+  nombreCentro: () => (estado.sub.diseno === 'Niveles' ? 'Corte · altura de cada muro' : 'Planta'),
   estado() {
     const { asig, error } = estado.calculo;
     if (error) return 'no verifica';

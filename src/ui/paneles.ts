@@ -275,6 +275,11 @@ function nuevoMuro(): Muro {
 }
 export function panelMuros(c: H) {
   const p = estado.proyecto;
+  // la altura de cada muro también se edita en el corte (Diseño → Niveles), arrastrando sus puntas
+  const irCorte = h('button', { type: 'button', class: 'mini enlace-corte' }, 'Ver el corte');
+  irCorte.title = 'Diseño → Niveles: cada muro como una barra entre los niveles; se arrastran sus puntas';
+  irCorte.addEventListener('click', () => { estado.sub.diseno = 'Niveles'; estado.avisarPanel(); });
+  c.append(h('p', { class: 'nota chica' }, '«Desde» y «Hasta» de cada muro también se ven y se cambian en el corte. ', irCorte));
   const acc = h('div', { class: 'fila-acciones' });
   const nuevo = h('button', { type: 'button' }, 'Nuevo muro');
   nuevo.addEventListener('click', () => estado.cambiar(() => { const m = nuevoMuro(); m.piezaA = `T${contador}`; p.muros.push(m); estado.seleccion = m.id; }));
