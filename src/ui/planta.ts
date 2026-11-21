@@ -1951,6 +1951,11 @@ export function montarPlanta(cont: HTMLElement) {
         [a, b].forEach(q => svg.appendChild(el('circle', { cx: X(q.x), cy: Y(q.y), r: 3, class: 'linea-ref-punta' })));
       });
     }
+    // «¿Qué pasa si…?»: el muro con el cambio que se está probando, en trazos (el proyecto todavía no cambió)
+    if (estado.fantasma && document.querySelector('.que-pasa')) {
+      const fm = estado.fantasma;
+      (tipoDe(fm) === 'tubo-circ' ? [{ x: fm.x, y: fm.y, ax: fm.largo, ay: fm.largo }] : rectangulos(fm)).forEach(r => svg.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: r.ax * escala, height: r.ay * escala, class: 'fantasma' })));
+    }
     if (verAreas) acomodarAreas();
     manijasSil.forEach(m => svg.appendChild(m));
     if (arrastreNodo && destinoIman && cursor) {

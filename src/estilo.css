@@ -1410,3 +1410,11 @@ canvas.tunel2d { display: block; width: 100%; height: auto; }
 .cartel-tunel { margin: 0 0 6px; padding: 5px 10px; border-left: 4px solid var(--revisar, #b7791f); background: color-mix(in srgb, var(--revisar, #b7791f) 10%, transparent); border-radius: 0 6px 6px 0; font-size: 12px; }
 canvas.corte-gpu { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 1px solid var(--edge); border-radius: 6px; }
 .tunel3d canvas { display: block; width: 100%; height: auto; cursor: grab; }
+
+/* «¿Qué pasa si…?» */
+rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); stroke: var(--elegido); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
+.que-pasa .deslizador { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 4px 0; }
+.que-pasa .deslizador input { grid-column: 1 / -1; width: 100%; }
+.que-pasa .deslizador output { font-variant-numeric: tabular-nums; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.que-pasa td.mejor { color: var(--ok); font-weight: 600; } .que-pasa td.peor { color: var(--mal, #c62828); font-weight: 600; }
+.que-pasa .calculando { color: var(--ink2); font-size: 12px; }

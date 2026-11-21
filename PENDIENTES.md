@@ -147,7 +147,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Recorrido guiado para la primera vez (Mostrar ▾ → Recorrido guiado)
 - [x] Comparar una versión guardada con la actual (Mis proyectos → ⇄): ΣJ, e, Mt y cada control
 - [ ] Rototraslación animada también en la planta (no solo en el 3D)
-- [ ] «Qué pasa si…»: deslizadores para largo y posición de un muro con el resultado en vivo
+- [x] «Qué pasa si…» (Diseño → Muros, con un muro elegido): deslizadores de largo, espesor y posición; recalcula en vivo una copia con el método elegido y muestra antes / con el cambio / Δ (ΣJ, parte del viento de su pieza, excentricidad del eje de rigidez, desplazamiento de la azotea, verificación de su pieza, controles que no verifican), con el muro en trazos en la planta; «Aplicar» (se deshace con Ctrl+Z) o «Volver»
 
 ### Para el uso diario
 - [x] Mis proyectos: versiones guardadas en el navegador (y copia automática antes de abrir otro)

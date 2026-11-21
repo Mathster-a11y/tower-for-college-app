@@ -1,4 +1,5 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
+import { seccionQuePasaSi } from './quePasaSi';
 import { filaExcelJ } from '../engine/planilla';
 import { conEspesor } from '../engine/juntas';
 import { dibujoPerfil } from './perfil';
@@ -332,7 +333,7 @@ export function panelMuros(c: H) {
     envolverPiezas(p);           // y es un grupo cerrado del Esquema (se entra con doble clic)
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
-  c.append(seccionEsquema(), acc);
+  c.append(seccionEsquema(), acc, seccionQuePasaSi());
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],

@@ -94,6 +94,8 @@ class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
   seleccion: string | null = null;
+  /** «¿Qué pasa si…?»: el muro elegido con el cambio que se está probando (la planta lo dibuja en trazos) */
+  fantasma: import('../engine/modelo').Muro | null = null;
   /** cómo se calcula el proyecto abierto (método, versión de la planilla, armado): sale del proyecto */
   get config(): ConfigCalculo { return configDe(this.proyecto); }
   /** de dónde salen los valores de fórmulas, indicadores y dibujos: la planilla tal cual o la guía (según el método) */
