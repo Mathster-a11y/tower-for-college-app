@@ -537,7 +537,19 @@ export function montarPlanta(cont: HTMLElement) {
     }), 'Agrega un vértice en el medio del tramo más largo; después se arrastra adonde va.');
     const borrar = boton('− vértice', () => { if (vSel === null || vs.length <= 3) return; const k = vSel; vSel = null; estado.cambiar(() => { siluetaPropia().splice(k, 1); }); }, 'Borra el vértice elegido (tocalo primero). Quedan al menos 3.');
     borrar.disabled = vSel === null || vs.length <= 3;
-    filaV.append(agregar, borrar);
+    // las herramientas de CAD del contorno (arcos, empalmes, chaflanes, desfase, formas): el mismo editor que el de los
+    // muros, sobre la losa o la carpintería de este nivel
+    const cad = boton('Herramientas CAD…', () => {
+      const nivel = iNivel, carp = editaCarp, nombre = estado.proyecto.niveles[nivel]?.nombre ?? '';
+      const v0 = verticesEd().map(q => ({ ...q }));
+      ponerModo('mover');
+      edc.abrirContorno({
+        titulo: `${carp ? 'Carpintería' : 'Losa'} del nivel ${nombre}`, v: v0,
+        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) nv.carpinteria = v; else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
+      });
+    }, 'Arcos (por tres puntos o por radio), empalmes, chaflanes, dividir lados, largo y ángulo exactos, desfasar, simetría, girar, escalar y formas (círculo, polígono, elipse). El mismo editor que el contorno de los muros.');
+    cad.classList.add('primario');
+    filaV.append(agregar, borrar, cad);
     if (vSel !== null) {
       const k = vSel, v0 = vs[k];
       const campo = (eje: 'x' | 'y') => {
@@ -1426,6 +1438,8 @@ export function montarPlanta(cont: HTMLElement) {
   let escala = 20, ox = 0, oy = 0;
   // vista: acercar (rueda, pellizco, botones) y desplazar (arrastrar el fondo); zoom 1 = toda la planta
   let zoom = 1, centroVista = { x: 0, y: 0 };
+  /** ancho útil de la última vista (sin el cuadro flotante de la derecha): el centro del zoom se mide sobre él */
+  let wUtilVista = 0;
   const ZMIN = 0.5, ZMAX = 16;
 
   const aMundo = (ev: PointerEvent) => {
@@ -1472,10 +1486,11 @@ export function montarPlanta(cont: HTMLElement) {
     const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
     // con un cuadro flotante abierto a la derecha (calar, insertar, silueta) la planta se encuadra en lo que queda
     // libre a su izquierda: si no, el cuadro tapaba justo los muros de ese lado
-    const panelDer = [panelCal, panelIns, panelSil].find(x => !x.hidden);
+    const panelDer = [panelCal, panelIns, panelSil, svg.parentElement?.querySelector<HTMLElement>('.contorno-panel') ?? null].find(x => x && !x.hidden) ?? undefined;
     const reservaD = panelDer && w > 640 ? Math.min(panelDer.offsetWidth + 16, w * 0.4) : 0, wUtil = w - reservaD;
     escala = (Math.min(wUtil, h) / ext) * zoom;
     ox = wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
+    wUtilVista = wUtil;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.replaceChildren();
     const X = (x: number) => ox + x * escala, Y = (y: number) => oy - y * escala;
@@ -2019,7 +2034,8 @@ export function montarPlanta(cont: HTMLElement) {
   let ultimoIdIman: string | undefined;
   // --- acercar y desplazar ---
   const acercarEn = (f: number, sx: number, sy: number) => {
-    const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
+    // con un cuadro flotante abierto, la planta ocupa solo el ancho útil: el centro de la vista es el de ese ancho
+    const w = wUtilVista || svg.clientWidth || 600, h = svg.clientHeight || 500;
     const q = { x: (sx - ox) / escala, y: -(sy - oy) / escala };      // punto del mundo bajo el cursor
     const z2 = Math.max(ZMIN, Math.min(ZMAX, zoom * f));
     const s2 = escala * (z2 / zoom);
@@ -2108,7 +2124,7 @@ export function montarPlanta(cont: HTMLElement) {
     if (pellizco && punteros.size >= 2) {
       ev.stopImmediatePropagation();
       const [a, b] = [...punteros.values()];
-      const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
+      const w = wUtilVista || svg.clientWidth || 600, h = svg.clientHeight || 500;
       const base = escala / zoom;                                     // escala con zoom 1
       const z2 = Math.max(ZMIN, Math.min(ZMAX, pellizco.z * Math.hypot(a.x - b.x, a.y - b.y) / pellizco.d));
       const s0 = base * pellizco.z, s2 = base * z2;
@@ -2129,7 +2145,7 @@ export function montarPlanta(cont: HTMLElement) {
   svg.addEventListener('pointercancel', finPuntero, true);
   // botones de la vista
   const zoomBar = document.createElement('div'); zoomBar.className = 'zoom-planta';
-  ([['+', 'Acercar', () => acercarEn(1.4, (svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['−', 'Alejar', () => acercarEn(1 / 1.4, (svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['⤢', 'Encuadrar: toda la planta', encuadrar]] as const).forEach(([t, a, f]) => {
+  ([['+', 'Acercar', () => acercarEn(1.4, (wUtilVista || svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['−', 'Alejar', () => acercarEn(1 / 1.4, (wUtilVista || svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['⤢', 'Encuadrar: toda la planta', encuadrar]] as const).forEach(([t, a, f]) => {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = `${a} (también: rueda del mouse o pellizcar; arrastrar el fondo para desplazar)`; b.setAttribute('aria-label', a); b.addEventListener('click', f); zoomBar.append(b);
   });
   cont.appendChild(zoomBar);

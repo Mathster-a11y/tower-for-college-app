@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
@@ -39,7 +39,7 @@ function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cf
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
-  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota > zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(plantaDeNivel(p, x.i).silueta, 12) }));
+  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota > zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(contornoAlViento(p, x.i).v, 12) }));
 }
 
 async function iniciar() {

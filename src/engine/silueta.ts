@@ -91,3 +91,12 @@ export function carpinteriaDeNivel(p: Proyecto, i: number): { v: Vertice[]; a: n
   const c = cajaSilueta(v);
   return { v, a: c.B, b: c.L, propia: !!(p.niveles[i]?.carpinteria && p.niveles[i].carpinteria!.length >= 3) };
 }
+
+/**
+ * el contorno que recibe el viento en el nivel i: la carpintería (la fachada, el cerramiento) si está dibujada en ese
+ * nivel o en uno de arriba; si no, el contorno de la losa. Lo usan las presiones del 3D y los túneles de viento.
+ */
+export function contornoAlViento(p: Proyecto, i: number): { v: Vertice[]; de: 'carpintería' | 'losa' } {
+  const c = carpinteriaDeNivel(p, i);
+  return c ? { v: c.v, de: 'carpintería' } : { v: plantaDeNivel(p, i).silueta, de: 'losa' };
+}

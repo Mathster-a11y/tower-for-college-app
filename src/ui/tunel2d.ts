@@ -8,7 +8,7 @@ import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import { vientoCirsoc } from './cirsoc102';
 import type { Tam } from './diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
@@ -59,7 +59,7 @@ function iniciar() {
   corrida = null;
   const ne = nivelElegido();
   if (!ne) return;
-  let pol = puntosSilueta(plantaDeNivel(estado.proyecto, ne.i).silueta, 12).map(q => ({ x: q.x, y: q.y }));
+  let pol = puntosSilueta(contornoAlViento(estado.proyecto, ne.i).v, 12).map(q => ({ x: q.x, y: q.y }));
   if (pol.length < 3) return;
   const D = RES[cfg.res].D, re = RE[cfg.re];
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
