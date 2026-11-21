@@ -13,6 +13,8 @@ import { calcularFem, type ResultadoMetodoFem } from '../engine/metodos/fem';
 import { compararMetodos, type Comparacion } from '../engine/metodos/combinado';
 import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201 } from '../engine/metodos/cirsoc';
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
+import { Historial } from './historial';
+import { Guardado } from './guardado';
 
 /**
  * Hasta noviembre de 2026 el motor y el armado se recordaban en el navegador (no en el proyecto), y el mismo archivo
@@ -135,25 +137,22 @@ class Estado {
   nivelPlanta: number | null = null;
   calculo!: Calculo;
   private oyentes: Oyente[] = [];
-  /** historia para deshacer / rehacer (proyectos como JSON) */
-  private atras: string[] = [];
-  private adelante: string[] = [];
-  private ultimo = '';
   /**
    * revisión del proyecto: sube con cada cambio de datos (editar, deshacer, abrir otro). Los resultados son «vigentes»
    * solo si se calcularon con la revisión actual y sin error (ver vigente)
    */
   revision = 0;
-  /** el último intento de guardar en el navegador falló (sin lugar, modo privado…): el proyecto solo está en memoria */
-  guardadoFallo = false;
+  /** el guardado automático en el navegador falló (y todavía no volvió a andar) */
+  get guardadoFallo() { return this.guardado.fallo; }
+  private readonly guardado = new Guardado(CLAVE);
+  private readonly historial = new Historial();
   /** al arrancar: el proyecto guardado en el navegador estaba dañado (se abrió el ejemplo; el texto quedó aparte) */
   avisoInicio = '';
-  private oyentesGuardado: ((fallo: boolean) => void)[] = [];
 
   constructor() {
     let p: Proyecto | null = null;
     let t: string | null = null;
-    try { t = localStorage.getItem(CLAVE); } catch { t = null; }
+    t = this.guardado.leer();
     if (t) {
       const l = leerProyecto(t);
       if (l.ok) {
@@ -164,7 +163,7 @@ class Estado {
       }
       else {
         // no se pisa: el texto dañado queda en otra clave para poder recuperarlo a mano
-        try { localStorage.setItem(`${CLAVE}.danado`, t); } catch { /* sin lugar */ }
+        this.guardado.guardarAparte(`${CLAVE}.danado`, t);
         this.avisoInicio = `El proyecto guardado en este navegador estaba dañado y se abrió el ejemplo (${textoErrores(l.errores)}). El texto original quedó guardado aparte.`;
       }
     }
@@ -172,15 +171,15 @@ class Estado {
     const migrado = !this.proyecto.calculo || (!!p && !JSON.parse(t ?? '{}').calculo);
     if (!this.proyecto.calculo) this.proyecto.calculo = { ...configViejaDelNavegador(), formulas: VERSION_FORMULAS };
     this.recalcular();
-    this.ultimo = JSON.stringify(this.proyecto);
+    this.historial.actual = JSON.stringify(this.proyecto);
     // la migración se guarda enseguida (la vista previa, en otra pestaña, lee el proyecto guardado) y la preferencia
     // vieja del navegador ya no hace falta
-    if (migrado) { try { localStorage.setItem(CLAVE, this.ultimo); localStorage.removeItem(CLAVE_CONFIG_VIEJA); } catch { /* sin lugar: se guarda con el próximo cambio */ } }
+    if (migrado && this.guardado.guardar(this.historial.actual)) this.guardado.quitar(CLAVE_CONFIG_VIEJA);
   }
   /** los resultados que se muestran corresponden al proyecto actual y el cálculo no falló */
   get vigente(): boolean { return !!this.calculo && !this.calculo.error && this.calculo.revision === this.revision; }
   /** avisa cuando el guardado automático en el navegador falla (true) o vuelve a andar (false) */
-  suscribirGuardado(f: (fallo: boolean) => void) { this.oyentesGuardado.push(f); }
+  suscribirGuardado(f: (fallo: boolean) => void) { this.guardado.suscribir(f); }
   suscribir(f: Oyente) { this.oyentes.push(f); }
   /** solo cambia el muro elegido: redibuja las vistas (planta, 3D) sin rearmar el panel */
   private oyentesSel: Oyente[] = [];
@@ -238,7 +237,7 @@ class Estado {
     if (f) f(this.proyecto);
     // grupos: lo bloqueado no cambia y las copias vinculadas siguen a la que se editó
     if (this.proyecto.grupos?.length) {
-      const previo = this.ultimo ? JSON.parse(this.ultimo) as Proyecto : null;
+      const previo = this.historial.actual ? JSON.parse(this.historial.actual) as Proyecto : null;
       const n = protegerBloqueados(previo, this.proyecto);
       const nf = protegerFijos(previo, this.proyecto);
       const hechos = sincronizarComponentes(previo, this.proyecto);
@@ -254,14 +253,8 @@ class Estado {
       if (i >= 0) { const a = areasInfluencia(pa, i); pa.muros.forEach(m => { if (m.id in a.area && Math.abs(m.areaInf - a.area[m.id]) > 1e-9) m.areaInf = a.area[m.id]; }); }
     }
     const nuevo = JSON.stringify(this.proyecto);
-    const cambio = nuevo !== this.ultimo;
-    if (cambio) {
-      this.revision++;
-      this.atras.push(this.ultimo);
-      if (this.atras.length > 100) this.atras.shift();
-      this.adelante = [];
-      this.ultimo = nuevo;
-    }
+    const cambio = this.historial.registrar(nuevo);
+    if (cambio) this.revision++;
     this.actualizar(cambio);
   }
   /** @param cambio cambiaron los datos del proyecto (cambiar de viento o de vista no cuenta como cambio pendiente) */
@@ -272,22 +265,13 @@ class Estado {
     this.oyentes.forEach(o => o());
   }
   /** guarda el proyecto en el navegador; si falla, avisa (una vez, hasta que vuelva a andar) */
-  private guardar() {
-    let ok = true;
-    try { localStorage.setItem(CLAVE, this.ultimo); } catch { ok = false; }
-    if (ok === !this.guardadoFallo) return;
-    this.guardadoFallo = !ok;
-    this.oyentesGuardado.forEach(f => f(!ok));
-  }
-  get puedeDeshacer() { return this.atras.length > 0; }
-  get puedeRehacer() { return this.adelante.length > 0; }
-  deshacer() { this.mover(this.atras, this.adelante); }
-  rehacer() { this.mover(this.adelante, this.atras); }
-  private mover(de: string[], a: string[]) {
-    const t = de.pop();
+  private guardar() { this.guardado.guardar(this.historial.actual); }
+  get puedeDeshacer() { return this.historial.puedeDeshacer; }
+  get puedeRehacer() { return this.historial.puedeRehacer; }
+  deshacer() { this.restaurar(this.historial.deshacer()); }
+  rehacer() { this.restaurar(this.historial.rehacer()); }
+  private restaurar(t: string | undefined) {
     if (t === undefined) return;
-    a.push(this.ultimo);
-    this.ultimo = t;
     this.revision++;
     this.proyecto = JSON.parse(t) as Proyecto;
     if (this.seleccion && !this.proyecto.muros.some(m => m.id === this.seleccion)) this.seleccion = null;

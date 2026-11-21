@@ -151,6 +151,8 @@ export function axialEmpirico(lw: number, h: number, lc: number, fc: number, k =
 }
 
 // ---------------------------------------------------------------------------------------------------- verificación de un muro
+/** búsqueda de la cuantía necesaria: bisección (por defecto) o lineal, de a un escalón (para comparar en las pruebas) */
+export const BUSQUEDA_CUANTIA = { lineal: false };
 export interface Solicitacion { combinacion: string; Nu: number; Mu: number; Vu: number }
 export interface VerifMuro201 {
   id: string; papel: string; lw: number; h: number;
@@ -197,11 +199,29 @@ export function verificarMuro201(id: string, papel: string, lw: number, h: numbe
         : mr > 0 ? Math.abs(s.Mu) / mr : Infinity;
       if (r > rel) { rel = r; peor = s; mR = mr; }
     }
-    return { dg, peor, rel, mR };
+    return { dg, peor, rel, mR, rho };
   };
-  let rho = min.rhoV, res = relacionCon(rho);
-  while (res.rel > 1 && rho < 0.04) { rho = Math.round((rho + 0.0005) * 1e5) / 1e5; res = relacionCon(rho); }
+  // los escalones de cuantía: desde la mínima, de a 0,0005, hasta pasar 0,04 (los mismos valores que antes)
+  const escalones = [min.rhoV];
+  while (escalones[escalones.length - 1] < 0.04) escalones.push(Math.round((escalones[escalones.length - 1] + 0.0005) * 1e5) / 1e5);
   const conMin = relacionCon(min.rhoV);
+  let res = conMin;
+  if (conMin.rel > 1) {
+    if (BUSQUEDA_CUANTIA.lineal) {
+      for (let k = 1; k < escalones.length && res.rel > 1; k++) res = relacionCon(escalones[k]);
+    } else {
+      // con más armadura el diagrama de interacción solo crece: bisección sobre los escalones (el primero que alcanza,
+      // o el último si ninguno alcanza), con el mismo resultado que recorrerlos uno por uno
+      const ultimo = relacionCon(escalones[escalones.length - 1]);
+      if (ultimo.rel > 1) res = ultimo;
+      else {
+        let lo = 0, hi = escalones.length - 1, mejor = ultimo;   // rel(lo) > 1, rel(hi) ≤ 1
+        while (hi - lo > 1) { const mid = (lo + hi) >> 1, r = relacionCon(escalones[mid]); if (r.rel > 1) lo = mid; else { hi = mid; mejor = r; } }
+        res = mejor;
+      }
+    }
+  }
+  const rho = res.rho;
   // simple
   const NuMax = Math.max(...sol.map(s => s.Nu));
   const axialEmp = axialEmpirico(lw, h, lc, fc);
