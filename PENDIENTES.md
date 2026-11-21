@@ -152,7 +152,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 ### Para el uso diario
 - [x] Mis proyectos: versiones guardadas en el navegador (y copia automática antes de abrir otro)
 - [x] Exportar los dibujos (cartas, diagramas, funiculares, perfiles) como SVG o PNG: botones «⤓ SVG · ⤓ PNG» arriba de cada dibujo
-- [ ] Carga más rápida al abrir (separar el 3D y la planilla del resto)
+- [x] Carga más rápida al abrir: el 3D (three.js), los libros de Excel, jszip, la vista previa, los informes y el desglose se cargan aparte, al usarlos. Archivo principal de 1,83 MB a 0,88 MB; con red de 10 Mb/s y procesador 4 veces más lento, la app aparece en 1,77 s (antes 2,24 s). El worker del túnel 2D va adentro del script (el archivo único abierto con doble clic lo necesita)
 
 ### Pendientes de la cátedra (preguntas abiertas, arriba)
 - [ ] Criterio de alas intermedias y de piezas con más de dos almas en el molde

@@ -5,10 +5,8 @@ import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/s
 import './estilo.css';
 import { estado, calcularProyecto } from './ui/estado';
 import { montarPlanta } from './ui/planta';
-import { montar3D, ultimaDeformada } from './ui/vista3d';
-import { imprimirInforme } from './ui/informe';
-import { imprimirDesglose, descargarPPTX } from './ui/desglose';
-import { imprimirLaminas } from './ui/lamina';
+import { montar3D } from './ui/montar3d';
+import { ultimaDeformada } from './ui/deformadaAuto';
 import { botonesExportar } from './ui/exportarDibujo';
 import { avisoActual } from './autoria';
 import { recorrido, recorridoSiEsPrimeraVez } from './ui/recorrido';
@@ -21,7 +19,6 @@ import { leerProyecto, textoErrores } from './engine/lector';
 import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
 import { resaltarFilas } from './ui/grilla';
-import { abrirVistaPlanilla } from './ui/vistaPlanilla';
 import plantillaURL from './assets/planilla_virgen.xlsx';
 import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
 import { usarConfig, type Motor } from './engine/config';
@@ -32,25 +29,17 @@ import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
-import { celdasAEscribir, escribirPlanilla, leerPlanilla } from './xlsx/planilla';
-import { libroGuia } from './xlsx/libros/libroGuia';
-import { datosRenovada, libroRenovada } from './xlsx/libros/libroRenovada';
-import { reporteFem } from './xlsx/libros/reporteFem';
-import { libroCombinado } from './xlsx/libros/libroCombinado';
 import { datos201De } from './engine/metodos/cirsoc';
 import { datosGuia } from './engine/metodos/guiaPasos';
-import { opcionesG } from './xlsx/opcionesG';
 import { datosExo } from './ui/exo';
 import { montarDiagramaJ } from './ui/diagramaJ';
 import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
 import { TIPOS_EXO, propsSeccion, pesoExo, type EntradaExo } from './engine/exo';
-import { imprimirCartaPdf } from './ui/cartaPdf';
-import { figurasDesdeMeta, type MetaFigura } from './xlsx/figuras';
+import type { MetaFigura } from './xlsx/figuras';
+import { celdasAEscribir } from './xlsx/celdas';
 import metaFiguras from './assets/figuras/figuras.json';
 // los PNG de los dibujos rediseñados (tools/figuras), por nombre
 const urlFiguras = import.meta.glob('./assets/figuras/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
-import { dibujosPorHoja } from './ui/dibujosDesglose';
-import { leerLibro, leerTexto, escribirLibro } from './xlsx/tablas';
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
 
 /** la app completa (el editor). main.ts la arranca, salvo en la pestaña de la vista previa de la planilla. */
@@ -309,6 +298,22 @@ function marcarCentroViejo() {
 document.addEventListener('keydown', ev => {
   if (ev.key === 'F9') { ev.preventDefault(); estado.calcularAhora(); }
 });
+/** lo pesado de los Excel (jszip, el armado de los libros) se carga recién al exportar o importar */
+const xlsxPlanilla = () => import('./xlsx/planilla');
+const xlsxTablas = () => import('./xlsx/tablas');
+/** los informes para imprimir y el desglose también se cargan al pedirlos */
+const imprimirInforme = () => import('./ui/informe').then(m => m.imprimirInforme());
+const imprimirCartaPdf = () => import('./ui/cartaPdf').then(m => m.imprimirCartaPdf());
+const imprimirLaminas = () => import('./ui/lamina').then(m => m.imprimirLaminas());
+const imprimirDesglose = () => import('./ui/desglose').then(m => m.imprimirDesglose());
+const descargarPPTX = () => import('./ui/desglose').then(m => m.descargarPPTX());
+const dibujosPorHoja = () => import('./ui/dibujosDesglose').then(m => m.dibujosPorHoja());
+/** abre (o trae al frente) la pestaña de la vista previa: tiene que ser en el mismo clic (si no, el navegador la bloquea) */
+function abrirVistaPlanilla() {
+  const w = window.open(`${location.pathname}${location.search}#planilla`, 'torre3d-planilla');
+  if (w) w.focus();
+  return !!w;
+}
 function mensaje(t: string) { $('mensaje').textContent = t; }
 
 function descargar(nombre: string, datos: BlobPart, tipo: string) {
@@ -377,9 +382,10 @@ async function exportar() {
       // cambia mientras se arma el archivo (hallazgo 5 del informe técnico)
       const conf = { ...configMotor(estado.config), motor };
       try {
+        const [mods, { escribirPlanilla }, { figurasDesdeMeta }] = await Promise.all([import('./xlsx/opcionesG'), xlsxPlanilla(), import('./xlsx/figuras')]);
         const { asig, res, g } = usarConfig(conf, () => {
           const asig = aPlanilla(estado.proyecto);
-          return { asig, res: calcularPlanilla(asig.datos), g: virgen ? null : opcionesG(estado.proyecto) };
+          return { asig, res: calcularPlanilla(asig.datos), g: virgen ? null : mods.opcionesG(estado.proyecto) };
         });
         const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
         if (virgen) {
@@ -434,6 +440,7 @@ async function abrirArchivo(f: File) {
     return;
   }
   const nombre = f.name.toLowerCase();
+  const { leerTexto, leerLibro } = await xlsxTablas(), { leerPlanilla } = await xlsxPlanilla();
   if (/\.(csv|tsv|txt)$/.test(nombre)) { dialogoImportar(interpretar(leerTexto(new TextDecoder().decode(buf), f.name)), f.name, null); return; }
   const leido = await leerPlanilla(buf);
   if (leido.proyecto) {
@@ -504,6 +511,7 @@ function dialogoImportar(imp: Importacion, archivo: string, planilla: ArrayBuffe
 
 async function descargarTabla() {
   try {
+    const { escribirLibro } = await xlsxTablas();
     const bytes = await escribirLibro(tablaDelProyecto(estado.proyecto.niveles, estado.proyecto.muros));
     descargar(nombreArchivo('_tabla.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { fallo('No se pudo armar la tabla', e); }
@@ -569,6 +577,7 @@ async function bytesComparacion(): Promise<Uint8Array> {
   const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'combinado' as const } };
   const cmp = estado.calculo.combinado ?? calcularProyecto(p).combinado;
   if (!cmp) throw new Error('La comparación no se pudo hacer.');
+  const { libroCombinado } = await import('./xlsx/libros/libroCombinado');
   return libroCombinado(cmp, estado.proyecto).xlsx();
 }
 async function descargarComparacion() {
@@ -583,6 +592,7 @@ async function bytesReporteFem(): Promise<Uint8Array> {
   const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'fem' as const } };
   const c = calcularProyecto(p);
   if (!c.fem || !c.cirsoc) throw new Error(c.error ?? 'El cálculo del modelo no se pudo hacer.');
+  const { reporteFem } = await import('./xlsx/libros/reporteFem');
   return reporteFem({ p, fem: c.fem, verif: c.cirsoc.verif, controles: c.controles, rects: datosGuia(p, c.asig.piezas).rects, teoria: configDe(p).teoria, limiteDeriva: datos201De(p).limiteDeriva }).xlsx();
 }
 async function descargarReporteFem() {
@@ -598,6 +608,7 @@ async function bytesRenovada(nivel: 'simple' | 'completa'): Promise<{ bytes: Uin
   const p = { ...estado.proyecto, calculo: { ...(estado.proyecto.calculo ?? {}), metodo: 'cirsoc' as const, verificacion: nivel } };
   const c = calcularProyecto(p);
   if (!c.cirsoc) throw new Error(c.error ?? 'El cálculo CIRSOC no se pudo hacer.');
+  const { datosRenovada, libroRenovada } = await import('./xlsx/libros/libroRenovada');
   const R = datosRenovada(p, c.asig.piezas, c.cirsoc.verif, nivel);
   const { libro } = libroRenovada(R, estado.proyecto);
   return { bytes: await libro.xlsx(), avisos: [...R.geo.avisos] };
@@ -622,6 +633,7 @@ async function descargarRenovada() {
 }
 async function bytesGuia(): Promise<{ bytes: Uint8Array; avisos: string[] }> {
   const p = estado.proyecto, d = datosGuia(p, estado.calculo.asig.piezas);
+  const { libroGuia } = await import('./xlsx/libros/libroGuia');
   return { bytes: await libroGuia(d, p).libro.xlsx(), avisos: [...d.avisos] };
 }
 /** la planilla virgen (solo datos en las hojas de la cátedra), con la versión del proyecto */
@@ -630,6 +642,7 @@ async function bytesVirgen(): Promise<Uint8Array> {
   const conf = { ...configMotor(estado.config), motor };
   const { asig, res } = usarConfig(conf, () => { const asig = aPlanilla(estado.proyecto); return { asig, res: calcularPlanilla(asig.datos) }; });
   const base = motor === 'nuevo' ? await (await fetch(plantilla2025URL)).arrayBuffer() : plantillaAbierta ?? await (await fetch(plantillaURL)).arrayBuffer();
+  const { escribirPlanilla } = await xlsxPlanilla();
   return escribirPlanilla(base, asig.datos, res, estado.proyecto, undefined, undefined, { motor, virgen: true, asig });
 }
 $('b-libros-zip').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('armar los libros')) void descargarLibrosZip(); });
@@ -668,13 +681,13 @@ async function descargarLibroGuia() {
   } catch (e) { fallo('No se pudo armar la planilla de la guía', e); }
 }
 $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });
-$('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme(); });
-$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf(); });
+$('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme().catch(e => fallo('No se pudo armar el informe', e)); });
+$('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf().catch(e => fallo('No se pudo armar la carta', e)); });
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
 $('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
-$('b-lamina').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la lámina')) return; imprimirLaminas(); });
+$('b-lamina').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la lámina')) return; imprimirLaminas().catch(e => fallo('No se pudo armar la lámina', e)); });
 
 // «Mis proyectos»: versiones en el navegador
 function armarMis() {

@@ -13,6 +13,7 @@ import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d'
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
+import TunelWorker from '../viento/tunel.worker?worker&inline';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
 const RE: Record<string, { Re: number; cs: number; texto: string }> = {
@@ -66,7 +67,9 @@ function iniciar() {
   if (cfg.ochava > 0) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
   const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia } });
   const nu = (U0 * geo.D) / re.Re;
-  const worker = new Worker(new URL('../viento/tunel.worker.ts', import.meta.url), { type: 'module' });
+  // el worker va adentro del script (también en el archivo único, que se abre con doble clic: ahí no se pueden cargar
+  // workers desde el disco)
+  const worker = new TunelWorker();
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * geo.nx; humo[2 * k + 1] = Math.random() * geo.ny; }
   corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota };

@@ -4,7 +4,7 @@
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
 import { centroTunel, panelTunel } from './tunel2d';
-import { centroTunel3d, panelTunel3d } from './tunel3d';
+
 import { describirConfig } from '../engine/metodos/tipos';
 import { armarTabique, ERRATAS_GUIA, textoBarras } from '../engine/metodos/guia';
 import { estado, fmt } from './estado';
@@ -15,7 +15,8 @@ import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
-import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
+import { montar3D } from './montar3d';
+import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
@@ -164,7 +165,7 @@ const viento: Etapa = {
   panel(c, sub) {
     if (sub === 'CIRSOC 102-25') { panelCirsoc102(c); return; }
     if (sub === 'Túnel 2D') { panelTunel(c); return; }
-    if (sub === 'Túnel 3D') { panelTunel3d(c); return; }
+    if (sub === 'Túnel 3D') { void import('./tunel3d').then(m => m.panelTunel3d(c)); return; }
     const d = datos();
     const R = d.R, s = d.p.sitio;
     c.append(seccionViento());
@@ -189,7 +190,7 @@ const viento: Etapa = {
   centro(c, tam) {
     if (estado.sub.viento === 'CIRSOC 102-25') { centroCirsoc102(c, tam, anchos, fila); return; }
     if (estado.sub.viento === 'Túnel 2D') { centroTunel(c, tam); return; }
-    if (estado.sub.viento === 'Túnel 3D') { centroTunel3d(c, tam); return; }
+    if (estado.sub.viento === 'Túnel 3D') { void import('./tunel3d').then(m => m.centroTunel3d(c, tam)); return; }
     const d = datos();
     const sobre = d.alt.filter(x => x.z > 0);
     const a = anchos(tam);

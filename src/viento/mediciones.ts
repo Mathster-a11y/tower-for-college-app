@@ -48,7 +48,9 @@ export function medir(Fx: ArrayLike<number>, Fy: ArrayLike<number>, u0: number, 
   let v = 0; for (let i = 0; i < n; i++) v += (Fy[i] - my) ** 2;
   const ClRms = Math.sqrt(v / n) / q;
   // si la fuerza lateral casi no oscila, no hay desprendimiento claro
-  const f = ClRms > 0.02 ? frecuenciaCruces(Fy) : null;
+  // sin desprendimiento claro (al arrancar la fuerza lateral apenas tiembla, ±0,05) no hay Strouhal: con remolinos
+  // formados el Cl eficaz pasa de 0,2 (cuadrado: 0,5 a 1,5)
+  const f = ClRms > 0.15 ? frecuenciaCruces(Fy) : null;
   return { Cd: mx / q, Cl: my / q, ClRms, f, St: f === null ? null : (f * D) / u0 };
 }
 

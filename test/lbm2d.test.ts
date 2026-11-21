@@ -97,3 +97,12 @@ describe('mediciones', () => {
     expect(velocidadCritica(0.2, 20, 0.13)).toBeCloseTo(30.769, 3);
   });
 });
+
+describe('mediciones al arrancar', () => {
+  it('sin remolinos formados (fuerza lateral chica) no da Strouhal', () => {
+    let z = 3; const azar = () => { z = (z * 1664525 + 1013904223) >>> 0; return z / 4294967296 - 0.5; };
+    const n = 4000, u0 = 0.1, D = 20, q = 0.5 * u0 * u0 * D;
+    const Fx = Array.from({ length: n }, () => 2 * q), Fy = Array.from({ length: n }, (_, i) => q * (0.05 * Math.sin(i / 40) + 0.05 * azar()));
+    expect(medir(Fx, Fy, u0, D).St).toBeNull();
+  });
+});

@@ -2,8 +2,7 @@
 // pestaña, que se actualiza sola mientras se edita la torre en la principal); si no, la app completa.
 // (En el archivo único todo va en un solo script: por eso el editor está dentro de iniciarApp y no corre solo.)
 import './compat';
-import { montarVistaPlanilla } from './ui/vistaPlanilla';
 import { iniciarApp } from './app';
 
-if (location.hash === '#planilla') montarVistaPlanilla();
+if (location.hash === '#planilla') void import('./ui/vistaPlanilla').then(m => m.montarVistaPlanilla());
 else iniciarApp();
