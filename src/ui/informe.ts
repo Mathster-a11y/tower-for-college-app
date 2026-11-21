@@ -15,7 +15,7 @@ import { estado, fmt } from './estado';
 import { AVISO } from '../autoria';
 import { h } from './comp';
 import { carta, type DatosCarta } from './carta';
-import { datosCarta, datosRotoPlanoActual, tablaControles } from './etapas';
+import { datosCarta, datosRotoPlanoActual, tablaControlesImpresa } from './etapas';
 import { dibujoRototraslacion } from './rototraslacion';
 import { tablaValores } from './diagramas';
 import type { Control } from '../engine/verificaciones';
@@ -149,7 +149,7 @@ export function armarInforme(): HTMLElement {
         tablaValores(['Pieza', 'J (m⁴)', '% ΣJ', 'a (m)', 'traslación (t)', 'rotación (t)', 'total (t)'], dp.paralelos.map(x => [x.nombre, x.J, x.frac * 100, x.a, x.tras, x.rot, x.total]), [0, 3, 1, 2, 2, 2, 2]));
     });
   } finally { estado.dir = antes; }
-  an.append(h('h3', {}, 'Controles con sus celdas'), tablaControles(cs));
+  an.append(h('h3', {}, 'Controles con sus celdas'), tablaControlesImpresa(cs));
   an.append(h('p', { class: 'inf-pie' }, `Informe generado con Torre 3D (${AVISO}). La planilla .xlsx escrita por la app recalcula estos valores en Excel.`));
   doc.append(an);
   doc.querySelectorAll('details').forEach(x => { (x as HTMLDetailsElement).open = true; });

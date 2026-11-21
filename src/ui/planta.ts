@@ -759,14 +759,15 @@ export function montarPlanta(cont: HTMLElement) {
     if (calQue === 'losa') { armarPanelHueco(que); return; }
     const tit = document.createElement('b'); tit.textContent = 'Calar un vano';
     const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group');
-    ([['puerta', 'Puerta'], ['ventana', 'Ventana'], ['hueco', 'Hueco a toda altura']] as const).forEach(([k, t]) => {
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', String(calTipo === k));
+    ([['puerta', 'Puerta', ''], ['ventana', 'Ventana', ''], ['hueco', 'Toda la altura', 'Hueco a toda la altura (sin dintel)']] as const).forEach(([k, t, tt]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = t; if (tt) b.title = tt; b.setAttribute('aria-pressed', String(calTipo === k));
       b.addEventListener('click', () => { if (k !== calTipo) calAlto = k === 'ventana' ? 1.2 : 2.1; calTipo = k; armarPanelCal(); dibujar(); }); seg.append(b);
     });
     const campoC = (etq: string, v: number, f: (x: number) => void) => {
       const l = document.createElement('label'); l.className = 'fila-vertices';
-      const i = document.createElement('input'); i.type = 'number'; i.step = '0.05'; i.min = '0'; i.value = String(v); i.className = 'campo-vertice';
-      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (x >= 0) { f(+x.toFixed(2)); dibujar(); } });
+      // con coma, como el resto de la app (el campo numérico del navegador muestra punto)
+      const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.value = fm(v); i.className = 'campo-vertice';
+      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (x >= 0) { f(+x.toFixed(2)); dibujar(); } else i.value = fm(v); });
       l.append(etq, ' ', i, ' m'); return l;
     };
     const filas: HTMLElement[] = [campoC('ancho', calAncho, x => { if (x > 0) calAncho = x; })];
@@ -789,7 +790,12 @@ export function montarPlanta(cont: HTMLElement) {
     const filaG = document.createElement('div'); filaG.className = 'fila-vertices'; filaG.append(bG);
     if (calGuias && !nG) { const sp = document.createElement('span'); sp.className = 'nota-chica'; sp.textContent = 'no hay guías: armalas en «Guías»'; filaG.append(sp); }
     else if (calGuias && !opGuias.ver) { const sp = document.createElement('span'); sp.className = 'nota-chica'; sp.textContent = 'las guías están ocultas («Guías» → ver guías)'; filaG.append(sp); }
-    panelCal.append(tit, que, seg, ...filas, filaG, ayuda, como);
+    // la ayuda larga, plegada: el cuadro tapaba media planta (justo donde va el vano)
+    const det = document.createElement('details'); det.className = 'calar-ayuda';
+    const sum = document.createElement('summary'); sum.textContent = '¿Cómo se usa?';
+    det.append(sum, ayuda, como);
+    const corto = document.createElement('span'); corto.textContent = calTipo === 'hueco' ? 'Tocá el muro donde va el vano.' : 'Tocá el muro donde va la abertura; tocá una hecha para moverla o sacarla.';
+    panelCal.append(tit, que, seg, ...filas, filaG, corto, det);
     // lo elegido: la abertura (mover, medidas, quitar) o el vano de toda la altura (cerrar)
     const p = estado.proyecto;
     const mkE = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
@@ -835,7 +841,6 @@ export function montarPlanta(cont: HTMLElement) {
       caja.append(mkE('b', `Vano de ${fm(vm.vano!.ancho)} m entre ${vm.id} y ${vo.id}`), bq, bs);
       panelCal.append(caja);
     }
-    if (!abSel && !vanoSel) panelCal.append(mkE('span', 'Para mover o sacar una abertura o un vano ya hecho: tocalo acá mismo.', 'nota-chica'));
   }
   /** panel de los huecos de la losa: cómo se dibujan y las medidas del elegido */
   function armarPanelHueco(que: HTMLElement) {
@@ -1131,7 +1136,8 @@ export function montarPlanta(cont: HTMLElement) {
   try { new ResizeObserver(() => barraTr.classList.toggle('angosta', cont.clientWidth < 620)).observe(cont); } catch { /* sin ResizeObserver */ }
   function refrescarTr() {
     const hay = col.hayEleccion(), act = col.herramientaActiva();
-    barraTr.hidden = modo !== 'mover' && modo !== 'lazo' && modo !== 'colocar';
+    // solo con algo elegido (o una herramienta de transformar en curso): si no, tapaba la parte de abajo de la planta
+    barraTr.hidden = (modo !== 'mover' && modo !== 'lazo' && modo !== 'colocar') || (!hay && !act);
     botonesTr.forEach(b => { b.setAttribute('aria-disabled', String(!hay && !(b.dataset.h && b.dataset.h === act))); b.setAttribute('aria-pressed', String(!!b.dataset.h && b.dataset.h === act)); });
   }
   // los cuadros de la derecha (medidas, mover con precisión) se pliegan tocando el título; con pantalla táctil arrancan plegados
@@ -1188,7 +1194,7 @@ export function montarPlanta(cont: HTMLElement) {
     if (comando && ev.key === 'Backspace') { ev.preventDefault(); ev.stopImmediatePropagation(); comando = comando.slice(0, -1); mensaje(comando ? `Comando: ${comando}▌` : ''); return; }
     if (comando && ev.key === 'Escape') { ev.stopImmediatePropagation(); comando = ''; mensaje(''); }
   }, true);
-  estado.suscribirSeleccion(() => col.refrescar());
+  estado.suscribirSeleccion(() => { col.refrescar(); refrescarTr(); });
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
   const bMas = document.createElement('button'); bMasRef = bMas; bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
@@ -1464,8 +1470,12 @@ export function montarPlanta(cont: HTMLElement) {
     const zN = nivel?.cota ?? 0;
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
     const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
-    escala = (Math.min(w, h) / ext) * zoom;
-    ox = w / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
+    // con un cuadro flotante abierto a la derecha (calar, insertar, silueta) la planta se encuadra en lo que queda
+    // libre a su izquierda: si no, el cuadro tapaba justo los muros de ese lado
+    const panelDer = [panelCal, panelIns, panelSil].find(x => !x.hidden);
+    const reservaD = panelDer && w > 640 ? Math.min(panelDer.offsetWidth + 16, w * 0.4) : 0, wUtil = w - reservaD;
+    escala = (Math.min(wUtil, h) / ext) * zoom;
+    ox = wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.replaceChildren();
     const X = (x: number) => ox + x * escala, Y = (y: number) => oy - y * escala;

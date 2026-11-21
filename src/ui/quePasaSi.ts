@@ -62,7 +62,7 @@ export function seccionQuePasaSi(): H {
   const c = s.cuerpo;
   if (!m) {
     ponerFantasma(null);
-    c.append(h('p', { class: 'nota' }, 'Elegí un muro en la planta o en la tabla: vas a poder cambiarle el largo, el espesor y la posición con deslizadores y ver en el momento qué le pasa a la torre (rigidez, reparto del viento, giro de la planta, desplazamiento y verificación), sin tocar el proyecto hasta que apliques el cambio.'));
+    c.append(h('p', { class: 'nota', title: 'Largo, espesor y posición con deslizadores; se ve en el momento qué le pasa a la torre (rigidez, reparto del viento, giro de la planta, desplazamiento y verificación) sin tocar el proyecto hasta que apliques el cambio.' }, 'Elegí un muro para probar cambios con deslizadores y ver qué le pasa a la torre.'));
     return s.el;
   }
   const k = cambioActual(m.id), ajustable = muroAjustable(p, m.id);

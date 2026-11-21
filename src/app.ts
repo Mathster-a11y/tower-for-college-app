@@ -793,7 +793,7 @@ function resaltarEnTablas() {
   const nota = document.getElementById('nota-conjunto');
   if (nota) nota.textContent = ids.size > 1 ? `${ids.size} muros elegidos en la planta (resaltados): lo que escribas en una celda de una de sus filas se aplica a todos, en esa columna. Un clic en otra fila deja de editar el conjunto.` : '';
   let primera: HTMLElement | null = null;
-  document.querySelectorAll<HTMLElement>('#panel tr[data-muros-pieza]').forEach(tr => {
+  document.querySelectorAll<HTMLElement>('#panel [data-muros-pieza]').forEach(tr => {
     const si = (tr.dataset.murosPieza ?? '').split(' ').some(id => ids.has(id));
     tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr;
   });

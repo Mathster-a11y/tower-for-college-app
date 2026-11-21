@@ -93,8 +93,31 @@ const fuenteTxt = () => (estado.fuente === 'guia' ? 'Método «Guía»: Kz const
 const peor = (cs: Control[]): EstadoChip => (cs.some(c => c.estado === 'no verifica') ? 'no verifica' : cs.some(c => c.estado === 'atención') ? 'revisar' : cs.length ? 'verifica' : 'pendiente');
 const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => pre.some(g => c.grupo.startsWith(g))) ?? [];
 
-/** Tabla de controles: planilla, guía y estado. */
+/**
+ * Controles: una tarjeta por control (la tabla de cinco columnas no entraba en el panel): el nombre y su estado, el
+ * criterio con su fuente, los valores de la planilla y del método con la diferencia, y la nota.
+ */
 export function tablaControles(cs: Control[]): H {
+  const met = ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía';
+  const lista = h('div', { class: 'lista-controles', role: 'list' });
+  cs.forEach(k => {
+    // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
+    const df = k.planilla !== null && k.guia !== null ? textoDiferencia(k.guia, k.planilla, k.unidad, 2) : null;
+    const u = k.unidad ? ` ${k.unidad}` : '';
+    const valores = h('div', { class: 'ctrl-valores' },
+      ...(k.planilla !== null ? [h('span', {}, h('b', {}, 'Planilla'), ` ${fmt(k.planilla)}${u}`)] : []),
+      ...(k.guia !== null ? [h('span', {}, h('b', {}, met), ` ${fmt(k.guia)}${u}`)] : []),
+      ...(df && df.nivel ? [h('span', { class: `sem ${df.nivel}`, title: df.texto }, df.nivel === 'verde' ? '✓ coinciden' : `Δ ${df.corto}`)] : []));
+    lista.append(h('div', { class: 'ctrl-item', role: 'listitem' },
+      h('div', { class: 'ctrl-cab' }, h('span', { class: 'ctrl-nombre' }, k.nombre), chip(k.estado === 'atención' ? 'revisar' : k.estado)),
+      h('div', { class: 'ctrl-criterio' }, `${k.criterio} · ${k.fuente}`),
+      valores,
+      ...(k.nota ? [h('p', { class: 'ctrl-nota' }, k.nota)] : [])));
+  });
+  return lista;
+}
+/** Tabla de controles (para el informe impreso, con el ancho de la hoja): planilla, guía y estado. */
+export function tablaControlesImpresa(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
   t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
@@ -108,6 +131,7 @@ export function tablaControles(cs: Control[]): H {
   t.append(tb);
   return h('div', { class: 'scroll' }, t);
 }
+
 /** dos dibujos lado a lado si entran; si no, uno debajo del otro */
 /**
  * Ancho de cada dibujo de una fila: dos por fila solo si cada uno queda de 420 px o más; si no, uno debajo del otro.
@@ -257,7 +281,7 @@ const estabilidad: Etapa = {
     c.append(h('div', { class: 'kpis' },
       kpi('Vuelco Me / Mv', fmt(vuelco, 2), okV ? '≥ 1,5 · verifica' : '< 1,5 · no verifica', colorEstado(okV)),
       kpi(`e, viento ${d.dir}`, `${fmt(fg.e, 2)} m`, `${okE ? '≤' : '>'} b/6 = ${fmt(fg.tercio, 2)} m`, colorEstado(okE)),
-      kpi('Suelo, σ máx.', `${fmt(m.N89, 2)} kg/cm²`, 'contra la del estudio de suelos'),
+      kpi('Suelo, σ máx.', `${fmt(Math.abs(m.N89), 2)} kg/cm²`, 'compresión, contra la del estudio de suelos'),
     ));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
@@ -808,8 +832,11 @@ const resumen: Etapa = {
     if (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación') { centroCombinado(c); return; }
     const cs = estado.calculo.controles ?? [];
     const grupos = [...new Set(cs.map(x => x.grupo))];
-    c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const e = peor(cs.filter(x => x.grupo === g && x.estado !== 'informativo')); return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
-    c.append(seccion('Todos los controles', tablaControles(cs)).el);
+    c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const dg = cs.filter(x => x.grupo === g && x.estado !== 'informativo'), e = dg.length ? peor(dg) : 'informativo'; return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
+    // centro ancho: tabla; si queda angosto (tablet vertical), las mismas tarjetas que en los paneles
+    const ancha = tablaControlesImpresa(cs), angosta = tablaControles(cs);
+    ancha.classList.add('solo-ancho'); angosta.classList.add('solo-angosto');
+    c.append(seccion('Todos los controles', h('div', { class: 'controles-adapt' }, ancha, angosta)).el);
     // método Guía: dónde el texto de la guía no cierra con su propio procedimiento (la app sigue el procedimiento)
     if (estado.fuente === 'guia') {
       const t = h('table', { class: 'tabla compacta' }, h('thead', {}, h('tr', {}, h('th', {}, 'Dónde'), h('th', {}, 'Qué dice la guía'), h('th', {}, 'Qué calcula la app'))),

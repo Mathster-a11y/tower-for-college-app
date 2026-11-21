@@ -350,7 +350,8 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   if (-adm >= s0) { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(-adm), y2: Y(-adm), class: 'd-ref fuerte' })); svg.append(el('text', { x: ancho - md - 2, y: Y(-adm) - 4, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, `límite σbk −${adm}`)); }
   if (s1 > 0) svg.append(el('rect', { x: mi, y: Y(s1), width: ancho - mi - md, height: Y(0) - Y(s1), class: 'd-traccion' }));
   svg.append(el('text', { x: mi, y: ms - 2, class: 'd-eje' }, 'σ (kg/cm²) · arriba de 0: tracción'));
-  svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición en el sentido del viento, desde el baricentro de la pieza (m)'));
+  { const t = el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'distancia al baricentro (m)');
+    t.append(el('title', {}, 'posición en el sentido del viento, medida desde el baricentro de la pieza (m)')); svg.append(t); }
   marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
   tramos.forEach(({ m, lejos, cerca }) => {
     (['desc', 'carg'] as const).forEach(k => {

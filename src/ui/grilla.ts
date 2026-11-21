@@ -107,6 +107,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
       const v = f === null ? null : c.leer(f);
       td.textContent = v === null || v === undefined || (typeof v === 'number' && !isFinite(v)) ? '' : typeof v === 'number' ? String(+v.toFixed(4)).replace('.', ',') : String(v);
       if (c.tipo === 'numero') td.className = 'n';
+      else if ((td.textContent ?? '').length > 14) td.title = td.textContent!;           // los textos largos se cortan con «…»
       td.dataset.r = String(r); td.dataset.c = String(k);
       tr.append(td);
       celdas[r].push(td);

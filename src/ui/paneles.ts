@@ -445,9 +445,9 @@ export function panelPiezas(c: H) {
   c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. «Clase» la elegís vos: automática (la app decide: simétrica si el baricentro cae sobre el eje de la pieza o dentro del material, como una doble T o un cajón; asimétrica si se corre hacia un lado, como una C, U o L), tabique singular, compuesta simétrica o asimétrica, tubo circular, pórtico o elemento especial (oblicuos, curvos, calados: rectángulo equivalente con su geometría en la hoja «Elementos especiales»). Sin tildar «J», la pieza no entra al cálculo del J en ese viento. Los muros calados van enteros (como la cátedra) salvo que en sus medidas elijas «corte». «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
   for (const dir of ['A', 'B'] as const) {
     c.append(h('h3', {}, dir === 'A' ? 'Viento A · J Tabiques paralelos' : 'Viento B · J Tabiques ortogonales'));
-    const t = h('table', { class: 'tabla compacta' });
-    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Clase', 'J', 'Muros', 'Molde', 'N.º', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
-    const tb = h('tbody');
+    // una tarjeta por pieza (la tabla de 8 columnas no entraba en el panel): arriba lo que se elige (nombre, clase, si
+    // entra al J), abajo sus datos y los avisos completos
+    const lista = h('div', { class: 'lista-piezas', role: 'list' });
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
       const clave = `${dir}:${pz.nombre}`;
@@ -471,16 +471,20 @@ export function panelPiezas(c: H) {
       clase.addEventListener('change', () => ponerCfg(c0 => { c0.clase = clase.value === 'auto' ? null : clase.value as ClasePieza; }));
       enJ.addEventListener('change', () => ponerCfg(c0 => { c0.enJ = enJ.checked ? null : false; }));
       [clase, enJ].forEach(x => x.addEventListener('click', ev => ev.stopPropagation()));
-      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
-        h('td', {}, nom), h('td', {}, clase), h('td', {}, enJ), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+      const dato = (r: string, v: string) => h('span', {}, h('b', {}, r), ` ${v}`);
+      const tr = h('div', { role: 'listitem', tabindex: '0', class: `pieza-item${estado.sub.perfil === clave ? ' sel' : ''}${cfg.enJ === false ? ' fuera' : ''}`, title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
+        h('div', { class: 'pieza-cab' }, nom, clase, h('label', { class: 'pieza-enj', title: 'Entra al cálculo del J (sin tildar: no va a la hoja J de este viento)' }, enJ, ' J')),
+        h('div', { class: 'pieza-datos' },
+          dato('muros', pz.muros.join(' ')), dato('molde', pz.molde),
+          dato('hoja', pz.filaHoja === null ? 'no va' : `n.º ${pz.filaHoja + 1} (fila ${filaExcelJ(pz.dir, pz.filaHoja)})`),
+          dato('J', `${fmt(J, 3)} m⁴`), dato('posición', `${fmt(pz.posicion)} m`)),
+        ...pz.avisos.map(a => h('p', { class: 'pieza-aviso' }, a)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);
-      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });
-      tb.append(tr);
-      pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '8' }, a))));
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target === tr) elegir(); });
+      lista.append(tr);
     });
-    t.append(tb);
-    c.append(h('div', { class: 'scroll' }, t));
+    c.append(lista);
     c.append(h('p', { class: 'total' }, `ΣJ = ${fmt(dir === 'A' ? res.jpar.AY24 : res.jort.AY24, 3)} m⁴`));
     // medidas de los muros de la pieza elegida, editables (también dentro de una pieza agrupada)
     const elegida = asig.piezas.find(pz => pz.dir === dir && estado.sub.perfil === `${dir}:${pz.nombre}`);
