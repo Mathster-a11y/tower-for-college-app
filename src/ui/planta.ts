@@ -8,6 +8,8 @@ import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanar, i
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
+import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
+import type { TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
@@ -255,6 +257,8 @@ export function montarPlanta(cont: HTMLElement) {
   let vSel: number | null = null;
   /** en el modo «Silueta»: se edita el contorno de la losa (false) o el de la carpintería (true) */
   let editaCarp = false;
+  /** lo elegido en «Esquinas de la torre» (vive mientras la página está abierta) */
+  const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'ambas' as 'ambas' | 'losa' | 'carpinteria', todos: true };
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
@@ -569,7 +573,8 @@ export function montarPlanta(cont: HTMLElement) {
         filaV, dxf,
         boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
         ...(car ? [boton('Usar a máx y b máx como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +car.a.toFixed(2); nv.L = +car.b.toFixed(2); }), 'Escribe en este nivel B = a máx y L = b máx (es lo que lee la planilla para el viento). No se hace solo: queda a tu criterio.')] : []),
-        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'));
+        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'),
+        seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L)));
       return;
     }
     panelSil.append(que, b(`Silueta de ${n.nombre}`), linea(pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
@@ -577,7 +582,55 @@ export function montarPlanta(cont: HTMLElement) {
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       filaV, dxf,
       boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
-      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'));
+      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'),
+      seccionEsquinas(Math.min(caja.B, caja.L)));
+  }
+  /**
+   * esquinas de la torre de una vez: redondeadas, en chaflán o sustraídas, en la losa y/o la carpintería de este nivel
+   * o de todos. Cambia la forma que recibe el viento (presiones 3D y túneles), no B y L de la planilla.
+   */
+  function seccionEsquinas(ancho: number): HTMLElement {
+    const det = document.createElement('details'); det.className = 'esquinas-torre'; det.open = esq.abierto;
+    det.addEventListener('toggle', () => { esq.abierto = det.open; });
+    const sum = document.createElement('summary'); sum.textContent = 'Esquinas de la torre (viento)'; det.append(sum);
+    const elegir = <T extends string>(rot: string, ops: [T, string][], val: T, al: (x: T) => void) => {
+      const s2 = document.createElement('select');
+      ops.forEach(([v, t]) => s2.append(new Option(t, v, false, v === val)));
+      s2.addEventListener('change', () => { al(s2.value as T); armarPanelSil(); });
+      const l = document.createElement('label'); l.className = 'campo-esq'; l.append(rot, s2); return l;
+    };
+    const medida = (rot: string, v: number, al: (x: number) => void) => {
+      const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.value = String(v).replace('.', ','); i.className = 'campo-vertice';
+      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x) && x > 0) al(x); armarPanelSil(); });
+      const l = document.createElement('label'); l.className = 'campo-esq'; l.append(rot, i, ' m'); return l;
+    };
+    const pct = (x: number) => `${((100 * x) / (ancho || 1)).toFixed(0)} % del ancho`;
+    det.append(
+      elegir<TipoEsquina>('Forma', [['redondeada', 'redondeadas (arco)'], ['chaflan', 'en chaflán (ochava)'], ['sustraida', 'sustraídas (retranqueo)']], esq.tipo, x => { esq.tipo = x; }),
+      medida(esq.tipo === 'redondeada' ? 'radio r ' : esq.tipo === 'chaflan' ? 'corte d ' : 'a ', esq.a, x => { esq.a = x; }),
+      ...(esq.tipo === 'sustraida' ? [medida('b ', esq.b, x => { esq.b = x; })] : []),
+      elegir('Contorno', [['ambas', 'losa y carpintería'], ['losa', 'solo la losa'], ['carpinteria', 'solo la carpintería']], esq.que, x => { esq.que = x; }),
+      elegir('Niveles', [['todos', 'todos los niveles'], ['este', 'solo este nivel']], esq.todos ? 'todos' : 'este', x => { esq.todos = x === 'todos'; }),
+    );
+    const nota = document.createElement('p'); nota.className = 'nota';
+    nota.textContent = esq.tipo === 'redondeada'
+      ? `r = ${pct(esq.a)}. Como referencia, el Eurocódigo (EN 1991-1-4) baja el arrastre de un prisma cuadrado con el factor ψr = 1 − 2,5·r/b ≥ 0,5: acá ψr ≈ ${psiRedondeo(esq.a, ancho).toFixed(2).replace('.', ',')}.`
+      : esq.tipo === 'chaflan'
+        ? `d = ${pct(esq.a)}. Ochavas de 5 a 10 % del ancho ya achican el despegue del aire en las esquinas, el arrastre y, sobre todo, la sacudida lateral por los remolinos.`
+        : `a × b = ${esq.a} × ${esq.b} m (${pct(esq.a)}). El retranqueo rompe el despegue en dos aristas más chicas y desordena los remolinos: baja la sacudida lateral.`;
+    const aplicar = document.createElement('button'); aplicar.type = 'button'; aplicar.className = 'primario'; aplicar.textContent = 'Aplicar a las esquinas salientes';
+    aplicar.addEventListener('click', async () => {
+      const p2 = estado.proyecto;
+      const niveles = esq.todos ? p2.niveles.map((_, k) => k) : [iNivel];
+      const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: esq.que, niveles });
+      if (!r.cambios.length) { await avisar('error', 'No se cambió ninguna esquina', r.avisos.join(' ') || 'No hay esquinas salientes entre lados rectos.'); return; }
+      estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else nv.carpinteria = c.v; }); });
+      if (r.avisos.length) await avisar('info', 'Esquinas tratadas, con avisos', r.avisos.join(' '));
+    });
+    const pie = document.createElement('p'); pie.className = 'nota';
+    pie.textContent = 'Se tratan las esquinas salientes entre lados rectos (las entrantes y las curvas quedan). Se puede deshacer. Cambia la forma que recibe el viento en las presiones 3D y en los túneles 2D y 3D (ahí se comparan el arrastre, la fuerza lateral y la velocidad crítica); la planilla y el CIRSOC 102 siguen con B, L y los Cp de la norma, que no premian la forma de las esquinas (eso pide un ensayo en túnel de viento).';
+    det.append(nota, aplicar, pie);
+    return det;
   }
   // biblioteca de piezas tipo: se eligen forma y medidas, se ve su J y se ubica con un clic en la planta
   const bIns = document.createElement('button');

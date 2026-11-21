@@ -26,7 +26,7 @@ const U0 = 0.1;
 
 /** lo que eligió el alumno (vive mientras la página está abierta; no se guarda en el proyecto) */
 const cfg = {
-  nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0,
+  nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0, forma: 'dibujada' as 'dibujada' | 'vivas',
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
 };
 
@@ -38,6 +38,8 @@ interface Corrida {
 let corrida: Corrida | null = null;
 let lienzo: HTMLCanvasElement | null = null;
 let panelMed: H | null = null;
+/** las mediciones anotadas para comparar formas (esquinas vivas, redondeadas, ochavadas, sustraídas…) */
+const anotadas: { forma: string; Cd: number; Cl: number; St: number | null; Vcr: number }[] = [];
 
 /** los niveles sobre PB, para elegir el corte (por defecto, uno a media altura) */
 function niveles() {
@@ -51,7 +53,7 @@ function nivelElegido() {
 }
 
 function claveCorrida(): string {
-  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.segunda, cfg.distancia]);
+  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.segunda, cfg.distancia]);
 }
 
 function iniciar() {
@@ -61,6 +63,11 @@ function iniciar() {
   if (!ne) return;
   let pol = puntosSilueta(contornoAlViento(estado.proyecto, ne.i).v, 12).map(q => ({ x: q.x, y: q.y }));
   if (pol.length < 3) return;
+  // para comparar: la misma planta con esquinas vivas (su caja)
+  if (cfg.forma === 'vivas') {
+    const xs = pol.map(q => q.x), ys = pol.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    pol = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  }
   const D = RES[cfg.res].D, re = RE[cfg.re];
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
@@ -217,6 +224,7 @@ export function panelTunel(c: H) {
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }),
     sel('Reynolds', Object.entries(RE).map(([k, v]) => [k, v.texto] as [string, string]), cfg.re, x => { cfg.re = x; }),
     sel('Resolución', Object.entries(RES).map(([k, v]) => [k, v.texto] as [string, string]), cfg.res, x => { cfg.res = x; }),
+    sel('Planta', [['dibujada', 'como está dibujada'], ['vivas', 'su caja, con esquinas vivas (para comparar)']], cfg.forma, x => { cfg.forma = x; }),
     sel('Ochavas', ['0', '5', '10', '15'].map(v => [v, v === '0' ? 'sin ochavas (esquinas vivas)' : `${v} % del ancho`] as [string, string]), String(cfg.ochava), x => { cfg.ochava = +x; }),
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
     cfg.segunda !== 'no' ? sel('Separación (anchos)', ['0.5', '1', '2', '3', '4'].map(v => [v, v.replace('.', ',')] as [string, string]), String(cfg.distancia), x => { cfg.distancia = +x; }) : h('span', {}),
@@ -229,9 +237,44 @@ export function panelTunel(c: H) {
   panelMed = h('div', {});
   m.append(panelMed);
   actualizarMediciones();
+  const ca = seccion('Comparar formas de esquina').cuerpo; c.append(ca.parentElement!);
+  panelAnot = h('div', {}); ca.append(panelAnot); armarAnotadas();
   const gp = seccion('Túnel 3D: probar la placa de video').cuerpo; c.append(gp.parentElement!);
   const ponerGpu = () => { gp.replaceChildren(seccionPruebaGpu(ponerGpu)); };
   ponerGpu();
+}
+
+/** anotar y comparar formas: la planta dibujada contra su caja con esquinas vivas (u otras esquinas) */
+let panelAnot: H | null = null;
+function armarAnotadas() {
+  const el = panelAnot;
+  if (!el) return;
+  const anotar = h('button', { type: 'button', class: 'boton primario' }, 'Anotar esta medición');
+  anotar.title = 'Guarda Cd, Cl, St y V crítica de la corrida actual (cuando ya se midieron) para compararlas con otra forma';
+  anotar.addEventListener('click', () => {
+    const c = corrida, md = c?.med;
+    if (!c || !md || !isFinite(md.Cd)) { anotar.textContent = 'Todavía midiendo: esperá unas pasadas'; return; }
+    let n1 = NaN; try { n1 = vientoCirsoc()[estado.dir].n1; } catch { /* sin datos */ }
+    const St = md.St ?? null;
+    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re}`;
+    anotadas.push({ forma, Cd: md.Cd, Cl: md.ClRms, St, Vcr: St ? velocidadCritica(n1, c.geo.anchoM, St) : NaN });
+    armarAnotadas();
+  });
+  const hijos: H[] = [h('div', { class: 'fila-acciones' }, anotar)];
+  if (anotadas.length) {
+    const borrar = h('button', { type: 'button', class: 'boton' }, 'Borrar las anotadas');
+    borrar.addEventListener('click', () => { anotadas.length = 0; armarAnotadas(); });
+    hijos[0].append(borrar);
+    const ref = anotadas[0];
+    const dif = (x: number, r: number) => (isFinite(x) && isFinite(r) && r !== 0 && Math.abs(x / r - 1) > 0.005 ? ` (${x > r ? '+' : '−'}${fmt(Math.abs(100 * (x / r - 1)), 0)} %)` : '');
+    hijos.push(h('table', { class: 'tabla chica' },
+      h('thead', {}, h('tr', {}, ...['forma', 'Cd', 'Cl eficaz', 'St', 'V crítica'].map(x => h('th', {}, x)))),
+      h('tbody', {}, ...anotadas.map(a => h('tr', {}, h('td', {}, a.forma),
+        h('td', { class: 'n' }, `${fmt(a.Cd, 2)}${dif(a.Cd, ref.Cd)}`), h('td', { class: 'n' }, `${fmt(a.Cl, 2)}${dif(a.Cl, ref.Cl)}`),
+        h('td', { class: 'n' }, a.St ? fmt(a.St, 3) : '—'), h('td', { class: 'n' }, isFinite(a.Vcr) ? `${fmt(a.Vcr, 1)} m/s` : '—'))))));
+  }
+  hijos.push(h('p', { class: 'nota' }, 'Para ver cuánto ayudan las esquinas: con el mismo corte, Reynolds y resolución, anotá la planta como «su caja, con esquinas vivas» y después «como está dibujada» (los porcentajes comparan con la primera anotada). Menos Cd: menos empuje en el sentido del viento. Menos Cl: menos sacudida de costado por los remolinos. La V crítica = n1·B/St conviene que quede bien por encima del viento de diseño.'));
+  el.replaceChildren(...hijos);
 }
 
 let ultimaMed = 0;

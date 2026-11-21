@@ -1603,3 +1603,10 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .gr-tablero.moviendo > .gr-nodo, .gr-tablero.moviendo > .gr-param { cursor: move; touch-action: none; user-select: none; }
 .gr-tablero.moviendo > .arrastrando { z-index: 3; box-shadow: 0 4px 14px rgb(0 0 0 / .18); opacity: .95; }
 .gr-tablero.moviendo { background-image: radial-gradient(circle, color-mix(in srgb, var(--dim) 35%, transparent) 1px, transparent 1px); background-size: 16px 16px; }
+
+/* Contornos: esquinas de la torre (redondeadas, chaflán, sustraídas) */
+.esquinas-torre { margin-top: 6px; border-top: 1px solid var(--rule); padding-top: 6px; }
+.esquinas-torre summary { cursor: pointer; font-weight: 600; }
+.esquinas-torre .campo-esq { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0; }
+.esquinas-torre .campo-esq select { max-width: 62%; }
+.esquinas-torre > button { width: 100%; margin: 4px 0; }

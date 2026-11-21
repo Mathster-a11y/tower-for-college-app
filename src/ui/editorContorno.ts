@@ -16,7 +16,7 @@ import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
 import type { Punto } from '../engine/silueta';
-import { arcoConRadio, chaflan, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
+import { arcoConRadio, chaflan, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
@@ -306,7 +306,8 @@ export function montarEditorContorno(api: ApiPlanta) {
       panel.append(fila(campo('x', q.x, x => { guardar(); P = moverVertice(P!, k, i, { x, y: q.y }); armar(); api.dibujar(); }, 60), campo('y', q.y, y => { guardar(); P = moverVertice(P!, k, i, { x: q.x, y }); armar(); api.dibujar(); }, 60)));
       panel.append(fila(
         boton('Empalme', 'Redondea la esquina con un arco tangente de radio r', () => aplicarAnillo(k, vs => empalme(vs, i, her.r), `Esquina redondeada con radio ${fmt(her.r)} m.`)), campo('r', her.r, x => { her.r = x; }),
-        boton('Chaflán', 'Corta la esquina a la distancia d sobre cada lado', () => aplicarAnillo(k, vs => chaflan(vs, i, her.d), `Esquina cortada a ${fmt(her.d)} m.`)), campo('d', her.d, x => { her.d = x; })));
+        boton('Chaflán', 'Corta la esquina a la distancia d sobre cada lado', () => aplicarAnillo(k, vs => chaflan(vs, i, her.d), `Esquina cortada a ${fmt(her.d)} m.`)), campo('d', her.d, x => { her.d = x; }),
+        boton('Sustraer', 'Saca de la esquina un rectángulo de d × d (retranqueo)', () => aplicarAnillo(k, vs => sustraerEsquina(vs, i, her.d), `Esquina sustraída ${fmt(her.d)} × ${fmt(her.d)} m.`))));
     }
     if (tramo) {
       const k = tramo.i >= 0 ? tramo.anillo : 0, i = tramo.i, md = medidaLado(anilloDe(P, k), i), a0 = anilloDe(P, k)[i];
@@ -321,6 +322,11 @@ export function montarEditorContorno(api: ApiPlanta) {
     const kSel = sel?.anillo ?? tramo?.anillo ?? 0, nomK = kSel ? `el hueco ${kSel}` : 'el contorno';
     const det = mk('details', '', 'contorno-cad'); det.open = abiertoCad; det.addEventListener('toggle', () => { abiertoCad = det.open; });
     det.append(mk('summary', `Herramientas de CAD (sobre ${nomK})`));
+    det.append(fila(mk('span', 'Todas las esquinas:'),
+      boton('Redondear', 'Empalme de radio r en cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'redondeada', her.r), `Esquinas redondeadas con r = ${fmt(her.r)} m.`)),
+      boton('Chaflán', 'Corta cada esquina saliente a la distancia d', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'chaflan', her.d), `Esquinas en chaflán de ${fmt(her.d)} m.`)),
+      boton('Sustraer', 'Saca d × d de cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'sustraida', her.d), `Esquinas sustraídas ${fmt(her.d)} × ${fmt(her.d)} m.`)),
+      campo('r', her.r, x => { her.r = x; }), campo('d', her.d, x => { her.d = x; })));
     det.append(fila(
       boton('Desfasar ⇱', 'Contorno paralelo hacia afuera (arcos exactos, esquinas en inglete)', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? -her.desf : her.desf), `${nomK} agrandado ${fmt(her.desf)} m.`, false)),
       boton('⇲', 'Contorno paralelo hacia adentro', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? her.desf : -her.desf), `${nomK} achicado ${fmt(her.desf)} m.`, false)),

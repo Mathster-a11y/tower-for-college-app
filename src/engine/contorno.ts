@@ -77,6 +77,54 @@ export function chaflan(vs: Anillo, i: number, d: number, d2 = d): Anillo | { er
   out.splice(i, 1, p1, p2);
   return quitarRepetidos(out.map(limpio));
 }
+/**
+ * esquina sustraída (retranqueada): saca de la esquina i un rectángulo de a sobre el lado de llegada y b sobre el de
+ * salida; la esquina saliente queda como dos esquinas salientes y una entrante.
+ */
+export function sustraerEsquina(vs: Anillo, i: number, a: number, b = a): Anillo | { error: string } {
+  const n = vs.length, ia = (i - 1 + n) % n, P = vs[i], A = vs[ia], B = vs[(i + 1) % n];
+  if (!recto(vs, ia) || !recto(vs, i)) return { error: 'La esquina sustraída va entre dos lados rectos.' };
+  const Lu = Math.hypot(A.x - P.x, A.y - P.y), Lw = Math.hypot(B.x - P.x, B.y - P.y);
+  if (!(a > 0) || !(b > 0)) return { error: 'Las medidas tienen que ser mayores que cero.' };
+  if (a >= Lu - 1e-6 || b >= Lw - 1e-6) return { error: 'La sustracción es más larga que el lado.' };
+  const u = { x: (A.x - P.x) / Lu, y: (A.y - P.y) / Lu }, w = { x: (B.x - P.x) / Lw, y: (B.y - P.y) / Lw };
+  const p1 = { x: P.x + u.x * a, y: P.y + u.y * a }, p2 = { x: P.x + w.x * b, y: P.y + w.y * b };
+  const q = { x: p1.x + w.x * b, y: p1.y + w.y * b };
+  const out = vs.map(v => ({ ...v }));
+  out.splice(i, 1, p1, q, p2);
+  return quitarRepetidos(out.map(limpio));
+}
+
+export type TipoEsquina = 'redondeada' | 'chaflan' | 'sustraida';
+/** las esquinas salientes (convexas, de más de 5° de quiebre) entre dos lados rectos */
+export function esquinasSalientes(vs: Anillo): number[] {
+  const n = vs.length, s = Math.sign(areaConSigno(vs)) || 1, out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const ia = (i - 1 + n) % n, A = vs[ia], P = vs[i], B = vs[(i + 1) % n];
+    if (!recto(vs, ia) || !recto(vs, i)) continue;
+    const ux = P.x - A.x, uy = P.y - A.y, wx = B.x - P.x, wy = B.y - P.y, l = Math.hypot(ux, uy) * Math.hypot(wx, wy);
+    if (!(l > 0)) continue;
+    if (((ux * wy - uy * wx) / l) * s > Math.sin((5 * Math.PI) / 180)) out.push(i);
+  }
+  return out;
+}
+/**
+ * trata de una vez las esquinas salientes del contorno (o las de «cuales»): redondeadas con radio a, en chaflán a
+ * la distancia a, o sustraídas a × b. Las esquinas entrantes y las que tocan un arco quedan como están.
+ */
+export function tratarEsquinas(vs: Anillo, tipo: TipoEsquina, a: number, b = a, cuales?: number[]): Anillo | { error: string } {
+  const todas = esquinasSalientes(vs), ids = (cuales ? todas.filter(i => cuales.includes(i)) : todas).sort((x, y) => y - x);
+  if (!ids.length) return { error: 'El contorno no tiene esquinas salientes entre lados rectos.' };
+  let out: Anillo = vs.map(v => ({ ...v }));
+  // de la última a la primera: tratar una esquina solo cambia los índices de las que vienen después
+  for (const i of ids) {
+    const r = tipo === 'redondeada' ? empalme(out, i, a) : tipo === 'chaflan' ? chaflan(out, i, a, a) : sustraerEsquina(out, i, a, b);
+    if ('error' in r) return { error: `Esquina ${i + 1}: ${r.error}` };
+    out = r;
+  }
+  return out;
+}
+
 /** parte el lado i (recto) en n partes iguales */
 export function dividirLado(vs: Anillo, i: number, partes: number): Anillo | { error: string } {
   const n = vs.length, a = vs[i], b = vs[(i + 1) % n], k = Math.round(partes);
