@@ -12,6 +12,8 @@ import { grafoPlanilla, tablaNivelesPlanilla, type RP } from './planilla';
 import { grafoCirsoc } from './cirsoc';
 import { grafoFem } from './fem';
 import { abrirGuiaImprimible } from './imprimir';
+import { elementoAImagen } from '../aImagen';
+import { confirmar, pedirTexto } from '../tarjeta';
 import { grafoFlujo } from './flujo';
 import { viento102 } from '../../engine/cargas/cirsoc102';
 import { calcularFem } from '../../engine/metodos/fem';
@@ -278,9 +280,55 @@ export function centroEcuaciones(c: H) {
   // mover burbujas: los datos quedan bloqueados (no cambian de valor) y cada tarjeta se arrastra a cualquier lugar
   const bMover = h('button', { type: 'button', class: 'mini', 'aria-pressed': String(moverBurbujas), title: 'Bloquea los valores de los datos y deja arrastrar cada tarjeta y cada dato a cualquier lugar del esquema. Las flechas se redibujan solas. Las posiciones se recuerdan en este navegador.' }, moverBurbujas ? '✓ Moviendo burbujas (los datos están bloqueados)' : 'Mover burbujas');
   bMover.addEventListener('click', () => { moverBurbujas = !moverBurbujas; estado.avisarPanel(); });
-  const bAuto = h('button', { type: 'button', class: 'mini', title: 'Borra las posiciones a mano de este capítulo y vuelve al acomodo automático' }, 'Volver al acomodo automático') as HTMLButtonElement;
+  const bAuto = h('button', { type: 'button', class: 'mini', title: 'Borra las posiciones a mano de este capítulo y vuelve a la posición original (el acomodo automático). Los acomodos guardados no se borran.' }, '↺ Posición original') as HTMLButtonElement;
   bAuto.disabled = !Object.keys(pos).length;
   bAuto.addEventListener('click', () => { guardarPosiciones(metodo, cap.id, {}); estado.avisarPanel(); });
+  // acomodos guardados con nombre (por método y capítulo) y exportar el esquema como imagen
+  const clave = `${metodo}/${cap.id}`, lista = acomodosDe(clave);
+  const sAcomodo = h('select', { 'aria-label': 'Acomodos guardados', title: 'Elegí un acomodo guardado para volver a esas posiciones' }) as HTMLSelectElement;
+  sAcomodo.append(new Option(lista.length ? `Acomodos guardados (${lista.length})` : 'Sin acomodos guardados', ''));
+  lista.forEach((a, i) => sAcomodo.append(new Option(`${a.nombre} · ${new Date(a.fecha).toLocaleDateString('es-AR')}`, String(i))));
+  sAcomodo.disabled = !lista.length;
+  sAcomodo.addEventListener('change', () => {
+    const a = lista[+sAcomodo.value];
+    if (!a) return;
+    guardarPosiciones(metodo, cap.id, { ...a.pos });
+    mensaje(`Acomodo «${a.nombre}» puesto en el esquema.`);
+    estado.avisarPanel();
+  });
+  const bGuardar = h('button', { type: 'button', class: 'mini', title: 'Guarda las posiciones de las burbujas de este capítulo con un nombre, para volver a ellas cuando quieras' }, 'Guardar acomodo…');
+  bGuardar.addEventListener('click', async () => {
+    const nombre = (await pedirTexto('Nombre del acomodo', `Se guardan las posiciones de «${cap.titulo}» (${metodo}). Si ya hay uno con ese nombre, se reemplaza.`, `Acomodo ${lista.length + 1}`, 'Guardar'))?.trim();
+    if (!nombre) return;
+    const todos = acomodos(), l = (todos[clave] ?? []).filter(a => a.nombre !== nombre);
+    l.push({ nombre, fecha: Date.now(), pos: { ...posicionesDe(metodo, cap.id) } });
+    todos[clave] = l;
+    guardarAcomodos();
+    mensaje(`Acomodo «${nombre}» guardado.`);
+    estado.avisarPanel();
+  });
+  const bBorrarAc = h('button', { type: 'button', class: 'mini', title: 'Borra el acomodo guardado elegido en la lista' }, 'Borrar acomodo…') as HTMLButtonElement;
+  bBorrarAc.disabled = !lista.length;
+  bBorrarAc.addEventListener('click', async () => {
+    const a = lista[+sAcomodo.value];
+    if (!a) { mensaje('Elegí primero en la lista el acomodo que querés borrar.'); return; }
+    if (!(await confirmar('Borrar acomodo', `¿Borrar el acomodo «${a.nombre}»? Las posiciones que se ven ahora no cambian.`, 'Borrar'))) return;
+    const todos = acomodos();
+    todos[clave] = (todos[clave] ?? []).filter(x => x !== a);
+    if (!todos[clave].length) delete todos[clave];
+    guardarAcomodos();
+    estado.avisarPanel();
+  });
+  const exportar = (tipo: 'png' | 'jpeg') => {
+    const b = h('button', { type: 'button', class: 'mini', title: `Descarga el esquema de este capítulo tal como se ve, en ${tipo.toUpperCase()}, sobre fondo blanco y al doble de resolución` }, tipo === 'png' ? 'PNG' : 'JPEG') as HTMLButtonElement;
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await elementoAImagen(vista!.el, tipo, nombreArchivo(`esquema ${metodo} ${cap.titulo}`)); }
+      catch (e) { mensaje(e instanceof Error ? e.message : String(e)); }
+      finally { b.disabled = false; }
+    });
+    return b;
+  };
   const ley = h('div', { class: 'leyenda gr-leyenda' },
     h('span', {}, 'Arriba, los datos (se arrastran de costado). Cada flecha lleva un resultado al lugar donde se usa.'),
     h('span', { class: 'gr-ley traccion' }, 'tracción'), h('span', { class: 'gr-ley compresion' }, 'compresión'),
@@ -292,6 +340,7 @@ export function centroEcuaciones(c: H) {
   const bz = (t: string, titulo: string, f: () => void) => { const b = h('button', { type: 'button', class: 'mini', title: titulo }, t); b.addEventListener('click', f); return b; };
   const ajustar = () => { const w = vista!.el.offsetWidth; poner(w > 0 ? Math.min(1, (marco.clientWidth - 8) / w) : 1); };
   c.append(h('div', { class: 'gr-zoom' }, bz('−', 'Alejar', () => poner((zoom ?? 1) - 0.1)), salida, bz('+', 'Acercar', () => poner((zoom ?? 1) + 0.1)), bz('Ajustar al ancho', 'Que entre todo el esquema', ajustar), h('span', { class: 'espacio' }), bMover, bAuto),
+    h('div', { class: 'gr-zoom gr-acomodos' }, sAcomodo, bGuardar, bBorrarAc, h('span', { class: 'espacio' }), h('span', { class: 'nota chica' }, 'Exportar el esquema:'), exportar('png'), exportar('jpeg')),
     ...(moverBurbujas ? [h('p', { class: 'nota chica' }, 'Arrastrá cualquier tarjeta o dato. Los valores no cambian mientras este modo está activo; para volver a moverlos, tocá de nuevo el botón.')] : []), marco, ley);
   // la primera vez, si no entra, se ajusta solo (después de que el tablero se acomoda)
   if (zoom === null) setTimeout(() => { if (marco.isConnected) ajustar(); }, 120); else poner(zoom);
@@ -321,5 +370,24 @@ function guardarPosiciones(metodo: string, capitulo: string, pos: Pos) {
   if (Object.keys(pos).length) todas[`${metodo}/${capitulo}`] = pos; else delete todas[`${metodo}/${capitulo}`];
   try { localStorage.setItem(CLAVE_POS, JSON.stringify(todas)); } catch { /* sin almacenamiento: quedan hasta recargar */ }
 }
+
+// ---------------------------------------------------------------------------------------------- acomodos guardados
+/** nombre de archivo sin acentos ni signos (algunos navegadores descartan el nombre si los tiene) */
+const nombreArchivo = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const mensaje = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+/** acomodos con nombre: posiciones de las burbujas guardadas para volver a ellas (en este navegador) */
+const CLAVE_ACOMODOS = 'torre3d.burbujas.acomodos.v1';
+type Acomodo = { nombre: string; fecha: number; pos: Pos };
+let acomodosMem: Record<string, Acomodo[]> | null = null;
+function acomodos(): Record<string, Acomodo[]> {
+  if (acomodosMem) return acomodosMem;
+  try { const t = localStorage.getItem(CLAVE_ACOMODOS); const o = t ? JSON.parse(t) : {}; acomodosMem = o && typeof o === 'object' ? o : {}; } catch { acomodosMem = {}; }
+  return acomodosMem!;
+}
+function acomodosDe(clave: string): Acomodo[] {
+  const l = acomodos()[clave];
+  return Array.isArray(l) ? l.filter(a => a && typeof a.nombre === 'string' && a.pos && typeof a.pos === 'object') : [];
+}
+function guardarAcomodos() { try { localStorage.setItem(CLAVE_ACOMODOS, JSON.stringify(acomodos())); } catch { /* sin almacenamiento: quedan hasta recargar */ } }
 
 export type { NodoGrafo, ParamGrafo };

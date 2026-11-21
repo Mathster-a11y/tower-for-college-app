@@ -1643,3 +1643,8 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .dock-planta.movible:not(:has(> .calco-panel:not([hidden]))) > .asa-mover { display: none; }
 .moviendose { box-shadow: 0 6px 20px rgba(0,0,0,.22); opacity: .96; }
 @media (max-width: 760px) { .asa-mover { display: none; } }
+/* Ecuaciones: acomodos guardados y exportar el esquema */
+.gr-zoom { flex-wrap: wrap; }
+.gr-acomodos select { font-size: 12px; max-width: 260px; }
+.gr-acomodos .nota { margin: 0 2px 0 6px; }
+.gr-zoom .espacio { flex: 1; }
