@@ -191,6 +191,12 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
   arrastrar(id: string, x: number, fin: boolean): void;
   valorParam(id: string): number;
   elegido: string | null;
+  /** modo «mover burbujas»: los datos no cambian de valor y cada tarjeta se arrastra a cualquier lugar */
+  mover?: boolean;
+  /** posiciones elegidas a mano (esquina de arriba a la izquierda de cada tarjeta, en px del tablero) */
+  posiciones?: Record<string, { x: number; y: number }>;
+  /** avisa las posiciones a mano cuando se suelta una tarjeta */
+  alMover?(pos: Record<string, { x: number; y: number }>): void;
 }): VistaGrafo {
   const porId = new Map<string, NodoGrafo<R> | ParamGrafo<D>>();
   cap.params.forEach(p => porId.set(p.id, p));
@@ -534,10 +540,54 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       return caja;
     });
     capas.forEach((c, k) => c.forEach(id => { if (id.startsWith('~')) return; const t = tarjetas.get(id)!; t.style.left = `${xc.get(id)! - t.offsetWidth / 2}px`; t.style.top = `${cajaFila[k].t}px`; }));
-    const derecha = Math.max(...[...xc.entries()].map(([id, x]) => x + ancho(id) / 2));
-    tablero.style.width = `${derecha + PAD + 6}px`;
-    tablero.style.height = `${(cajaFila.at(-1)?.b ?? 0) + PAD + 6}px`;
+    // las tarjetas que se movieron a mano van donde las dejaron
+    movidas.forEach((pq, id) => { const t = tarjetas.get(id); if (t) { t.style.left = `${pq.x}px`; t.style.top = `${pq.y}px`; } });
+    ajustarTamano();
   };
+  const ajustarTamano = () => {
+    let der = 0, aba = (cajaFila.at(-1)?.b ?? 0);
+    tarjetas.forEach(t => { der = Math.max(der, t.offsetLeft + t.offsetWidth); aba = Math.max(aba, t.offsetTop + t.offsetHeight); });
+    tablero.style.width = `${der + PAD + 6}px`;
+    tablero.style.height = `${aba + PAD + 6}px`;
+  };
+  /** tarjetas movidas a mano: id → esquina de arriba a la izquierda */
+  const movidas = new Map<string, { x: number; y: number }>(Object.entries(al.posiciones ?? {}).filter(([id]) => tarjetas.has(id)));
+
+  // ---- mover burbujas: en este modo cada tarjeta o dato se arrastra a cualquier lugar (mouse o dedo); los datos no
+  // cambian de valor y tocar no elige. Las posiciones se avisan al soltar.
+  if (al.mover) {
+    tablero.classList.add('moviendo');
+    let arr: { id: string; t: H; dx: number; dy: number; pid: number; movio: boolean } | null = null, pend = 0;
+    const enTablero = (e: PointerEvent) => { const b = tablero.getBoundingClientRect(), z = b.width / (tablero.offsetWidth || 1) || 1; return { x: (e.clientX - b.left) / z, y: (e.clientY - b.top) / z }; };
+    tablero.addEventListener('pointerdown', e => {
+      const t = (e.target as HTMLElement).closest<HTMLElement>('.gr-tablero > [data-id]');
+      if (!t || t.parentElement !== tablero) return;
+      e.preventDefault(); e.stopPropagation();
+      const q = enTablero(e);
+      arr = { id: t.dataset.id!, t, dx: q.x - t.offsetLeft, dy: q.y - t.offsetTop, pid: e.pointerId, movio: false };
+      t.classList.add('arrastrando');
+      tablero.setPointerCapture(e.pointerId);
+    }, true);
+    tablero.addEventListener('pointermove', e => {
+      if (!arr || e.pointerId !== arr.pid) return;
+      const q = enTablero(e);
+      // de a 4 px, para que alinear a ojo sea fácil
+      const x = Math.max(0, Math.round((q.x - arr.dx) / 4) * 4), y = Math.max(0, Math.round((q.y - arr.dy) / 4) * 4);
+      arr.t.style.left = `${x}px`; arr.t.style.top = `${y}px`; arr.movio = true;
+      movidas.set(arr.id, { x, y });
+      if (!pend) pend = requestAnimationFrame(() => { pend = 0; ajustarTamano(); dibujar(); });
+    });
+    const soltar = (e: PointerEvent) => {
+      if (!arr || e.pointerId !== arr.pid) return;
+      const movio = arr.movio;
+      arr.t.classList.remove('arrastrando');
+      arr = null;
+      if (movio) { ajustarTamano(); dibujar(); al.alMover?.(Object.fromEntries(movidas)); }
+    };
+    tablero.addEventListener('pointerup', soltar);
+    tablero.addEventListener('pointercancel', soltar);
+    tablero.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); }, true);
+  }
   let colocado = false;
 
   // ---- sectores: un polígono ortogonal de color debajo de las tarjetas de cada momento del procedimiento
@@ -560,7 +610,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
         const tramos2: string[][] = [];
         let actual: string[] = [];
         c.forEach(id => {
-          if (id.startsWith('~')) return;
+          if (id.startsWith('~') || movidas.has(id)) return;
           if (sectorDe(id) === nom) actual.push(id);
           else if (actual.length) { tramos2.push(actual); actual = []; }
         });
@@ -571,6 +621,9 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
           t: Math.min(...ids.map(id => tarjetas.get(id)!.offsetTop)) - P, b: Math.max(...ids.map(id => tarjetas.get(id)!.offsetTop + tarjetas.get(id)!.offsetHeight)) + P,
         })));
       });
+      // cada tarjeta movida a mano, su propia isla
+      const sueltas = [...movidas.keys()].filter(id => sectorDe(id) === nom).map(id => { const t = tarjetas.get(id)!; return { k: -1, l: t.offsetLeft - P, r: t.offsetLeft + t.offsetWidth + P, t: t.offsetTop - P, b: t.offsetTop + t.offsetHeight + P }; });
+      if (!filasS.length && sueltas.length) filasS.push([sueltas.shift()!]);
       if (!filasS.length) return;
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('class', `gr-sector gs-${si % 7}`);
@@ -593,12 +646,29 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
         sig.forEach(n => puente(cajas.reduce((m, f) => (dist(f, n) < dist(m, n) ? f : m)), n));
         cajas.forEach(f => { if (!sig.some(n => dist(f, n) === 0)) puente(f, sig.reduce((m, n) => (dist(f, n) < dist(f, m) ? n : m))); });
       });
+      sueltas.forEach(f => rect(f.l, f.t, f.r - f.l, f.b - f.t));
       const tx = document.createElementNS(NS, 'text');
       tx.setAttribute('x', String(primera.l + 8)); tx.setAttribute('y', String(primera.t + 13));
       tx.textContent = nom;
       svgSect.append(g, tx);
       tx.setAttribute('class', `gr-sector-nombre gs-${si % 7}`);
     });
+  };
+
+  /** flecha entre una tarjeta movida a mano y otra: en ángulo recto, entrando siempre desde arriba */
+  const rutaLibre = (x0: number, y0: number, x1: number, y1: number, destino: H, rel: (e: Element) => { l: number; r: number; t: number; b: number }) => {
+    const R = 6, ARR = 12, s2 = (v: number) => Math.sign(v) || 1;
+    const codo = (ax: number, ay: number, bx: number, by: number) => {                 // de (ax, ay) bajando, a (bx, by) bajando, por la mitad
+      const ym = (ay + by) / 2;
+      if (Math.abs(bx - ax) < 2) return ` L ${bx} ${by}`;
+      const r = Math.min(R, Math.abs(bx - ax) / 2, Math.abs(by - ay) / 2), sx = s2(bx - ax);
+      return ` L ${ax} ${ym - r} Q ${ax} ${ym} ${ax + sx * r} ${ym} L ${bx - sx * r} ${ym} Q ${bx} ${ym} ${bx} ${ym + r} L ${bx} ${by}`;
+    };
+    if (y1 - y0 > 2 * ARR) return `M ${x0} ${y0}` + codo(x0, y0, x1, y1 - 6);
+    // el destino está a la misma altura o más arriba: baja, rodea la tarjeta por el costado más cercano y entra desde arriba
+    const b = rel(destino), lado = Math.abs(x0 - b.l) < Math.abs(x0 - b.r) ? b.l - ARR : b.r + ARR;
+    const ya = y0 + ARR, yb = Math.min(b.t, y1) - ARR;
+    return `M ${x0} ${y0} L ${x0} ${ya} L ${lado} ${ya} L ${lado} ${yb} L ${x1} ${yb} L ${x1} ${y1 - 6}`;
   };
 
   // ---- flechas
@@ -618,7 +688,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       const bs = rel(s), bt = rel(t);
       return { x: (bs.l + bs.r) / 2, y: bt.b };
     };
-    interface Tramo { de: string; a: string; xs: number[]; f0: number; punta: { x: number; y: number } }
+    interface Tramo { de: string; a: string; xs: number[]; f0: number; punta: { x: number; y: number }; libre?: boolean }
     const tramos: Tramo[] = [];
     for (const ruta of rutas) {
       const de = ruta[0], a = ruta[ruta.length - 1];
@@ -632,13 +702,15 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
         // menos de 5 px de diferencia: recta (un codo así no se ve y estorba)
         const xs = [st.x, ...xsCarril, px];
         for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - xs[k - 1]) < 5) xs[k] = xs[k - 1];
-        tramos.push({ de, a, xs, f0: fila[de], punta: { x: xs[xs.length - 1], y: b.t - 2 } });
+        // si una de las dos puntas se movió a mano, la flecha va directo (sin carriles ni vías de las filas)
+        const libre = movidas.has(de) || movidas.has(a);
+        tramos.push({ de, a, xs: libre ? [st.x, px] : xs, f0: fila[de], punta: { x: libre ? px : xs[xs.length - 1], y: b.t - 2 }, libre });
       });
     }
     // vías: en cada hueco, una por cada resultado que se corre de costado, con sus tramos horizontales
     interface Via { de: string; seg: [number, number][]; bajan: number[]; suben: number[] }
     const vias = new Map<number, Via[]>();
-    tramos.forEach(tr => tr.xs.forEach((x, k) => {
+    tramos.forEach(tr => !tr.libre && tr.xs.forEach((x, k) => {
       if (k === tr.xs.length - 1 || tr.xs[k + 1] === x) return;
       const g = tr.f0 + k, l = vias.get(g) ?? [];
       let v = l.find(y => y.de === tr.de);
@@ -648,7 +720,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
     }));
     // las líneas verticales que cruzan el hueco sin correrse (las rectas) también cuentan para los cruces
     const rectas = new Map<number, number[]>();
-    tramos.forEach(tr => tr.xs.forEach((x, k) => { if (k < tr.xs.length - 1 && tr.xs[k + 1] === x) rectas.set(tr.f0 + k, [...(rectas.get(tr.f0 + k) ?? []), x]); }));
+    tramos.forEach(tr => !tr.libre && tr.xs.forEach((x, k) => { if (k < tr.xs.length - 1 && tr.xs[k + 1] === x) rectas.set(tr.f0 + k, [...(rectas.get(tr.f0 + k) ?? []), x]); }));
     // cruces si «a» va por encima de «b»: la bajada de «b» desde arriba corta la horizontal de «a», y la bajada de
     // «a» hacia abajo corta la horizontal de «b»
     const dentro = (x: number, [l, r]: [number, number]) => x > l + 0.5 && x < r - 0.5;
@@ -673,8 +745,10 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
     const R = 6;
     for (const tr of tramos) {
       let d = `M ${tr.xs[0]} ${tallo(tr.de).y}`;
+      if (tr.libre) d = rutaLibre(tr.xs[0], tallo(tr.de).y, tr.punta.x, tr.punta.y, tarjetas.get(tr.a)!, rel);
+      else
       tr.xs.forEach((x, k) => {
-        if (k === tr.xs.length - 1) return;
+        if (k === tr.xs.length - 1 || tr.libre) return;
         const nx = tr.xs[k + 1];
         if (nx === x) return;
         const y = yVia(tr.f0 + k, tr.de), s2 = Math.sign(nx - x), rr = Math.min(R, Math.abs(nx - x) / 2);

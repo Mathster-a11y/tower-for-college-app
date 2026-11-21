@@ -265,12 +265,22 @@ export function centroEcuaciones(c: H) {
   });
   c.append(h('div', { class: 'fila-acciones' }, pest), h('p', { class: 'nota' }, cap.intro));
   const r = resultado(g, metodo);
+  const pos = posicionesDe(metodo, cap.id);
   vista = vistaGrafo(cap as CapituloGrafo<unknown, unknown>, r, {
     elegido: sel.elegido,
     elegir,
     arrastrar: mover,
     valorParam: k => sel.movidos[metodo]?.[k] ?? cap.params.find(p => p.id === k)!.get(g.datos()),
+    mover: moverBurbujas,
+    posiciones: pos,
+    alMover: q => guardarPosiciones(metodo, cap.id, q),
   });
+  // mover burbujas: los datos quedan bloqueados (no cambian de valor) y cada tarjeta se arrastra a cualquier lugar
+  const bMover = h('button', { type: 'button', class: 'mini', 'aria-pressed': String(moverBurbujas), title: 'Bloquea los valores de los datos y deja arrastrar cada tarjeta y cada dato a cualquier lugar del esquema. Las flechas se redibujan solas. Las posiciones se recuerdan en este navegador.' }, moverBurbujas ? '✓ Moviendo burbujas (los datos están bloqueados)' : 'Mover burbujas');
+  bMover.addEventListener('click', () => { moverBurbujas = !moverBurbujas; estado.avisarPanel(); });
+  const bAuto = h('button', { type: 'button', class: 'mini', title: 'Borra las posiciones a mano de este capítulo y vuelve al acomodo automático' }, 'Volver al acomodo automático') as HTMLButtonElement;
+  bAuto.disabled = !Object.keys(pos).length;
+  bAuto.addEventListener('click', () => { guardarPosiciones(metodo, cap.id, {}); estado.avisarPanel(); });
   const ley = h('div', { class: 'leyenda gr-leyenda' },
     h('span', {}, 'Arriba, los datos (se arrastran de costado). Cada flecha lleva un resultado al lugar donde se usa.'),
     h('span', { class: 'gr-ley traccion' }, 'tracción'), h('span', { class: 'gr-ley compresion' }, 'compresión'),
@@ -281,10 +291,35 @@ export function centroEcuaciones(c: H) {
   const poner = (z: number) => { zoom = Math.min(1.4, Math.max(0.4, z)); vista!.el.style.zoom = String(zoom); salida.textContent = `${Math.round(zoom * 100)} %`; vista!.redibujar(); };
   const bz = (t: string, titulo: string, f: () => void) => { const b = h('button', { type: 'button', class: 'mini', title: titulo }, t); b.addEventListener('click', f); return b; };
   const ajustar = () => { const w = vista!.el.offsetWidth; poner(w > 0 ? Math.min(1, (marco.clientWidth - 8) / w) : 1); };
-  c.append(h('div', { class: 'gr-zoom' }, bz('−', 'Alejar', () => poner((zoom ?? 1) - 0.1)), salida, bz('+', 'Acercar', () => poner((zoom ?? 1) + 0.1)), bz('Ajustar al ancho', 'Que entre todo el esquema', ajustar)), marco, ley);
+  c.append(h('div', { class: 'gr-zoom' }, bz('−', 'Alejar', () => poner((zoom ?? 1) - 0.1)), salida, bz('+', 'Acercar', () => poner((zoom ?? 1) + 0.1)), bz('Ajustar al ancho', 'Que entre todo el esquema', ajustar), h('span', { class: 'espacio' }), bMover, bAuto),
+    ...(moverBurbujas ? [h('p', { class: 'nota chica' }, 'Arrastrá cualquier tarjeta o dato. Los valores no cambian mientras este modo está activo; para volver a moverlos, tocá de nuevo el botón.')] : []), marco, ley);
   // la primera vez, si no entra, se ajusta solo (después de que el tablero se acomoda)
   if (zoom === null) setTimeout(() => { if (marco.isConnected) ajustar(); }, 120); else poner(zoom);
 }
 let zoom: number | null = null;
+let moverBurbujas = false;
+
+// ---------------------------------------------------------------------------------------------- posiciones a mano
+/** posiciones de las burbujas movidas a mano, por método y capítulo, en este navegador (una comodidad de quien mira) */
+const CLAVE_POS = 'torre3d.burbujas.v1';
+type Pos = Record<string, { x: number; y: number }>;
+let posiciones: Record<string, Pos> | null = null;
+/** se leen una vez del navegador; después quedan en memoria (si el navegador no deja guardar, duran hasta recargar) */
+function todasLasPosiciones(): Record<string, Pos> {
+  if (posiciones) return posiciones;
+  try { const t = localStorage.getItem(CLAVE_POS); const o = t ? JSON.parse(t) : {}; posiciones = o && typeof o === 'object' ? o : {}; } catch { posiciones = {}; }
+  return posiciones!;
+}
+export function posicionesDe(metodo: string, capitulo: string): Pos {
+  const p = todasLasPosiciones()[`${metodo}/${capitulo}`];
+  if (!p || typeof p !== 'object') return {};
+  // solo números válidos (lo guardado puede venir de otra versión)
+  return Object.fromEntries(Object.entries(p).filter(([, v]) => v && Number.isFinite((v as { x: number }).x) && Number.isFinite((v as { y: number }).y))) as Pos;
+}
+function guardarPosiciones(metodo: string, capitulo: string, pos: Pos) {
+  const todas = todasLasPosiciones();
+  if (Object.keys(pos).length) todas[`${metodo}/${capitulo}`] = pos; else delete todas[`${metodo}/${capitulo}`];
+  try { localStorage.setItem(CLAVE_POS, JSON.stringify(todas)); } catch { /* sin almacenamiento: quedan hasta recargar */ }
+}
 
 export type { NodoGrafo, ParamGrafo };

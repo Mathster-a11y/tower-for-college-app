@@ -1598,3 +1598,8 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .corte-muros .corte-id { font-size: 11px; }
 @media (pointer: coarse) { .corte-muros .mango { stroke-width: 6px; stroke: transparent; paint-order: stroke; } }
 .estado-linea .compilacion { font: 11px var(--mono); color: var(--dim); margin-right: 12px; white-space: nowrap; }
+
+/* mover burbujas: los datos no se arrastran de valor; cada tarjeta se mueve */
+.gr-tablero.moviendo > .gr-nodo, .gr-tablero.moviendo > .gr-param { cursor: move; touch-action: none; user-select: none; }
+.gr-tablero.moviendo > .arrastrando { z-index: 3; box-shadow: 0 4px 14px rgb(0 0 0 / .18); opacity: .95; }
+.gr-tablero.moviendo { background-image: radial-gradient(circle, color-mix(in srgb, var(--dim) 35%, transparent) 1px, transparent 1px); background-size: 16px 16px; }

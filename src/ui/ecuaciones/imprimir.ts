@@ -7,7 +7,7 @@
 import { estado, fmt } from '../estado';
 import { esc, h, type H } from '../comp';
 import { filas, referencias, simbolo, vistaGrafo, type CapituloGrafo, type NodoGrafo, type ParamGrafo } from '../grafo';
-import { conNumeros, conSimbolos, grafoDeMetodo, type MetodoEc } from './vista';
+import { conNumeros, conSimbolos, grafoDeMetodo, posicionesDe, type MetodoEc } from './vista';
 import { TEXTOS_METODO } from './metodos';
 
 type Cap = CapituloGrafo<unknown, unknown>;
@@ -68,7 +68,7 @@ export async function abrirGuiaImprimible(metodo: MetodoEc, imprimir = true): Pr
     }
     raiz.append(sec);
     // el esquema, en su hoja
-    const vg = vistaGrafo(cap, r, { elegido: null, elegir: () => undefined, arrastrar: () => undefined, valorParam: k => cap.params.find(x => x.id === k)!.get(d) });
+    const vg = vistaGrafo(cap, r, { elegido: null, elegir: () => undefined, arrastrar: () => undefined, valorParam: k => cap.params.find(x => x.id === k)!.get(d), posiciones: posicionesDe(metodo, cap.id) });
     vistas.push(vg);
     raiz.append(h('section', { class: 'guia-diagrama' }, h('h3', {}, `${t.titulo} · ${cap.titulo}`), h('div', { class: 'guia-tablero' }, vg.el)));
     // paso a paso, en el orden del esquema (de arriba hacia abajo)
