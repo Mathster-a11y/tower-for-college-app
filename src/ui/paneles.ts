@@ -1,10 +1,11 @@
 /** Paneles de datos de la etapa «Diseño» (proyecto, viento, materiales, niveles, muros, piezas), resultados, avisos y ayuda. */
+import { seccionQuePasaSi } from './quePasaSi';
 import { filaExcelJ } from '../engine/planilla';
 import { conEspesor } from '../engine/juntas';
 import { dibujoPerfil } from './perfil';
 import { AUTOR, ANIO, HASTA, LICENCIA_NOMBRE, LICENCIA_URL, vigente } from '../autoria';
 import { estado, fmt, COLORES } from './estado';
-import { tipoDe, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
+import { NOMBRE_CLASE, tipoDe, type ClasePieza, type Muro, type Nivel, type RolMolde, type TipoElemento } from '../engine/modelo';
 import { agrupar, armarPiezas, desagrupar, espejarGrupo, girarGrupo, seTocan } from '../engine/dibujo';
 import { TENSION_ADM } from '../engine/verificaciones';
 import { datosAlturaDe, pesoMuro } from '../engine/flexocompresion';
@@ -73,6 +74,16 @@ export function seccionMateriales(): H {
   campo(fo, 'Hormigón', 's-horm', p.hormigon, v => set(() => (p.hormigon = v)), { lista: ['H20', 'H25', 'H30', 'H35', 'H40', 'H45', 'H50'], ayuda: `resistencia característica σbk = ${TENSION_ADM(p.hormigon)} kg/cm² (H30 → 30 MPa); es el límite de compresión que usa la guía` });
   campo(fo, 'b1', 's-b1', p.fundacion.b1, v => set(() => (p.fundacion.b1 = num(v) ?? p.fundacion.b1)), { tipo: 'number', unidad: 'm', ayuda: 'lado de la fundación paralelo al viento A · M,NyQ!N80' });
   campo(fo, 'a1', 's-a1', p.fundacion.a1, v => set(() => (p.fundacion.a1 = num(v) ?? p.fundacion.a1)), { tipo: 'number', unidad: 'm', ayuda: 'lado perpendicular al viento A · M,NyQ!N81' });
+  campo(fo, 'σt adm', 's-sadm', p.fundacion.sigmaAdm ?? '', v => set(() => { const x = num(v); p.fundacion.sigmaAdm = x && x > 0 ? x : null; }), { tipo: 'number', unidad: 'kg/cm²', ayuda: 'tensión admisible del suelo, del estudio geotécnico (CIRSOC 401); vacío = 2,5 como la guía' });
+  {
+    // platea por defecto: la planta del último subsuelo (sección D del plan)
+    let B = 0, L = 0; p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; });
+    if (B > 0 && L > 0 && (Math.abs(p.fundacion.b1 - L) > 1e-6 || Math.abs(p.fundacion.a1 - B) > 1e-6)) {
+      const bt = h('button', { type: 'button', class: 'mini' }, `Platea = planta del último subsuelo (${fmt(L, 2)} × ${fmt(B, 2)} m)`) as HTMLButtonElement;
+      bt.addEventListener('click', () => set(() => { p.fundacion.b1 = L; p.fundacion.a1 = B; }));
+      fo.append(bt);
+    }
+  }
   return seccion('Materiales y fundación', fo).el;
 }
 
@@ -322,7 +333,7 @@ export function panelMuros(c: H) {
     envolverPiezas(p);           // y es un grupo cerrado del Esquema (se entra con doble clic)
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
-  c.append(seccionEsquema(), acc);
+  c.append(seccionEsquema(), acc, seccionQuePasaSi());
   c.append(h('p', { class: 'nota' }, 'Una fila por elemento. Tipo: tabique (o columna rectangular), tubo rectangular (largo = lado en x, «Lado y», espesor de pared) o tubo circular (largo = diámetro, espesor de pared; macizo si el espesor es la mitad del diámetro). Dirección Y: paralelo al viento A; X: paralelo al viento B. Un ala dice en «Pegado a» el alma a la que se une. «Desde» y «Hasta»: niveles donde arranca y termina (vacío = de la fundación a la azotea); en el cálculo de PB entran los que llegan a la fundación. Se puede pegar una tabla copiada de Excel con las columnas en este orden.'));
   const numM = (titulo: string, clave: 'x' | 'y' | 'largo' | 'espesor' | 'areaInf', min = -Infinity): Columna<Muro> => ({
     titulo, clave, tipo: 'numero', leer: m => m[clave],
@@ -419,6 +430,9 @@ function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElemen
     { titulo: 'Muro', clave: 'id', leer: m => m.id, escribir: () => { avisoPanel('El nombre del muro se cambia en la tabla de Muros (Diseño → Muros).'); return false; } },
     { titulo: 'Dir.', clave: 'dir', leer: m => m.dir, escribir: () => false },
     num('Largo', 'largo', 0.01), num('Esp.', 'espesor', 0.01), num('x (m)', 'x'), num('y (m)', 'y'),
+    { titulo: 'Calado (J)', clave: 'caladoJ', ayuda: 'Solo muros con puertas o ventanas: «entero» (como la cátedra, las aberturas no cambian el J) o «corte» (la sección más débil)',
+      leer: m => (m.aberturas?.length ? m.caladoJ ?? 'entero' : null),
+      escribir: (m, v) => { const t = String(v ?? '').trim().toLowerCase(); if (!m.aberturas?.length) return false; if (t.startsWith('c')) m.caladoJ = 'corte'; else if (t.startsWith('e') || !t) delete m.caladoJ; else return false; } },
     { titulo: 'Lado y', clave: 'ladoY', tipo: 'numero', ayuda: 'Solo tubo rectangular', leer: m => (tipoDe(m) === 'tubo-rect' ? m.ladoY ?? m.largo : null),
       escribir: (m, v) => { const x = aNumero(v); if (tipoDe(m) !== 'tubo-rect') return false; if (x === null || Number.isNaN(x) || x <= 0) return false; m.ladoY = x; } },
   ], { id: `medidas-${dir}`, filas: () => estado.proyecto.muros.filter(m => ids.includes(m.id)), clave: m => m.id, alElegirFila: m => estado.elegir(m?.id ?? null),
@@ -428,12 +442,12 @@ function medidasPieza(nombre: string, dir: 'A' | 'B', ids: string[]): HTMLElemen
 export function panelPiezas(c: H) {
   const { asig, res } = estado.calculo;
   if (!asig) return;
-  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. Simétrica: el muro suelto o la doble T con alas iguales y centradas. Asimétrica: todo lo demás (C, U, L, T, E), un muro por columna: ala sup., alma izq., alma der. y ala inf. «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
+  c.append(h('p', { class: 'nota' }, 'Cada pieza se escribe en la hoja J de su dirección. «Clase» la elegís vos: automática (la app decide: simétrica si el baricentro cae sobre el eje de la pieza o dentro del material, como una doble T o un cajón; asimétrica si se corre hacia un lado, como una C, U o L), tabique singular, compuesta simétrica o asimétrica, tubo circular, pórtico o elemento especial (oblicuos, curvos, calados: rectángulo equivalente con su geometría en la hoja «Elementos especiales»). Sin tildar «J», la pieza no entra al cálculo del J en ese viento. Los muros calados van enteros (como la cátedra) salvo que en sus medidas elijas «corte». «N.º» es el número de pieza en la hoja (entre paréntesis, la fila del Excel).'));
   for (const dir of ['A', 'B'] as const) {
     c.append(h('h3', {}, dir === 'A' ? 'Viento A · J Tabiques paralelos' : 'Viento B · J Tabiques ortogonales'));
-    const t = h('table', { class: 'tabla compacta' });
-    t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'Muros', 'Molde', 'N.º', 'J (m⁴)', 'Posición (m)'].map(x => h('th', {}, x)))));
-    const tb = h('tbody');
+    // una tarjeta por pieza (la tabla de 8 columnas no entraba en el panel): arriba lo que se elige (nombre, clase, si
+    // entra al J), abajo sus datos y los avisos completos
+    const lista = h('div', { class: 'lista-piezas', role: 'list' });
     asig.piezas.filter(pz => pz.dir === dir).forEach(pz => {
       const J = pz.filaHoja === null ? NaN : (dir === 'A' ? res.jpar : res.jort).filas[pz.filaHoja].AY;
       const clave = `${dir}:${pz.nombre}`;
@@ -442,16 +456,35 @@ export function panelPiezas(c: H) {
       nom.addEventListener('click', ev => ev.stopPropagation());
       nom.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') nom.blur(); if (ev.key === 'Escape') { nom.value = pz.nombre; nom.blur(); } });
       nom.addEventListener('change', () => renombrarPieza(dir, pz.nombre, nom.value));
-      const tr = h('tr', { tabindex: '0', class: estado.sub.perfil === clave ? 'sel' : '', title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
-        h('td', {}, nom), ...[pz.muros.join(' '), pz.molde, pz.filaHoja === null ? '—' : `${pz.filaHoja + 1} (${filaExcelJ(pz.dir, pz.filaHoja)})`, fmt(J, 3), fmt(pz.posicion)].map(x => h('td', {}, x)));
+      // clasificación elegida a mano (vacía = automática) y si entra al cálculo del J
+      const cfg = estado.proyecto.clasesPieza?.[pz.nombre] ?? {};
+      const clase = h('select', { 'aria-label': `Clase de ${pz.nombre}`, title: 'Cómo va la pieza a la hoja J. Automática: la app decide (simétrica si el baricentro cae sobre el eje de la pieza o dentro del material). Elemento especial: oblicuos, curvos, calados o cualquier sección, con el rectángulo equivalente y su geometría en la hoja «Elementos especiales».' }) as HTMLSelectElement;
+      (Object.keys(NOMBRE_CLASE) as ClasePieza[]).forEach(k => clase.append(new Option(NOMBRE_CLASE[k], k)));
+      clase.value = cfg.clase ?? 'auto';
+      const enJ = h('input', { type: 'checkbox', 'aria-label': `${pz.nombre} entra al cálculo del J`, title: 'Entra al cálculo del J (sin tildar: no va a la hoja J de este viento)' }) as HTMLInputElement;
+      enJ.checked = cfg.enJ !== false;
+      const ponerCfg = (f: (c: { clase?: ClasePieza | null; enJ?: boolean | null }) => void) => estado.cambiar(p => {
+        const cs = (p.clasesPieza ??= {}); const c0 = { ...(cs[pz.nombre] ?? {}) }; f(c0);
+        if ((!c0.clase || c0.clase === 'auto') && c0.enJ !== false) delete cs[pz.nombre]; else cs[pz.nombre] = c0;
+        if (!Object.keys(cs).length) delete p.clasesPieza;
+      });
+      clase.addEventListener('change', () => ponerCfg(c0 => { c0.clase = clase.value === 'auto' ? null : clase.value as ClasePieza; }));
+      enJ.addEventListener('change', () => ponerCfg(c0 => { c0.enJ = enJ.checked ? null : false; }));
+      [clase, enJ].forEach(x => x.addEventListener('click', ev => ev.stopPropagation()));
+      const dato = (r: string, v: string) => h('span', {}, h('b', {}, r), ` ${v}`);
+      const tr = h('div', { role: 'listitem', tabindex: '0', class: `pieza-item${estado.sub.perfil === clave ? ' sel' : ''}${cfg.enJ === false ? ' fuera' : ''}`, title: 'Ver su perfil equivalente y editar sus medidas', 'data-muros-pieza': pz.muros.join(' ') },
+        h('div', { class: 'pieza-cab' }, nom, clase, h('label', { class: 'pieza-enj', title: 'Entra al cálculo del J (sin tildar: no va a la hoja J de este viento)' }, enJ, ' J')),
+        h('div', { class: 'pieza-datos' },
+          dato('muros', pz.muros.join(' ')), dato('molde', pz.molde),
+          dato('hoja', pz.filaHoja === null ? 'no va' : `n.º ${pz.filaHoja + 1} (fila ${filaExcelJ(pz.dir, pz.filaHoja)})`),
+          dato('J', `${fmt(J, 3)} m⁴`), dato('posición', `${fmt(pz.posicion)} m`)),
+        ...pz.avisos.map(a => h('p', { class: 'pieza-aviso' }, a)));
       const elegir = () => { estado.sub.perfil = clave; estado.avisarPanel(); };
       tr.addEventListener('click', elegir);
-      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') elegir(); });
-      tb.append(tr);
-      pz.avisos.forEach(a => tb.append(h('tr', { class: 'aviso' }, h('td', { colspan: '6' }, a))));
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target === tr) elegir(); });
+      lista.append(tr);
     });
-    t.append(tb);
-    c.append(h('div', { class: 'scroll' }, t));
+    c.append(lista);
     c.append(h('p', { class: 'total' }, `ΣJ = ${fmt(dir === 'A' ? res.jpar.AY24 : res.jort.AY24, 3)} m⁴`));
     // medidas de los muros de la pieza elegida, editables (también dentro de una pieza agrupada)
     const elegida = asig.piezas.find(pz => pz.dir === dir && estado.sub.perfil === `${dir}:${pz.nombre}`);
@@ -475,9 +508,9 @@ export function panelResultados(c: H, completo = true) {
   const { res, corr, controles } = estado.calculo;
   if (!res) return;
   const m = res.mnyq, g = corr.guia.mnyq;
-  c.append(h('p', { class: 'nota' }, '«Planilla»: lo que calcula la planilla original, sin cambios. «Guía/CIRSOC»: con Kz mínimo de 5 m, sin viento en PB y con el momento de rotación en unidades correctas.'));
+  c.append(h('p', { class: 'nota' }, 'Columna «Planilla»: lo que calcula la planilla de la cátedra, sin cambios. Columna «Guía»: el procedimiento de la guía (Kz constante por debajo de 5 m, sin viento en PB, J completo, rotación muro por muro y momento de rotación con las unidades bien). El método elegido arriba decide qué valores usan las etapas y los dibujos.'));
   const resumen = h('table', { class: 'tabla' });
-  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, 'Guía/CIRSOC'))));
+  resumen.append(h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Planilla'), h('th', {}, ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía'))));
   const tb = h('tbody');
   ([['W total (t)', m.H61, g.H61, 1], ['Mv en la fundación (tm)', m.J61, g.J61, 0], ['hW (m)', m.G66, g.G66, 2], ['P sin sobrecarga (t)', m.M61, g.M61, 0],
     ['Me / Mv', m.L99, g.L99, 2], ['e = Mv/P (m)', m.M99, g.M99, 2], ["b'/6 (m)", m.N99, g.N99, 2], ['σ máx. suelo (kg/cm²)', m.N89, g.N89, 2], ['σ mín. suelo (kg/cm²)', m.N90, g.N90, 2],
@@ -488,7 +521,7 @@ export function panelResultados(c: H, completo = true) {
   if (!completo) return;
   c.append(h('h3', {}, 'Verificaciones'));
   const t = h('table', { class: 'tabla compacta' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía/CIRSOC', 'Estado'].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', 'Estado'].map(x => h('th', {}, x)))));
   const tb2 = h('tbody');
   let grupo = '';
   controles.forEach(k => {
@@ -523,8 +556,8 @@ export const NOTAS_PLANILLA = [
   'A las filas de las piezas 8 y 9 de «J Tabiques paralelos» les faltan las fórmulas del ala superior y del alma izquierda (pregunta abierta para la cátedra). La app usa primero las filas 10 y 11 para las piezas asimétricas.',
   'En «Flex comp PB paralelos», D13:D20 tienen 0,01 fijo, así que las piezas 10 a 17 no suman su peso propio (pregunta abierta para la cátedra). La app pone ahí las de menos J y avisa en cada pieza.',
   'Planilla anterior: en «Rototrasl. cara menor», B51 e I51 suman solo hasta la fila 38, así que las piezas 9 a 20 del viento A no cuentan para el CR del viento B. La app pone en las filas 1 a 8 las de más J, dibuja el CR real y avisa cuánto cambia la rotación.',
-  'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía/CIRSOC» usa el área real (pregunta abierta para la cátedra).',
-  'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía/CIRSOC» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
+  'En las dos hojas J, el área de la pieza (columna O) no suma el ala inferior del molde asimétrico (AH · AI); la flexocompresión de la planilla usa esa área. La columna «Guía» usa el área real (pregunta abierta para la cátedra).',
+  'La planilla usa el peso descargado (Ng) para la compresión y el cargado (Nq) para la tracción. La columna «Guía» toma el caso más desfavorable de cada una: Ng para la tracción y Nq para la compresión.',
 ];
 /** avisos que piden revisar algo (el de los subsuelos fijos de la planilla es solo informativo) */
 export const esInformativo = (a: string) => a.startsWith('La planilla tiene 3 subsuelos fijos') || /(^|: )Nota: /.test(a);
@@ -550,7 +583,7 @@ export function panelAyuda(c: H) {
     ['Muros', 'El origen (0, 0) es el centro de la planta de PB. Dirección Y: paralelo al viento A; X: paralelo al viento B. Arrastrá los muros en la planta o movelos con las flechas (Mayús: de a 1 m).'],
     ['Piezas', 'Cada muro va en una sola pieza por dirección (pieza A y pieza B). Los muros paralelos al viento son almas; un muro perpendicular es ala si escribís a qué alma está pegado. Revisá en «Piezas» el molde y la J de cada una.'],
     ['Importar', 'Con «Abrir / importar…» o «Importar desde Excel…»: la tabla de la app (bajala con «Descargar tabla»), líneas exportadas de AutoCAD (x1, y1, x2, y2) o la planilla del curso ya llena.'],
-    ['Resultados', '«Planilla» es lo que da el Excel original; «Guía/CIRSOC» son los valores corregidos. Cada control dice si verifica.'],
+    ['Resultados', '«Planilla» es lo que da el Excel original; «Guía» son los valores corregidos. Cada control dice si verifica.'],
     ['Diagramas', 'Viento en altura, corte y momento, rototraslación en planta, flexocompresión muro por muro (como la guía, con la armadura por tracción), rigidez y deformada, y la verificación funicular (polígono de fuerzas, polo, rayos y funicular). Pasá el mouse (o tocá) el gráfico para ver los valores.'],
     ['Elementos', 'En «Muros», la columna «Tipo»: tabique (o columna rectangular), tubo rectangular o tubo circular. «Desde» y «Hasta» dicen en qué niveles está cada muro; arriba de la planta elegís qué piso ver.'],
     ['Escribir planilla', 'Descarga la planilla del curso con tus datos. Excel o LibreOffice la recalculan al abrirla. La hoja «T3D» guarda el proyecto: con «Abrir…» la volvés a cargar.'],

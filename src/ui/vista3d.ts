@@ -16,37 +16,13 @@ import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
+import { capaPresiones, leyendaPresiones } from './presiones3d';
 
 type P2 = { x: number; y: number };
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
-/** Corrimiento real máximo de un punto de la planta (traslación + giro alrededor del CR de cada nivel). */
-export function movMaximo(r: Rototraslacion3D, B: number, L: number): number {
-  return Math.max(0, ...r.niveles.map(n => Math.abs(n.d) + Math.abs(n.th) * Math.hypot(B / 2 + Math.abs(n.cr.x), L / 2 + Math.abs(n.cr.y))));
-}
-
-/** Exageración «redonda» (1, 2, 5 × 10ⁿ) para que la azotea se corra cerca de un sexto del ancho de la planta. */
-/** últimas exageraciones usadas (para los deslizadores de la axonometría) */
-export const ultimaDeformada = { auto: 0, giroAuto: 1, f: 0, k: 1 };
-export function exageracionAuto(r: Rototraslacion3D, B: number, L: number): number {
-  const mov = Math.max(movMaximo(r, B, L), 1e-12);
-  const f = (0.16 * Math.max(B, L)) / mov;
-  const p = 10 ** Math.floor(Math.log10(f));
-  return [5, 2, 1].map(k => k * p).find(v => v <= f) ?? p;
-}
-
-/**
- * Extra del giro: la rotación es mucho más chica que la traslación, así que se multiplica aparte para que el
- * revirado se vea (la azotea gira unos 20° en el dibujo). Es solo para dibujar: los números son los reales.
- */
-export function giroExtraAuto(r: Rototraslacion3D, f: number): number {
-  const th = Math.abs(r.thTop) * f;
-  if (th < 1e-12) return 1;
-  const x = 0.35 / th;
-  if (x <= 1.5) return 1;
-  const p = 10 ** Math.floor(Math.log10(x));
-  return [1, 2, 5, 10].map(k => k * p).reduce((a, b) => (Math.abs(Math.log(b / x)) < Math.abs(Math.log(a / x)) ? b : a));
-}
+export { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
+import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 
 /**
  * Prisma deformable: una planta (polígono) repetida en varias cotas. Las posiciones se recalculan con mover()
@@ -147,6 +123,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   leyT.className = 'leyenda-tensiones3d';
   leyT.hidden = true;
   cont.appendChild(leyT);
+  // leyenda de las presiones del viento (botón «p»), con los casos de carga para elegir
+  const leyP = document.createElement('div');
+  leyP.className = 'leyenda-presiones3d';
+  leyP.hidden = true;
+  cont.appendChild(leyP);
   const capaEt = new CSS2DRenderer();
   capaEt.domElement.className = 'etiquetas3d';
   if (op.etiquetas) cont.appendChild(capaEt.domElement);
@@ -251,9 +232,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       }
     }
     // capa de tensiones: cada muro de las piezas del viento, piso por piso, con su peor fibra
-    const tens = estado.capas.tensiones && !roto ? mapaTensiones() : null;
+    // también sobre la deformada: cada piso de cada muro, del color de su peor fibra, se mueve con la torre
+    const tens = estado.capas.tensiones ? mapaTensiones() : null;
     leyT.hidden = !tens;
-    if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
+    leyT.classList.toggle('arriba', !!roto);            // con la deformada, abajo a la izquierda va el recuadro del giro
+    if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>${roto ? 'sobre la deformada exagerada · ' : ''}kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
     p.muros.forEach(m => {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const porPiso = tens?.porMuro.get(m.id);
@@ -316,6 +299,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
     }
     prismas.forEach(pr => { grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
+    // presiones del viento sobre las fachadas (simulador de viento, etapa V1): sin la deformada
+    const pres = estado.capas.presiones && !roto ? capaPresiones() : null;
+    leyP.hidden = !pres;
+    leyP.classList.add('arriba');                       // arriba: abajo quedan el corte y la base, y la leyenda de σ
+    if (pres) { pres.objetos.forEach(o => grupo.add(o)); leyendaPresiones(leyP, pres); }
     // viento
     const largo = 8;
     const dirV = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);
@@ -419,11 +407,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     }
   }
 
-  /** etiqueta HTML pegada a un punto 3D */
-  function etiqueta(texto: string, clase: string, globo?: string): CSS2DObject {
+  /** etiqueta pegada a un punto 3D. El texto va siempre como texto (los nombres vienen del proyecto: nunca como HTML) */
+  function etiqueta(texto: string | (string | Node)[], clase: string, globo?: string): CSS2DObject {
     const e = document.createElement('div');
     e.className = `et3d ${clase}`;
-    e.innerHTML = texto;
+    e.append(...(Array.isArray(texto) ? texto : [texto]));
     if (globo) e.title = globo;
     const o = new CSS2DObject(e);
     grupo.add(o);
@@ -509,7 +497,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (i % paso && i !== nivs.length - 1) return;
       const pt = esq.clone().setY(n.cota);
       grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pt.clone().add(new THREE.Vector3(A ? 0 : 0, 0, A ? 0.5 : 0)), pt.clone().add(A ? new THREE.Vector3(0, 0, 1.2) : new THREE.Vector3(-1.2, 0, 0))]), tick));
-      etiqueta(`${n.nombre} <span>${n.cota > 0 ? '+' : ''}${fmt(n.cota)}</span>`, 'nivel').position.copy(pt.add(A ? new THREE.Vector3(0, 0, 1.4) : new THREE.Vector3(-1.4, 0, 0)));
+      const cotaN = document.createElement('span'); cotaN.textContent = `${n.cota > 0 ? '+' : ''}${fmt(n.cota)}`;
+      etiqueta([`${n.nombre} `, cotaN], 'nivel').position.copy(pt.add(A ? new THREE.Vector3(0, 0, 1.4) : new THREE.Vector3(-1.4, 0, 0)));
     });
     // δ en la azotea: del CR sin deformar al CR corrido (solo la traslación)
     const gD = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);

@@ -7,6 +7,7 @@ import { piezaTipo } from '../engine/piezasTipo';
 import { ponerPerfil } from '../engine/perfil';
 import { proyectoDesdeTablas, tablasProyecto } from './proyectoTablas';
 import { escribirLibro, leerLibro } from './tablas';
+import { leerProyecto } from '../engine/lector';
 
 /** el proyecto sin claves vacías (undefined, null) ni marcas falsas opcionales, para comparar */
 const canon = (p: Proyecto) => JSON.parse(JSON.stringify(p, (k, v) => (v === null || v === undefined || (v === false && ['bloq', 'oculto', 'portico', 'espejo'].includes(k)) ? undefined : v)));
@@ -18,6 +19,9 @@ async function idaYVuelta(p: Proyecto) {
   const r = proyectoDesdeTablas(hojas, ejemploAsimetrico());
   expect(r).not.toBeNull();
   expect(r!.avisos).toEqual([]);
+  // lo que sale de las tablas pasa el lector único sin errores ni reparaciones
+  const l = leerProyecto(r!.proyecto);
+  expect(l.ok ? l.avisos.filter(a => !/ningún piso/.test(a)) : l.errores).toEqual([]);   // el proyecto «completo» tiene a propósito un muro que no está en ningún piso
   return r!.proyecto;
 }
 

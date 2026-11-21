@@ -109,6 +109,11 @@ export interface Muro {
    */
   aberturas?: import('./aberturas').Abertura[] | null;
   /**
+   * qué J lleva a la planilla un elemento calado: «entero» (como la cátedra: las aberturas no cambian el J; por defecto)
+   * o «corte» (la sección más débil, cortada por las aberturas)
+   */
+  caladoJ?: 'entero' | 'corte' | null;
+  /**
    * perfil irregular (tipo «perfil»): contorno cerrado con rectas, arcos y Bézier, y sus huecos, con los vértices
    * respecto del baricentro (x, y). largo, espesor y dir son los de su caja (para las tablas).
    */
@@ -236,6 +241,17 @@ export function entraEnCalculo(m: Muro, zFund: number, zTop: number): boolean {
   return m.llega && (m.zDesde ?? zFund) <= zFund + 1e-6 && (m.zHasta ?? zTop) > 1e-6;
 }
 
+/**
+ * Clasificación de una pieza para la hoja J: automática (la app decide), tabique singular, compuesta simétrica (doble T:
+ * columnas B a K), compuesta asimétrica (W a AI), tubo circular (S, T), pórtico (AO a AU) o elemento especial (oblicuos,
+ * curvos, calados y cualquier sección: va como rectángulo equivalente, con su geometría en la hoja «Elementos especiales»)
+ */
+export type ClasePieza = 'auto' | 'singular' | 'simetrica' | 'asimetrica' | 'tubo' | 'portico' | 'especial';
+export const NOMBRE_CLASE: Record<ClasePieza, string> = {
+  auto: 'Automática', singular: 'Tabique singular', simetrica: 'Compuesta simétrica', asimetrica: 'Compuesta asimétrica',
+  tubo: 'Tubo circular', portico: 'Pórtico', especial: 'Elemento especial',
+};
+
 export interface Proyecto {
   version: 1;
   nombre: string;
@@ -243,7 +259,9 @@ export interface Proyecto {
   sitio: Sitio;
   niveles: Nivel[];
   /** b1: lado de la fundación paralelo al viento A · a1: perpendicular (M,NyQ N80 y N81) */
-  fundacion: { b1: number; a1: number };
+  fundacion: { b1: number; a1: number;
+    /** tensión admisible del suelo (kg/cm²), dato del estudio geotécnico (CIRSOC 401, art. 7.4); vacío = 2,5 como la guía */
+    sigmaAdm?: number | null };
   /** hormigón de los tabiques: su número es la resistencia característica σbk en MPa (H30 → 300 kg/cm²) */
   hormigon: string;
   muros: Muro[];
@@ -261,8 +279,32 @@ export interface Proyecto {
   juntas?: Record<string, 'inglete' | 'pasaA' | 'pasaB'>;
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
+  /**
+   * Rototraslación: par de tabiques perpendiculares al viento que trabajan juntos contra el giro (dos muros cerca uno
+   * del otro). Van en las filas 28–29 de la hoja del viento («USAR SOLAMENTE PARA DOS TABIQUES»), con los brazos desde
+   * su punto medio, en vez de las filas 31–50. Clave: el viento de la hoja (A = cara mayor); valor: los nombres de las
+   * dos piezas del otro viento. Vacío = el bloque general.
+   */
+  parPerp?: { A?: [string, string] | null; B?: [string, string] | null };
+  /**
+   * clasificación de cada pieza elegida por el usuario (por nombre de pieza; vacío = automática) y si entra al cálculo
+   * del J (enJ: false = no va a la hoja J; sus muros quedan fuera del cálculo en ese viento)
+   */
+  clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
+  /**
+   * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
+   * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados
+   * en cualquier computadora; vacío = lo que la app usaba antes (ver metodos/tipos.ts, CONFIG_POR_DEFECTO)
+   */
+  calculo?: (Partial<import('./metodos/tipos').ConfigCalculo> & { formulas?: string }) | null;
+  /** datos del viento según CIRSOC 102-25 (métodos CIRSOC y FEM): ciudad, categoría de riesgo, exposición…; vacío = por defecto */
+  cirsoc102?: import('./cargas/cirsoc102').DatosCirsoc102 | null;
+  /** cargas gravitatorias según CIRSOC 101-25 (métodos CIRSOC y FEM); vacío = por defecto */
+  cirsoc101?: import('./cargas/cirsoc101').DatosCirsoc101 | null;
+  /** datos del hormigón para la verificación CIRSOC 201 (recubrimiento, exposición) y el límite de deriva; vacío = por defecto */
+  cirsoc201?: import('./metodos/cirsoc').DatosCirsoc201 | null;
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }

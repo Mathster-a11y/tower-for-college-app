@@ -9,10 +9,14 @@
  */
 import { AVISO } from '../autoria';
 import JSZip from 'jszip';
-import { filasParalelosNuevo, type PlanillaDatos, type PlanillaRes } from '../engine/planilla';
+import type { PlanillaDatos, PlanillaRes } from '../engine/planilla';
 import { config, type Motor } from '../engine/config';
+import { hojaEspeciales, hojaXml } from './hojasNuevas';
+import { HOJA_FLEX, estilosFlex, hojaFlexXml } from './hojaFlex';
+import { TENSION_ADM } from '../engine/verificaciones';
+import type { Asignacion } from '../engine/mapping';
 import type { Proyecto } from '../engine/modelo';
-import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos, type ValorCelda } from './xml';
+import { borrarResultadosGuardados, escribirCelda, leerCelda, leerCompartidos } from './xml';
 import { ejemploGuia } from '../engine/modelo';
 import { proyectoDesdeTablas, tablasProyecto, type Tabla } from './proyectoTablas';
 import { leerLibro } from './tablas';
@@ -21,12 +25,8 @@ import { opcionesG } from './opcionesG';
 import { agregarFiguras, type FiguraPlanilla } from './figuras';
 import { agregarFilasPiezas } from './filas';
 
-export const HOJAS = {
-  viento: 'viento', mnyq: 'M,NyQ', jpar: 'J Tabiques paralelos', jort: 'J Tabiques ortogonales',
-  rotA: 'Rototrasl. cara mayor', rotB: 'Rototrasl. cara menor', flex: 'Flex comp PB paralelos', t3d: 'T3D',
-};
-const COLS_J = ['B', 'C', 'F', 'G', 'J', 'K', 'S', 'T', 'W', 'X', 'Z', 'AB', 'AE', 'AF', 'AH', 'AI', 'AO', 'AP', 'AQ', 'AT', 'AU'] as const;
-
+export { HOJAS, colJ, celdasAEscribir } from './celdas';
+import { HOJAS, celdasAEscribir } from './celdas';
 async function rutasHojas(zip: JSZip): Promise<Record<string, string>> {
   const wb = await zip.file('xl/workbook.xml')!.async('string');
   const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
@@ -37,52 +37,6 @@ async function rutasHojas(zip: JSZip): Promise<Record<string, string>> {
     out[m[1].replace(/&amp;/g, '&')] = 'xl/' + target;
   }
   return out;
-}
-
-const num = (x: number | null | undefined): ValorCelda => (x === null || x === undefined ? { vacia: true } : { num: x });
-
-/** Celdas que cambia la app, hoja por hoja (lo que se muestra al alumno antes de confirmar). */
-export function celdasAEscribir(d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor): Record<string, Record<string, ValorCelda>> {
-  const nuevo = motor === 'nuevo';
-  const c: Record<string, Record<string, ValorCelda>> = {};
-  const v = (c[HOJAS.viento] = {} as Record<string, ValorCelda>);
-  const s = d.viento;
-  Object.entries({ C4: s.V, D4: s.Kd, E4: s.I, F4: s.zg, G4: s.alfa, I4: s.Kzt, J4: s.G, K4: s.Cpb, L4: s.Cps, O4: s.GCpi })
-    .forEach(([ref, x]) => (v[ref] = num(x)));
-  s.Z.forEach((z, i) => (v[`B${5 + i}`] = { num: z }));
-
-  const m = (c[HOJAS.mnyq] = {} as Record<string, ValorCelda>);
-  for (let k = 1; k < 54; k++) {
-    const r = k + 4;
-    m[`C${r}`] = d.mnyq.C[k] !== null ? { num: d.mnyq.C[k]! } : { formula: `+B${r - 1}-B${r}` };
-    m[`D${r}`] = d.mnyq.D[k] !== null ? { num: d.mnyq.D[k]! } : { formula: `(B${r - 1}-B${r + 1})/2` };
-    m[`E${r}`] = d.mnyq.E[k] !== null ? { num: d.mnyq.E[k]! } : { formula: `+E${r - 1}` };
-    m[`F${r}`] = d.mnyq.F[k] !== null ? { num: d.mnyq.F[k]! } : { formula: `+F${r - 1}` };
-    // planilla 2025: el ejemplo de la cátedra tiene cotas escritas a mano en B22:B54 de M,NyQ; se vuelve a poner el
-    // vínculo original con «viento» (la fila r de M,NyQ lee la fila r+1 de viento), que es la fórmula de la planilla
-    if (nuevo) m[`B${r}`] = { formula: `+viento!B${r + 1}` };
-  }
-  m.E4 = { num: d.mnyq.E[0] ?? 0 };
-  m.F4 = { num: d.mnyq.F[0] ?? 0 };
-  m.N80 = num(d.mnyq.b1);
-  m.N81 = num(d.mnyq.a1);
-  const mn = r.mnyq;
-  m.O99 = { str: mn.L99 >= 1.5 && mn.M99 <= mn.N99 ? 'VERIFICA' : 'NO VERIFICA' };
-
-  // planilla 2025: «J Tabiques paralelos» tiene 28 filas; cada pieza va en la fila que lee su ranura de Rototrasl.
-  const jpar = nuevo ? filasParalelosNuevo(d.jpar) : d.jpar;
-  for (const [hoja, filas] of [[HOJAS.jpar, jpar], [HOJAS.jort, d.jort]] as const) {
-    const h = (c[hoja] = {} as Record<string, ValorCelda>);
-    filas.forEach((f, i) => COLS_J.forEach(col => (h[`${col}${4 + i}`] = num(f[col]))));
-  }
-  // columna H: paralelas desde la fila 5 y perpendiculares 6 filas después del bloque de paralelas (31 con 20 piezas)
-  for (const [hoja, H, nP] of [[HOJAS.rotA, d.rotA.H, d.jpar.length], [HOJAS.rotB, d.rotB.H, d.jort.length]] as const) {
-    const h = (c[hoja] = {} as Record<string, ValorCelda>);
-    H.forEach((x, i) => { if (i < nP || i >= nP + 6) h[`H${5 + i}`] = num(x); });
-  }
-  const f = (c[HOJAS.flex] = {} as Record<string, ValorCelda>);
-  d.flex.forEach((x, i) => { f[`C${4 + i}`] = num(x.C); f[`F${4 + i}`] = num(x.F); f[`G${4 + i}`] = num(x.G); });
-  return c;
 }
 
 /** Hoja «T3D»: el proyecto en JSON (en trozos, por el límite de caracteres por celda) y una tabla legible de muros. */
@@ -149,11 +103,13 @@ async function agregarHoja(zip: JSZip, nombre: string, xml: string, rutas: Recor
  * @param figuras dibujos explicativos rediseñados para poner sobre las hojas originales (lista vacía: vuelve a
  *          dejar los dibujos originales; sin pasar: no toca los dibujos)
  */
-export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
-  op: { motor?: Motor; virgen?: boolean } = {}): Promise<Uint8Array> {
+/**
+ * La plantilla de la cátedra con los datos de la torre: agrega las filas de piezas que hagan falta (planilla 2025) y
+ * escribe las celdas de datos. Es el primer paso de la exportación y lo que muestra la vista previa.
+ */
+export async function prepararPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, motor: Motor = config.motor, extra?: { asig: Asignacion; p: Proyecto }) {
   const zip = await JSZip.loadAsync(plantilla);
   const rutas = await rutasHojas(zip);
-  const motor = op.motor ?? config.motor;
   // planilla 2025 con más de 20 piezas en un viento: se agregan las filas (con sus fórmulas) antes de escribir los datos
   const eA = Math.max(0, d.jpar.length - 20), eB = Math.max(0, d.jort.length - 20);
   if (eA || eB) {
@@ -168,6 +124,21 @@ export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: P
     for (const [ref, v] of Object.entries(cs)) xml = escribirCelda(xml, ref, v);
     zip.file(ruta, xml);
   }
+  // hojas nuevas de la app, después de las 7 de la cátedra (no tocan ninguna de ellas)
+  if (extra) {
+    const esp = hojaEspeciales(extra.asig, r, extra.p, motor);
+    if (esp) await agregarHoja(zip, esp.nombre, hojaXml(esp), rutas);
+    const { st, S, dxfOk, dxfNo } = estilosFlex(await zip.file('xl/styles.xml')!.async('string'));
+    const flex = hojaFlexXml(extra.asig, extra.p, motor, TENSION_ADM(extra.p.hormigon || 'H30'), S, dxfOk, dxfNo);
+    if (flex) { zip.file('xl/styles.xml', st); await agregarHoja(zip, HOJA_FLEX, flex, rutas); }
+  }
+  return { zip, rutas, celdas };
+}
+
+export async function escribirPlanilla(plantilla: ArrayBuffer | Uint8Array, d: PlanillaDatos, r: PlanillaRes, p: Proyecto, g?: OpcionesG, figuras?: FiguraPlanilla[],
+  op: { motor?: Motor; virgen?: boolean; asig?: Asignacion } = {}): Promise<Uint8Array> {
+  const motor = op.motor ?? config.motor;
+  const { zip, rutas } = await prepararPlanilla(plantilla, d, r, motor, op.asig ? { asig: op.asig, p } : undefined);
   for (const ruta of Object.values(rutas)) {
     const f = zip.file(ruta);
     if (f) zip.file(ruta, borrarResultadosGuardados(await f.async('string')));

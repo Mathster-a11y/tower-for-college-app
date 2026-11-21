@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Verificación D3Q19 en WebGPU</title></head>
+<body>
+<p>Compara el D3Q19 de la placa de video (src/viento/lbm3dGpu.ts) con la referencia en JavaScript (src/viento/lbm3d.ts), con la misma grilla y los mismos pasos. Uso: <code>npx vite</code> y abrir <code>/tools/gpu/</code> (en Chrome con WebGPU).</p>
+<pre id="r">calculando…</pre>
+<script type="module">
+import { Lbm3D, canalConPrisma, perfilPotencia } from '/src/viento/lbm3d.ts';
+import { crearLbm3dGpu } from '/src/viento/lbm3dGpu.ts';
+const out = document.getElementById('r');
+try {
+  const casos = [
+    { nx: 40, ny: 17, nz: 14, a: 5, hT: 8, x0: 10, nu: 0.02, cs: 0.12, pasos: 120 },
+    { nx: 70, ny: 9, nz: 8, a: 3, hT: 4, x0: 12, nu: 0.05, cs: 0, pasos: 60 },
+  ];
+  const res = [];
+  for (const k of casos) {
+    const o = { nx: k.nx, ny: k.ny, nz: k.nz, nu: k.nu, cs: k.cs, uIn: perfilPotencia(k.nz, 0.08, k.nz * 0.6, 0.2), solido: canalConPrisma(k.nx, k.ny, k.nz, k.a, k.hT, k.x0) };
+    const cpu = new Lbm3D(o), gpu = await crearLbm3dGpu(o);
+    for (let i = 0; i < k.pasos; i++) cpu.paso();
+    gpu.avanzar(k.pasos); await gpu.esperar();
+    const fg = await gpu.leer();
+    let peor = 0, nan = 0;
+    for (let q = 0; q < fg.length; q++) { if (!Number.isFinite(fg[q])) nan++; peor = Math.max(peor, Math.abs(fg[q] - cpu.f[q])); }
+    const c = await gpu.corte(Math.round(k.hT / 2)), campo = await gpu.campo();
+    // el campo y el corte tienen que ser los del último paso (los compara con la referencia)
+    let peorCampo = 0, peorCorte = 0; const zc = Math.round(k.hT / 2), N = k.nx * k.ny * k.nz;
+    for (let q = 0; q < N; q++) { if (o.solido[q]) continue; const m = cpu.macro(q); peorCampo = Math.max(peorCampo, Math.abs(campo[4 * q] - m.u), Math.abs(campo[4 * q + 2] - m.w), Math.abs(campo[4 * q + 3] - m.r)); }
+    for (let y = 0; y < k.ny; y++) for (let x = 0; x < k.nx; x++) { const q = (zc * k.ny + y) * k.nx + x; if (o.solido[q]) continue; const m = cpu.macro(q); peorCorte = Math.max(peorCorte, Math.abs(c[4 * (y * k.nx + x)] - m.u)); }
+    res.push({ grilla: `${k.nx}×${k.ny}×${k.nz}`, pasos: k.pasos, peorDiferencia: peor, peorCampo, peorCorte, noFinitos: nan, adaptador: gpu.adaptador });
+    gpu.destruir();
+  }
+  out.textContent = JSON.stringify({ ok: res.every(r => r.peorDiferencia < 1e-4 && r.peorCampo < 1e-4 && r.peorCorte < 1e-4 && r.noFinitos === 0), res }, null, 1);
+} catch (e) { out.textContent = JSON.stringify({ ok: false, error: String(e?.message ?? e) }); }
+</script>
+</body></html>

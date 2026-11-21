@@ -51,6 +51,8 @@ export interface SerieAltura {
   punteada?: boolean;
   tipo: 'linea' | 'barras';
   puntos: { z: number; x: number; nivel: string }[];
+  /** tensiones: el color sale del signo de cada tramo (+ tracción en rojo, − compresión en azul), partido en el cero */
+  porSigno?: boolean;
 }
 export interface GraficoAltura {
   titulo: string;
@@ -79,7 +81,8 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   if (g.series.length > 1) {
     const ley = document.createElement('div');
     ley.className = 'leyenda';
-    g.series.forEach(s => ley.append(muestra(s.color, s.nombre, s.punteada)));
+    if (g.series.some(s => s.porSigno)) ley.append(muestra('traccion', 'tracción'), muestra('compresion', 'compresión'));
+    g.series.forEach(s => ley.append(muestra(s.porSigno ? 'tinta' : s.color, s.nombre, s.punteada)));
     fig.append(ley);
   }
   const todos = g.series.flatMap(s => s.puntos);
@@ -120,9 +123,22 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
       });
       ib++;
     } else {
-      const pts = s.puntos.filter(p => isFinite(p.x)).sort((a, b) => b.z - a.z).map(p => `${X(p.x).toFixed(1)},${Z(p.z).toFixed(1)}`);
-      svg.append(el('polyline', { points: pts.join(' '), class: `d-linea d-c-${s.color}-l${s.punteada ? ' punteada' : ''}` }));
-      if (s.puntos.length <= 60) s.puntos.forEach(p => { if (isFinite(p.x)) svg.append(el('circle', { cx: X(p.x), cy: Z(p.z), r: 2.4, class: `d-c-${s.color}` })); });
+      const orden = s.puntos.filter(p => isFinite(p.x)).sort((a, b) => b.z - a.z);
+      const colorDe = (x: number) => (s.porSigno ? (x > 0 ? 'traccion' : 'compresion') : s.color);
+      if (s.porSigno) {
+        // tramo por tramo, partido donde cruza el cero
+        for (let i = 0; i + 1 < orden.length; i++) {
+          const a = orden[i], b = orden[i + 1];
+          const cortes: [number, number, number, number][] = (a.x > 0) !== (b.x > 0) && a.x !== b.x
+            ? (() => { const t = a.x / (a.x - b.x), zc = a.z + (b.z - a.z) * t; return [[a.x, a.z, 0, zc], [0, zc, b.x, b.z]]; })()
+            : [[a.x, a.z, b.x, b.z]];
+          cortes.forEach(([xa, za, xb, zb]) => svg.append(el('line', { x1: X(xa), y1: Z(za), x2: X(xb), y2: Z(zb), class: `d-linea d-c-${colorDe((xa + xb) / 2 || xa || xb)}-l${s.punteada ? ' punteada' : ''}` })));
+        }
+      } else {
+        const pts = orden.map(p => `${X(p.x).toFixed(1)},${Z(p.z).toFixed(1)}`);
+        svg.append(el('polyline', { points: pts.join(' '), class: `d-linea d-c-${s.color}-l${s.punteada ? ' punteada' : ''}` }));
+      }
+      if (s.puntos.length <= 60) s.puntos.forEach(p => { if (isFinite(p.x)) svg.append(el('circle', { cx: X(p.x), cy: Z(p.z), r: 2.4, class: `d-c-${colorDe(p.x)}` })); });
     }
     // rótulo directo en el extremo de mayor |x|
     const ext = s.puntos.reduce((m, p) => (Math.abs(p.x) > Math.abs(m.x) ? p : m), s.puntos[0]);
@@ -186,7 +202,9 @@ export function tablaValores(cols: string[], filas: (string | number)[][], dec: 
   det.append(sum);
   const t = document.createElement('table');
   t.className = 'tabla compacta';
-  t.innerHTML = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+  const cab = document.createElement('thead'), trc = document.createElement('tr');
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; trc.append(th); });
+  cab.append(trc); t.append(cab);
   const tb = document.createElement('tbody');
   filas.forEach(f => { const tr = document.createElement('tr'); f.forEach((v, j) => { const td = document.createElement('td'); if (typeof v === 'number') { td.className = 'n'; td.textContent = fmt(v, dec[j] ?? 2); } else td.textContent = v; tr.append(td); }); tb.append(tr); });
   t.append(tb);
@@ -310,7 +328,8 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   fig.className = 'diagrama';
   const ley = document.createElement('div');
   ley.className = 'leyenda';
-  ley.append(muestra('traccion', 'descargado, 0,7 t/m² (verifica la tracción)', true), muestra('compresion', 'cargado, 0,9 t/m² (verifica la compresión)'));
+  // el color sale del signo de la tensión (rojo tracción, azul compresión, como en toda la app); el trazo, del caso
+  ley.append(muestra('traccion', 'tracción'), muestra('compresion', 'compresión'), muestra('tinta', 'descargado, 0,7 t/m² (punteada: verifica la tracción)', true), muestra('tinta', 'cargado, 0,9 t/m² (llena: verifica la compresión)'));
   fig.append(ley);
   const tramos = v.muros.map(m => {
     const [y1, y2] = m.papel === 'ala' ? [m.d, m.d] : [m.d - m.h / 2, m.d + m.h / 2];
@@ -331,22 +350,32 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   if (-adm >= s0) { svg.append(el('line', { x1: mi, x2: ancho - md, y1: Y(-adm), y2: Y(-adm), class: 'd-ref fuerte' })); svg.append(el('text', { x: ancho - md - 2, y: Y(-adm) - 4, class: 'd-eje d-ref-txt', 'text-anchor': 'end' }, `límite σbk −${adm}`)); }
   if (s1 > 0) svg.append(el('rect', { x: mi, y: Y(s1), width: ancho - mi - md, height: Y(0) - Y(s1), class: 'd-traccion' }));
   svg.append(el('text', { x: mi, y: ms - 2, class: 'd-eje' }, 'σ (kg/cm²) · arriba de 0: tracción'));
-  svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición en el sentido del viento, desde el baricentro de la pieza (m)'));
+  { const t = el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'distancia al baricentro (m)');
+    t.append(el('title', {}, 'posición en el sentido del viento, medida desde el baricentro de la pieza (m)')); svg.append(t); }
   marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
   tramos.forEach(({ m, lejos, cerca }) => {
-    ([['desc', 'traccion'], ['carg', 'compresion']] as const).forEach(([k, c]) => {
+    (['desc', 'carg'] as const).forEach(k => {
       const [a, b] = m[k].map(x => x / 10);
       const tip = `${m.id} (${m.papel})\n${k === 'desc' ? 'descargado' : 'cargado'}: ${fmt(a, 1)} / ${fmt(b, 1)} kg/cm²`;
+      const col = (s: number) => (s > 0 ? 'traccion' : 'compresion');
+      const trazo = k === 'desc' ? ' punteada' : '';
+      // un segmento de (x1, s1) a (x2, s2), partido donde cruza el cero: arriba rojo, abajo azul
+      const tramo = (x1: number, sa: number, x2: number, sb: number) => {
+        const partes: [number, number, number, number][] = (sa > 0) !== (sb > 0) && sa !== sb
+          ? (() => { const t = sa / (sa - sb), xc = x1 + (x2 - x1) * t; return [[x1, sa, xc, 0], [xc, 0, x2, sb]]; })()
+          : [[x1, sa, x2, sb]];
+        partes.forEach(([p1, q1, p2, q2]) => {
+          const l = el('line', { x1: p1, y1: Y(q1), x2: p2, y2: Y(q2), class: `d-linea d-c-${col((q1 + q2) / 2 || q1 || q2)}-l${trazo}` });
+          l.append(el('title', {}, tip));
+          svg.append(l);
+        });
+      };
       if (m.papel === 'ala') {
-        const l = el('line', { x1: X(lejos), x2: X(lejos), y1: Y(a), y2: Y(b), class: `d-linea d-c-${c}-l${k === 'desc' ? ' punteada' : ''}` });
-        l.append(el('title', {}, tip));
-        svg.append(l);
-        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-c-${c}` })));
+        tramo(X(lejos), a, X(lejos), b);
+        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-c-${col(s)}` })));
       } else {
-        const l = el('line', { x1: X(lejos), y1: Y(a), x2: X(cerca), y2: Y(b), class: `d-linea d-c-${c}-l${k === 'desc' ? ' punteada' : ''}` });
-        l.append(el('title', {}, tip));
-        svg.append(l);
-        [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-c-${c}` })));
+        tramo(X(lejos), a, X(cerca), b);
+        [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-c-${col(ss)}` })));
       }
     });
     // compresión con el viento al revés, si es mayor que la del diagrama de un sentido (alma corrida del baricentro)

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plan · simulador de viento</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;--tint:#dbe8f6;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;
+  --v1:#a8650a;--v1f:#fdf0dc;--v2:#1a6bbd;--v2f:#dbe8f6;--v3:#1d8a68;--v3f:#e0f3ec}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.5 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1000px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:17px;margin:34px 0 10px;padding-top:12px;border-top:2px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 6px;border-radius:15px;background:var(--acc);color:#fff;font-size:13px;font-weight:700;flex:none}
+h2.v1{border-color:var(--v1)}h2.v1 .n{background:var(--v1)}h2.v2{border-color:var(--v2)}h2.v2 .n{background:var(--v2)}h2.v3{border-color:var(--v3)}h2.v3 .n{background:var(--v3)}
+h3{font-size:14px;margin:16px 0 6px;break-after:avoid}
+p{margin:6px 0}
+ul,ol{margin:6px 0 6px 20px;padding:0}
+li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;break-inside:avoid}
+.tarjeta.gris{background:var(--panel);border-color:transparent}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--tint);color:var(--acc);white-space:nowrap}
+.chip.v1{background:var(--v1f);color:var(--v1)}.chip.v2{background:var(--v2f);color:var(--v2)}.chip.v3{background:var(--v3f);color:var(--v3)}
+.chip.ok{background:var(--okf);color:var(--ok)}.chip.warn{background:var(--warnf);color:var(--warn)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+th.v1{background:var(--v1f);color:var(--v1)}th.v2{background:var(--v2f);color:var(--v2)}th.v3{background:var(--v3f);color:var(--v3)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.cols{grid-template-columns:1fr}.pag{padding:20px 16px 40px}}
+.paso{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:8px 0;break-inside:avoid}
+.paso .b{width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.paso b{display:block}
+.paso small{color:var(--ink2)}
+code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+.aviso{border-left:4px solid var(--warn);background:var(--warnf);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+.nota{color:var(--ink2);font-size:12.5px}
+figure{margin:14px 0;break-inside:avoid}
+figure svg{width:100%;height:auto;display:block;border:1px solid var(--hair);border-radius:8px;background:#fff}
+figcaption{font-size:12px;color:var(--ink2);margin-top:5px}
+.preg{border:1px solid var(--edge);border-radius:8px;padding:10px 14px;margin:8px 0;break-inside:avoid}
+.preg b.q{color:var(--acc)}
+.preg .prop{color:var(--ink2);font-size:12.5px;margin-top:4px}
+.pie{margin-top:40px;padding-top:10px;border-top:1px solid var(--hair);color:var(--dim);font-size:11.5px}
+svg text{font-family:'IBM Plex Sans',system-ui,'Segoe UI',Roboto,sans-serif}
+@media print{body{font-size:12px}.pag{max-width:none;padding:0}h2{margin-top:26px}}
+@page{size:A4;margin:14mm 12mm}
+</style>
+</head>
+<body><div class="pag">
+
+<h1>Plan de trabajo · simulador de viento</h1>
+<p class="sub">Torre 3D · primera versión del plan · noviembre 2026 · <b>V1, V2 y V3 hechas</b>. Tres sistemas, de menor a mayor complejidad; cada uno sirve solo y prepara el siguiente.</p>
+
+<div class="tarjeta gris">
+<b>En una frase.</b> Primero <b>V1</b>, las presiones del CIRSOC 102-25 pintadas sobre la torre en el 3D, sin simular nada.
+Después <b>V2</b>, un túnel de viento en 2D: un corte en planta donde se ven la estela y los remolinos.
+Al final, opcional, <b>V3</b>: el túnel en 3D con la placa de video. Ninguno de los tres es un método de cálculo: no cambian los
+números de ningún método, no van al Excel y no dimensionan. Sirven para <b>ver</b> y <b>entender</b> de dónde viene la carga.
+</div>
+
+<figure>
+<svg viewBox="0 0 960 230" role="img" aria-label="Las tres etapas del simulador, de menor a mayor complejidad">
+  <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a949e"/></marker></defs>
+  <g>
+    <rect x="20" y="40" width="270" height="160" rx="10" fill="#fdf0dc" stroke="#a8650a"/>
+    <text x="40" y="70" font-size="18" font-weight="700" fill="#a8650a">V1 · Presiones</text>
+    <text x="40" y="96" font-size="13" fill="#1f2328">Cp y qz del 102-25 en colores</text>
+    <text x="40" y="116" font-size="13" fill="#1f2328">sobre las caras de la torre</text>
+    <text x="40" y="146" font-size="12" fill="#5f6b76">Reglamentario · sin simulación</text>
+    <text x="40" y="166" font-size="12" fill="#5f6b76">Todos los navegadores · instantáneo</text>
+    <text x="40" y="186" font-size="12" fill="#5f6b76">Esfuerzo: chico</text>
+  </g>
+  <line x1="296" y1="120" x2="336" y2="120" stroke="#8a949e" stroke-width="2" marker-end="url(#fl)"/>
+  <g>
+    <rect x="345" y="25" width="270" height="190" rx="10" fill="#dbe8f6" stroke="#1a6bbd"/>
+    <text x="365" y="55" font-size="18" font-weight="700" fill="#1a6bbd">V2 · Túnel 2D</text>
+    <text x="365" y="81" font-size="13" fill="#1f2328">Corte en planta a una cota,</text>
+    <text x="365" y="101" font-size="13" fill="#1f2328">Lattice Boltzmann D2Q9</text>
+    <text x="365" y="131" font-size="12" fill="#5f6b76">Estela, remolinos, esquinas</text>
+    <text x="365" y="151" font-size="12" fill="#5f6b76">Strouhal contra la n1 de la torre</text>
+    <text x="365" y="171" font-size="12" fill="#5f6b76">WebGL2, todos los navegadores</text>
+    <text x="365" y="191" font-size="12" fill="#5f6b76">Esfuerzo: medio</text>
+  </g>
+  <line x1="621" y1="120" x2="661" y2="120" stroke="#8a949e" stroke-width="2" marker-end="url(#fl)"/>
+  <g>
+    <rect x="670" y="10" width="270" height="210" rx="10" fill="#e0f3ec" stroke="#1d8a68"/>
+    <text x="690" y="40" font-size="18" font-weight="700" fill="#1d8a68">V3 · Túnel 3D</text>
+    <text x="690" y="66" font-size="13" fill="#1f2328">La torre entera, D3Q19 con</text>
+    <text x="690" y="86" font-size="13" fill="#1f2328">turbulencia (LES) en la GPU</text>
+    <text x="690" y="116" font-size="12" fill="#5f6b76">Planos de corte, líneas de corriente</text>
+    <text x="690" y="136" font-size="12" fill="#5f6b76">Cp medio al lado del Cp del 102</text>
+    <text x="690" y="156" font-size="12" fill="#5f6b76">Viento en la vereda</text>
+    <text x="690" y="176" font-size="12" fill="#5f6b76">WebGPU · opcional · experimental</text>
+    <text x="690" y="196" font-size="12" fill="#5f6b76">Esfuerzo: grande</text>
+  </g>
+</svg>
+<figcaption>Cada etapa se puede usar sola. V2 reusa el dibujo de V1 (la escala de colores, la leyenda y el cartel); V3 reusa el núcleo de V2 llevado a 3D.</figcaption>
+</figure>
+
+<h2><span class="n">0</span>Reglas para los tres</h2>
+<ul>
+  <li><b>No es un método.</b> No entra en los controles, en el resumen ni en el Combinado. No cambia ningún número de la Planilla, la Guía, el CIRSOC ni el FEM.</li>
+  <li><b>No va al Excel.</b> Una simulación no se puede rehacer con fórmulas, así que no tiene que cumplir «app = Excel». Lo que sí se puede exportar: una imagen y una tabla chica con las mediciones (St, Cd).</li>
+  <li><b>Siempre con cartel.</b> V2 y V3 llevan siempre a la vista: «Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel».</li>
+  <li><b>Todo en el navegador, sin servidor y sin conexión.</b> Código propio, sin bibliotecas de terceros con licencias dudosas.</li>
+  <li><b>No pesa al abrir.</b> El simulador va en un módulo aparte (<code>src/viento/</code>) que se carga solo cuando se abre. Ayuda también con el pendiente «carga más rápida al abrir».</li>
+  <li><b>La geometría sale del proyecto.</b> Se usan el contorno de la losa de cada nivel, los retiros y los muros, sin cargar nada nuevo. Lo que se toque en el túnel, como achaflanar una esquina, vale solo ahí y no cambia el proyecto.</li>
+</ul>
+
+<h2 class="v1"><span class="n">V1</span>Presiones del reglamento sobre la torre</h2>
+<p><span class="chip v1">esfuerzo chico · 1 a 2 sesiones</span> <span class="chip ok">reglamentario</span> <span class="chip ok">hecha</span></p>
+<p class="nota">Hecha: botón «p» de la axonometría (<code>src/viento/presiones.ts</code>, <code>src/ui/presiones3d.ts</code>), con los cuatro casos, las flechas por nivel y la foto para el informe; pruebas en <code>test/presionesViento.test.ts</code>. Con el plano de corte en altura (diagrama de presiones en planta en la cota elegida).</p>
+<h3>Qué ve el alumno</h3>
+<ul>
+  <li>La torre en el 3D con cada cara pintada según la presión de diseño, en kN/m²:
+    <ul>
+      <li>barlovento: qz·G·Cp, con Cp = 0,8 y variando con la altura;</li>
+      <li>sotavento: qh·G·Cp, con el Cp según L/B y constante en altura;</li>
+      <li>laterales: Cp = −0,7, solo para mostrar; no entran en la fuerza de la estructura principal, como dice el reglamento.</li>
+    </ul></li>
+  <li>Un selector de viento A o B y de los <b>cuatro casos de carga</b> (Fig. 2.4-8). Los casos 2 y 4 muestran la presión al 75 % con la excentricidad de 0,15·B, y una flecha de la resultante corrida del centro que hace visible la torsión.</li>
+  <li>La flecha de la fuerza de cada nivel, proporcional a W. Al lado, el diagrama de Q y M que la app ya dibuja.</li>
+  <li>Un plano de corte en altura que muestra el reparto de la presión en planta a esa cota.</li>
+  <li>Con los métodos Planilla y Guía, las presiones son las del viento que usa ese método. Con CIRSOC y FEM, las del 102-25 con su G o Gf. Siempre se ve el mismo número que calcula el método elegido.</li>
+</ul>
+<h3>Cómo se hace</h3>
+<ul>
+  <li>Sale de resultados que ya existen: <code>cirsoc102.ts</code> (qz, G, Cp, fuerza por nivel) y el viento de la planilla y de la guía. No hay cálculo nuevo, solo dibujo.</li>
+  <li>Materiales de three.js con color por cara y por franja de altura (vista3d), con una escala de color que se ve bien en pantalla y en el PDF, y su leyenda.</li>
+  <li>Una pestaña «Presiones» en la etapa Viento. La misma vista entra a la lámina y al desglose como imagen.</li>
+</ul>
+<h3>Cómo se comprueba</h3>
+<ul>
+  <li>Test: en cada nivel, la presión neta por el área de influencia de las caras da la W del nivel del método elegido, con tolerancia de 1e-9. Se prueba en las 11 torres y en los dos vientos.</li>
+  <li>Test: los casos 2 y 4 dan el momento torsor 0,75·W·0,15·B del 102-25.</li>
+</ul>
+
+<h2 class="v2"><span class="n">V2</span>Túnel de viento en 2D (corte en planta)</h2>
+<p><span class="chip v2">esfuerzo medio · 4 a 6 sesiones</span> <span class="chip warn">cualitativo</span> <span class="chip ok">hecha</span></p>
+<p class="nota">Hecha: etapa Viento → «Túnel 2D» (<code>src/viento/lbm2d.ts</code>, <code>geometria2d.ts</code>, <code>mediciones.ts</code>, <code>tunel.worker.ts</code>; <code>src/ui/tunel2d.ts</code>). El núcleo corre en JavaScript dentro de un worker (unos 300 a 600 pasos por segundo en una notebook común, con el canal de 16 × 7 anchos); la versión en WebGL2 queda para si hace falta más velocidad. Falta el modo «solo los muros» (con 20 celdas por ancho, un tabique de 20 cm no llega a una celda). Pruebas en <code>test/lbm2d.test.ts</code>.</p>
+<h3>Qué ve el alumno</h3>
+<ul>
+  <li>La planta de la torre a la cota que elija, como un obstáculo dentro de un canal. Puede ser el contorno de la losa o solo los muros, como un esqueleto sin cerramiento. El viento sale de A, de B o de cualquier ángulo (se gira la planta).</li>
+  <li>Cuatro vistas para elegir:
+    <ul>
+      <li>velocidad;</li>
+      <li>vorticidad, donde se ven los remolinos que se desprenden;</li>
+      <li>presión;</li>
+      <li>humo o trazadores.</li>
+    </ul>
+    Con reproducir, pausa y velocidad de simulación.</li>
+  <li><b>Mediciones:</b>
+    <ul>
+      <li>la frecuencia del desprendimiento, con una sonda en la estela y su espectro;</li>
+      <li>el número de Strouhal, St = f·B/V;</li>
+      <li>el arrastre Cd y la fuerza lateral Cl, que oscila con los remolinos.</li>
+    </ul></li>
+  <li><b>Relación con el cálculo:</b> la velocidad crítica de desprendimiento, V<sub>cr</sub> = n1·B/St. Usa la n1 que la app ya calcula (102-25 o FEM) y se compara con la V de diseño del sitio. Es un dato informativo, en el lenguaje del 102-25 sobre edificios flexibles.</li>
+  <li><b>Experimentos de un clic:</b> esquinas achaflanadas o redondeadas, una segunda torre al lado para ver la interferencia, la planta rotada 45° y la planta en L contra la cuadrada. Solo cambian la simulación.</li>
+</ul>
+<h3>Cómo se hace</h3>
+<ul>
+  <li><b>Lattice Boltzmann D2Q9</b>, el mismo método del simulador didáctico de Schroeder (Weber State):
+    <ul>
+      <li>colisión BGK con Smagorinsky para que no explote a Reynolds alto;</li>
+      <li>rebote en el obstáculo;</li>
+      <li>entrada a velocidad uniforme y salida libre.</li>
+    </ul></li>
+  <li>Corre en la placa de video con <b>WebGL2</b>, que anda en todos los navegadores: texturas de punto flotante en ida y vuelta, unas 512 × 256 celdas y cientos de pasos por cuadro.</li>
+  <li>El mismo núcleo en JavaScript, con una grilla más chica, sirve de respaldo y para los tests en Node.</li>
+  <li>La geometría pasa a celdas desde el contorno de la losa del nivel, que ya calcula el editor de contornos. El tamaño se ajusta para que la torre ocupe unas 40 a 60 celdas de ancho.</li>
+</ul>
+<h3>Lo que hay que decir siempre (límites)</h3>
+<ul>
+  <li>El Reynolds de la red es de 10³ a 10⁴ y el real, de 10⁷ a 10⁸. En una planta <b>con aristas vivas</b> el flujo se despega en las esquinas casi a cualquier Reynolds. Por eso la forma de la estela y el St (≈ 0,12 a 0,14 en un cuadrado) son razonables.</li>
+  <li>En una planta <b>circular u ovalada</b> eso no vale, porque el despegue depende mucho del Reynolds. La app tiene que avisarlo.</li>
+  <li>Es un corte 2D: no hay flujo por arriba de la torre ni capa límite atmosférica. Los Cd y Cp que mide son de un prisma infinito, no de la torre.</li>
+</ul>
+<h3>Cómo se comprueba (tests)</h3>
+<ul>
+  <li>Canal vacío entre dos paredes: el perfil parabólico de Poiseuille, con un error menor al 2 %, y conservación de la masa.</li>
+  <li>Cuadrado en el canal a Re de 100 a 200: St de 0,13 a 0,15 y Cd del orden de 1,5 a 2, comparado con los valores de la literatura y con tolerancias amplias.</li>
+  <li>La geometría: el área de celdas sólidas da el área de la planta con un error menor al 2 %.</li>
+</ul>
+
+<h2 class="v3"><span class="n">V3</span>Túnel de viento en 3D</h2>
+<p><span class="chip v3">esfuerzo grande · 8 a 12 sesiones</span> <span class="chip warn">opcional · experimental</span> <span class="chip ok">hecha</span></p>
+<p class="nota">Hecha: etapa Viento → «Túnel 3D» (<code>src/viento/geometria3d.ts</code>, <code>src/viento/lbm3dGpu.ts</code>, <code>src/ui/tunel3d.ts</code>). La torre del proyecto en celdas con sus retiros, el perfil del 102-25 (u ∝ √Kz), Cp promediado en el tiempo al lado del reglamento, cortes horizontal y vertical (velocidad o Cp), líneas de corriente y el viento en la vereda; tres grillas (rápida, liviana, fina). Con el ejemplo de la guía (grilla rápida, 2,2 pasadas): barlovento 0,72 a 0,74 contra 0,80; laterales −0,71 a −0,77 contra −0,70; sotavento −0,58 a −0,65 contra −0,50. Pruebas en <code>test/geometria3d.test.ts</code>; la placa contra la referencia, en <code>tools/verificar_lbm3d_gpu.cjs</code>.</p>
+<h3>Qué ve el alumno</h3>
+<ul>
+  <li>La torre entera, con sus retiros y cambios de planta, dentro de un dominio 3D. La entrada lleva el <b>perfil de velocidad del 102-25</b> según la exposición B, C o D (el mismo Kz de la app).</li>
+  <li>Planos de corte horizontales y verticales que se mueven con el mouse, líneas de corriente desde una grilla de puntos y la zona de aire quieto detrás de la torre.</li>
+  <li><b>Cp medio sobre las caras</b>, promediado en el tiempo, al lado del Cp del reglamento de V1. La comparación es didáctica: dónde coinciden (barlovento) y dónde no (costados y sotavento).</li>
+  <li>El <b>viento en la vereda</b>: velocidad a 1,5 m, con la bajada de aire por la cara de barlovento y la aceleración en las esquinas. Sirve para hablar del confort del peatón, solo como dato informativo.</li>
+</ul>
+<h3>Cómo se hace</h3>
+<ul>
+  <li>Lattice Boltzmann <b>D3Q19</b> con Smagorinsky (LES) en <b>WebGPU</b> (compute shaders WGSL).</li>
+  <li>Para la memoria: almacenamiento en FP16 y un esquema de streaming en el lugar, unos 55 bytes por celda como FluidX3D (código propio).</li>
+  <li>Dos tamaños:
+    <ul>
+      <li>liviano: 160 × 80 × 64 celdas, alrededor de 0,8 M y menos de 100 MB;</li>
+      <li>fino: 256 × 128 × 96 celdas, alrededor de 3 M y 170 a 300 MB.</li>
+    </ul>
+    El dominio mide unas 5H a lo largo, 3H a lo ancho y 1,5H de alto, con la torre a un tercio de la entrada.</li>
+  <li>Detecta WebGPU al abrir. Si no hay, porque Firefox todavía no lo tiene en Linux, Android ni Mac con Intel, avisa y ofrece V2.</li>
+  <li>Hay que promediar en el tiempo para el Cp medio y mostrar el avance de «convergiendo…».</li>
+</ul>
+<h3>Cómo se comprueba</h3>
+<ul>
+  <li>Cubo en un canal: el ancho de la zona de recirculación detrás, en el orden de lo publicado.</li>
+  <li>Prisma 1 : 1 : 6, parecido al edificio de referencia CAARC, con la exposición del 102-25:
+    <ul>
+      <li>Cp medio de barlovento a 2/3 de la altura entre 0,6 y 0,9;</li>
+      <li>costados y sotavento negativos.</li>
+    </ul>
+    Tolerancias amplias y explicadas. Los estudios profesionales en 3D también se dispersan en los costados y en sotavento.</li>
+  <li>Rendimiento: la meta es al menos 10 cuadros por segundo con el tamaño liviano en una notebook típica de estudiante con video integrado.</li>
+</ul>
+<p class="nota"><b>Prototipo hecho:</b> <code>src/viento/lbm3d.ts</code> (referencia en JavaScript, con pruebas en <code>test/lbm3d.test.ts</code>) y <code>src/viento/lbm3dGpu.ts</code> (WebGPU), que da lo mismo que la referencia (peor diferencia 1,3·10⁻⁶ después de 120 pasos: <code>tools/verificar_lbm3d_gpu.cjs</code> con <code>tools/gpu/</code>). En la app: Viento → Túnel 2D → «Túnel 3D: probar la placa de video», que corre la grilla liviana y dice si alcanza (10 cuadros por segundo a 20 pasos por cuadro, unos 164 millones de celdas por segundo). Falta correrla en una notebook típica de estudiante para decidir si se sigue con V3.</p>
+<h3>Riesgos</h3>
+<ul>
+  <li>Rendimiento en notebooks con video integrado, y WebGPU incompleto en algunos navegadores (está V2 de respaldo).</li>
+  <li>Que se lea como un estudio de viento. Por eso el cartel es fijo y Cp va siempre al lado del reglamento.</li>
+  <li>Es la etapa más larga; conviene un prototipo antes de comprometerla (ver el orden, abajo).</li>
+</ul>
+
+<h2><span class="n">4</span>Orden y cuándo se pasa a la siguiente</h2>
+<div class="paso"><div class="b">1</div><div><b>V1 completa</b><small>Se cierra con los tests de W por nivel y de torsión, y con la vista entrando a la lámina.</small></div></div>
+<div class="paso"><div class="b">2</div><div><b>V2: primero el núcleo en JavaScript con los tests de Poiseuille y del cuadrado; después la versión en WebGL2 y la interfaz</b><small>Se cierra cuando el St del cuadrado da en rango y la vista va fluida en una notebook común.</small></div></div>
+<div class="paso"><div class="b">3</div><div><b>Prototipo de V3 (una sesión) · hecho, falta medir</b><small>Solo el núcleo D3Q19 en WebGPU con un cubo, para medir la velocidad. Si da al menos 10 cuadros por segundo en tamaño liviano, se sigue; si no, V3 se deja y se mejora V2.</small></div></div>
+<div class="paso"><div class="b">4</div><div><b>V3 completa</b><small>Perfil de entrada del 102-25, la torre del proyecto, Cp medio, vereda, y los tests del cubo y del prisma.</small></div></div>
+
+<table>
+  <tr><th></th><th class="v1">V1 · Presiones</th><th class="v2">V2 · Túnel 2D</th><th class="v3">V3 · Túnel 3D</th></tr>
+  <tr><td>Fuente de los números</td><td>CIRSOC 102-25 (el método elegido)</td><td>Simulación Lattice Boltzmann 2D</td><td>Simulación Lattice Boltzmann 3D con LES</td></tr>
+  <tr><td>Qué tan confiable</td><td>Es el reglamento</td><td>Cualitativa; St razonable con aristas vivas</td><td>Cualitativa; Cp medio de barlovento razonable</td></tr>
+  <tr><td>Navegadores</td><td>Todos</td><td>Todos (WebGL2)</td><td>Con WebGPU</td></tr>
+  <tr><td>Memoria</td><td>Nada nuevo</td><td>Unos pocos MB</td><td>100 a 300 MB</td></tr>
+  <tr><td>Se exporta</td><td>Imagen en la lámina, el desglose y el informe</td><td>Imagen y tabla de St y Cd</td><td>Imagen y tabla de Cp medio</td></tr>
+  <tr><td>Esfuerzo</td><td>1 a 2 sesiones</td><td>4 a 6 sesiones</td><td>8 a 12 sesiones (más el prototipo)</td></tr>
+</table>
+
+<h2><span class="n">5</span>Preguntas para cuando se arranque</h2>
+<div class="preg"><b class="q">1. ¿En V2 se mide (St, Cd y velocidad crítica) o solo se mira?</b><div class="prop">Propuesta: medir. La velocidad crítica conecta la simulación con la n1 que los alumnos ya calculan.</div></div>
+<div class="preg"><b class="q">2. ¿La segunda torre (interferencia) entra en V2?</b><div class="prop">Propuesta: sí, como experimento de un clic (una copia de la misma planta a una distancia elegida).</div></div>
+<div class="preg"><b class="q">3. ¿El viento en la vereda (V3) se muestra con algún criterio de confort?</b><div class="prop">Propuesta: solo la velocidad relativa a la de entrada, sin criterio, para no sumar una norma que el curso no usa.</div></div>
+<div class="preg"><b class="q">4. ¿Las imágenes del túnel van a la entrega (lámina) o solo a la pantalla?</b><div class="prop">Propuesta: V1 sí (es el reglamento); V2 y V3, a elección del alumno y siempre con el cartel.</div></div>
+
+<h3>Fuentes revisadas</h3>
+<ul class="nota">
+  <li>D. V. Schroeder, <i>Fluid Dynamics Simulation</i> y <i>Fluid Simulations for Undergrads</i> (Weber State): Lattice Boltzmann 2D en JavaScript para enseñar.</li>
+  <li>Laboratorio virtual de túnel de viento de PolyU y AeroDyn 2D: D2Q9 en el navegador.</li>
+  <li>SimScale, validación CAARC; <i>Numerical Simulation of CAARC Standard High-Rise Building Model Based on MRT-LBM LES</i> (Shock and Vibration, 2022): barlovento bien, costados y sotavento con dispersión.</li>
+  <li>FluidX3D (README): memoria de D3Q19, de 55 a 93 bytes por celda.</li>
+  <li>web.dev, <i>WebGPU is now supported in major browsers</i> (nov. 2025): Chrome, Edge, Safari 26 y Firefox en Windows y Mac ARM.</li>
+  <li>CIRSOC 102-25: Cp de paredes (Tabla 2.4-1), casos de carga (Fig. 2.4-8), Kz (Tabla 1.13-1), edificios flexibles (1.9.5).</li>
+</ul>
+
+<p class="pie">Torre 3D · plan del simulador de viento · se suma después de las etapas en curso; no cambia ningún método ni planilla.</p>
+</div></body>
+</html>

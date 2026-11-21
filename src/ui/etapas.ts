@@ -3,6 +3,10 @@
  * 06 Rototraslación · 07 Flexión, más Resumen y Ayuda. Cada etapa tiene su color de rol, su panel (datos, indicadores,
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
+import { centroTunel, panelTunel } from './tunel2d';
+
+import { describirConfig } from '../engine/metodos/tipos';
+import { armarTabique, ERRATAS_GUIA, textoBarras } from '../engine/metodos/guia';
 import { estado, fmt } from './estado';
 import { textoDiferencia } from '../engine/desglose';
 import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, type EstadoChip } from './comp';
@@ -10,8 +14,11 @@ import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelPr
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
+import { rototraslacionAnimada } from './rotoAnimada';
+import { centroEcuaciones, panelEcuaciones, METODOS_ECUACIONES } from './ecuaciones/vista';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
-import { montar3D, exageracionAuto, giroExtraAuto } from './vista3d';
+import { montar3D } from './montar3d';
+import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
 import { verificarDireccion, Q_CARGADO, Q_DESCARGADO, PE_HORMIGON, SIGMA_E, alturaYLosas, datosAlturaDe } from '../engine/flexocompresion';
@@ -20,6 +27,13 @@ import { alturaDesde, fibrasDireccion } from '../engine/fibras';
 import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
 import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
+import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
+import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
+import { centroRigidezFem, panelRigidezFem, seccionRepartoFem } from './fem';
+import { centroCombinado, panelCombinado } from './combinado';
+
+/** los métodos que verifican el hormigón con el CIRSOC 201 (CIRSOC y FEM) */
+const usaCirsoc201 = () => estado.config.metodo === 'cirsoc' || estado.config.metodo === 'fem';
 
 export interface Etapa {
   id: string; nro: string; nombre: string; rol: string; icono: string;
@@ -42,7 +56,7 @@ function datos() {
   const dir = estado.dir;
   const iPB = p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1);
   const filaPB = asig.filaNivel[iPB] ?? 50;
-  const R: PlanillaRes = estado.fuente === 'guia' ? corr.guia : res;
+  const R: PlanillaRes = estado.calculo.valores;
   const alt = datosAltura(p, R.viento, R.mnyq, asig.filaNivel, dir);
   const W = dir === 'A' ? R.mnyq.H61 : alt.reduce((s, x) => s + x.F, 0);
   const Mv = dir === 'A' ? R.mnyq.J61 : R.mnyq.O61;
@@ -77,14 +91,37 @@ function recuadroJ(c: HTMLElement) {
   c.append(caja.el);
 }
 
-const fuenteTxt = () => (estado.fuente === 'guia' ? 'Valores «Guía/CIRSOC»: Kz con z mínimo de 5 m, sin viento en PB ni en los subsuelos.' : 'Valores de la planilla original, tal como los calcula.');
+const fuenteTxt = () => (estado.fuente === 'guia' ? 'Método «Guía»: Kz constante por debajo de 5 m, sin viento en PB ni en los subsuelos.' : 'Valores de la planilla original, tal como los calcula.');
 const peor = (cs: Control[]): EstadoChip => (cs.some(c => c.estado === 'no verifica') ? 'no verifica' : cs.some(c => c.estado === 'atención') ? 'revisar' : cs.length ? 'verifica' : 'pendiente');
 const grupoControles = (pre: string[]) => estado.calculo.controles?.filter(c => pre.some(g => c.grupo.startsWith(g))) ?? [];
 
-/** Tabla de controles: planilla, guía y estado. */
+/**
+ * Controles: una tarjeta por control (la tabla de cinco columnas no entraba en el panel): el nombre y su estado, el
+ * criterio con su fuente, los valores de la planilla y del método con la diferencia, y la nota.
+ */
 export function tablaControles(cs: Control[]): H {
+  const met = ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía';
+  const lista = h('div', { class: 'lista-controles', role: 'list' });
+  cs.forEach(k => {
+    // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
+    const df = k.planilla !== null && k.guia !== null ? textoDiferencia(k.guia, k.planilla, k.unidad, 2) : null;
+    const u = k.unidad ? ` ${k.unidad}` : '';
+    const valores = h('div', { class: 'ctrl-valores' },
+      ...(k.planilla !== null ? [h('span', {}, h('b', {}, 'Planilla'), ` ${fmt(k.planilla)}${u}`)] : []),
+      ...(k.guia !== null ? [h('span', {}, h('b', {}, met), ` ${fmt(k.guia)}${u}`)] : []),
+      ...(df && df.nivel ? [h('span', { class: `sem ${df.nivel}`, title: df.texto }, df.nivel === 'verde' ? '✓ coinciden' : `Δ ${df.corto}`)] : []));
+    lista.append(h('div', { class: 'ctrl-item', role: 'listitem' },
+      h('div', { class: 'ctrl-cab' }, h('span', { class: 'ctrl-nombre' }, k.nombre), chip(k.estado === 'atención' ? 'revisar' : k.estado)),
+      h('div', { class: 'ctrl-criterio' }, `${k.criterio} · ${k.fuente}`),
+      valores,
+      ...(k.nota ? [h('p', { class: 'ctrl-nota' }, k.nota)] : [])));
+  });
+  return lista;
+}
+/** Tabla de controles (para el informe impreso, con el ancho de la hoja): planilla, guía y estado. */
+export function tablaControlesImpresa(cs: Control[]): H {
   const t = h('table', { class: 'tabla' });
-  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
+  t.append(h('thead', {}, h('tr', {}, ...['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', 'Diferencia', ''].map(x => h('th', {}, x)))));
   const tb = h('tbody');
   cs.forEach(k => {
     // diferencia de la planilla respecto de la Guía/CIRSOC, con semáforo (verde < 0,5 %, amarillo hasta 5 %, rojo más)
@@ -96,6 +133,7 @@ export function tablaControles(cs: Control[]): H {
   t.append(tb);
   return h('div', { class: 'scroll' }, t);
 }
+
 /** dos dibujos lado a lado si entran; si no, uno debajo del otro */
 /**
  * Ancho de cada dibujo de una fila: dos por fila solo si cada uno queda de 420 px o más; si no, uno debajo del otro.
@@ -149,7 +187,11 @@ const viento: Etapa = {
   id: 'viento', nro: '02', nombre: 'Viento', rol: '--r-viento', dependeDir: true, conFuente: true,
   icono: '<path d="M3 8h12a3 3 0 1 0-3-3M3 13h17a3 3 0 1 1-3 3M3 18h8"/>',
   globo: 'Viento|La presión del viento según el CIRSOC 102, método analítico: crece con la altura en la cara de barlovento y es constante (con qh) en sotavento.',
-  panel(c) {
+  sub: ['Planilla y guía (102-2005)', 'CIRSOC 102-25', 'Túnel 2D', 'Túnel 3D'],
+  panel(c, sub) {
+    if (sub === 'CIRSOC 102-25') { panelCirsoc102(c); return; }
+    if (sub === 'Túnel 2D') { panelTunel(c); return; }
+    if (sub === 'Túnel 3D') { void import('./tunel3d').then(m => m.panelTunel3d(c)); return; }
     const d = datos();
     const R = d.R, s = d.p.sitio;
     c.append(seccionViento());
@@ -172,6 +214,9 @@ const viento: Etapa = {
     c.append(h('p', { class: 'nota' }, fuenteTxt()));
   },
   centro(c, tam) {
+    if (estado.sub.viento === 'CIRSOC 102-25') { centroCirsoc102(c, tam, anchos, fila); return; }
+    if (estado.sub.viento === 'Túnel 2D') { centroTunel(c, tam); return; }
+    if (estado.sub.viento === 'Túnel 3D') { void import('./tunel3d').then(m => m.centroTunel3d(c, tam)); return; }
     const d = datos();
     const sobre = d.alt.filter(x => x.z > 0);
     const a = anchos(tam);
@@ -187,7 +232,7 @@ const viento: Etapa = {
     c.append(h('p', { class: 'nota' }, `Viento ${d.dir}: ${d.dir === 'A' ? 'sobre la cara mayor (ancho B, M,NyQ columna E)' : 'sobre la cara menor (ancho L, M,NyQ columna F)'}. Cada fuerza es la presión neta por el ancho de la cara y la altura de influencia del nivel: Wi = D · E · p (M,NyQ columna H). ${fuenteTxt()}`));
     c.append(tablaValores(['Nivel', 'Cota (m)', 'Barlovento (kN/m²)', 'Sotavento (kN/m²)', 'Wi (t)'], d.alt.map(x => [x.nivel, x.z, x.pBarlo, x.pSota, x.F]), [0, 2, 3, 3, 2]));
   },
-  nombreCentro: () => `Alzado · viento ${estado.dir}`,
+  nombreCentro: () => (estado.sub.viento === 'Túnel 2D' ? `Túnel de viento 2D · viento ${estado.dir}` : estado.sub.viento === 'Túnel 3D' ? `Túnel de viento 3D · viento ${estado.dir}` : `Alzado · viento ${estado.dir}`),
   estado: () => (estado.calculo.res?.mnyq.H61 > 0 ? 'completa' : 'pendiente'),
 };
 
@@ -238,7 +283,7 @@ const estabilidad: Etapa = {
     c.append(h('div', { class: 'kpis' },
       kpi('Vuelco Me / Mv', fmt(vuelco, 2), okV ? '≥ 1,5 · verifica' : '< 1,5 · no verifica', colorEstado(okV)),
       kpi(`e, viento ${d.dir}`, `${fmt(fg.e, 2)} m`, `${okE ? '≤' : '>'} b/6 = ${fmt(fg.tercio, 2)} m`, colorEstado(okE)),
-      kpi('Suelo, σ máx.', `${fmt(m.N89, 2)} kg/cm²`, 'contra la del estudio de suelos'),
+      kpi('Suelo, σ máx.', `${fmt(Math.abs(m.N89), 2)} kg/cm²`, 'compresión, contra la del estudio de suelos'),
     ));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
@@ -276,6 +321,7 @@ const rigidezE: Etapa = {
   icono: '<path d="M6 4h14M6 20h14M13 4v16"/>',
   globo: 'Rigidez|La suma de los J de las piezas tiene que alcanzar para que la azotea no se corra más de h/500 con el viento.',
   panel(c) {
+    if (estado.config.metodo === 'fem' && estado.calculo.fem) panelRigidezFem(c);
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
@@ -292,6 +338,9 @@ const rigidezE: Etapa = {
       formula(`ΣJ, viento ${d.dir}`, `Σ ${v('J', 'j')}${op('=')}${r(rg.J, 3, 'm⁴')}${op(rg.J >= rg.minimos.h500 ? '≥' : '<')}${n(rg.minimos.h500, 2)}`, `J ${d.dir === 'A' ? 'paralelos' : 'ortogonales'}!AY24`, rg.J >= rg.minimos.h500 ? 'verifica' : 'no verifica'),
       formula('Desplazamiento de la azotea (ménsula, momento real de cada nivel)', `${v('δ')}${op('=')}∬ ${v('M')}/(${v('E')}·${v('J')}) d${v('z')}${op('=')}${r(def.dTop * 1000, 1, 'mm')}${op(def.dTop <= def.limite ? '≤' : '>')}${v('h')}/500${op('=')}${r(def.limite * 1000, 1, 'mm')}`, `E = ${fmt(E / 10, 0)} kg/cm² (el de la planilla) · con carga uniforme: δ = W·h³/8EJ = ${fmt(def.dUniforme * 1000, 1)} mm`, def.dTop <= def.limite ? 'verifica' : 'no verifica'),
     );
+    // método Guía: la flecha como la calcula la guía (4.2), ménsula con la carga uniforme promedio
+    const fl = estado.calculo.controles.find(x => x.nombre === `Flecha de la ménsula, viento ${d.dir}`);
+    if (fl && estado.fuente === 'guia') cu.append(formula('Flecha de la ménsula (guía 4.2)', `${v('f')}${op('=')}${v('q', 'v')} · ${v('h')}⁴ / (8 · ${v('E')} · ${v('J')})${op('=')}${r(fl.guia ?? NaN, 3, 'm')}${op(fl.estado === 'verifica' ? '≤' : '>')}${v('h')}/500`, fl.nota ?? '', fl.estado === 'verifica' ? 'verifica' : 'no verifica'));
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
     const tot = piezasDir.reduce((s, x) => s + Jp(x.filaHoja!), 0);
@@ -300,6 +349,7 @@ const rigidezE: Etapa = {
     c.append(seccion('J de cada pieza', t).el);
   },
   centro(c, tam) {
+    if (estado.config.metodo === 'fem' && estado.calculo.fem) { centroRigidezFem(c, tam); return; }
     const d = datos();
     const rs = rigidez(d.R, d.p.hormigon || 'H30');
     const rg = rs.find(x => x.dir === d.dir)!;
@@ -353,11 +403,15 @@ const rototrasl: Etapa = {
     };
     c.append(seccion('Tabiques paralelos al viento (t)', tabla(dp.paralelos, false)).el);
     if (dp.perpendiculares.some(x => Math.abs(x.rot) > 1e-9) || dp.perpendiculares.length) c.append(seccion(guia ? 'Muros perpendiculares: solo rotación (t)' : 'Piezas perpendiculares: solo rotación (t)', tabla(dp.perpendiculares, true)).el);
+    if (!guia) c.append(seccionParPerp(d));
+    const rf = seccionRepartoFem(); if (rf) c.append(rf);
     const aviso = avisoCRCaraMenor(d);
     if (aviso) c.append(h('p', { class: 'aviso-linea' }, aviso));
     c.append(h('p', { class: 'nota' }, guia
-      ? 'Valores «Guía/CIRSOC»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
-      : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
+      ? 'Valores «Guía»: cada muro perpendicular entra a la rotación con su propio J, como en el Anexo de la guía (por ejemplo, las alas de T6, que hacen un par contra el giro). Se usa este reparto para el momento de cada pieza en Flexión.'
+      : (d.dir === 'A' ? d.asig.datos.rotA : d.asig.datos.rotB).par
+        ? 'Valores de la planilla: las dos piezas perpendiculares elegidas entran a la rotación en las filas 28–29, con los brazos desde su punto medio; las demás no cuentan (filas 31 a 50 en 0).'
+        : 'Valores de la planilla: las piezas perpendiculares entran a la rotación enteras, en su baricentro (filas 31 a 50).'));
   },
   centro(c, tam) {
     const d = datos();
@@ -365,7 +419,7 @@ const rototrasl: Etapa = {
     const pasoN = Number(estado.sub.pasoRoto) || 1;
     const paso = Math.min(4, pasoN) as Paso;
     const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Paso' });
-    (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación', '5 · En 3D'] as const).forEach((t, i) => {
+    (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación', '5 · Animada', '6 · En 3D'] as const).forEach((t, i) => {
       const b2 = h('button', { type: 'button', 'aria-pressed': String(pasoN === i + 1) }, t);
       b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
       seg.append(b2);
@@ -374,9 +428,14 @@ const rototrasl: Etapa = {
       1: 'Eje de inercia por el polígono funicular, como en la clase 5, con la notación de Bow. El J de cada tabique es un vector sobre el tabique (más grueso y más largo cuanto mayor es J). Los espacios entre las rectas de acción llevan letras a, b, c…, y cada J se nombra por los dos espacios que separa (ab, bc…). A la derecha, los J se ponen uno a continuación del otro (polígono de los J) y desde el polo O salen los rayos Oa, Ob, Oc… Debajo de la planta, el lado c del funicular es paralelo al rayo Oc y queda en el espacio c: tienen la misma letra y el mismo color. El primer y el último lado (punteados) se prolongan hasta cortarse en R; por R pasa la resultante ΣJ, que sube por el eje de inercia hasta el centro de rigidez CR.',
       2: 'Traslación: el viento W actúa en el eje de simetría y cada tabique toma una parte proporcional a su J: Wj = W · Jj / ΣJ. La flecha está sobre la recta de acción del tabique; su grosor es su J y su largo, la fuerza.',
       3: 'Rotación: como el eje de inercia no coincide con el eje de simetría, el viento gira la planta con Mt = W · e alrededor del CR. Cada tabique toma ± W · e · Jj · aj / ΣJt·aj² (aj: distancia al eje de inercia). Del lado del viento se suma (+) y del otro se resta (−). Los perpendiculares no toman traslación pero colaboran en la rotación.',
-      4: 'Rototraslación = traslación ± rotación. En azul la parte de traslación; en violeta la de rotación, que se suma (+) o se resta (−).',
+      4: 'Rototraslación = traslación ± rotación. En verde la parte de traslación; en violeta la de rotación, que se suma (+) o se resta (−).',
     };
-    if (pasoN === 5) { centro3D(c, seg, dp); return; }
+    if (pasoN === 6) { centro3D(c, seg, dp); return; }
+    if (pasoN === 5) {
+      c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, 'La losa es rígida: se corre (traslación) y gira alrededor del CR (rotación). Cada tabique toma una fuerza proporcional a su J por lo que se movió. Los movimientos están exagerados, pero la relación entre corrimiento y giro es la del cálculo.'));
+      c.append(rototraslacionAnimada(dp, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 110)) }).el);
+      return;
+    }
     c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, textos[paso]));
     // paso a paso de la funicular de los J: cada clic agrega un rayo y su lado (con la misma letra y color)
     const nPares = new Set(dp.paralelos.map(x => x.pos.toFixed(2))).size + 1;
@@ -396,10 +455,10 @@ const rototrasl: Etapa = {
     c.append(svg);
     const ley = h('div', { class: 'leyenda' });
     const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
-    ley.append(mu('var(--accent)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', paso === 1 ? 'eje de inercia y R' : 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
+    ley.append(mu('var(--deformada)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', paso === 1 ? 'eje de inercia y R' : 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
     c.append(ley);
   },
-  nombreCentro: () => (estado.sub.pasoRoto === '5' ? `Torre 3D · rototraslación exagerada, viento ${estado.dir}` : `Planta · rototraslación, viento ${estado.dir}`),
+  nombreCentro: () => (estado.sub.pasoRoto === '6' ? `Torre 3D · rototraslación exagerada, viento ${estado.dir}` : `Planta · rototraslación, viento ${estado.dir}`),
   estado: () => (estado.calculo.asig?.piezas.length ? (grupoControles(['Reparto']).some(c => c.estado === 'no verifica') ? 'revisar' : 'completa') : 'pendiente'),
 };
 
@@ -463,6 +522,13 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
   const kg = estado.roto3d.giro ?? giroAuto;
   const bAuto = h('button', { type: 'button', class: 'mini' }, 'automáticas');
   bAuto.addEventListener('click', () => { estado.roto3d.exag = null; estado.roto3d.giro = null; estado.avisarPanel(); });
+  // tensiones de las fibras (la peor de cada piso de cada muro) pintadas sobre la torre deformada
+  const chipTensiones = () => {
+    const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(!!estado.capas.tensiones), title: 'Pinta cada piso de cada muro con la tensión de su peor fibra (compresión en azul, tracción en rojo) sobre la torre deformada' }, h('i', {}), 'Tensiones σ');
+    (b.firstChild as HTMLElement).style.setProperty('--c', 'var(--compresion, #378add)');
+    b.addEventListener('click', () => { estado.capas.tensiones = !estado.capas.tensiones; try { localStorage.setItem('torre3d.tensiones3d', estado.capas.tensiones ? '1' : '0'); } catch { /* sin almacenamiento */ } estado.avisarPanel(); });
+    return b;
+  };
   const chipT = (t: string, col: string, k: 'original' | 'animar' | 'rotulos', redibujar: boolean) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.roto3d[k]) }, h('i', {}), t);
     (b.firstChild as HTMLElement).style.setProperty('--c', col);
@@ -473,7 +539,7 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
     h('div', { class: 'fila-acciones controles3d' },
       deslizador('Traslación', f, auto, x => { estado.roto3d.exag = x; }, 'Exageración de la traslación|Multiplica el corrimiento δ de cada piso para que se vea. Los números del recuadro son los reales.'),
       ...(gira ? [deslizador('Giro extra', kg, giroAuto, x => { estado.roto3d.giro = x; }, 'Giro exagerado aparte|El giro es mucho más chico que la traslación; se multiplica además por este número para que el revirado se vea. El sentido y la forma son los reales.')] : []),
-      bAuto, chipT('Rótulos y cotas', 'var(--ink)', 'rotulos', true), chipT('Torre sin deformar', 'var(--ink2)', 'original', true), chipT('Animar ráfaga', 'var(--carga)', 'animar', false)));
+      bAuto, chipT('Rótulos y cotas', 'var(--ink)', 'rotulos', true), chipT('Torre sin deformar', 'var(--ink2)', 'original', true), chipT('Animar ráfaga', 'var(--carga)', 'animar', false), chipTensiones()));
   c.append(visor3DRoto());
   if (r) {
     const ley = h('div', { class: 'leyenda' });
@@ -485,6 +551,47 @@ function centro3D(c: HTMLElement, seg: HTMLElement, dp: ReturnType<typeof datosR
 
 /** Datos de la rototraslación en planta (paralelos y perpendiculares) desde la hoja de rototraslación. */
 export function datosRotoPlanoActual() { return datosRotoPlano(datos()); }
+/**
+ * «Dos tabiques perpendiculares» (filas 28–29 de la hoja del viento): cuando dos muros perpendiculares al viento están
+ * cerca uno del otro trabajan juntos contra el giro. Se eligen las dos piezas del otro viento; la planilla mide sus
+ * brazos desde el punto medio entre las dos (J28) y deja el bloque general (filas 31–50) en 0.
+ */
+const parAMedias: Partial<Record<'A' | 'B', [string, string]>> = {};
+function seccionParPerp(d: ReturnType<typeof datos>): HTMLElement {
+  const p = estado.proyecto, dir = d.dir as 'A' | 'B', otra = dir === 'A' ? 'B' : 'A';
+  const hoja = dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor';
+  const cand = d.asig.piezas.filter(z => z.dir === otra && z.filaHoja !== null).map(z => z.nombre);
+  const actual = p.parPerp?.[dir] ?? null;
+  const usado = !!(dir === 'A' ? d.asig.datos.rotA : d.asig.datos.rotB).par;
+  const cuerpo = h('div', { class: 'par-perp' });
+  const sel = (k: 0 | 1) => {
+    const s = h('select', { 'aria-label': `Tabique ${k + 1}` }) as HTMLSelectElement;
+    s.append(new Option('—', ''), ...cand.map(n => new Option(n, n)));
+    s.value = (actual ?? parAMedias[dir])?.[k] ?? '';
+    s.addEventListener('change', () => {
+      const otro = (cuerpo.querySelectorAll('select')[k ? 0 : 1] as HTMLSelectElement).value;
+      const par = [k ? otro : s.value, k ? s.value : otro] as [string, string];
+      // con uno solo elegido, se espera al otro sin cambiar el proyecto
+      if (!(par[0] && par[1] && par[0] !== par[1])) { parAMedias[dir] = par; if (!actual) return; }
+      else delete parAMedias[dir];
+      estado.cambiar(pp => {
+        pp.parPerp = { ...(pp.parPerp ?? {}) };
+        if (par[0] && par[1] && par[0] !== par[1]) pp.parPerp[dir] = par; else delete pp.parPerp[dir];
+        if (!pp.parPerp.A && !pp.parPerp.B) delete pp.parPerp;
+      });
+    });
+    return s;
+  };
+  const quitar = h('button', { type: 'button', class: 'mini' }, 'Usar el bloque general');
+  quitar.addEventListener('click', () => { delete parAMedias[dir]; }, true);
+  quitar.addEventListener('click', () => estado.cambiar(pp => { if (pp.parPerp) { delete pp.parPerp[dir]; if (!pp.parPerp.A && !pp.parPerp.B) delete pp.parPerp; } }));
+  cuerpo.append(h('div', { class: 'fila-acciones' }, sel(0), sel(1), ...(actual ? [quitar] : [])),
+    h('p', { class: 'nota' }, usado
+      ? `En uso: ${actual!.join(' y ')} van en las filas 28–29 de «${hoja}», con los brazos desde su punto medio (J28 = ${fmt(d.R[dir === 'A' ? 'rotA' : 'rotB'].J28, 2)} m). El bloque general (filas 31 a 50) queda en 0: al exportar, B31:B50 se escriben en 0 en esta hoja (son vínculos a la otra hoja J; es la única fórmula que se reemplaza).`
+      : `Cuando dos muros perpendiculares al viento están cerca uno del otro trabajan juntos y se oponen mejor a la rotación: elegí las dos piezas y la planilla usa las filas 28–29 («USAR SOLAMENTE PARA DOS TABIQUES»), con los brazos desde su punto medio, en vez del bloque general (filas 31 a 50).`),
+    ...(cand.length < 2 ? [h('p', { class: 'nota' }, `Hacen falta al menos dos piezas en el viento ${otra}.`)] : []));
+  return seccion('Dos tabiques perpendiculares (filas 28–29)', cuerpo).el;
+}
 /**
  * Planilla anterior, viento B: B51 e I51 de «Rototrasl. cara menor» suman solo hasta la fila 38, así que las piezas 9
  * a 20 del viento A no cuentan para el CR. Devuelve el aviso (o null si no cambia nada o no corresponde).
@@ -505,7 +612,7 @@ function avisoCRCaraMenor(d: ReturnType<typeof datos>): string | null {
     });
     if (peor.dif > 0.005) txt += ` Como la planta gira, la rotación cambia: la que más, ${peor.nombre}, ${fmt(peor.pl, 2)} t en la planilla contra ${fmt(peor.re, 2)} t con el CR real (ΣJt·a² ${fmt(pl.M51, 1)} contra ${fmt(re.M51, 1)}).`;
   } else txt += ' En este viento la planta no gira (e = 0), así que las fuerzas no cambian.';
-  return txt + ' Con «Planilla 2025» o «Guía/CIRSOC» sale bien.';
+  return txt + ' Con «Planilla 2025» o «Guía» sale bien.';
 }
 function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: number; SJa2: number; metodo: 'guia' | 'planilla'; YrPlanilla?: number } {
   const A = d.dir === 'A';
@@ -527,14 +634,16 @@ function datosRotoPlano(d: ReturnType<typeof datos>): DatosRotoPlano & { SJ: num
   // la planilla: piezas paralelas (filas 5 a 24) y perpendiculares (filas 31 a 50), por pieza
   const rot = A ? d.R.rotA : d.R.rotB;
   const H = A ? d.asig.datos.rotA.H : d.asig.datos.rotB.H;
-  const elem = (otra: boolean) => d.asig.piezas.filter(pz => (otra ? pz.dir !== d.dir : pz.dir === d.dir) && pz.filaHoja !== null).map(pz => {
-    const i = (otra ? 26 : 0) + pz.filaHoja!;
+  // con el par de dos tabiques (filas 28–29), las perpendiculares son solo esas dos, en las filas del atajo
+  const dos = (A ? d.asig.datos.rotA : d.asig.datos.rotB).par ?? null, s0 = rot.nP + 3;
+  const elem = (otra: boolean) => d.asig.piezas.filter(pz => (otra ? pz.dir !== d.dir : pz.dir === d.dir) && pz.filaHoja !== null && (!otra || !dos || dos.includes(pz.filaHoja!))).map(pz => {
+    const i = otra ? (dos ? s0 + dos.indexOf(pz.filaHoja!) : rot.oO + pz.filaHoja!) : pz.filaHoja!;
     const rotF = isFinite(rot.N[i]) ? rot.N[i] : 0, tras = otra ? 0 : rot.E[i];
     return { nombre: pz.nombre, pos: otra ? (H[i] ?? 0) : t(H[i] ?? 0), J: rot.B[i], frac: otra ? 0 : rot.C[i], tras, rot: rotF, total: tras + rotF, a: rot.K[i], muros: muros(pz.muros) } as ElementoPlano;
   });
   // planilla anterior, viento B: su CR (J38) no cuenta las piezas 9 a 20 del viento A; el dibujo y el 3D usan el real
   const real = !A && d.R.rotBReal ? d.R.rotBReal : null;
-  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: (real ?? rot).J38 ?? 0, YrPlanilla: rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
+  return { ...base, metodo: 'planilla', Xr: t(rot.J7), Yr: dos ? rot.J28 : (real ?? rot).J38 ?? 0, YrPlanilla: dos ? rot.J28 : rot.J38 ?? 0, Q: rot.D5, Mt: rot.J15, SJ: rot.B25, SJa2: rot.M51, paralelos: elem(false), perpendiculares: elem(true) };
 }
 
 // ------------------------------------------------------------------ 07 Flexión
@@ -563,6 +672,7 @@ const flexion: Etapa = {
   icono: '<path d="M6 4v16M6 4l14 16H6"/>',
   globo: 'Flexocompresión|Cada muro se verifica en PB con σ = −N/F ± M/W: sin sobrecarga para ver si tracciona (y cuánta armadura lleva), con sobrecarga para la compresión máxima del hormigón.',
   panel(c) {
+    if (usaCirsoc201()) { panelFlexCirsoc(c); return; }
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
     const vs = verifs();
@@ -587,7 +697,7 @@ const flexion: Etapa = {
         h('p', { class: 'nota' }, Mx ? `Con exo, el momento de los tabiques en PB es ${fmt(Mx(altP.zPB), 1)} tm (sin exo, ${fmt(d.p.niveles.length ? (d.dir === 'A' ? d.corr.guia.mnyq.J : d.corr.guia.mnyq.O)[d.filaPB] : 0, 1)} tm). Cada pieza toma su fracción de la rototraslación. Sin la marca, las cuentas son las de la planilla del curso (sin exo).` : 'Sin la marca: las cuentas de la planilla del curso, sin el exoesqueleto.'));
     }
     if (!enPB) c.append(h('p', { class: 'nota' }, `Fibras en ${nomNivel}: el mismo σ = −N/F ± M/W de PB, con el momento de ${nomNivel} (M,NyQ, la misma fracción de la pieza), lo que pesa de ${nomNivel} para arriba y la sección del muro justo encima de la losa. Los controles de la etapa siguen siendo los de PB.`));
-    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía/CIRSOC» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
+    c.append(h('p', { class: 'nota' }, `Como la guía (sección 5), ${enPB ? 'en PB y ' : ''}muro por muro. Valores «Guía» (momento de cada pieza en ${nomNivel}). Límite de compresión: σbk = ${adm} kg/cm² (${d.p.hormigon}), como la guía.`));
     const t = h('table', { class: 'tabla' });
     t.append(h('thead', {}, h('tr', {}, ...['Pieza', 'tracción', 'compresión', ''].map(x => h('th', {}, x)))));
     const tb = h('tbody');
@@ -614,9 +724,13 @@ const flexion: Etapa = {
         formula('Tracción (descargado)', `${v('σ')}${op('=')}−${v('N', 'g')}/${v('F')} + ${m.papel === 'ala' ? `${v('M')}·${v('d')}/${v('J')}` : `${v('M')}·${v('y')}/${v('J')}`}${op('=')}−${n(m.Ndesc / m.A, 1)} + ${n(m.sigM, 1)}${op('=')}${r(m.traccion, 2, 'kg/cm²')}`, m.traccion > 0 ? `tracciona en ${fmt(m.x * 100, 0)} cm: T = ${fmt(m.T, 2)} t · As = T/${SIGMA_E} = ${fmt(m.As, 2)} cm²; mínima 0,8 % = ${fmt(m.AsMin, 1)} cm² → ${fmt(Math.max(m.As, m.AsMin), 1)} cm²` : 'todo comprimido: armadura mínima', m.traccion > 0 ? 'revisar' : 'verifica'),
         formula('Compresión (cargado)', `${v('σ')}${op('=')}−${v('N', 'q')}/${v('F')} − ${n(m.sigM, 1)}${op('=')}−${n(m.Ncarg / m.A, 1)} − ${n(m.sigM, 1)}${op('=')}${r(m.compresion, 2, 'kg/cm²')}`, `|σ| ${m.verifica ? '≤' : '>'} ${adm} kg/cm² · Nq con ${String(Q_CARGADO).replace('.', ',')} t/m²`, m.verifica ? 'verifica' : 'no verifica'),
       );
+      // armado como la guía (5): dos capas, vertical (la de cálculo o la mínima) y horizontal (1/5)
+      const arm = armarTabique(m.As, m.AsMin, Math.max(m.b, m.h));
+      cu.append(formula('Armado (guía 5)', `${v('A', 's')}${op('=')}${r(arm.AsTotal, 1, 'cm²')} (${esc(arm.manda)}) → ${n(arm.vertical.pedido, 2)} cm²/m por capa${op('→')}${esc(textoBarras(arm.vertical))}; horizontal ${n(arm.horizontal.pedido, 2)} cm²/m${op('→')}${esc(textoBarras(arm.horizontal))}`, 'Fe long en 2 capas · Fe hor = 1/5 · mín. Ø8 c/20 y Ø6 c/25'));
     });
   },
   centro(c, tam) {
+    if (usaCirsoc201()) { centroFlexCirsoc(c, tam); return; }
     const vs = verifs();
     const d = datos();
     const adm = TENSION_ADM(d.p.hormigon || 'H30');
@@ -631,8 +745,8 @@ const flexion: Etapa = {
       const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
       c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
         series: [
-          { nombre: 'tracción máxima, descargado (0,7 t/m²)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t') },
-          { nombre: 'compresión máxima, cargado (0,9 t/m²)', color: 'compresion', tipo: 'linea', puntos: pts('c') },
+          { nombre: 'fibra más traccionada, descargado (0,7 t/m², punteada)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t'), porSigno: true },
+          { nombre: 'fibra más comprimida, cargado (0,9 t/m², llena)', color: 'compresion', tipo: 'linea', puntos: pts('c'), porSigno: true },
         ],
         referencias: Math.min(...pts('c').map(p => p.x)) < -adm * 0.5 ? [{ x: -adm, texto: `σbk −${adm}` }] : [],
         alturas: Math.abs(z - (f.niveles[0]?.z ?? 0)) > 1e-6 ? [{ z, texto: `se ve: ${nomNivel}` }] : [],
@@ -646,7 +760,7 @@ const flexion: Etapa = {
     c.append(t, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
   },
   nombreCentro: () => `Flexocompresión · viento ${estado.dir}`,
-  estado: () => peor(grupoControles(['Flexocompresión'])),
+  estado: () => peor(grupoControles(usaCirsoc201() ? ['CIRSOC 201'] : ['Flexocompresión'])),
 };
 
 // ------------------------------------------------------------------ Carta (la hoja M,NyQ dibujada)
@@ -670,7 +784,7 @@ export function datosCarta(): DatosCarta | null {
   const PB = niveles.find(n => Math.abs(n.z) < 1e-6) ?? niveles.filter(n => n.z >= 0).pop() ?? null;
   const cs = (estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo');
   return {
-    dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla',
+    dir: d.dir, proyecto: d.p.nombre || 'Proyecto', fuente: describirConfig(estado.config),
     niveles, T: plano.T, S: plano.S, zTop: d.p.niveles[0]?.cota ?? 0, zFondo: d.p.niveles[d.p.niveles.length - 1]?.cota ?? 0,
     W: d.W, Mv: d.Mv, hw: d.hw, PB, plano, roto: datosRoto3D(), vuelco,
     controles: cs.map(c => ({ nombre: c.nombre, valor: c.guia !== null ? `${fmt(c.guia, 1)} ${c.unidad}` : c.planilla !== null ? `${fmt(c.planilla, 1)} ${c.unidad}` : '', estado: c.estado })),
@@ -719,15 +833,25 @@ const resumen: Etapa = {
   id: 'resumen', nro: '✓', nombre: 'Resumen', rol: '--r-resumen', conFuente: false,
   icono: '<path d="M5 6l1.5 1.5L9 5M5 12l1.5 1.5L9 11M5 18l1.5 1.5L9 17M12 6h9M12 12h9M12 18h9"/>',
   globo: 'Resumen|Todos los controles juntos, con el valor de la planilla y el corregido, y los avisos del proyecto.',
-  sub: ['Controles', 'Avisos'],
-  panel(c, sub) { if (sub === 'Avisos') panelAvisos(c); else { panelResultados(c, false); c.append(h('p', { class: 'nota' }, 'Todos los controles están en el centro, agrupados; cada etapa muestra además los suyos con sus fórmulas.')); } },
+  get sub() { return estado.config.metodo === 'combinado' ? ['Comparación', 'Controles', 'Avisos'] : ['Controles', 'Avisos']; },
+  panel(c, sub) { if (sub === 'Avisos') panelAvisos(c); else if (sub === 'Comparación' && estado.config.metodo === 'combinado') panelCombinado(c); else { panelResultados(c, false); c.append(h('p', { class: 'nota' }, 'Todos los controles están en el centro, agrupados; cada etapa muestra además los suyos con sus fórmulas.')); } },
   centro(c) {
+    if (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación') { centroCombinado(c); return; }
     const cs = estado.calculo.controles ?? [];
     const grupos = [...new Set(cs.map(x => x.grupo))];
-    c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const e = peor(cs.filter(x => x.grupo === g && x.estado !== 'informativo')); return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
-    c.append(seccion('Todos los controles', tablaControles(cs)).el);
+    c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const dg = cs.filter(x => x.grupo === g && x.estado !== 'informativo'), e = dg.length ? peor(dg) : 'informativo'; return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
+    // centro ancho: tabla; si queda angosto (tablet vertical), las mismas tarjetas que en los paneles
+    const ancha = tablaControlesImpresa(cs), angosta = tablaControles(cs);
+    ancha.classList.add('solo-ancho'); angosta.classList.add('solo-angosto');
+    c.append(seccion('Todos los controles', h('div', { class: 'controles-adapt' }, ancha, angosta)).el);
+    // método Guía: dónde el texto de la guía no cierra con su propio procedimiento (la app sigue el procedimiento)
+    if (estado.fuente === 'guia') {
+      const t = h('table', { class: 'tabla compacta' }, h('thead', {}, h('tr', {}, h('th', {}, 'Dónde'), h('th', {}, 'Qué dice la guía'), h('th', {}, 'Qué calcula la app'))),
+        h('tbody', {}, ...ERRATAS_GUIA.map(e => h('tr', {}, h('td', {}, e.donde), h('td', {}, e.texto), h('td', {}, e.calculado)))));
+      c.append(seccion('Diferencias con el texto de la guía', h('p', { class: 'nota' }, 'Números del texto de la guía «Edificio en torre» 2024 que no cierran con su propio procedimiento. El método «Guía» sigue el procedimiento.'), h('div', { class: 'scroll' }, t)).el);
+    }
   },
-  nombreCentro: () => 'Resumen de controles',
+  nombreCentro: () => (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación' ? 'Comparación de los cuatro métodos' : 'Resumen de controles'),
   estado: () => peor((estado.calculo.controles ?? []).filter(c => c.estado !== 'informativo')),
 };
 const ayuda: Etapa = {
@@ -737,6 +861,17 @@ const ayuda: Etapa = {
   panel(c) { panelAyuda(c); },
   centro: 'planta',
   nombreCentro: () => 'Planta',
+  estado: () => 'informativo',
+};
+
+const ecuaciones: Etapa = {
+  id: 'ecuaciones', nro: 'Σ', nombre: 'Ecuaciones', rol: '--r-ayuda', dependeDir: true,
+  icono: '<rect x="3" y="3" width="8" height="5" rx="1"/><rect x="15" y="3" width="8" height="5" rx="1"/><rect x="9" y="17" width="8" height="5" rx="1"/><path d="M7 8v4h6v5M19 8v4h-6"/>',
+  globo: 'Ecuaciones|La guía de cálculo como un mapa de cuentas: de dónde sale cada número, en qué ecuación se usa, cómo saber si verifica y qué hacer si no. Los datos se arrastran y toda la cadena se recalcula.',
+  sub: [...METODOS_ECUACIONES],
+  panel(c) { panelEcuaciones(c); },
+  centro(c) { centroEcuaciones(c); },
+  nombreCentro: () => `Ecuaciones · método ${estado.sub.ecuaciones ?? METODOS_ECUACIONES[0]} · viento ${estado.dir}`,
   estado: () => 'informativo',
 };
 
@@ -751,7 +886,7 @@ const exoesqueleto: Etapa = {
 };
 
 export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto];
-export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ayuda];
+export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ecuaciones, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;
 export { esc };

@@ -3,6 +3,7 @@
  * suelo; abajo la lámina M, N y Q, las verificaciones y el rótulo (proyecto, alumno, curso, fecha, hoja).
  * Se dibuja en un SVG con unidades de 0,1 mm y cada carta va anidada a su escala.
  */
+import { describirConfig } from '../engine/metodos/tipos';
 import { estado, fmt } from './estado';
 import { carta } from './carta';
 import { datosCarta } from './etapas';
@@ -50,7 +51,7 @@ export function laminaA3(dir: 'A' | 'B', hoja: number, hojas: number): SVGSVGEle
     const hRot = 470, yRot = H - M - 20 - hRot;
     verificaciones(svg, xR, yB + 10, wR, yRot - yB - 40);
     rotulo(svg, xR, yRot, wR, hRot, {
-      proyecto: p.nombre || 'Proyecto', alumno: p.alumno || '—', dir, fuente: estado.fuente === 'guia' ? 'valores Guía/CIRSOC' : 'valores de la planilla',
+      proyecto: p.nombre || 'Proyecto', alumno: p.alumno || '—', dir, fuente: describirConfig(estado.config),
       hoja: `${hoja} / ${hojas}`, fecha: new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }), hormigon: p.hormigon || 'H30',
     });
     return svg;
@@ -65,7 +66,7 @@ function verificaciones(svg: SVGSVGElement, x: number, y: number, w: number, h: 
   svg.append(el('text', { x, y: y + 30, class: 'lm-tit' }, 'Verificaciones'));
   const fila = 50, entran = Math.max(1, Math.floor((h - 110) / fila));
   const cols = [x, x + w - 520, x + w - 330, x + w - 150];
-  ['Control', 'Planilla', 'Guía', ''].forEach((t, i) => svg.append(el('text', { x: cols[i] + (i === 1 || i === 2 ? 150 : 0), y: y + 80, class: 'lm-cab', 'text-anchor': i === 1 || i === 2 ? 'end' : 'start' }, t)));
+  ['Control', 'Planilla', ({ cirsoc: 'CIRSOC', fem: 'FEM' } as Record<string, string>)[estado.config.metodo] ?? 'Guía', ''].forEach((t, i) => svg.append(el('text', { x: cols[i] + (i === 1 || i === 2 ? 150 : 0), y: y + 80, class: 'lm-cab', 'text-anchor': i === 1 || i === 2 ? 'end' : 'start' }, t)));
   lista.slice(0, entran).forEach((c, i) => {
     const yy = y + 130 + i * fila;
     if (i % 2 === 0) svg.append(el('rect', { x: x - 8, y: yy - 34, width: w + 8, height: fila, class: 'lm-cebra' }));

@@ -150,7 +150,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   g.append(el('line', { x1: xr, x2: xr, y1: Y(sTop), y2: Y(sBot), class: 'rt-inercia' }));
   // con los dos ejes juntos, el rótulo va debajo de la planta (arriba están los nombres de las piezas)
   // (en el paso 1 va debajo de R, más abajo)
-  if (coinciden && paso !== 1) g.append(el('text', { x: xr + 6, y: Y(-d.S / 2) + 16, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
+  if (coinciden && paso !== 1) g.append(el('text', { x: xr + 8, y: Y(d.Yr) + 22, class: 'd-valor', 'text-anchor': 'start' }, 'los dos ejes coinciden: solo traslación'));
   else if (!coinciden) { const tx = `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`; g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, tx)); ocupar(xr + (derecha ? 4 : -4), Y(sTop) - 4, tx, derecha ? 'start' : 'end'); }
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
@@ -308,19 +308,26 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   if (paso >= 2) {
     // fuerzas: flechas debajo de la planta, sobre la recta de acción de cada tabique, entrando por barlovento
     // escala de fuerzas propia de cada paso (la rotación es chica al lado de la traslación)
-    const Fmax = Math.max(1e-9, ...(paso === 2 ? d.paralelos.map(p => Math.abs(p.tras))
-      : paso === 3 ? [...d.paralelos, ...d.perpendiculares].map(p => Math.abs(p.rot))
-        : d.paralelos.map(p => Math.max(Math.abs(p.tras), Math.abs(p.total)))));
-    const Lmax = abajo - 76;
-    const base = Y(-d.S / 2) + 4;
-    // piezas en la misma recta de acción: flechas una al lado de la otra
+    // lo que mide cada flecha en este paso
+    const medida = (p: ElementoPlano) => (paso === 2 ? Math.abs(p.tras) : paso === 3 ? Math.abs(p.rot) : Math.max(Math.abs(p.tras), Math.abs(p.total)));
+    // piezas en la misma recta de acción: flechas en columna, una debajo de la otra, sobre la misma recta
     const grupos = new Map<string, ElementoPlano[]>();
     d.paralelos.forEach(p => { const kk = p.pos.toFixed(2); grupos.set(kk, [...(grupos.get(kk) ?? []), p]); });
-    const corr = new Map<ElementoPlano, number>();
-    grupos.forEach(ps => { const ws = ps.map(p => Math.max(9, grosor(p.J) * 3) + 4); const tot = ws.reduce((a, b) => a + b, 0); let acc = -tot / 2; ps.forEach((p, i) => { corr.set(p, acc + ws[i] / 2); acc += ws[i]; }); });
+    const SEP = 7;
+    // la escala hace entrar la columna más larga (las fuerzas de una recta, una tras otra)
+    const Fmax = Math.max(1e-9, ...[...grupos.values()].map(ps => ps.reduce((s, p) => s + medida(p), 0)),
+      ...(paso === 3 ? d.perpendiculares.map(p => Math.abs(p.rot)) : []));
+    const Lmax = abajo - 76;
+    const base = Y(-d.S / 2) + 4;
+    const desde = new Map<ElementoPlano, number>();
+    grupos.forEach(ps => { let acc = 0; ps.forEach(p => { desde.set(p, acc); acc += (medida(p) / Fmax) * (Lmax - SEP * (ps.length - 1)) + SEP; }); });
+    const escala = (ps: number) => (Lmax - SEP * (ps - 1)) / Lmax;
     d.paralelos.forEach(p => {
-      const x = X(p.pos) + (corr.get(p) ?? 0), w = grosor(p.J);
-      const L = (f: number) => (Math.abs(f) / Fmax) * Lmax;
+      const nG = grupos.get(p.pos.toFixed(2))!.length;
+      const x = X(p.pos), w = grosor(p.J);
+      const base0 = base;
+      { const base = base0 + (desde.get(p) ?? 0);
+      const L = (f: number) => (Math.abs(f) / Fmax) * Lmax * escala(nG);
       const g2 = el('g', { class: 'rt-flecha', 'data-pieza': p.nombre });
       g2.append(el('title', {}, tip(p)));
       g2.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(d.S / 2), class: 'rt-accion' }));
@@ -338,6 +345,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
         }
       }
       g.append(g2);
+      }
     });
     ocupados.push({ x0: X(0) - 23, x1: X(0) + 23, y: base + Lmax + 14 });
     // rótulos por recta de acción: nombres juntos y el valor (igual para todos o uno por pieza)

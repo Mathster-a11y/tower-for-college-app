@@ -15,6 +15,7 @@ import type { Guia } from '../engine/guias';
 import type { MedidasPieza, TipoPieza } from '../engine/piezasTipo';
 import type { Hoja, Valor } from './tablas';
 import { EXO_POR_DEFECTO, type TipoExo } from '../engine/exo';
+import { IDS_METODO, type IdMetodo } from '../engine/metodos/tipos';
 
 export interface Tabla { nombre: string; filas: Valor[][]; anchos: number[] }
 export const T = {
@@ -41,9 +42,36 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Hormigón', 'tipo de hormigón de los tabiques (H30: σbk = 300 kg/cm²)', p => p.hormigon, (p, v) => (p.hormigon = txt(v))],
   ['Fundación b1 (m)', 'lado de la fundación paralelo al viento A', p => p.fundacion.b1, (p, v) => (p.fundacion.b1 = num(v) ?? 0)],
   ['Fundación a1 (m)', 'lado de la fundación perpendicular al viento A', p => p.fundacion.a1, (p, v) => (p.fundacion.a1 = num(v) ?? 0)],
+  ['σt adm del suelo (kg/cm²)', 'tensión admisible del estudio de suelos (vacío = 2,5, la de la guía)', p => p.fundacion.sigmaAdm ?? null, (p, v) => { const x = num(v); p.fundacion.sigmaAdm = x && x > 0 ? x : null; }],
   ...(['V', 'Kd', 'I', 'zg', 'alfa', 'Kzt', 'G', 'Cpb', 'Cps', 'GCpi'] as const).map(k => [
     k, { V: 'velocidad básica del viento (m/s)', Kd: 'factor de direccionalidad', I: 'factor de importancia', zg: 'zg de la exposición (m)', alfa: 'α de la exposición', Kzt: 'factor topográfico', G: 'factor de ráfaga', Cpb: 'Cp a barlovento', Cps: 'Cp a sotavento', GCpi: 'presión interna GCpi' }[k],
     (p: Proyecto) => p.sitio[k], (p: Proyecto, v: Valor) => { p.sitio[k] = num(v) ?? 0; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  // cómo se calcula (va con el proyecto: el archivo da lo mismo en cualquier computadora). Vacío = la configuración de siempre
+  ['Método', 'método de cálculo: planilla (planilla virgen), guia, cirsoc o fem', p => p.calculo?.metodo ?? null,
+    (p, v) => { const t = norm(v); if (IDS_METODO.includes(t as IdMetodo)) p.calculo = { ...(p.calculo ?? {}), metodo: t as IdMetodo }; }],
+  ['Versión de la planilla', 'anterior o 2025', p => (p.calculo?.version ? (p.calculo.version === 'nuevo' ? '2025' : 'anterior') : null),
+    (p, v) => { const t = norm(v); if (t === '2025' || t === 'anterior') p.calculo = { ...(p.calculo ?? {}), version: t === '2025' ? 'nuevo' : 'actual' }; }],
+  ['Armado de piezas', 'catedra (método simplificado de la cátedra) o app', p => p.calculo?.armado ?? null,
+    (p, v) => { const t = norm(v); if (t === 'catedra' || t === 'app') p.calculo = { ...(p.calculo ?? {}), armado: t }; }],
+  ['Verificación', 'métodos CIRSOC y FEM: simple o completa', p => p.calculo?.verificacion ?? null,
+    (p, v) => { const t = norm(v); if (t === 'simple' || t === 'completa') p.calculo = { ...(p.calculo ?? {}), verificacion: t }; }],
+  ['Piezas del FEM', 'método FEM: timoshenko o euler', p => p.calculo?.teoria ?? null,
+    (p, v) => { const t = norm(v); if (t === 'timoshenko' || t === 'euler') p.calculo = { ...(p.calculo ?? {}), teoria: t }; }],
+  ['Versión de las fórmulas', 'con qué versión de la app se calculó (informativo)', p => p.calculo?.formulas ?? null,
+    (p, v) => { const t = txt(v); if (t) p.calculo = { ...(p.calculo ?? {}), formulas: t }; }],
+  // viento CIRSOC 102-25 y cargas CIRSOC 101-25 (métodos CIRSOC y FEM); vacío = por defecto
+  ...([['ciudad', 'CIRSOC 102: ciudad', 'ciudad de la Fig. 1.5-1D (vacío = la de la V del 102-2005)', 't'],
+    ['Vmanual', 'CIRSOC 102: V a mano (m/s)', 'en lugar de la ciudad', 'n'], ['categoria', 'CIRSOC 102: categoría de riesgo', 'I, II o III-IV', 't'],
+    ['exposicion', 'CIRSOC 102: exposición', 'B, C o D', 't'], ['Kzt', 'CIRSOC 102: Kzt', 'factor topográfico (1 = llano)', 'n'],
+    ['altitud', 'CIRSOC 102: altitud (m)', 'sobre el nivel del mar (Ke)', 'n'], ['cerramiento', 'CIRSOC 102: cerramiento', 'cerrado, parcialmente cerrado, parcialmente abierto o abierto', 't'],
+    ['frecuencia', 'CIRSOC 102: frecuencia', 'tabiques (1.9-5), otros (1.9-4) o manual', 't'], ['n1manual', 'CIRSOC 102: n1 (Hz)', 'frecuencia de un análisis', 'n'],
+    ['beta', 'CIRSOC 102: amortiguamiento', '0,02 = 2 %', 'n'], ['recurrenciaServicio', 'CIRSOC 102: recurrencia de servicio (años)', '5, 10, 25, 50, 100, 200 o 500', 'n'],
+  ] as const).map(([k, rot, desc, t]) => [rot, desc, (p: Proyecto) => (p.cirsoc102?.[k] ?? null) as Valor,
+    (p: Proyecto, v: Valor) => { const x = t === 'n' ? num(v) : txt(v) || null; if (x !== null) p.cirsoc102 = { ...(p.cirsoc102 ?? {}), [k]: x }; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
+  ...([['D', 'CIRSOC 101: D losa (t/m²)', 'carga permanente de la losa', 'n'], ['destino', 'CIRSOC 101: destino', 'vivienda, oficinas u otro', 't'],
+    ['Lmanual', 'CIRSOC 101: L a mano (kN/m²)', 'sobrecarga si el destino es «otro»', 'n'],
+  ] as const).map(([k, rot, desc, t]) => [rot, desc, (p: Proyecto) => (p.cirsoc101?.[k] ?? null) as Valor,
+    (p: Proyecto, v: Valor) => { const x = t === 'n' ? num(v) : txt(v) || null; if (x !== null) p.cirsoc101 = { ...(p.cirsoc101 ?? {}), [k]: x }; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   ['Parapeto (m)', 'parapeto o baranda sobre la última losa: se suma a la altura de influencia de la azotea (vacío = 0)', p => p.sitio.parapeto ?? null, (p, v) => { const x = num(v); if (x && x > 0) p.sitio.parapeto = x; else delete p.sitio.parapeto; }],
   ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil (vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
     (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
@@ -89,7 +117,7 @@ function medLeer(s: string): MedidasPieza {
 }
 
 const CAB_MUROS = ['Muro', 'Dir.', 'x (m)', 'y (m)', 'Largo (m)', 'Espesor (m)', 'Llega', 'Área inf. (m²)', 'Pieza A', 'Pegado a (A)', 'Pieza B', 'Pegado a (B)', 'Tipo', 'Lado y',
-  'Desde', 'Hasta', 'Rol A', 'Rol B', 'Pórtico', 'Grupo', 'Pieza tipo', 'Medidas de la pieza', 'Vano con', 'Vano ancho (m)', 'Vano tipo', 'Grupo de dibujo', 'Ref. componente', 'Espesor en altura', 'Línea de referencia', 'Aberturas'];
+  'Desde', 'Hasta', 'Rol A', 'Rol B', 'Pórtico', 'Grupo', 'Pieza tipo', 'Medidas de la pieza', 'Vano con', 'Vano ancho (m)', 'Vano tipo', 'Grupo de dibujo', 'Ref. componente', 'Espesor en altura', 'Línea de referencia', 'Aberturas', 'Calado (J)'];
 const CAB_CONT = ['Elemento', 'Clase', 'Anillo', 'Nº', 'x (m)', 'y (m)', 'b (arco)', 'c1 x', 'c1 y', 'c2 x', 'c2 y'];
 
 /** las tablas del proyecto, listas para escribir en la planilla o en Google Sheets */
@@ -99,7 +127,7 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   out.push({ nombre: T.proyecto, anchos: [26, 16, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS.map(([k, q, g]) => [k, g(p) ?? null, q] as Valor[]),
     [], ['Estas hojas «T3D …» guardan la torre completa: con ellas la app vuelve a armar el proyecto. Se pueden editar; la app las lee al abrir la planilla.']] });
   out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null])] });
-  out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30, 12, 34], filas: [CAB_MUROS, ...p.muros.map(m => [
+  out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30, 12, 34, 10], filas: [CAB_MUROS, ...p.muros.map(m => [
     m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? SI : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
     TIPO_TXT[m.tipo ?? 'tabique'], m.tipo === 'tubo-rect' ? m.ladoY ?? null : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta),
     m.rolA || null, m.rolB || null, b2s(m.portico), m.grupo ?? null, m.pieza?.tipo ?? null, m.pieza ? medTxt(m.pieza.med) : null,
@@ -110,6 +138,8 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
     m.refLado === 1 ? 'cara +' : m.refLado === -1 ? 'cara −' : null,
     // «s ancho×alto desde h [cara]; …» (s: posición sobre el eje, la cara o el ángulo del tubo)
     m.aberturas?.length ? m.aberturas.map(a => `${String(a.s).replace('.', ',')} ${String(a.ancho).replace('.', ',')}x${String(a.alto).replace('.', ',')} desde ${String(a.desde).replace('.', ',')}${a.cara ? ` ${a.cara}` : ''}`).join('; ') : null,
+    // calado: «corte» (la sección más débil va a la hoja J); vacío = entero (como la cátedra)
+    m.caladoJ === 'corte' ? 'corte' : null,
   ] as Valor[])] });
   const cont: Valor[][] = [CAB_CONT];
   const vert = (el: string, clase: string, anillo: number, v: { x: number; y: number; b?: number; c1?: { x: number; y: number }; c2?: { x: number; y: number } }[]) =>
@@ -210,6 +240,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
       }).filter(Boolean) as NonNullable<Muro['aberturas']>;
       if (ab.length) m.aberturas = ab;
     }
+    if (norm(g('Calado (J)')).startsWith('corte')) m.caladoJ = 'corte';
     return m;
   });
   // contornos

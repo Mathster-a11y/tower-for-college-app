@@ -11,7 +11,7 @@ import type { Camino, Muro, Proyecto, Ubicacion } from './modelo';
 import { cajaMuro, tipoDe } from './modelo';
 import { agruparNodos, copiarNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
 import type { Punto } from './silueta';
-import { polilinea, desdeEje, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
+import { polilinea, propiedades, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export type Seleccion = { m: string[]; g: string[] };
@@ -225,6 +225,20 @@ export function unirCaminos(cs: Camino[], tol = 0.01): { v: Camino['v']; cerrado
   return { v: v.map(q => ({ x: r4(q.x), y: r4(q.y), ...(q.b ? { b: q.b } : {}), ...(q.c1 ? { c1: q.c1, c2: q.c2 } : {}) })), cerrado };
 }
 
+/** dirección (unitaria) con la que termina un camino abierto, o null si tiene un solo punto */
+export function tangenteFinal(v: Camino['v']): Punto | null {
+  const n = v.length; if (n < 2) return null;
+  const a = v[n - 2], b = v[n - 1];
+  if (a.c1 && a.c2) { const dx = b.x - a.c2.x, dy = b.y - a.c2.y, L = Math.hypot(dx, dy); if (L > 1e-9) return { x: dx / L, y: dy / L }; }
+  const th = 4 * Math.atan(a.b ?? 0), dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy); if (L < 1e-9) return null;
+  const c = Math.cos(th / 2), s = Math.sin(th / 2);
+  return { x: (dx * c - dy * s) / L, y: (dx * s + dy * c) / L };
+}
+/** bulge del arco que sale de a con la dirección t (tangente al tramo anterior) y llega a b */
+export function bulgeTangente(t: Punto, a: Punto, b: Punto): number {
+  const dx = b.x - a.x, dy = b.y - a.y, phi = Math.atan2(t.x * dy - t.y * dx, t.x * dx + t.y * dy);
+  return Math.abs(Math.abs(phi) - Math.PI) < 1e-6 ? 0 : Math.tan(phi / 2);
+}
 /** bulge del arco que va de a a b pasando por m (b = tan(θ/4), θ con signo) */
 export function bulgeTresPuntos(a: Punto, m: Punto, b: Punto): number {
   const ax = a.x - m.x, ay = a.y - m.y, bx = b.x - m.x, by = b.y - m.y;
@@ -332,11 +346,96 @@ export function perfilDesdeCamino(p: Proyecto, c: Camino, gd?: string): { id: st
   p.muros.push(m);
   return { id: m.id };
 }
-/** muro (perfil) de espesor e a lo largo de un camino abierto: el eje es el camino */
-export function muroSobreCamino(p: Proyecto, c: Camino, e: number, gd?: string): { id: string } | { error: string } {
-  if (c.cerrado) return { error: 'Para un muro sobre el camino, el camino tiene que estar abierto.' };
-  const pf = desdeEje(puntosCamino(c, 3), e);
-  if (!pf) return { error: 'No se pudo armar el muro (espesor o camino inválidos).' };
+/** justificación de un muro sobre un camino: el camino es la cara izquierda, el eje o la cara derecha del muro */
+export type Justificacion = 'izq' | 'eje' | 'der';
+export interface Tramo { a: Punto; b: Punto; bulge: number }
+const tangIni = (t: Tramo) => { const th = 4 * Math.atan(t.bulge), dx = t.b.x - t.a.x, dy = t.b.y - t.a.y, L = Math.hypot(dx, dy) || 1, c = Math.cos(-th / 2), s = Math.sin(-th / 2); return { x: (dx * c - dy * s) / L, y: (dx * s + dy * c) / L }; };
+const tangFin = (t: Tramo) => { const th = 4 * Math.atan(t.bulge), dx = t.b.x - t.a.x, dy = t.b.y - t.a.y, L = Math.hypot(dx, dy) || 1, c = Math.cos(th / 2), s = Math.sin(th / 2); return { x: (dx * c - dy * s) / L, y: (dx * s + dy * c) / L }; };
+/** tramos del camino: rectas y arcos; las Bézier se parten en rectas */
+export function tramosDe(v: Camino['v'], cerrado: boolean): Tramo[] {
+  const n = v.length, out: Tramo[] = [];
+  for (let i = 0; i < (cerrado ? n : n - 1); i++) {
+    const a = v[i], b = v[(i + 1) % n];
+    if (a.c1 && a.c2) { const pts = polilinea([{ x: a.x, y: a.y, c1: a.c1, c2: a.c2 }, { x: b.x, y: b.y }], 3, 24).slice(0, 24); pts.push({ x: b.x, y: b.y }); for (let k = 1; k < pts.length; k++) out.push({ a: pts[k - 1], b: pts[k], bulge: 0 }); }
+    else if (Math.hypot(b.x - a.x, b.y - a.y) > 1e-9) out.push({ a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, bulge: a.b ?? 0 });
+  }
+  return out;
+}
+/** un arco partido en rectas de a lo sumo 3° */
+function partirArco(t: Tramo): Tramo[] {
+  const pts = polilinea([{ x: t.a.x, y: t.a.y, b: t.bulge }, { x: t.b.x, y: t.b.y }], 3).slice(0, -1);
+  pts.push({ x: t.b.x, y: t.b.y });
+  return pts.slice(1).map((q, k) => ({ a: pts[k], b: q, bulge: 0 }));
+}
+/**
+ * Curva paralela al camino a la distancia d (positiva hacia la izquierda del sentido de avance). Los arcos siguen
+ * siendo arcos (mismo centro y mismo ángulo, radio ± d), las rectas se cortan en inglete. Si un arco no llega
+ * tangente a su vecino, se parte en rectas cortas para poder cortarlo en inglete.
+ */
+export function paralelaTramos(ts: Tramo[], d: number, cerrado: boolean): { v: Camino['v'] } | { error: string } {
+  const n = ts.length, tangente = (i: number, j: number) => { const u = tangFin(ts[i]), w = tangIni(ts[j]); return Math.abs(u.x * w.y - u.y * w.x) < 2e-3 && u.x * w.x + u.y * w.y > 0; };
+  const izq = (t: Punto) => ({ x: -t.y, y: t.x });
+  const ini: Punto[] = [], fin: Punto[] = [];
+  for (const t of ts) {
+    const ni = izq(tangIni(t)), nf = izq(tangFin(t));
+    ini.push({ x: t.a.x + ni.x * d, y: t.a.y + ni.y * d });
+    fin.push({ x: t.b.x + nf.x * d, y: t.b.y + nf.y * d });
+    if (t.bulge) {
+      // radio del arco paralelo: el centro queda a la izquierda si el arco gira en sentido antihorario
+      const th = 4 * Math.atan(t.bulge), c = Math.hypot(t.b.x - t.a.x, t.b.y - t.a.y), R = c / (2 * Math.abs(Math.sin(th / 2)));
+      const Rn = R - Math.sign(th) * d;
+      if (Rn < 1e-4) return { error: `El espesor no entra en una curva de radio ${R.toFixed(2).replace('.', ',')} m: el muro se cerraría sobre sí mismo.` };
+    }
+  }
+  const pts: Punto[] = [];
+  const unir = (i: number, j: number): Punto => {
+    if (tangente(i, j)) return { x: (fin[i].x + ini[j].x) / 2, y: (fin[i].y + ini[j].y) / 2 };
+    // inglete: corte de las dos rectas paralelas
+    const p1 = fin[i], u = tangFin(ts[i]), p2 = ini[j], w = tangIni(ts[j]), den = u.x * w.y - u.y * w.x;
+    if (Math.abs(den) < 1e-9) return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    const s = ((p2.x - p1.x) * w.y - (p2.y - p1.y) * w.x) / den;
+    return { x: p1.x + u.x * s, y: p1.y + u.y * s };
+  };
+  for (let i = 0; i < n; i++) pts.push(i === 0 ? (cerrado ? unir(n - 1, 0) : ini[0]) : unir(i - 1, i));
+  if (!cerrado) pts.push(fin[n - 1]);
+  return { v: pts.map((q, i) => ({ x: r4(q.x), y: r4(q.y), ...(i < n && ts[i].bulge ? { b: ts[i].bulge } : {}) })) };
+}
+/** tramos listos para desfasar: los arcos que no llegan tangentes a una esquina se parten en rectas cortas */
+export function tramosListos(v: Camino['v'], cerrado: boolean): Tramo[] {
+  const ts = tramosDe(v, cerrado), n0 = ts.length;
+  const tg = (i: number, j: number) => { const u = tangFin(ts[i]), w = tangIni(ts[j]); return Math.abs(u.x * w.y - u.y * w.x) < 2e-3 && u.x * w.x + u.y * w.y > 0; };
+  const partir = ts.map((t, i) => !!t.bulge && (((i > 0 || cerrado) && !tg((i - 1 + n0) % n0, i)) || ((i < n0 - 1 || cerrado) && !tg(i, (i + 1) % n0))));
+  return ts.flatMap((t, i) => (partir[i] ? partirArco(t) : [t]));
+}
+/**
+ * Perfil de un muro de espesor e que sigue un camino (rectas, arcos y Bézier). Con «just» el camino es la cara
+ * izquierda del muro (el muro queda a su izquierda), el eje o la cara derecha. Abierto: los extremos se cierran en
+ * recto. Cerrado: queda un anillo (perfil con hueco). Los arcos quedan exactos.
+ */
+export function perfilSobreCamino(c: Pick<Camino, 'v' | 'cerrado'>, e: number, just: Justificacion = 'eje'): import('./perfil').Perfil | { error: string } {
+  if (!(e > 0)) return { error: 'El espesor tiene que ser mayor que cero.' };
+  const ts = tramosListos(c.v, c.cerrado);
+  if (!ts.length) return { error: 'El camino necesita al menos dos puntos.' };
+  const dI = just === 'izq' ? e : just === 'eje' ? e / 2 : 0, dD = dI - e;
+  const L = dI ? paralelaTramos(ts, dI, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
+  const R = dD ? paralelaTramos(ts, dD, c.cerrado) : { v: paralelaCero(ts, c.cerrado) };
+  if ('error' in L) return L;
+  if ('error' in R) return R;
+  if (c.cerrado) {
+    const aL = Math.abs(propiedades({ v: L.v }).A), aR = Math.abs(propiedades({ v: R.v }).A);
+    return aL >= aR ? { v: L.v, huecos: [R.v] } : { v: R.v, huecos: [L.v] };
+  }
+  // cara derecha de ida, cara izquierda de vuelta (los arcos de vuelta cambian de signo y pasan al vértice anterior)
+  const m = L.v.length, vuelta = L.v.map((_q, i) => { const q = L.v[m - 1 - i], prev = L.v[m - 2 - i]; return { x: q.x, y: q.y, ...(i < m - 1 && prev.b ? { b: -prev.b } : {}) }; });
+  const v = [...R.v.map((q, i) => (i === R.v.length - 1 ? { x: q.x, y: q.y } : q)), ...vuelta.map((q, i) => (i === vuelta.length - 1 ? { x: q.x, y: q.y } : q))];
+  return { v: v.filter((q, i) => { const s = v[(i + 1) % v.length]; return Math.hypot(q.x - s.x, q.y - s.y) > 1e-5; }) };
+}
+const paralelaCero = (ts: Tramo[], cerrado: boolean): Camino['v'] => [...ts.map(t => ({ x: r4(t.a.x), y: r4(t.a.y), ...(t.bulge ? { b: t.bulge } : {}) })), ...(cerrado ? [] : [{ x: r4(ts[ts.length - 1].b.x), y: r4(ts[ts.length - 1].b.y) }])];
+/** muro (perfil) de espesor e a lo largo de un camino, con el camino como cara izquierda, eje o cara derecha */
+export function muroSobreCamino(p: Proyecto, c: Camino, e: number, gd?: string, just: Justificacion = 'eje'): { id: string } | { error: string } {
+  const pf = perfilSobreCamino(c, e, just);
+  if ('error' in pf) return pf;
+  if (Math.abs(propiedades(pf).A) < 1e-6) return { error: 'No se pudo armar el muro (espesor o camino inválidos).' };
   const m = muroPerfil(p, pf, gd);
   p.muros.push(m);
   return { id: m.id };

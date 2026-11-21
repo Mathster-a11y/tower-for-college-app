@@ -67,6 +67,8 @@ export interface ExoDef {
   cuartos?: boolean;
   /** ficha E: la columna de esquina termina un piso abajo del nudo del tope de cada módulo (no llega a la esquina) */
   esquinaCortada?: boolean;
+  /** tubos sin costura (CIRSOC 302, Tabla 2.2.1: límites de la pared un poco más amplios); por defecto, con costura */
+  sinCostura?: boolean;
   /** cambios barra por barra, por el id de la barra (se borran si cambia la ficha o el módulo) */
   barras?: Record<string, CambioBarra>;
   /** barras agregadas a mano entre dos nudos de la cara (s, z en m); su id es N1, N2… */
@@ -726,7 +728,7 @@ export interface FilaCuarto { z: number; NA: number; NB: number; N45: number; ra
  * partes. Se toma la peor esquina (los dos vientos con el signo que suma) y |N| de la columna de esquina más cargada
  * de cada tramo. razon = N45 / máx(NA, NB): 1,41 si las dos caras tiran igual.
  */
-export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo): FilaCuarto[] {
+export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo, factor = Math.SQRT1_2): FilaCuarto[] {
   const esquinas = (r: ResultadoExo) => {
     const m = new Map<number, number>();
     r.caras.forEach(c => {
@@ -740,7 +742,7 @@ export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo): FilaCuarto[]
     });
     return m;
   };
-  const a = esquinas(rA), b = esquinas(rB), c45 = Math.SQRT1_2;
+  const a = esquinas(rA), b = esquinas(rB), c45 = factor;
   return [...a.keys()].filter(z => b.has(z)).sort((x, y) => x - y).map(z => {
     const NA = a.get(z)!, NB = b.get(z)!, N45 = c45 * (NA + NB);
     return { z, NA, NB, N45, razon: Math.max(NA, NB) > 1e-9 ? N45 / Math.max(NA, NB) : 0 };
@@ -760,8 +762,64 @@ export interface Cirsoc301Barra {
   lambdaC: number; bt: number;
   /** interacción (H1-1a o H1-1b): ≤ 1 verifica */
   ratio: number; ecuacion: 'H1-1a' | 'H1-1b';
+  /** combinación que manda */
+  combinacion: string;
+  /** pared del tubo (CIRSOC 302, Tabla 2.2.1): compacta, no compacta o esbelta (en flexión y en compresión) */
+  pared: 'compacta' | 'no compacta' | 'esbelta';
   verifica: boolean;
 }
+/**
+ * combinación de cargas para las barras del exo: D = peso propio, W = viento. Con «otro», un viento oblicuo
+ * (quartering): la cara toma la fracción W de su viento de frente y las columnas de esquina, además, «otro» del
+ * viento perpendicular (son de las dos caras).
+ */
+export interface CombExo { nombre: string; D: number; W: number; otro?: number }
+/** la del curso (viento de servicio del 102-2005): 1,2·D + 1,6·W */
+export const COMBOS_CURSO: CombExo[] = [{ nombre: '1,2 D + 1,6 W', D: 1.2, W: 1.6 }];
+/** CIRSOC 101-25 con el viento de resistencia del 102-25 (1,0 W): 1,4 D; 1,2 D + 1,0 W; 0,9 D + 1,0 W */
+export const COMBOS_101_25: CombExo[] = [{ nombre: '1,4 D', D: 1.4, W: 0 }, { nombre: '1,2 D + 1,0 W', D: 1.2, W: 1 }, { nombre: '0,9 D + 1,0 W', D: 0.9, W: 1 }];
+/**
+ * vientos oblicuos del 102-25 (Fig. 2.4-8): caso 3, 75 % de los dos vientos a la vez; caso 4, 56,3 % de los dos (con
+ * sus torsiones, que el modelo plano de las caras no toma)
+ */
+export const COMBOS_OBLICUOS_101_25: CombExo[] = [
+  { nombre: '1,2 D + 1,0 W · caso 3 (0,75 A + 0,75 B)', D: 1.2, W: 0.75, otro: 0.75 }, { nombre: '0,9 D + 1,0 W · caso 3 (0,75 A + 0,75 B)', D: 0.9, W: 0.75, otro: 0.75 },
+  { nombre: '1,2 D + 1,0 W · caso 4 (0,563 A + 0,563 B)', D: 1.2, W: 0.563, otro: 0.563 },
+];
+/** el del curso: viento a 45°, cada cara con cos 45° de su viento de frente (como se revisó el Citicorp en 1978) */
+export const COMBOS_OBLICUOS_CURSO: CombExo[] = [{ nombre: '1,2 D + 1,6 W · a 45° (0,71 A + 0,71 B)', D: 1.2, W: 1.6 * Math.SQRT1_2, otro: 1.6 * Math.SQRT1_2 }];
+
+/**
+ * esfuerzos de las columnas de esquina con el viento perpendicular, por altura: el mayor |N| y |M| de las columnas de
+ * esquina de cada tramo (la peor esquina, con el viento en el sentido que suma)
+ */
+export function esquinasPorAltura(r: ResultadoExo): Map<number, { N: number; M: number }> {
+  const m = new Map<number, { N: number; M: number }>();
+  r.caras.forEach(c => {
+    const cols = c.esfuerzos.filter(e => e.clase === 'columna' && (e.fraccion ?? 1) === 1 && Math.abs(e.a.s) > 1e-6);
+    cols.forEach(e => {
+      const zb = Math.min(e.a.z, e.b.z), sMax = Math.max(...cols.filter(x => Math.abs(Math.min(x.a.z, x.b.z) - zb) < 1e-6).map(x => Math.abs(x.a.s)));
+      if (Math.abs(Math.abs(e.a.s) - sMax) > 1e-6) return;
+      const k = Math.round(zb * 1000) / 1000, prev = m.get(k) ?? { N: 0, M: 0 };
+      let Mmax = 0; for (let i = 0; i <= 20; i++) Mmax = Math.max(Mmax, Math.abs(esfuerzosEn(e, i / 20).M));
+      m.set(k, { N: Math.max(prev.N, Math.abs(e.N)), M: Math.max(prev.M, Mmax) });
+    });
+  });
+  return m;
+}
+/** ¿es columna de esquina? (la misma regla que esquinasPorAltura) */
+function esColumnaEsquina(c: { esfuerzos: EsfuerzoBarra[] }, e: EsfuerzoBarra): boolean {
+  if (e.clase !== 'columna' || (e.fraccion ?? 1) !== 1 || Math.abs(e.a.s) <= 1e-6) return false;
+  const zb = Math.min(e.a.z, e.b.z);
+  const sMax = Math.max(...c.esfuerzos.filter(x => x.clase === 'columna' && (x.fraccion ?? 1) === 1 && Math.abs(Math.min(x.a.z, x.b.z) - zb) < 1e-6).map(x => Math.abs(x.a.s)));
+  return Math.abs(Math.abs(e.a.s) - sMax) <= 1e-6;
+}
+/**
+ * CIRSOC 302 (Tabla 2.2.1): límites de la relación ancho-espesor de la pared de un tubo rectangular. Con costura
+ * (los tubos estructurales soldados, lo común): λp = 1,05 √(E/Fy) en flexión, λr = 1,30 √(E/Fy); sin costura:
+ * 1,12 y 1,40.
+ */
+export const limitesPared = (E: number, Fy: number, costura = true) => { const k = Math.sqrt(E / Fy); return costura ? { lp: 1.05 * k, lr: 1.3 * k } : { lp: 1.12 * k, lr: 1.4 * k }; };
 /**
  * Verificación de las barras de acero con el CIRSOC 301 (2005, método LRFD, el de la AISC):
  *  - combinación 1,2·D + 1,6·W (D: peso propio del exo; W: el viento de la planilla). Se calculan aparte, con el mismo
@@ -772,37 +830,54 @@ export interface Cirsoc301Barra {
  *  - interacción (capítulo H): Pu/φPn ≥ 0,2 → Pu/φPn + 8/9·Mu/φbMn ≤ 1; si no, Pu/(2φPn) + Mu/φbMn ≤ 1.
  *  - pared del tubo: b/t ≤ 1,40·√(E/Fy) (si no, la pared abolla antes: se avisa como que no verifica).
  */
-export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24): Cirsoc301Barra[] {
+export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24,
+  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo } = {}): Cirsoc301Barra[] {
+  const combos = (op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
   const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos);
+  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos)) : null;
   const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos);
   const out: Cirsoc301Barra[] = [];
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
     const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id);
     if (!eD) return;
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
-    let Pc = 0, Pt = 0, Mu = 0, MuC = 0, MuT = 0;
-    for (let i = 0; i <= 20; i++) {
-      const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20);
-      for (const sg of [1, -1]) {
-        const N = 1.2 * fd.N + 1.6 * sg * fw.N, M = Math.abs(1.2 * fd.M + 1.6 * sg * fw.M);
+    const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
+    const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f, S = p.W * f;
+    const lambdaC = (eW.L / (r * Math.PI)) * Math.sqrt(Fy / def.E);
+    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
+    // pared del tubo (CIRSOC 302, Tabla 2.2.1). La pieza equivalente de la base (Citicorp: la supercolumna son cuatro
+    // barras en las esquinas de un cuadrado de 7,3 m) y las barras macizas no son tubos de pared delgada.
+    const equivalente = (!!def.mastilBase && s === def.mastilBase.sec) || s.e >= s.b / 2 - 1e-9;
+    const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, op.costura ?? true);
+    const pared: Cirsoc301Barra['pared'] = equivalente || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
+    // flexión: compacta Mn = Mp = Z·Fy; no compacta, entre Mp y Mr = Fy·S según λ (302, cap. 3)
+    const Mp = Z * Fy, Mr = S * Fy;
+    const Mn = pared === 'compacta' ? Mp : pared === 'no compacta' ? Mp - (Mp - Mr) * ((bt - lim.lp) / (lim.lr - lim.lp)) : Mr;
+    const phiPc = 0.85 * Fcr * A, phiPt = 0.9 * Fy * A, phiMn = 0.9 * Mn;
+    const inter = (P: number, phiP: number, M: number) => { const q = phiP > 0 ? P / phiP : Infinity; return q >= 0.2 ? { v: q + (8 / 9) * (M / phiMn), e: 'H1-1a' as const } : { v: q / 2 + M / phiMn, e: 'H1-1b' as const }; };
+    // cada combinación, con el viento de los dos lados, en 21 puntos de la barra
+    let peor = { v: -1, e: 'H1-1b' as 'H1-1a' | 'H1-1b', comb: '' }, PuPeor = 0, MuMax = 0;
+    // viento oblicuo: solo cambia las columnas de esquina (las demás barras toman una fracción de su viento de frente)
+    const esquina = esqOtro && esColumnaEsquina(c, eW);
+    const otro = esquina ? esqOtro!.get(Math.round(Math.min(eW.a.z, eW.b.z) * 1000) / 1000) ?? null : null;
+    for (const cb of combos) for (const sg of cb.W ? [1, -1] : [1]) {
+      if (cb.otro && !otro) continue;
+      let Pc = 0, Pt = 0, Mu = 0, MuC = 0, MuT = 0;
+      for (let i = 0; i <= 20; i++) {
+        const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20);
+        // la parte del viento perpendicular suma con el mismo signo (la peor esquina); la flexión de la otra cara se suma
+        // (flexión en los dos planos de un tubo cuadrado, del lado seguro)
+        const Nw = sg * fw.N, extraN = cb.otro && otro ? cb.otro * otro.N * (Nw >= 0 ? 1 : -1) : 0;
+        const N = cb.D * fd.N + cb.W * Nw + extraN, M = Math.abs(cb.D * fd.M + cb.W * sg * fw.M) + (cb.otro && otro ? cb.otro * otro.M : 0);
         if (-N > Pc) { Pc = -N; MuC = M; } else if (-N === Pc) MuC = Math.max(MuC, M);
         if (N > Pt) { Pt = N; MuT = M; } else if (N === Pt) MuT = Math.max(MuT, M);
         Mu = Math.max(Mu, M);
       }
+      MuMax = Math.max(MuMax, Mu);
+      for (const x of [inter(Pc, phiPc, MuC), inter(Pt, phiPt, MuT), { v: Mu / phiMn, e: 'H1-1b' as const }]) if (x.v > peor.v) { peor = { ...x, comb: cb.nombre }; PuPeor = Pc >= Pt ? -Pc : Pt; }
     }
-    const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
-    const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f;
-    const lambdaC = (eW.L / (r * Math.PI)) * Math.sqrt(Fy / def.E);
-    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
-    const phiPc = 0.85 * Fcr * A, phiPt = 0.9 * Fy * A, phiMn = 0.9 * Z * Fy;
-    const inter = (P: number, phiP: number, M: number) => { const q = phiP > 0 ? P / phiP : Infinity; return q >= 0.2 ? { v: q + (8 / 9) * (M / phiMn), e: 'H1-1a' as const } : { v: q / 2 + M / phiMn, e: 'H1-1b' as const }; };
-    const ic1 = inter(Pc, phiPc, MuC), it1 = inter(Pt, phiPt, MuT), soloM = Mu / phiMn;
-    const peor = [ic1, it1, { v: soloM, e: 'H1-1b' as const }].reduce((m, x) => (x.v > m.v ? x : m));
-    // la pieza equivalente de la base (Citicorp: la supercolumna son cuatro barras en las esquinas de un cuadrado de 7,3 m)
-    // no es un tubo de pared delgada: no se le mira la abolladura de la pared
-    const equivalente = !!def.mastilBase && s === def.mastilBase.sec;
-    const bt = s.e > 0 ? bi / s.e : Infinity, compacta = equivalente || bt <= 1.4 * Math.sqrt(def.E / Fy) || s.e >= s.b / 2 - 1e-9;
-    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: Pc >= Pt ? -Pc : Pt, Mu, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, verifica: peor.v <= 1 && compacta });
+    // una pared esbelta abolla antes de llegar a la resistencia: no verifica (habría que reducir el área, 302 apéndice)
+    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
   }));
   return out;
 }

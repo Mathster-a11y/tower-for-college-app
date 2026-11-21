@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ecuaciones de cada método</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;
+  --pla:#a8650a;--plaf:#fdf0dc;--gui:#6a3d9a;--guif:#efe7f7;--cir:#1a6bbd;--cirf:#dbe8f6;--fem:#1d8a68;--femf:#e0f3ec;--flu:#0f6e8c;--fluf:#dff1f6;
+  --trac:#e24b4a;--comp:#378add;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;--mal:#c62828;--malf:#fbe9e9}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.5 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1040px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:18px;margin:38px 0 8px;padding-top:12px;border-top:3px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 7px;border-radius:15px;background:var(--acc);color:#fff;font-size:13px;font-weight:700}
+h2.pla{border-color:var(--pla)}h2.pla .n{background:var(--pla)}h2.gui{border-color:var(--gui)}h2.gui .n{background:var(--gui)}
+h2.cir{border-color:var(--cir)}h2.cir .n{background:var(--cir)}h2.fem{border-color:var(--fem)}h2.fem .n{background:var(--fem)}h2.flu{border-color:var(--flu)}h2.flu .n{background:var(--flu)}
+h3{font-size:14px;margin:18px 0 6px;break-after:avoid}
+p{margin:6px 0}ul{margin:6px 0 6px 20px;padding:0}li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;break-inside:avoid}
+.gris{background:var(--panel);border-color:transparent}
+.nota{color:var(--ink2);font-size:12.5px}
+.aviso{border-left:4px solid var(--warn);background:var(--warnf);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+/* cuadro esquemático: una columna de pasos unidos por flechas; en cada paso, la ecuación y el ejemplo */
+.flujo{position:relative;margin:12px 0 4px}
+.paso{display:grid;grid-template-columns:38px 1fr 300px;border:1px solid var(--edge);border-radius:8px;background:#fff;break-inside:avoid;overflow:hidden}
+.paso + .paso{margin-top:22px;position:relative}
+.paso + .paso::before{content:'';position:absolute;left:18px;top:-22px;width:2px;height:22px;background:var(--dim)}
+.paso + .paso::after{content:'';position:absolute;left:13px;top:-8px;border:6px solid transparent;border-top:8px solid var(--dim)}
+.paso .num{display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-weight:700;color:#fff}
+.paso .eq{padding:9px 12px}
+.paso .eq b{display:block;font-size:13px;margin-bottom:3px}
+.paso .eq .f{font-family:'STIX Two Math','Cambria Math','Latin Modern Math',Georgia,serif;font-size:14.5px;line-height:1.55;margin:1px 0}
+.paso .eq .f small{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11.5px;color:var(--ink2)}
+.paso .ej{padding:9px 12px;font-size:12.5px;border-left:1px dashed var(--edge)}
+.paso .ej .t{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:2px}
+.paso .ej .v{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
+.pla .num{background:var(--pla)}.pla .ej{background:var(--plaf)}.gui .num{background:var(--gui)}.gui .ej{background:var(--guif)}
+.cir .num{background:var(--cir)}.cir .ej{background:var(--cirf)}.fem .num{background:var(--fem)}.fem .ej{background:var(--femf)}.flu .num{background:var(--flu)}.flu .ej{background:var(--fluf)}
+.fuente{display:inline-block;font-size:10.5px;color:var(--ink2);background:var(--panel);border-radius:999px;padding:0 7px;margin-left:6px;font-weight:400}
+.ver{color:var(--ok);font-weight:600}.nover{color:var(--mal);font-weight:600}.aten{color:var(--warn);font-weight:600}
+@media (max-width:760px){.paso{grid-template-columns:30px 1fr}.paso .ej{grid-column:2;border-left:none;border-top:1px dashed var(--edge)}.pag{padding:20px 16px 40px}}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:5px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+td.n{text-align:right;font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;white-space:nowrap}
+th.pla{background:var(--plaf);color:var(--pla)}th.gui{background:var(--guif);color:var(--gui)}th.cir{background:var(--cirf);color:var(--cir)}th.fem{background:var(--femf);color:var(--fem)}
+tr.capa td{background:#fafaf9;font-weight:600;color:var(--ink2);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.barras{display:grid;grid-template-columns:80px 1fr 70px;gap:4px 8px;align-items:center;font-size:12px;margin:8px 0}
+.barras i{display:block;height:12px;border-radius:3px}
+.pie{margin-top:40px;padding-top:10px;border-top:1px solid var(--hair);color:var(--dim);font-size:11.5px}
+@media print{body{font-size:12px}.pag{max-width:none;padding:0}h2{break-before:auto}}
+@page{size:A4;margin:13mm 11mm}
+</style>
+</head>
+<body><div class="pag">
+
+<h1>Ecuaciones de cada método, paso a paso</h1>
+<p class="sub">Torre 3D · cuadros esquemáticos de los cinco sistemas (Planilla, Guía, CIRSOC, FEM y flujo de viento), explicados con el ejemplo de la guía «Edificio en torre» 2024 (Neuquén, 20 pisos, 20 × 16 m, H30) y comparados entre sí · noviembre 2026</p>
+
+<div class="tarjeta gris">
+<b>Cómo leer los cuadros.</b> Cada método es una columna de pasos unidos por flechas: cada paso usa lo que sale del anterior.
+A la izquierda va la ecuación con su fuente; a la derecha, el número que da la app con el ejemplo de la guía, viento A
+(sobre la cara mayor, B = 20 m). Todos los números salen de la app (los mismos que los Excel de cada método); la
+comparación final explica de dónde vienen las diferencias.
+<br><span class="nota">Bibliografía: guía «Edificio en torre» 2024 (cátedra), guía de viento con el CIRSOC 102-2005, CIRSOC 101-25 y 102-25 (con comentarios), CIRSOC 201-2005 (cap. 9, 10, 11 y 14), CIRSOC 301 y 302 (acero), CIRSOC 401 (suelos). Unidades: t, m, kg/cm² como la cátedra; el CIRSOC en N y MPa adentro de sus fórmulas.</span>
+</div>
+
+<h3>Lo que tienen en común</h3>
+<p>Los cuatro métodos estructurales resuelven la misma cadena: <b>viento → fuerzas por nivel → estabilidad → rigidez → reparto entre piezas → verificación de cada pieza</b>. Cambian las reglas de cada eslabón: qué reglamento de viento, cómo se calcula la rigidez, cómo se reparte la fuerza y con qué criterio se verifica. El quinto sistema, el flujo de viento, no es un método de cálculo: es una simulación para ver y entender de dónde vienen las presiones.</p>
+
+<!-- =============================================================================================== PLANILLA -->
+<h2 class="pla"><span class="n">1</span>Planilla de la cátedra (CIRSOC 102-2005, tensiones admisibles)</h2>
+<p>La planilla virgen: siete hojas de la cátedra, la torre como una ménsula y cada pieza llevada a un «molde» (rectángulo, T, doble T) para el J. Es el método que se entrega.</p>
+<div class="flujo pla">
+  <div class="paso"><div class="num">1</div><div class="eq"><b>Datos <span class="fuente">hoja «viento»</span></b>
+    <div class="f">B, L, h, cotas de los niveles · V (Fig. 1) · Kd = 0,85 · I (Tabla 1) · exposición · Kzt</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">V = 48 m/s (Neuquén) · I = 1 · B × L = 20 × 16 m · 20 pisos · h = 64 m sobre PB</div></div></div>
+  <div class="paso"><div class="num">2</div><div class="eq"><b>Presión del viento <span class="fuente">102-2005, procedimiento analítico</span></b>
+    <div class="f">K<sub>z</sub> = 2,01 · (z / z<sub>g</sub>)<sup>2/α</sup></div>
+    <div class="f">q<sub>z</sub> = 0,613 · K<sub>z</sub> · K<sub>zt</sub> · K<sub>d</sub> · V² · I &nbsp;[N/m²]</div>
+    <div class="f">p<sub>barlovento</sub> = q<sub>z</sub> · G · C<sub>p</sub> &nbsp;(C<sub>p</sub> = 0,8) &nbsp;·&nbsp; p<sub>sotavento</sub> = q<sub>h</sub> · G · C<sub>p</sub>(L/B) &nbsp;·&nbsp; G = 0,85</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">en la azotea q<sub>z</sub> ≈ 1,2 kN/m² · neta ≈ 1,4 kN/m² (barlovento + sotavento)</div></div></div>
+  <div class="paso"><div class="num">3</div><div class="eq"><b>Fuerzas, corte y momento <span class="fuente">hoja «M,NyQ»</span></b>
+    <div class="f">W<sub>i</sub> = (p<sub>b</sub> − p<sub>s</sub>) · B · h<sub>inf,i</sub> &nbsp;·&nbsp; Q(z) = Σ<sub>j≥i</sub> W<sub>j</sub> &nbsp;·&nbsp; M(z) = Σ W<sub>j</sub> (z<sub>j</sub> − z)</div>
+    <div class="f">h<sub>w</sub> = M<sub>v</sub> / W &nbsp;<small>(altura de la resultante)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">W = 129,5 t · Q en PB = 125,8 t<br>M en PB = 4.466 tm · Mv en la fundación = 5.503 tm</div></div></div>
+  <div class="paso"><div class="num">4</div><div class="eq"><b>Estabilidad <span class="fuente">hoja «M,NyQ»</span></b>
+    <div class="f">M<sub>e</sub> = P · b′ / 2 ≥ 1,5 · M<sub>v</sub> &nbsp;·&nbsp; e = M<sub>v</sub> / P ≤ b / 6</div>
+    <div class="f">σ<sub>suelo</sub> = N / (a·b) · (1 ± 6e / b) ≤ σ<sub>adm</sub></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">Me / Mv = 8,97 <span class="ver">≥ 1,5</span><br>e = 1,00 m <span class="ver">≤ b/6 = 3,00 m</span></div></div></div>
+  <div class="paso"><div class="num">5</div><div class="eq"><b>Rigidez: J por molde <span class="fuente">hojas «J paralelos / ortogonales»</span></b>
+    <div class="f">J<sub>pieza</sub> = J<sub>molde</sub>(b, h, alas) &nbsp;·&nbsp; ΣJ = Σ J<sub>j</sub> ≥ J<sub>mín</sub></div>
+    <div class="f">J<sub>mín</sub>: f = q<sub>v</sub> h⁴ / (8 E J) ≤ h / 500</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">ΣJ viento A = 22,08 m⁴<br>(T1–T4: 1,52 m⁴ c/u · T5, T6 en U: 8,00 m⁴ c/u)</div></div></div>
+  <div class="paso"><div class="num">6</div><div class="eq"><b>Rototraslación <span class="fuente">hoja «Rototrasl.»</span></b>
+    <div class="f">X<sub>r</sub> = Σ J<sub>j</sub> x<sub>j</sub> / Σ J<sub>j</sub> &nbsp;·&nbsp; e = X<sub>r</sub> &nbsp;·&nbsp; M<sub>t</sub> = W · e</div>
+    <div class="f">W<sub>j</sub> = W · J<sub>j</sub> / ΣJ ± W · e · J<sub>j</sub> · a<sub>j</sub> / Σ J<sub>jt</sub> a<sub>j</sub>²</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">planta simétrica: e ≈ 0<br>T1: 6,88 % del viento · T5: 36,25 %</div></div></div>
+  <div class="paso"><div class="num">7</div><div class="eq"><b>Flexocompresión en PB <span class="fuente">hoja «Flex comp PB paralelos»</span></b>
+    <div class="f">σ = − N / F ± M<sub>pieza</sub> · y / J &nbsp;<small>(N con 0,7 t/m² descargado y 0,9 t/m² cargado)</small></div>
+    <div class="f">|σ<sub>compresión</sub>| ≤ σ<sub>bk</sub> &nbsp;·&nbsp; si hay tracción: A<sub>s</sub> = T / σ<sub>e</sub> (≥ 0,8 % mínima)</div></div>
+    <div class="ej"><div class="t">ejemplo · T1</div><div class="v">σ<sub>c</sub> = −83,3 kg/cm² <span class="ver">≤ 300</span><br>σ<sub>t</sub> = +13,4 kg/cm² → lleva armadura</div></div></div>
+</div>
+
+<!-- =============================================================================================== GUÍA -->
+<h2 class="gui"><span class="n">2</span>Método de la guía (guía «Edificio en torre» 2024, paso a paso)</h2>
+<p>El mismo viento que la planilla, pero hecho como en la guía: el J de la sección real (Steiner), cada muro verificado por separado (almas y alas), el armado en barras y los controles que la planilla no tiene (esbeltez, flecha, dinteles, suelo).</p>
+<div class="flujo gui">
+  <div class="paso"><div class="num">1</div><div class="eq"><b>Diseño: esbeltez <span class="fuente">guía 1</span></b>
+    <div class="f">λ = h / L &nbsp;<small>(λ &gt; 3: el viento cuenta; 5 ≤ λ ≤ 10: los efectos laterales mandan)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">λ = 64 / 16 = 4,0 (viento A)</div></div></div>
+  <div class="paso"><div class="num">2</div><div class="eq"><b>Viento <span class="fuente">guía 2.1 · 102-2005</span></b>
+    <div class="f">igual que la planilla, con K<sub>z</sub> constante debajo de 5 m y sin viento en PB ni en los subsuelos</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">Q en PB = 126,0 t (+0,1 % que la planilla)<br>M en PB = 4.467 tm</div></div></div>
+  <div class="paso"><div class="num">3</div><div class="eq"><b>Cargas, vuelco y suelo <span class="fuente">guía 2.2 y 3</span></b>
+    <div class="f">P = Σ (D + L) · área &nbsp;·&nbsp; M<sub>e</sub> / M<sub>v</sub> ≥ 1,5 &nbsp;·&nbsp; e ≤ b/6</div>
+    <div class="f">σ<sub>máx, mín</sub> = N / A · (1 ± 6e / b) ≤ σ<sub>t adm</sub> &nbsp;·&nbsp; profundidad del estudio ≥ máx(6 m, D<sub>f</sub> + 2·ancho) <small>(401)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">Me / Mv = 8,97 · e = 1,00 m<br>σ = 2,24 / 0,92 kg/cm² <span class="ver">≤ 2,5</span></div></div></div>
+  <div class="paso"><div class="num">4</div><div class="eq"><b>Inercia real <span class="fuente">guía 4.1</span></b>
+    <div class="f">J<sub>pieza</sub> = Σ (J<sub>propio</sub> + A · d²) &nbsp;<small>(Steiner, cada muro desde el baricentro de la pieza)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">J T1 = 0,2 · 4,5³ / 12 = 1,52 m⁴<br>J «U» = 2(J<sub>ala</sub> + A d²) + J<sub>alma</sub> = 8,00 m⁴</div></div></div>
+  <div class="paso"><div class="num">5</div><div class="eq"><b>Flecha de la ménsula <span class="fuente">guía 4.2</span></b>
+    <div class="f">q<sub>v</sub> = (q<sub>arriba</sub> + q<sub>abajo</sub>) / 2 &nbsp;·&nbsp; f = q<sub>v</sub> h⁴ / (8 E ΣJ) ≤ h / 500</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">q<sub>v</sub> = 1,95 t/m · E = 3,4·10⁶ t/m²<br>f = 0,087 m <span class="ver">≤ 0,144 m</span></div></div></div>
+  <div class="paso"><div class="num">6</div><div class="eq"><b>Rototraslación <span class="fuente">guía, «caso particular con rototraslación»</span></b>
+    <div class="f">W<sub>j</sub> = W · J<sub>j</sub> / ΣJ ± W · e · J<sub>j</sub> a<sub>j</sub> / Σ J<sub>jt</sub> a<sub>j</sub>² &nbsp;<small>(los perpendiculares suman en la rotación con su J propio)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">igual que la planilla: T1 6,88 % · T5 36,25 %</div></div></div>
+  <div class="paso"><div class="num">7</div><div class="eq"><b>Flexocompresión muro por muro <span class="fuente">guía 5</span></b>
+    <div class="f">almas: σ = −N/F ± M<sub>pieza</sub> · y / J &nbsp;·&nbsp; alas: σ = −N/F ± M<sub>pieza</sub> · d / J &nbsp;(axial)</div>
+    <div class="f">tracción: T = σ · b · x / 2 &nbsp;·&nbsp; A<sub>s</sub> = máx(T / σ<sub>e</sub>, 0,8 % A<sub>c</sub>) → barras en dos capas</div></div>
+    <div class="ej"><div class="t">ejemplo · T1 y T5</div><div class="v">T1: σ −82,9 / +13,0 kg/cm²<br>→ Ø12 c/14 (32 por capa), horiz. Ø6 c/17,5<br>T5 (ala M6): σ −111,2 kg/cm² <span class="ver">≤ 300</span></div></div></div>
+  <div class="paso"><div class="num">8</div><div class="eq"><b>Corte en los dinteles <span class="fuente">guía 5, «esfuerzo de corte»</span></b>
+    <div class="f">Q<sub>j</sub> = Q<sub>pieza</sub> J<sub>m</sub> / J<sub>pieza</sub> &nbsp;·&nbsp; S = e (L²/4 − s²) / 2 &nbsp;·&nbsp; t = Q<sub>j</sub> S / J<sub>m</sub></div>
+    <div class="f">T = t · h<sub>piso</sub> &nbsp;·&nbsp; τ = T / (h<sub>dintel</sub> · b) ≤ τ<sub>adm</sub> (24 kg/cm² para H30)</div></div>
+    <div class="ej"><div class="t">ejemplo de la guía</div><div class="v">abertura 0,60 × 2,10 en T1:<br>t = 2,94 t/m · T = 8,81 t<br>τ = 4,89 kg/cm² <span class="ver">≤ 24</span></div></div></div>
+</div>
+
+<!-- =============================================================================================== CIRSOC -->
+<h2 class="cir"><span class="n">3</span>Método CIRSOC (102-25, 101-25 y 201-2005, estados límite)</h2>
+<p>Los reglamentos vigentes: el viento de resistencia del 102-25 con la frecuencia y la ráfaga, los cuatro casos de carga, las combinaciones del 101-25 y la verificación por resistencia del 201 (con el diagrama N-M en la versión completa).</p>
+<div class="flujo cir">
+  <div class="paso"><div class="num">1</div><div class="eq"><b>Velocidad y exposición <span class="fuente">102-25, Fig. 1.5-1 y art. 1.7</span></b>
+    <div class="f">V según la ciudad y la categoría de riesgo (ya incluye la importancia) · exposición B, C o D · K<sub>e</sub> = e<sup>−0,000119·altitud</sup></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">Neuquén, categoría II: V = 58,8 m/s<br>exposición B</div></div></div>
+  <div class="paso"><div class="num">2</div><div class="eq"><b>Presión dinámica <span class="fuente">Tabla 1.13-1 y (1.13-1)</span></b>
+    <div class="f">K<sub>z</sub> = 2,41 · (z / z<sub>g</sub>)<sup>2/α</sup>, z ≥ 5 m &nbsp;·&nbsp; q<sub>z</sub> = 0,613 K<sub>z</sub> K<sub>zt</sub> K<sub>d</sub> K<sub>e</sub> V²</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">q<sub>h</sub> (azotea) = 2,09 kN/m²</div></div></div>
+  <div class="paso"><div class="num">3</div><div class="eq"><b>Frecuencia y ráfaga <span class="fuente">art. 1.9</span></b>
+    <div class="f">n<sub>1</sub> = 117,3 · √C<sub>w</sub> / h &nbsp;(1.9-5) · C<sub>w</sub> = (100 / A<sub>B</sub>) Σ (h/h<sub>i</sub>)² A<sub>i</sub> / (1 + 0,83 (h<sub>i</sub>/D<sub>i</sub>)²)</div>
+    <div class="f">n<sub>1</sub> ≥ 1 Hz: G = 0,85 · si no: G<sub>f</sub> = 0,925 (1 + 1,7 I<sub>z</sub> √(g<sub>Q</sub>²Q² + g<sub>R</sub>²R²)) / (1 + 1,7 g<sub>v</sub> I<sub>z</sub>)</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">n<sub>1</sub> = 0,168 Hz → flexible<br>G<sub>f</sub> = 1,397<br><span class="aten">la fórmula no vale acá (h ≥ 4·L<sub>ef</sub>): mejor la n<sub>1</sub> del FEM</span></div></div></div>
+  <div class="paso"><div class="num">4</div><div class="eq"><b>Fuerzas por nivel y carga mínima <span class="fuente">art. 2.4 y 2.1.5</span></b>
+    <div class="f">p = q<sub>z</sub> G (0,8) − q<sub>h</sub> G C<sub>p,s</sub>(L/B) &nbsp;·&nbsp; W<sub>i</sub> = p · B · h<sub>inf</sub> &nbsp;·&nbsp; W ≥ 0,75 kN/m² · área</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">Q en PB = 422,1 t · M en PB = 14.680 tm<br>mínima 94,8 t (no manda)</div></div></div>
+  <div class="paso"><div class="num">5</div><div class="eq"><b>Casos de carga <span class="fuente">Fig. 2.4-8</span></b>
+    <div class="f">1: 100 % de cada viento · 2: 75 % con torsión e = ±0,15 B · 3: 75 % de los dos a la vez · 4: 56,3 % de los dos con torsión</div>
+    <div class="f">M<sub>t</sub> = fracción · Q · 0,15 B &nbsp;<small>(los casos 3 y 4 son los vientos oblicuos, «quartering»)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">caso 2: M<sub>t</sub> = 0,75 · 422 · 0,15 · 20 ≈ 950 tm</div></div></div>
+  <div class="paso"><div class="num">6</div><div class="eq"><b>Combinaciones <span class="fuente">101-25, art. 2.3.2 · 102-25 Apéndice B</span></b>
+    <div class="f">1,4 D · 1,2 D + 1,6 L · 1,2 D + 0,5 W · 1,2 D + 1,0 W + 0,5 L · 0,9 D + 1,0 W &nbsp;(resistencia)</div>
+    <div class="f">servicio: D + 0,6 W · D + 0,75 L + 0,45 W · 0,6 D + 0,6 W (suelo) · viento de 10 años = 47 % de la presión (deriva)</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">vuelco 0,9 D + 1,0 W: 2,72 <span class="ver">verifica</span><br>suelo: σ<sub>máx</sub> 2,37 kg/cm² <span class="aten">≈ 2,5</span><br>0,6 D + 0,6 W: contacto parcial (e = 3,31 &gt; 3,00 m)</div></div></div>
+  <div class="paso"><div class="num">7</div><div class="eq"><b>Reparto por caso <span class="fuente">rototraslación con J real</span></b>
+    <div class="f">partes de cada pieza en los cuatro casos (la del caso 1 = la de la guía); M<sub>pieza</sub> = parte · M<sub>PB</sub>, V<sub>pieza</sub> = parte · Q<sub>PB</sub></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">T1: M = 1.010 tm · V = 29 t<br>T5: M = 5.321 tm · V = 153 t</div></div></div>
+  <div class="paso"><div class="num">8</div><div class="eq"><b>Hormigón por resistencia <span class="fuente">201-2005, cap. 10, 11 y 14</span></b>
+    <div class="f">flexocompresión: (M<sub>u</sub>, N<sub>u</sub>) adentro de φ·(M<sub>n</sub>, P<sub>n</sub>) del diagrama de interacción · φ = 0,65 a 0,90 según ε<sub>t</sub></div>
+    <div class="f">corte: V<sub>c</sub> = mín (11-29, 11-30) · φV<sub>n</sub> ≤ φ · 5/6 √f′c · h · d · cuantías mínimas ρ<sub>v</sub> 0,12 %, ρ<sub>h</sub> 0,20 % (14.3)</div></div>
+    <div class="ej"><div class="t">ejemplo · cuantía necesaria</div><div class="v">T1: ρ = 1,50 % (mín. 0,25 %)<br>T5 alas: ρ = 3,37 % (máx. 4 %)</div></div></div>
+  <div class="paso"><div class="num">9</div><div class="eq"><b>Deriva de servicio <span class="fuente">102-25 Apéndice B · 201</span></b>
+    <div class="f">u<sub>servicio</sub> = u · (V<sub>a</sub> / V)² &nbsp;·&nbsp; azotea ≤ h / 500 · cada piso ≤ entrepiso / 500</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">azotea 96 mm ≤ 128 mm<br>último piso 1/497 <span class="nover">&gt; 1/500: no verifica (por poco)</span></div></div></div>
+</div>
+
+<!-- =============================================================================================== FEM -->
+<h2 class="fem"><span class="n">4</span>Sistema FEM (modelo pseudo-3D con modal)</h2>
+<p>Las mismas cargas y verificaciones que el CIRSOC, pero la estructura se resuelve con un modelo: losas rígidas (tres movimientos por piso) unidas por las piezas como ménsulas de Timoshenko. El modal da la frecuencia real, que reemplaza la fórmula aproximada.</p>
+<div class="flujo fem">
+  <div class="paso"><div class="num">1</div><div class="eq"><b>Modelo <span class="fuente">pseudo-3D</span></b>
+    <div class="f">por piso: u<sub>x</sub>, u<sub>y</sub>, θ &nbsp;·&nbsp; cada pieza, una barra de Timoshenko: k = EI/L³ · [12/(1+Φ) …], Φ = 12 EI / (κ G A L²)</div>
+    <div class="f">K = Σ T<sub>p</sub>ᵀ k<sub>p</sub> T<sub>p</sub> &nbsp;<small>(T: la posición de la pieza en la planta lleva su giro a los tres movimientos del piso)</small></div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">21 pisos · 12 piezas · E = 340.000 kg/cm²<br>masa = D de las losas + tabiques: 6.049 t</div></div></div>
+  <div class="paso"><div class="num">2</div><div class="eq"><b>Modal <span class="fuente">autovalores</span></b>
+    <div class="f">det (K − ω² M) = 0 &nbsp;·&nbsp; n = ω / 2π &nbsp;·&nbsp; masa participante de cada modo</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">modo 1: 0,293 Hz (x, viento B)<br>modo 3: 0,360 Hz (y, viento A)</div></div></div>
+  <div class="paso"><div class="num">3</div><div class="eq"><b>Viento con la n<sub>1</sub> del modelo <span class="fuente">102-25 art. 1.9</span></b>
+    <div class="f">G<sub>f</sub>(n<sub>1</sub> del modal) → p, W<sub>i</sub>, casos 1 a 4 (como el CIRSOC)</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">G<sub>f</sub> = 1,056 (CIRSOC: 1,397)<br>Q en PB = 319,0 t (−24 %)</div></div></div>
+  <div class="paso"><div class="num">4</div><div class="eq"><b>Estático por caso <span class="fuente">K u = F</span></b>
+    <div class="f">K u = F &nbsp;·&nbsp; esfuerzos de cada pieza: f<sub>p</sub> = k<sub>p</sub> T<sub>p</sub> u &nbsp;(M y V en la base de cada pieza)</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">T1: 13,15 % del viento (rototraslación: 6,88 %)<br>T5: 23,71 % (rototraslación: 36,25 %)</div></div></div>
+  <div class="paso"><div class="num">5</div><div class="eq"><b>Deriva y hormigón <span class="fuente">201-2005, como el CIRSOC</span></b>
+    <div class="f">u<sub>servicio</sub> del modelo · el 201 con los M y V de cada pieza del modelo</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">deriva 74 mm <span class="ver">verifica</span><br>ρ T1 = 1,05 % · ρ T5 alas = 1,62 %</div></div></div>
+</div>
+
+<!-- =============================================================================================== FLUJO -->
+<h2 class="flu"><span class="n">5</span>Flujo de viento (túnel 2D y 3D, Lattice Boltzmann)</h2>
+<p>No es un método de cálculo: simula el aire alrededor de la torre para ver y medir lo que el reglamento resume en coeficientes. Resuelve las ecuaciones de Navier-Stokes con el método de Lattice Boltzmann (D2Q9 en el plano, D3Q19 en el espacio).</p>
+<div class="flujo flu">
+  <div class="paso"><div class="num">1</div><div class="eq"><b>Lo que se resuelve <span class="fuente">Navier-Stokes incompresible</span></b>
+    <div class="f">∇·u = 0 &nbsp;·&nbsp; ∂u/∂t + (u·∇)u = −∇p / ρ + ν ∇²u</div></div>
+    <div class="ej"><div class="t">idea</div><div class="v">el aire en lugar de las fórmulas: la estela, los remolinos y las presiones salen solos</div></div></div>
+  <div class="paso"><div class="num">2</div><div class="eq"><b>Lattice Boltzmann <span class="fuente">BGK</span></b>
+    <div class="f">f<sub>i</sub>(x + e<sub>i</sub>, t + 1) = f<sub>i</sub> − (1/τ)(f<sub>i</sub> − f<sub>i</sub><sup>eq</sup>)</div>
+    <div class="f">f<sub>i</sub><sup>eq</sup> = w<sub>i</sub> ρ (1 + 3 e<sub>i</sub>·u + 4,5 (e<sub>i</sub>·u)² − 1,5 u²) &nbsp;·&nbsp; ρ = Σ f<sub>i</sub> &nbsp;·&nbsp; ρu = Σ f<sub>i</sub> e<sub>i</sub> &nbsp;·&nbsp; p = ρ / 3</div>
+    <div class="f">ν = (τ − ½) / 3 &nbsp;·&nbsp; turbulencia (Smagorinsky): τ<sub>ef</sub> = ½ (τ + √(τ² + 18 C<sub>s</sub>² Q / ρ))</div></div>
+    <div class="ej"><div class="t">red</div><div class="v">2D: 9 direcciones (D2Q9)<br>3D: 19 direcciones (D3Q19)<br>C<sub>s</sub> = 0,1 a 0,22</div></div></div>
+  <div class="paso"><div class="num">3</div><div class="eq"><b>Bordes <span class="fuente">túnel</span></b>
+    <div class="f">torre y suelo: rebote a mitad de camino · entrada 3D: u(z) = u<sub>H</sub> √(K<sub>z</sub>(z) / K<sub>z</sub>(H)) del 102-25 · salida libre · tapa deslizante</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">exposición B, torre de 64 m<br>en celdas de 2,5 m (grilla rápida)</div></div></div>
+  <div class="paso"><div class="num">4</div><div class="eq"><b>Lo que se mide</b>
+    <div class="f">C<sub>p</sub> = (p − p<sub>∞</sub>) / (½ ρ u<sub>H</sub>²) &nbsp;·&nbsp; C<sub>d</sub> = F<sub>x</sub> / (½ ρ u² B) &nbsp;·&nbsp; F = Σ 2 f<sub>i</sub> e<sub>i</sub> (intercambio de cantidad de movimiento)</div>
+    <div class="f">Strouhal: St = f B / V &nbsp;·&nbsp; velocidad crítica de desprendimiento: V<sub>cr</sub> = n<sub>1</sub> B / St</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">2D (corte en el 11º): St = 0,168 · C<sub>d</sub> = 2,30<br>3D: C<sub>p</sub> barlovento 0,72 a 0,74 (102-25: 0,80)<br>laterales −0,71 a −0,77 (−0,70) · sotavento −0,58 a −0,65 (−0,50)</div></div></div>
+  <div class="paso"><div class="num">5</div><div class="eq"><b>Relación con el cálculo</b>
+    <div class="f">V<sub>cr</sub> = n<sub>1</sub> · B / St &nbsp;con la n<sub>1</sub> del FEM</div></div>
+    <div class="ej"><div class="t">ejemplo</div><div class="v">V<sub>cr</sub> = 0,36 · 20 / 0,168 = 42,9 m/s<br><span class="aten">&lt; V de diseño 58,8 m/s: la resonancia por remolinos puede aparecer; en una torre real se estudia en túnel</span></div></div></div>
+</div>
+
+<!-- =============================================================================================== COMPARACIÓN -->
+<h2><span class="n">6</span>Comparación de los métodos</h2>
+<p>La misma torre (el ejemplo de la guía) con los cuatro métodos, viento A. Los números son los de Resumen → «Comparación» de la app y los del Excel «Comparación de métodos».</p>
+<table>
+  <tr><th>Qué</th><th class="pla">Planilla</th><th class="gui">Guía</th><th class="cir">CIRSOC</th><th class="fem">FEM</th></tr>
+  <tr class="capa"><td colspan="5">Cargas</td></tr>
+  <tr><td>Frecuencia n<sub>1</sub> (Hz)</td><td class="n">0,87</td><td class="n">0,87</td><td class="n">0,17</td><td class="n">0,36</td></tr>
+  <tr><td>Factor de ráfaga G</td><td class="n">0,85</td><td class="n">0,85</td><td class="n">1,40</td><td class="n">1,06</td></tr>
+  <tr><td>Corte del viento en PB (t)</td><td class="n">125,8</td><td class="n">126,0</td><td class="n">422,1</td><td class="n">319,0</td></tr>
+  <tr><td>Momento del viento en PB (tm)</td><td class="n">4.466</td><td class="n">4.467</td><td class="n">14.680</td><td class="n">11.095</td></tr>
+  <tr class="capa"><td colspan="5">Estabilidad</td></tr>
+  <tr><td>Vuelco M<sub>e</sub> / M<sub>v</sub></td><td class="n">8,97</td><td class="n">8,97</td><td class="n">2,72</td><td class="n">3,60</td></tr>
+  <tr><td>Excentricidad e = M<sub>v</sub> / P (m; b/6 = 3,00)</td><td class="n">1,00</td><td class="n">1,00</td><td class="n">3,31</td><td class="n">2,50</td></tr>
+  <tr class="capa"><td colspan="5">Rigidez</td></tr>
+  <tr><td>ΣJ (m⁴)</td><td class="n">22,08</td><td class="n">22,08</td><td class="n">22,08</td><td class="n">22,08</td></tr>
+  <tr><td>Desplazamiento de la azotea (m)</td><td class="n">—</td><td class="n">0,087 <span class="nota">(cálculo)</span></td><td class="n">0,096 <span class="nota">(servicio)</span></td><td class="n">0,074 <span class="nota">(servicio)</span></td></tr>
+  <tr class="capa"><td colspan="5">Reparto (caso 1)</td></tr>
+  <tr><td>T1 (tabique de 4,5 m)</td><td class="n">6,88 %</td><td class="n">6,88 %</td><td class="n">6,88 %</td><td class="n">13,15 %</td></tr>
+  <tr><td>T5 (U)</td><td class="n">36,25 %</td><td class="n">36,25 %</td><td class="n">36,25 %</td><td class="n">23,71 %</td></tr>
+  <tr class="capa"><td colspan="5">Verificación (criterios distintos: ver abajo)</td></tr>
+  <tr><td>T1</td><td class="n">σ −83,3 kg/cm²<br>(28 % de σbk)</td><td class="n">σ −82,9 kg/cm²<br>(28 % de σbk)</td><td class="n">ρ nec. 1,50 %</td><td class="n">ρ nec. 1,05 %</td></tr>
+  <tr><td>T5, alas</td><td class="n">—</td><td class="n">σ −111,2 kg/cm²<br>(37 % de σbk)</td><td class="n">ρ nec. 3,37 %</td><td class="n">ρ nec. 1,62 %</td></tr>
+</table>
+
+<h3>Corte en PB, viento A</h3>
+<div class="barras">
+  <span>Planilla</span><i style="width:29.8%;background:var(--pla)"></i><span>125,8 t</span>
+  <span>Guía</span><i style="width:29.8%;background:var(--gui)"></i><span>126,0 t</span>
+  <span>CIRSOC</span><i style="width:100%;background:var(--cir)"></i><span>422,1 t</span>
+  <span>FEM</span><i style="width:75.6%;background:var(--fem)"></i><span>319,0 t</span>
+</div>
+
+<h3>Por qué difieren</h3>
+<div class="tarjeta"><b>Planilla y guía: iguales (± 0,1 %).</b> Usan el mismo viento (102-2005) y la misma rototraslación. La diferencia de 0,1 % en el corte sale de que la guía toma K<sub>z</sub> constante debajo de 5 m y no carga la franja de PB. La guía agrega controles que la planilla no tiene (esbeltez, flecha, suelo, dinteles) y el armado en barras, pero llega a las mismas tensiones.</div>
+<div class="tarjeta"><b>CIRSOC: el viento es 3,35 veces el de la guía.</b> No es un error: cambian cuatro cosas a la vez.
+<ul>
+  <li><b>Velocidad:</b> 58,8 m/s contra 48 m/s (el 102-25 trae otro mapa y la categoría de riesgo dentro de V): (58,8/48)² = <b>× 1,50</b>.</li>
+  <li><b>Exposición:</b> el coeficiente del K<sub>z</sub> pasa de 2,01 a 2,41: <b>× 1,20</b>.</li>
+  <li><b>Ráfaga:</b> la fórmula aproximada da n<sub>1</sub> = 0,17 Hz (flexible) y G<sub>f</sub> = 1,40 contra 0,85: <b>× 1,64</b>.</li>
+  <li><b>El resto (× 1,13)</b> sale de la forma del perfil K<sub>z</sub> en altura y de la altitud (K<sub>e</sub>).</li>
+</ul>
+Además, el 102-2005 daba un viento <b>de servicio</b> que se mayoraba con 1,6, y el 102-25 da uno <b>de resistencia</b> que va con 1,0. Comparados a igual nivel, 1,6 × 126 = 202 t contra 422 t: el viento de diseño se duplica. Por eso el vuelco baja de 8,97 a 2,72 (sigue verificando) y la resultante en el suelo sale del núcleo central en la combinación 0,6 D + 0,6 W.</div>
+<div class="tarjeta"><b>FEM: −24 % de viento que el CIRSOC, porque la torre es menos flexible de lo que dice la fórmula.</b> La fórmula 1.9-5 da un límite inferior de la frecuencia (y no vale para esta torre, con h ≥ 4·L<sub>ef</sub>); el modal da 0,36 Hz, el doble. Con más frecuencia, menos amplificación dinámica: G<sub>f</sub> baja de 1,40 a 1,06 y el corte de 422 t a 319 t. El modelo cambia también el <b>reparto</b>: la rototraslación reparte por J (flexión pura), y el modelo de Timoshenko suma la deformación por corte de las almas, que pesa más en las piezas cortas y anchas como las U. Por eso T1 pasa de 6,9 % a 13,2 % y T5 de 36,3 % a 23,7 %. En la torre de prueba P2 (núcleo y cuatro L) pasa lo mismo: el núcleo baja de 78 % a 46 %.</div>
+<div class="tarjeta"><b>Verificación: dos criterios distintos.</b> Planilla y guía verifican por <b>tensiones admisibles</b>: con cargas de servicio, la compresión del hormigón contra σ<sub>bk</sub> y la tracción con armadura (T1 usa el 28 % de σ<sub>bk</sub>). CIRSOC y FEM verifican por <b>resistencia</b> (201-2005): con cargas mayoradas, la pieza tiene que estar adentro de su diagrama de interacción, y lo que se compara es la <b>cuantía de armadura que hace falta</b>. Con el viento del 102-25 las alas de las U necesitan 3,37 % (cerca del máximo, 4 %); con el viento del FEM, 1,62 %. La lectura para el proyecto: <b>la torre del ejemplo verifica con los cuatro métodos, pero con el viento vigente las alas de las U quedan muy armadas</b>; conviene engrosarlas o usar la n<sub>1</sub> del FEM, que el reglamento permite («n<sub>1</sub> de un análisis»).</div>
+<div class="tarjeta"><b>Flujo de viento: confirma los coeficientes y avisa de algo que los métodos no ven.</b> El C<sub>p</sub> medio de la simulación 3D cae cerca de los del 102-25 (barlovento 0,72 a 0,74 contra 0,80; laterales −0,71 a −0,77 contra −0,70; sotavento −0,58 a −0,65 contra −0,50): las presiones de los cuatro métodos tienen la forma correcta. Lo que agrega es el <b>desprendimiento de remolinos</b>: con St = 0,168 y la n<sub>1</sub> del FEM, la velocidad crítica es 42,9 m/s, por debajo de los 58,8 m/s de diseño. La torre podría entrar en resonancia de costado; ningún método de la cátedra lo calcula (el 102-25 lo deja para estudios especiales). Es un dato para discutir, no para dimensionar.</div>
+
+<div class="aviso"><b>Vientos oblicuos («quartering»).</b> Los casos 3 y 4 del 102-25 (75 % y 56,3 % de los dos vientos a la vez) cargan las dos direcciones juntas. En los tabiques, el método CIRSOC los incluye en el reparto (caso 4, con la torsión del otro viento). En el exoesqueleto ahora entran en la verificación del CIRSOC 301: las columnas de esquina, que son de dos caras, suman el esfuerzo de los dos vientos (en planilla y guía, a 45°: 0,71 A + 0,71 B, como se revisó el Citicorp en 1978).</div>
+
+<p class="pie">Torre 3D · ecuaciones de cada método · los números salen de la app con el ejemplo de la guía 2024 (métodos CIRSOC y FEM con la verificación completa) y del túnel de viento (2D a Re ≈ 1.000; 3D con la grilla rápida). Cada Excel de la app tiene las mismas cuentas con fórmulas.</p>
+</div></body>
+</html>

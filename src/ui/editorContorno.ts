@@ -16,6 +16,7 @@ import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
 import type { Punto } from '../engine/silueta';
+import { arcoConRadio, chaflan, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
@@ -26,6 +27,16 @@ export function montarEditorContorno(api: ApiPlanta) {
   let id: string | null = null, P: Perfil | null = null, original: Muro | null = null, ortogonal = true;
   let vista: Vista = { X: x => x, Y: y => y, escala: 1 }; void vista;
   let sel: Sel = null, tramo: Sel = null;
+  // deshacer dentro del editor (Ctrl+Z / Ctrl+Y)
+  let atras: Perfil[] = [], adelante: Perfil[] = [];
+  const guardar = () => { if (P) { atras.push(clonar(P)); if (atras.length > 100) atras.shift(); adelante = []; } };
+  const deshacer = (rehacer = false) => {
+    const de = rehacer ? adelante : atras, a = rehacer ? atras : adelante;
+    const q = de.pop(); if (!q || !P) { api.mensaje(rehacer ? 'Nada para rehacer.' : 'Nada para deshacer en el contorno.'); return; }
+    a.push(clonar(P)); P = q; sel = null; tramo = null; armar(); api.dibujar();
+  };
+  // valores de las herramientas
+  const her = { r: 0.3, d: 0.2, partes: 2, desf: 0.1, giro: 15, escala: 1.25, lados: 6, forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse' };
   let arrastre: { tipo: 'vertice' | 'lado' | 'c1' | 'c2' | 'arco'; anillo: number; i: number; base: Perfil } | null = null;
   const panel = document.createElement('div'); panel.className = 'calco-panel colocar-panel contorno-panel'; panel.hidden = true;
   (svg.parentElement ?? api.dock).appendChild(panel);
@@ -41,7 +52,7 @@ export function montarEditorContorno(api: ApiPlanta) {
     id = m.id; original = JSON.parse(JSON.stringify(m)); P = perfilDeMuro(m);
     ortogonal = t !== 'perfil' || esOrtogonal(P);
     if (t === 'tubo-circ') ortogonal = false;
-    sel = null; tramo = null;
+    sel = null; tramo = null; atras = []; adelante = [];
     api.activar(true); svg.classList.add('editando-contorno'); svg.parentElement?.classList.add('con-contorno');
     api.centrarEn?.(m.x, m.y);
     armar(); api.dibujar();
@@ -130,6 +141,7 @@ export function montarEditorContorno(api: ApiPlanta) {
     ev.preventDefault(); ev.stopPropagation();
     if (!h) { sel = null; tramo = null; armar(); api.dibujar(); return; }
     const [tipo, k, i] = h.getAttribute('data-h')!.split(':');
+    guardar();
     const kk = Number(k), ii = Number(i);
     if (tipo === 'lado' && !ortogonal) {
       // sin ortogonal: el medio de un lado recto agrega un vértice ahí y se arrastra
@@ -147,7 +159,11 @@ export function montarEditorContorno(api: ApiPlanta) {
     if (!id || !P || !arrastre) return;
     ev.stopPropagation();
     const q = punteroEn(ev), a = arrastre;
-    if (a.tipo === 'vertice') P = moverVertice(a.base, a.anillo, a.i, q);
+    if (a.tipo === 'vertice') {
+      // Shift: el lado que llega al vértice va de a 15° (rastreo polar)
+      const vs = anilloDe(a.base, a.anillo), ant = vs[(a.i - 1 + vs.length) % vs.length];
+      P = moverVertice(a.base, a.anillo, a.i, ev.shiftKey && !ortogonal ? polar15(ant, q) : q);
+    }
     else if (a.tipo === 'lado') P = moverLado(a.base, a.anillo, a.i, q);
     else if (a.tipo === 'arco') P = arcoPor(a.base, a.anillo, a.i, q);
     else { const p = clonar(a.base), v = anilloDe(p, a.anillo)[a.i]; v[a.tipo] = { x: r4(q.x), y: r4(q.y) }; P = p; }
@@ -161,6 +177,7 @@ export function montarEditorContorno(api: ApiPlanta) {
     if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cerrar(); api.mensaje('Edición del contorno cancelada.'); }
     else if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); void listo(); }
     else if ((ev.key === 'Delete' || ev.key === 'Backspace') && sel) { ev.preventDefault(); ev.stopImmediatePropagation(); borrarVertice(); }
+    else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z' || ev.key === 'y')) { ev.preventDefault(); ev.stopImmediatePropagation(); deshacer(ev.key === 'y' || ev.shiftKey); }
   }, true);
 
   function borrarVertice() {
@@ -168,11 +185,32 @@ export function montarEditorContorno(api: ApiPlanta) {
     const vs = anilloDe(P, sel.anillo);
     if (vs.length <= 3) { api.mensaje('Un contorno necesita al menos tres vértices.'); return; }
     if (ortogonal) { api.mensaje('Con «Mantener ortogonal» no se borran vértices: destildalo primero.'); return; }
-    vs.splice(sel.i, 1); sel = null; armar(); api.dibujar();
+    guardar(); vs.splice(sel.i, 1); sel = null; armar(); api.dibujar();
+  }
+  /** aplica una herramienta a un anillo: el resultado reemplaza al anillo (o avisa el error) */
+  function aplicarAnillo(k: number, f: (vs: VerticePerfil[]) => VerticePerfil[] | { error: string }, ok: string, libre = true) {
+    if (!P) return;
+    const r = f(anilloDe(P, k).map(q => ({ ...q })));
+    if ('error' in r) { api.mensaje(r.error); return; }
+    if (r.length < 2) { api.mensaje('El contorno quedaría sin lados.'); return; }
+    guardar();
+    if (k === 0) P.v = r; else P.huecos![k - 1] = r;
+    if (libre && !esOrtogonal(P)) ortogonal = false;
+    sel = null; tramo = null; armar(); api.dibujar(); api.mensaje(ok);
+  }
+  const centroAnillo = (k: number): Punto => { const pr = propiedades({ v: anilloDe(P!, k) }); return { x: pr.xg, y: pr.yg }; };
+  /** forma nueva con el mismo centro y la misma caja que el anillo */
+  function formaEn(k: number, forma: typeof her.forma): VerticePerfil[] {
+    const pr = propiedades({ v: anilloDe(P!, k) }), cx = (pr.x0 + pr.x1) / 2, cy = (pr.y0 + pr.y1) / 2, ax = pr.x1 - pr.x0, ay = pr.y1 - pr.y0;
+    if (forma === 'rect') return rectangulo(cx, cy, ax, ay);
+    if (forma === 'circulo') return circulo(cx, cy, Math.min(ax, ay) / 2);
+    if (forma === 'elipse') return elipse(cx, cy, ax / 2, ay / 2);
+    return poligonoRegular(cx, cy, Math.min(ax, ay) / 2, her.lados);
   }
   function tipoTramo(t: 'recta' | 'arco' | 'bezier') {
     if (!P || !tramo) return;
     const vs = anilloDe(P, tramo.anillo), a = vs[tramo.i], b = vs[(tramo.i + 1) % vs.length];
+    guardar();
     delete a.b; delete a.c1; delete a.c2;
     if (t === 'arco') a.b = 0.4;
     if (t === 'bezier') { const dx = b.x - a.x, dy = b.y - a.y; a.c1 = { x: r4(a.x + dx / 3 - dy / 4), y: r4(a.y + dy / 3 + dx / 4) }; a.c2 = { x: r4(a.x + (2 * dx) / 3 - dy / 4), y: r4(a.y + (2 * dy) / 3 + dx / 4) }; }
@@ -185,6 +223,7 @@ export function montarEditorContorno(api: ApiPlanta) {
   const boton = (t: string, titulo: string, f: () => void, activo = false) => { const x = mk('button', t); x.type = 'button'; x.title = titulo; if (activo) x.classList.add('activo'); x.addEventListener('click', f); return x; };
   const fila = (...h: (Node | string)[]) => { const d = mk('div', '', 'col-fila'); d.append(...h); return d; };
   const datos = mk('div', '', 'col-nota contorno-datos');
+  let abiertoCad = false;
   function armarDatos() {
     if (!P) return;
     const k = propiedades(P), r = esRectanguloOrtogonal(P);
@@ -211,13 +250,60 @@ export function montarEditorContorno(api: ApiPlanta) {
     panel.append(fila(lo));
     if (!ortogonal) panel.append(mk('p', 'Libre: tocá el medio de un lado para agregar un vértice; elegí un lado (○) para hacerlo arco o Bézier.', 'col-nota'));
     if (tramo && !ortogonal) panel.append(fila(mk('span', 'Lado:'), boton('Recto', '', () => tipoTramo('recta')), boton('Arco', 'Arrastrá el medio para curvarlo', () => tipoTramo('arco')), boton('Bézier', 'Arrastrá los dos puntos de control', () => tipoTramo('bezier'))));
+    // ---- herramientas de CAD
+    const campo = (etq: string, v: number, f: (x: number) => void, ancho = 46, unidad = 'm') => { const l = mk('label', '', 'col-campo'); l.append(etq); const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.style.width = `${ancho}px`; i.value = String(r4(v)).replace('.', ','); i.addEventListener('change', () => { const x = num(i.value); if (isFinite(x)) f(x); else i.value = String(r4(v)).replace('.', ','); }); l.append(i, unidad); return l; };
+    if (sel) {
+      const k = sel.anillo, i = sel.i, q = anilloDe(P, k)[i];
+      panel.append(mk('b', `Vértice ${i + 1}${k ? ` del hueco ${k}` : ''}`, 'col-sub'));
+      panel.append(fila(campo('x', q.x, x => { guardar(); P = moverVertice(P!, k, i, { x, y: q.y }); armar(); api.dibujar(); }, 60), campo('y', q.y, y => { guardar(); P = moverVertice(P!, k, i, { x: q.x, y }); armar(); api.dibujar(); }, 60)));
+      panel.append(fila(
+        boton('Empalme', 'Redondea la esquina con un arco tangente de radio r', () => aplicarAnillo(k, vs => empalme(vs, i, her.r), `Esquina redondeada con radio ${fmt(her.r)} m.`)), campo('r', her.r, x => { her.r = x; }),
+        boton('Chaflán', 'Corta la esquina a la distancia d sobre cada lado', () => aplicarAnillo(k, vs => chaflan(vs, i, her.d), `Esquina cortada a ${fmt(her.d)} m.`)), campo('d', her.d, x => { her.d = x; })));
+    }
+    if (tramo) {
+      const k = tramo.i >= 0 ? tramo.anillo : 0, i = tramo.i, md = medidaLado(anilloDe(P, k), i), a0 = anilloDe(P, k)[i];
+      panel.append(mk('b', `Lado ${i + 1}${k ? ` del hueco ${k}` : ''}`, 'col-sub'));
+      if (!a0.b && !a0.c1) panel.append(fila(
+        campo('largo', md.largo, x => aplicarAnillo(k, vs => ladoCon(vs, i, x), `Lado de ${fmt(x)} m (queda fijo su primer vértice).`), 52),
+        campo('ángulo', md.angulo, x => aplicarAnillo(k, vs => ladoCon(vs, i, md.largo, x), `Lado a ${fmt(x)}°.`), 44, '°')));
+      else if (a0.b) panel.append(fila(mk('span', `arco de ${fmt(md.largo)} m`), campo('radio', md.radio ?? 0, x => aplicarAnillo(k, vs => arcoConRadio(vs, i, x), `Arco de radio ${fmt(x)} m.`), 52)));
+      if (!a0.b && !a0.c1) panel.append(fila(boton('Dividir', 'Parte el lado en partes iguales (agrega vértices)', () => aplicarAnillo(k, vs => dividirLado(vs, i, her.partes), `Lado dividido en ${her.partes}.`)), campo('en', her.partes, x => { her.partes = Math.max(2, Math.round(x)); }, 32, 'partes'),
+        ...(ortogonal ? [] : [boton('Arco por radio', 'Convierte el lado en un arco del radio escrito (hacia afuera)', () => aplicarAnillo(k, vs => arcoConRadio(vs, i, her.r), `Arco de radio ${fmt(her.r)} m.`))])));
+    }
+    const kSel = sel?.anillo ?? tramo?.anillo ?? 0, nomK = kSel ? `el hueco ${kSel}` : 'el contorno';
+    const det = mk('details', '', 'contorno-cad'); det.open = abiertoCad; det.addEventListener('toggle', () => { abiertoCad = det.open; });
+    det.append(mk('summary', `Herramientas de CAD (sobre ${nomK})`));
+    det.append(fila(
+      boton('Desfasar ⇱', 'Contorno paralelo hacia afuera (arcos exactos, esquinas en inglete)', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? -her.desf : her.desf), `${nomK} agrandado ${fmt(her.desf)} m.`, false)),
+      boton('⇲', 'Contorno paralelo hacia adentro', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? her.desf : -her.desf), `${nomK} achicado ${fmt(her.desf)} m.`, false)),
+      campo('d', her.desf, x => { her.desf = Math.abs(x); })));
+    det.append(fila(
+      boton('Simetría ↔', 'Espeja el contorno con un eje vertical por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'x', centroAnillo(kSel)), 'Espejado.', false)),
+      boton('↕', 'Eje horizontal por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'y', centroAnillo(kSel)), 'Espejado.', false))));
+    det.append(fila(
+      boton('Girar', 'Gira el contorno alrededor de su baricentro (positivo: antihorario)', () => aplicarAnillo(kSel, vs => girarAnillo(vs, her.giro, centroAnillo(kSel)), `Girado ${fmt(her.giro)}°.`)), campo('', her.giro, x => { her.giro = x; }, 40, '°'),
+      boton('Escalar', 'Agranda o achica el contorno desde su baricentro', () => aplicarAnillo(kSel, vs => (her.escala > 0 ? escalarAnillo(vs, her.escala, centroAnillo(kSel)) : { error: 'El factor tiene que ser mayor que cero.' }), `Escalado × ${fmt(her.escala)}.`, false)), campo('×', her.escala, x => { her.escala = x; }, 40, '')));
+    const selForma = mk('select'); ([['rect', 'Rectángulo'], ['circulo', 'Círculo'], ['poligono', 'Polígono regular'], ['elipse', 'Elipse']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = her.forma === v; selForma.append(o); });
+    selForma.addEventListener('change', () => { her.forma = selForma.value as typeof her.forma; armar(); });
+    det.append(fila(mk('span', 'Forma:'), selForma, ...(her.forma === 'poligono' ? [campo('lados', her.lados, x => { her.lados = Math.max(3, Math.round(x)); }, 32, '')] : [])));
+    det.append(fila(
+      boton(`Cambiar ${nomK}`, 'Reemplaza el contorno por la forma elegida, con el mismo centro y la misma caja', () => aplicarAnillo(kSel, () => formaEn(kSel, her.forma), `${nomK}: ${selForma.selectedOptions[0].textContent?.toLowerCase()}.`)),
+      boton('Hueco con esa forma', 'Agrega un hueco con la forma elegida en el medio', () => {
+        if (!P) return; guardar(); const k = propiedades(P), ax = (k.x1 - k.x0) * 0.4, ay = (k.y1 - k.y0) * 0.4;
+        const base = rectangulo(k.xg, k.yg, ax, ay), h = her.forma === 'rect' ? base : her.forma === 'circulo' ? circulo(k.xg, k.yg, Math.min(ax, ay) / 2) : her.forma === 'elipse' ? elipse(k.xg, k.yg, ax / 2, ay / 2) : poligonoRegular(k.xg, k.yg, Math.min(ax, ay) / 2, her.lados);
+        P.huecos = [...(P.huecos ?? []), h]; if (her.forma !== 'rect') ortogonal = false; armar(); api.dibujar();
+      })));
+    det.append(mk('p', 'Shift al arrastrar un vértice: el lado va de a 15°. Ctrl+Z / Ctrl+Y deshacen y rehacen dentro del contorno.', 'col-nota'));
+    panel.append(det);
+    panel.append(fila(
+      boton('Deshacer', 'Ctrl+Z', () => deshacer(), false), boton('Rehacer', 'Ctrl+Y', () => deshacer(true), false)));
     panel.append(fila(
       boton('Agregar hueco', 'Un hueco rectangular en el medio (se edita igual que el contorno)', () => {
-        if (!P) return; const k = propiedades(P), ax = (k.x1 - k.x0) * 0.4, ay = (k.y1 - k.y0) * 0.4;
+        if (!P) return; guardar(); const k = propiedades(P), ax = (k.x1 - k.x0) * 0.4, ay = (k.y1 - k.y0) * 0.4;
         P.huecos = [...(P.huecos ?? []), [{ x: k.xg - ax / 2, y: k.yg - ay / 2 }, { x: k.xg - ax / 2, y: k.yg + ay / 2 }, { x: k.xg + ax / 2, y: k.yg + ay / 2 }, { x: k.xg + ax / 2, y: k.yg - ay / 2 }].map(q => ({ x: r4(q.x), y: r4(q.y) }))];
         armar(); api.dibujar();
       }),
-      ...(sel && sel.anillo > 0 ? [boton('Borrar hueco', '', () => { if (!P || !sel) return; P.huecos!.splice(sel.anillo - 1, 1); if (!P.huecos!.length) delete P.huecos; sel = null; armar(); api.dibujar(); })] : []),
+      ...(sel && sel.anillo > 0 ? [boton('Borrar hueco', '', () => { if (!P || !sel) return; guardar(); P.huecos!.splice(sel.anillo - 1, 1); if (!P.huecos!.length) delete P.huecos; sel = null; armar(); api.dibujar(); })] : []),
       ...(sel && !ortogonal ? [boton('Borrar vértice', 'También: Supr', borrarVertice)] : [])));
     panel.append(fila(boton('Listo', 'Enter', () => void listo(), true), boton('Cancelar', 'Esc', () => { cerrar(); api.mensaje('Edición del contorno cancelada.'); })));
   }

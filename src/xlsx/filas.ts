@@ -184,8 +184,9 @@ export async function agregarFilasPiezas(zip: JSZip, rutas: Record<string, strin
     }
     return x;
   });
-  await roto(RA, 20 + eA, 20 + eB, i => `${q(JP)}!AY${filaJP(i)}`, j => `${q(JO)}!AY${filaJO(j)}`);
-  await roto(RB, 20 + eB, 20 + eA, i => `${q(JO)}!AY${filaJO(i)}`, j => `${q(JP)}!AY${filaJP(j)}`);
+  // el J total: AY en paralelos y AW en ortogonales (planilla 2025 de 49 columnas)
+  await roto(RA, 20 + eA, 20 + eB, i => `${q(JP)}!AY${filaJP(i)}`, j => `${q(JO)}!AW${filaJO(j)}`);
+  await roto(RB, 20 + eB, 20 + eA, i => `${q(JO)}!AW${filaJO(i)}`, j => `${q(JP)}!AY${filaJP(j)}`);
   // flexocompresión: área y módulo de la fila de su pieza, momento de su fila de rototraslación
   await editar(FX, x => {
     for (let i = 20; i < 20 + eA; i++) {

@@ -134,3 +134,22 @@ export function circulo3p(a: Punto, b: Punto, c: Punto): { c: Punto; r: number }
   const ux = (s(a) * (b.y - c.y) + s(b) * (c.y - a.y) + s(c) * (a.y - b.y)) / d, uy = (s(a) * (c.x - b.x) + s(b) * (a.x - c.x) + s(c) * (b.x - a.x)) / d;
   return { c: { x: r4(ux), y: r4(uy) }, r: r4(Math.hypot(a.x - ux, a.y - uy)) };
 }
+
+/**
+ * Dónde cortan las guías a la recta o + s·u (u unitario): los valores de s entre s0 y s1, ordenados y sin repetir,
+ * con el nombre del eje (o «guía»). Sirve para acotar y ubicar una abertura respecto de los ejes que cruzan el muro.
+ */
+export function crucesSobre(gs: Guia[], o: Punto, u: Punto, s0: number, s1: number): { s: number; nombre: string }[] {
+  const recta: GuiaRecta = { id: '', t: 'recta', p: o, ang: (Math.atan2(u.y, u.x) * 180) / Math.PI };
+  const out: { s: number; nombre: string }[] = [];
+  const poner = (q: Punto, nombre: string) => {
+    const s = (q.x - o.x) * u.x + (q.y - o.y) * u.y;
+    if (s < s0 - 1e-6 || s > s1 + 1e-6 || out.some(x => Math.abs(x.s - s) < 1e-4)) return;
+    out.push({ s: r4(s), nombre });
+  };
+  gs.forEach(g => {
+    if (g.t === 'recta') { const q = cruceRectas(recta, g); if (q) poner(q, g.eje ? `eje ${g.eje}` : 'guía'); }
+    else cruceRectaCirculo(recta, g).forEach(q => poner(q, 'círculo'));
+  });
+  return out.sort((a, b) => a.s - b.s);
+}

@@ -78,7 +78,13 @@
       <div class="menu-cont">
         <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar ▾</button>
         <div class="menu" id="m-exportar" role="menu">
+          <button type="button" id="b-vista-planilla" role="menuitem">Vista previa de la planilla ↗<span class="pista">En otra pestaña: la planilla que se exporta, con las fórmulas calculadas; se actualiza sola mientras editás</span></button>
           <button type="button" id="b-guardar" role="menuitem">Guardar proyecto (.json)<span class="pista">Para seguir en otra computadora</span></button>
+          <button type="button" id="b-libro-guia" role="menuitem">Planilla de la guía (.xlsx)<span class="pista">Calculadora paso a paso de la guía 2024: se cargan los datos una vez y calcula sola, con gráficos (no necesita la app)</span></button>
+          <button type="button" id="b-libro-renovada" role="menuitem">Planilla renovada CIRSOC (.xlsx)<span class="pista">Calculadora con el CIRSOC 102-25, 101-25 y 201: simple o completa (con los diagramas N-M); funciona sola</span></button>
+          <button type="button" id="b-reporte-fem" role="menuitem">Reporte FEM (.xlsx)<span class="pista">Los números del modelo (modos, viento, desplazamientos, esfuerzos, deriva, hormigón) con sus diagramas</span></button>
+          <button type="button" id="b-comparacion" role="menuitem">Comparación de métodos (.xlsx)<span class="pista">Los cuatro métodos con la misma torre, capa por capa, con las diferencias y gráficos</span></button>
+          <button type="button" id="b-libros-zip" role="menuitem">Todos los libros (.zip)<span class="pista">Los de los cuatro métodos y la comparación, con la misma torre, en un solo archivo</span></button>
           <button type="button" id="b-tabla" role="menuitem">Tabla de niveles y muros (.xlsx)<span class="pista">Sirve de plantilla para llenar en Excel</span></button>
           <button type="button" id="b-lamina" role="menuitem">Lámina de entrega A3<span class="pista">Una hoja apaisada por viento, con rótulo, para imprimir o guardar como PDF</span></button>
           <button type="button" id="b-desglose" role="menuitem">Desglose por hoja (PDF)<span class="pista">Cálculo analítico paso por paso al lado del Excel, hoja por hoja</span></button>
@@ -109,7 +115,7 @@
     </section>
     <aside class="derecha" aria-label="Axonometría y avance">
       <div class="bloque3d">
-        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)">📷</button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura">σ</button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura">J</button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
+        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)">📷</button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura">σ</button><button type="button" class="mini" id="b-p3d" aria-pressed="false" title="Presiones del viento: cada cara pintada con la presión del método elegido (barlovento empuja, sotavento y laterales succionan), la fuerza de cada nivel y los cuatro casos de carga del 102-25">p</button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura">J</button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
         <div class="vista3d" id="vista-3d"></div>
         <div class="capas" id="capas"></div>
       </div>

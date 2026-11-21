@@ -1,5 +1,30 @@
 import { defineConfig, type Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+// @ts-expect-error módulo JavaScript del build, sin tipos
+import { armarSW } from './scripts/sw.mjs';
+
+// Service worker con la lista completa de archivos del build (hallazgo 4 del informe técnico): se escribe al final,
+// cuando ya están todos los archivos en dist (también los de public/). La versión es el hash de todos los archivos.
+function precacheSW(): Plugin {
+  let salida = 'dist';
+  return {
+    name: 'precache-sw',
+    apply: 'build',
+    configResolved(c) { salida = c.build.outDir; },
+    closeBundle() {
+      const todos = (d: string): string[] => readdirSync(d).flatMap(n => { const r = join(d, n); return statSync(r).isDirectory() ? todos(r) : [r]; });
+      const archivos = todos(salida).map(f => relative(salida, f).split(sep).join('/'))
+        .filter(f => f !== 'sw.js' && f !== 'torre3d.html' && !f.endsWith('.map')).sort();
+      const h = createHash('sha256');
+      archivos.forEach(f => { h.update(f); h.update(readFileSync(join(salida, f))); });
+      const lista = ['./', ...archivos.filter(f => f !== 'index.html')];
+      writeFileSync(join(salida, 'sw.js'), armarSW(h.digest('hex').slice(0, 12), lista));
+    },
+  };
+}
 
 // Tablets y navegadores viejos (Chrome < 111, Samsung Internet < 22): no entienden color-mix(). Antes de cada
 // declaración con color-mix se agrega otra con un color de respaldo: el navegador nuevo usa la segunda, el viejo la
@@ -25,7 +50,7 @@ function respaldoColorMix(): Plugin {
 export default defineConfig(({ mode }) => ({
   base: './',
   assetsInclude: ['**/*.xlsx'],
-  plugins: mode === 'unico' ? [respaldoColorMix(), viteSingleFile()] : [respaldoColorMix()],
+  plugins: mode === 'unico' ? [respaldoColorMix(), viteSingleFile()] : [respaldoColorMix(), precacheSW()],
   build: mode === 'unico'
     ? { outDir: 'dist-unico', assetsInlineLimit: 100_000_000, chunkSizeWarningLimit: 4000, rollupOptions: { output: { format: 'iife' as const } }, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] }
     : { chunkSizeWarningLimit: 1000, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] },

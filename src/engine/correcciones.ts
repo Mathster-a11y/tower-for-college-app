@@ -5,7 +5,9 @@
 import { calcularPlanilla, DIVISORES, type JMinimo, type PlanillaDatos, type PlanillaRes, type RotoRes } from './planilla';
 import { entraEnCalculo, rectangulos, tipoDe, dInterior, type Proyecto } from './modelo';
 import { propiedades } from './perfil';
+import { propsPoligonos, seccionDebil } from './aberturas';
 import type { PiezaEquivalente } from './mapping';
+import { config } from './config';
 
 export interface ResultadoCorregido {
   /** viento con Kz mínimo 5 m (CIRSOC), J completo en todas las filas y viento en PB con el criterio C: fuera del corte de los tabiques, dentro del vuelco y del suelo */
@@ -61,7 +63,7 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
   const A = dir === 'A';
   const rot = A ? g.rotA : g.rotB, otra = A ? g.rotB : g.rotA;
   const Q = rot.D5, Mv = rot.F5, hW = Q === 0 ? 0 : Mv / Q;
-  const par = piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).map(pz => ({ nombre: pz.nombre, fila: pz.filaHoja!, pos: H[pz.filaHoja!] ?? 0, J: rot.B[pz.filaHoja!], muros: pz.muros }));
+  const par = piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).map(pz => ({ nombre: pz.nombre, fila: pz.filaHoja!, pos: (config.metodo === 'app' ? pz.posicionReal : undefined) ?? H[pz.filaHoja!] ?? 0, J: rot.B[pz.filaHoja!], muros: pz.muros }));
   const SJ = par.reduce((x, e) => x + e.J, 0);
   const Xr = SJ > 0 ? par.reduce((x, e) => x + e.J * e.pos, 0) / SJ : 0;
   const Sr = isFinite(otra.J7) ? otra.J7 : 0;
@@ -75,10 +77,14 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
       if (Jotra > Jesta) perp.push({ nombre: m.id, pos: A ? m.y : m.x, posT: A ? m.x : m.y, J: Jotra, muros: [m.id] });
       return;
     }
+    // tabique calado, sólo con el armado de la app (J real): con el J de su corte débil, igual que cuando trabaja paralelo
+    // al viento; con la planilla original va entero, como siempre
+    const deb = config.metodo === 'app' && tipoDe(m) === 'tabique' && m.aberturas?.length ? (seccionDebil(m) ?? []).filter(pg => pg.length >= 3) : [];
+    const kD = deb.length ? propsPoligonos(deb) : null;
     rectangulos(m).forEach((r, k, todos) => {
       const largoT = A ? r.ax : r.ay, largoS = A ? r.ay : r.ax;              // transversal y en el sentido del viento
       if (largoT <= largoS) return;                                            // no es perpendicular al viento
-      perp.push({ nombre: todos.length > 1 ? `${m.id}·${k + 1}` : m.id, pos: A ? r.y : r.x, posT: A ? r.x : r.y, J: (largoS * largoT ** 3) / 12, muros: [m.id] });
+      perp.push({ nombre: todos.length > 1 ? `${m.id}·${k + 1}` : m.id, pos: A ? r.y : r.x, posT: A ? r.x : r.y, J: kD && todos.length === 1 ? (A ? kD.Jy : kD.Jx) : (largoS * largoT ** 3) / 12, muros: [m.id] });
     });
   });
   const SJa2 = par.reduce((x, e) => x + e.J * (e.pos - Xr) ** 2, 0) + perp.reduce((x, e) => x + e.J * (e.pos - Sr) ** 2, 0);
@@ -144,7 +150,13 @@ export function vientoEnPB(m: PlanillaRes['mnyq'], d: PlanillaDatos, filaPB: num
 }
 
 export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[] }): ResultadoCorregido {
-  const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true });
+  // con el armado de la app, el J de cada pieza es el de su sección real (Steiner con los muros), como la guía; con el
+  // de la cátedra, el de su método simplificado (el molde de la hoja)
+  const Jreal = extra && config.metodo === 'app' ? (['A', 'B'] as const).reduce((o, dir) => {
+    extra.piezas.forEach(pz => { if (pz.dir === dir && pz.filaHoja !== null && pz.Jreal != null && pz.Jreal > 0) o[dir][pz.filaHoja] = pz.Jreal; });
+    return o;
+  }, { A: [] as number[], B: [] as number[] }) : undefined;
+  const guia = calcularPlanilla(datosSegunGuia(d, filaPB), { kzMin5: true, Jreal });
   guia.jminA = jMinimoConAlturaTotal(guia.jminA, guia.mnyq.G69);
   vientoEnPB(guia.mnyq, d, filaPB);
   if (!extra) return { guia, rotA: repartoCorregido(guia.rotA), rotB: repartoCorregido(guia.rotB) };

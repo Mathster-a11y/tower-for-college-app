@@ -167,3 +167,37 @@ describe('parapeto', () => {
     expect(W(con) - W(sin)).toBeGreaterThan(0);
   });
 });
+
+describe('dos tabiques perpendiculares (filas 28–29 de Rototrasl.)', async () => {
+  const { calcularPlanilla: calc } = await import('../src/engine/planilla');
+  const { celdasAEscribir } = await import('../src/xlsx/planilla');
+  const { ejemploAsimetrico } = await import('../src/engine/modelo');
+  for (const motor of ['actual', 'nuevo'] as const) it(`${motor}: el par va en 28–29 con brazos desde su punto medio y el bloque general queda en 0`, () => {
+    const p = { ...ejemploAsimetrico(), parPerp: { A: ['T6B', 'T1B'] as [string, string] } };
+    const a = usarConfig({ motor }, () => aPlanilla(p));
+    const r = calc(a.datos, { motor });
+    const ro = r.rotA, s0 = ro.nP + 3;
+    const t6b = a.piezas.find(z => z.nombre === 'T6B')!, t1b = a.piezas.find(z => z.nombre === 'T1B')!;
+    expect(a.datos.rotA.par).toEqual([t6b.filaHoja, t1b.filaHoja]);
+    const J1 = r.jort.filas[t6b.filaHoja!].AY, J2 = r.jort.filas[t1b.filaHoja!].AY, y1 = t6b.posicion, y2 = t1b.posicion;
+    expect(ro.B[s0]).toBeCloseTo(J1, 12); expect(ro.B[s0 + 1]).toBeCloseTo(J2, 12);
+    expect(ro.J28).toBeCloseTo((y1 + y2) / 2, 12);                               // punto medio, sin pesar por J
+    for (let i = ro.oO; i < ro.B.length; i++) expect(ro.B[i]).toBe(0);
+    const ym = (y1 + y2) / 2;
+    const Mpar = ro.Mm.slice(0, ro.nP).reduce((s, x) => s + x, 0);
+    expect(ro.M51).toBeCloseTo(Mpar + J1 * (y1 - ym) ** 2 + J2 * (y2 - ym) ** 2, 9);
+    expect(ro.N[s0]).toBeCloseTo(-(ro.J15 * J1 * (y1 - ym)) / ro.M51, 9);
+    // al exportar: B28, B29, H28, H29 y B31:B50 en 0
+    const c = celdasAEscribir(a.datos, r, motor)['Rototrasl. cara mayor'];
+    expect(c[`B${5 + s0}`]).toEqual({ num: J1 });
+    expect(c[`H${6 + s0}`]).toEqual({ num: y2 });
+    expect(c[`B${5 + ro.oO}`]).toEqual({ num: 0 });
+    expect(c[`B${5 + ro.B.length - 1}`]).toEqual({ num: 0 });
+  });
+  it('si una de las dos piezas ya no existe, vuelve al bloque general y avisa', () => {
+    const p = { ...ejemploAsimetrico(), parPerp: { A: ['T6B', 'NO'] as [string, string] } };
+    const a = aPlanilla(p);
+    expect(a.datos.rotA.par).toBeUndefined();
+    expect(a.avisos.join(' ')).toMatch(/par de tabiques perpendiculares/);
+  });
+});

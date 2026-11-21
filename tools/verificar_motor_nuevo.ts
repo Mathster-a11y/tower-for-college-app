@@ -71,9 +71,13 @@ function celdas(r: PlanillaRes): Celdas {
   for (const c of ['H61', 'J61', 'M61', 'O61', 'F62', 'G65', 'G66', 'G67', 'G68', 'G69', 'G70', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N89', 'N90', 'H99', 'I99', 'J99', 'K99', 'L99', 'M99', 'N99'] as const) put(M, c, m[c]);
   const colsJ = ['D', 'I', 'M', 'N', 'O', 'P', 'Q', 'R', 'U', 'V', 'Y', 'AC', 'AG', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AS', 'AW', 'AX', 'AY'] as const;
   r.jpar.filas28!.forEach((f, i) => colsJ.forEach(c => put(JP, `${c}${4 + i}`, f[c])));
-  r.jort.filas.forEach((f, i) => colsJ.forEach(c => put(JO, `${c}${4 + i}`, f[c])));
+  // planilla 2025 de 49 columnas: en ortogonales se borraron AA y AD (desde AB se corre una letra; desde AE, dos)
+  const num = (c: string) => [...c].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+  const letra = (n: number) => { let s = ''; while (n > 0) { const q = (n - 1) % 26; s = String.fromCharCode(65 + q) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const o49 = (c: string) => { const n = num(c); return n >= num('AE') ? letra(n - 2) : n >= num('AB') ? letra(n - 1) : c; };
+  r.jort.filas.forEach((f, i) => colsJ.forEach(c => put(JO, `${o49(c)}${4 + i}`, f[c])));
   const eA = r.jpar.filas.length - 20, eB = r.jort.filas.length - 20;
-  put(JP, `AY${32 + eA}`, r.jpar.AY24); put(JO, `AY${24 + eB}`, r.jort.AY24);
+  put(JP, `AY${32 + eA}`, r.jpar.AY24); put(JO, `AW${24 + eB}`, r.jort.AY24);
   const jmin = (h: string, j: PlanillaRes['jminA'], f0: number) => { put(h, `I${f0}`, j.W); put(h, `J${f0}`, j.h); j.tabla.forEach((t, q) => { put(h, `K${f0 + 2 * q}`, t.h400); put(h, `M${f0 + 2 * q}`, t.h500); put(h, `O${f0 + 2 * q}`, t.h600); }); };
   jmin(JP, r.jminA, 45 + eA); jmin(JO, r.jminB, 37 + eB);
   for (const [h, ro] of [['Rototrasl. cara mayor', r.rotA], ['Rototrasl. cara menor', r.rotB]] as const) {
@@ -101,7 +105,7 @@ for (const [nombre, f, metodo] of casos) {
   const p = f();
   const a = aPlanilla(p);
   const r = calcularPlanilla(a.datos);
-  writeFileSync(`${dir}/${nombre}.xlsx`, await escribirPlanilla(plantilla, a.datos, r, p, undefined, undefined, { motor: 'nuevo', virgen: true }));
+  writeFileSync(`${dir}/${nombre}.xlsx`, await escribirPlanilla(plantilla, a.datos, r, p, undefined, undefined, { motor: 'nuevo', virgen: true, asig: a }));
   writeFileSync(`${dir}/${nombre}.json`, JSON.stringify(celdas(r)));
   console.log(nombre, '· piezas A', a.piezas.filter(x => x.dir === 'A' && x.filaHoja !== null).length, '· B', a.piezas.filter(x => x.dir === 'B' && x.filaHoja !== null).length,
     '· W', r.mnyq.H61.toFixed(2), '· ΣJ A', r.jpar.AY24.toFixed(3), '· e A', r.rotA.J7.toFixed(3));

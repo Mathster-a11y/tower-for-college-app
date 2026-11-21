@@ -126,3 +126,36 @@ describe('tubos y plantas por piso', () => {
     expect(a.papeles.M2.A).toBe('alma');
   });
 });
+
+describe('clasificación elegida a mano', async () => {
+  const { usarConfig } = await import('../src/engine/config');
+  const caja = (): ReturnType<typeof ejemploGuia> => {
+    // núcleo de 7,56 × 11,13 con muros de 0,35 (como el de la torre de 34 pisos de la cátedra): dos almas y dos alas
+    const p = ejemploGuia();
+    const m = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number) => ({ id, dir, x, y, largo, espesor: 0.35, llega: true, areaInf: 10, piezaA: 'N', pegadoA: '', piezaB: 'NB', pegadoB: '' });
+    p.muros = [m('S', 'X', 0, 5.39, 7.56), m('I', 'X', 0, -5.39, 7.56), m('L', 'Y', -3.605, 0, 10.43), m('R', 'Y', 3.605, 0, 10.43)];
+    return p;
+  };
+  it('compuesta simétrica: el cajón va como la cátedra (alma 0,70 × 10,43, alas 7,56 × 0,35 → J 219,98)', () => {
+    const p = { ...caja(), clasesPieza: { N: { clase: 'simetrica' as const } } };
+    const pz = aPlanilla(p).piezas.find(z => z.nombre === 'N')!;
+    expect(pz.fila).toEqual({ B: 0.7, C: 10.43, F: 7.56, G: 0.35, J: 7.56, K: 0.35 });
+    expect(calcularPlanilla(aPlanilla(p).datos).jpar.filas[pz.filaHoja!].AY).toBeCloseTo(219.984282, 5);
+  });
+  it('compuesta asimétrica forzada, especial (rectángulo equivalente del J real) y fuera del J', () => {
+    const asim = aPlanilla({ ...caja(), clasesPieza: { N: { clase: 'asimetrica' } } }).piezas.find(z => z.nombre === 'N')!;
+    expect(asim.molde).toBe('asimétrico');
+    const esp = aPlanilla({ ...caja(), clasesPieza: { N: { clase: 'especial' } } }).piezas.find(z => z.nombre === 'N')!;
+    expect(esp.especial).toBeDefined();
+    const { B, C } = esp.fila as { B: number; C: number };
+    expect((B * C ** 3) / 12).toBeCloseTo(esp.especial!.J, 2);
+    expect(B * C).toBeCloseTo(esp.especial!.A, 3);
+    const a = aPlanilla({ ...caja(), clasesPieza: { N: { enJ: false } } });
+    expect(a.piezas.find(z => z.nombre === 'N')!.filaHoja).toBeNull();
+    expect(a.papeles.L.A).toBe('fuera del cálculo');
+  });
+  it('método planilla: dos almas paralelas, una al lado de la otra, suman sus espesores (no sus largos)', () => {
+    const a = usarConfig({ metodo: 'planilla' }, () => aPlanilla(caja()));
+    expect(a.piezas.find(z => z.nombre === 'N')!.fila).toMatchObject({ B: 0.7, C: 10.43 });
+  });
+});

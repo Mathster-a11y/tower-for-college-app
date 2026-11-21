@@ -439,7 +439,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     const ba = new Hoja(BA, [10, 8, 7, 9, 9, 9, 9, 9, 10, 10, 9, 10, 9, 9, 2, 10, 8, 7, 9, 9, 9, 9, 9, 10, 10, 9, 10, 9, 9]);
     ba.p('A1', 'Balance: cuánto viento toman los tabiques y cuánto el exoesqueleto, piso por piso', 'tit');
     ba.p('A2', 'No cambia ninguna hoja original: lee «M,NyQ» y «Rototrasl.» con fórmulas. La única columna que viene de la app es ρ, la parte de la fuerza de cada piso que toman los tabiques (sale de la matriz de rigidez de las caras, que no entra en Excel).', 'nota');
-    ba.p('A3', 'Q y M de los tabiques se acumulan igual que las columnas I y J de «M,NyQ» (Q = Σ W de arriba, M = M de arriba + Q·h). Con ρ = 1 en todos los pisos (exo de rigidez cero) la hoja da exactamente M,NyQ. «Δ con la app» compara M de los tabiques con el motor del exo: da 0 si la app usa los valores de la planilla y unas décimas por mil con los de la Guía/CIRSOC (Kz desde 5 m). Las celdas verdes son fórmulas.', 'nota');
+    ba.p('A3', 'Q y M de los tabiques se acumulan igual que las columnas I y J de «M,NyQ» (Q = Σ W de arriba, M = M de arriba + Q·h). Con ρ = 1 en todos los pisos (exo de rigidez cero) la hoja da exactamente M,NyQ. «Δ con la app» compara M de los tabiques con el motor del exo: da 0 si la app usa los valores de la planilla y unas décimas por mil con los del método Guía (Kz desde 5 m). Las celdas verdes son fórmulas.', 'nota');
     const zPB = (() => { const i = p.niveles.reduce((k, nv, j) => (nv.cota >= 0 ? j : k), -1); return i >= 0 ? p.niveles[i].cota : 0; })();
     // niveles del balance: de la azotea a PB, en el orden de «M,NyQ»
     const filasB = p.niveles.map((nv, j) => ({ nv, fm: nivRows[j] })).filter(x => x.fm !== undefined && x.nv.cota >= zPB - 1e-6);
