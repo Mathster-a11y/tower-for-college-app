@@ -1585,15 +1585,3 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .gr-sector-nombre { font: 700 11px var(--fuente); fill: color-mix(in srgb, var(--gsc) 55%, var(--ink)); }
 .gs-0 { --gsc: var(--gs-0); } .gs-1 { --gsc: var(--gs-1); } .gs-2 { --gsc: var(--gs-2); } .gs-3 { --gsc: var(--gs-3); }
 .gs-4 { --gsc: var(--gs-4); } .gs-5 { --gsc: var(--gs-5); } .gs-6 { --gsc: var(--gs-6); }
-
-/* tarjetas como en el boceto: cada variable que llega tiene su franja de color desde el borde de arriba, y el
-   resultado, la suya hasta el borde de abajo (pasando por «símbolo = valor»); las flechas terminan en un punto */
-.gr-nodo > :not(.gr-franja) { position: relative; z-index: 1; }
-.gr-franja { position: absolute; z-index: 0; border-radius: 4px; background: color-mix(in srgb, var(--c, var(--dim)) 15%, transparent); pointer-events: none; }
-.gr-franja.gr-dato { background: color-mix(in srgb, var(--dim) 13%, transparent); }
-.gr-uso:not(.gr-dato), .gr-sal.gc-0, .gr-sal.gc-1, .gr-sal.gc-2, .gr-sal.gc-3, .gr-sal.gc-4, .gr-sal.gc-5, .gr-sal.gc-6, .gr-sal.gc-7 { background: none; }
-.gr-param .gr-sal { background: none; }
-.gr-valor .gr-sal-v { font: 600 15px var(--math); }
-.gr-valor .gr-igual { font: 15px var(--math); color: var(--ink); }
-.gr-valor { font-size: 14px; }
-.gr-arista circle.punta { stroke: var(--lienzo); stroke-width: 1; }

@@ -394,8 +394,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
     valores.forEach((el, id) => {
       const x = porId.get(id)!;
       if (!esNodo(x)) { el.textContent = `${textoValor(id)}${x.unidad ? ` ${x.unidad}` : ''}`; return; }
-      const simV = h('span', { class: `gr-sal gr-sal-v${color.has(id) ? ` gc-${color.get(id)}` : ''}` }); simV.innerHTML = simbolo(x.sim);
-      el.replaceChildren(...(x.externo ? [] : [simV, h('span', { class: 'gr-igual' }, ' = ')]), h('span', { class: 'gr-num' }, textoValor(id)), x.unidad ? h('span', { class: 'u' }, ` ${x.unidad}`) : '');
+      el.replaceChildren(h('span', { class: 'gr-num' }, textoValor(id)), x.unidad ? h('span', { class: 'u' }, ` ${x.unidad}`) : '');
       const t = tarjetas.get(id)!;
       if (x.control) {
         const ok = x.control.ok(r);
@@ -619,7 +618,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       const bs = rel(s), bt = rel(t);
       return { x: (bs.l + bs.r) / 2, y: bt.b };
     };
-    interface Tramo { de: string; a: string; xs: number[]; f0: number; punta: { x: number; y: number }; lugar: HTMLElement | null }
+    interface Tramo { de: string; a: string; xs: number[]; f0: number; punta: { x: number; y: number } }
     const tramos: Tramo[] = [];
     for (const ruta of rutas) {
       const de = ruta[0], a = ruta[ruta.length - 1];
@@ -633,7 +632,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
         // menos de 5 px de diferencia: recta (un codo así no se ve y estorba)
         const xs = [st.x, ...xsCarril, px];
         for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - xs[k - 1]) < 5) xs[k] = xs[k - 1];
-        tramos.push({ de, a, xs, f0: fila[de], punta: { x: xs[xs.length - 1], y: rel(t).t }, lugar: l === t ? null : l });
+        tramos.push({ de, a, xs, f0: fila[de], punta: { x: xs[xs.length - 1], y: b.t - 2 } });
       });
     }
     // vías: en cada hueco, una por cada resultado que se corre de costado, con sus tramos horizontales
@@ -681,41 +680,19 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
         const y = yVia(tr.f0 + k, tr.de), s2 = Math.sign(nx - x), rr = Math.min(R, Math.abs(nx - x) / 2);
         d += ` L ${x} ${y - rr} Q ${x} ${y} ${x + s2 * rr} ${y} L ${nx - s2 * rr} ${y} Q ${nx} ${y} ${nx} ${y + rr}`;
       });
-      d += ` L ${tr.punta.x} ${tr.punta.y}`;
+      d += ` L ${tr.punta.x} ${tr.punta.y - 6}`;
       const c = color.has(tr.de) ? `gc-${color.get(tr.de)}` : 'gr-dato';
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('class', `gr-arista ${c}`);
       g.dataset.de = tr.de; g.dataset.a = tr.a;
       const p = document.createElementNS(NS, 'path');
       p.setAttribute('d', d);
-      // un punto donde sale (borde de abajo) y otro donde llega (borde de arriba)
-      const punto = (x: number, y: number) => { const c2 = document.createElementNS(NS, 'circle'); c2.setAttribute('cx', String(x)); c2.setAttribute('cy', String(y)); c2.setAttribute('r', '3.6'); c2.setAttribute('class', 'punta'); return c2; };
-      g.append(p, punto(tr.xs[0], tallo(tr.de).y), punto(tr.punta.x, tr.punta.y));
+      const pu = document.createElementNS(NS, 'path');
+      pu.setAttribute('d', `M ${tr.punta.x} ${tr.punta.y} l -3.5 -7 h 7 z`);
+      pu.setAttribute('class', 'punta');
+      g.append(p, pu);
       svg.append(g);
     }
-    // franjas: la columna de color que une el borde de la tarjeta con la variable que llega (de arriba) y con el
-    // resultado que sale (hasta abajo, pasando por el renglón del valor)
-    tarjetas.forEach(t => t.querySelectorAll(':scope > .gr-franja').forEach(f => f.remove()));
-    const franja = (t: HTMLElement, el: Element, desdeArriba: boolean, clase: string) => {
-      const bt = rel(t), be = rel(el), bl = t.clientLeft, btop = t.clientTop;
-      const f = h('span', { class: `gr-franja ${clase}` });
-      f.style.left = `${be.l - bt.l - bl - 2}px`;
-      f.style.width = `${be.r - be.l + 4}px`;
-      if (desdeArriba) { f.style.top = '0px'; f.style.height = `${be.b - bt.t - btop + 2}px`; }
-      else { f.style.top = `${be.t - bt.t - btop - 2}px`; f.style.bottom = '0px'; }
-      t.prepend(f);
-    };
-    const hechas = new Set<HTMLElement>();
-    tramos.forEach(tr => {
-      if (!tr.lugar || hechas.has(tr.lugar)) return;
-      hechas.add(tr.lugar);
-      franja(tarjetas.get(tr.a)!, tr.lugar, true, color.has(tr.de) ? `gc-${color.get(tr.de)}` : 'gr-dato');
-    });
-    new Set(tramos.map(tr => tr.de)).forEach(de => {
-      const t = tarjetas.get(de)!, x = porId.get(de);
-      if (!t.classList.contains('gr-nodo') || !x) return;
-      franja(t, salidas.get(de)!, false, color.has(de) ? `gc-${color.get(de)}` : 'gr-dato');
-    });
     dibujarSectores();
     enfocar(al.elegido);
   };
