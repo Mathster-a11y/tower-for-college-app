@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -197,7 +197,10 @@ export function vientoReglamento(): Viento102 | null {
 /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
 export function verif301(d: DatosExo & { entrada: EntradaExo }) {
   const en = d.entrada, reglamento = !!vientoReglamento();
-  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos: reglamento ? COMBOS_101_25 : COMBOS_CURSO, costura: d.def.sinCostura ? false : true });
+  // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
+  const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
+  const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro });
 }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
 export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {
@@ -327,13 +330,16 @@ export function panelExo(c: H) {
     // viento de cuarto: 0,71·A + 0,71·B en las columnas de las esquinas (lo que se descubrió en el Citicorp en 1978)
     const dA = datosExo('A', def), dB = datosExo('B', def);
     if (dA && dB) {
-      const filas = vientoDeCuarto(dA.r, dB.r).filter(x => x.NA + x.NB > 1e-6);
+      const reg = !!vientoReglamento(), fOb = reg ? 0.75 : Math.SQRT1_2;
+      const filas = vientoDeCuarto(dA.r, dB.r, fOb).filter(x => x.NA + x.NB > 1e-6);
       if (filas.length) {
         const peor = filas.reduce((m, x) => (x.N45 > m.N45 ? x : m), filas[0]);
-        const sec = seccion('Viento a 45° (de cuarto)',
-          h('p', { class: 'nota' }, 'Con el viento en diagonal cada cara recibe 0,71 (cos 45°) del viento de frente y las dos direcciones actúan a la vez: 0,71·A + 0,71·B. Las columnas de las esquinas son de dos caras: suman las dos partes. Así se revisó el Citicorp en 1978.'),
-          tablaValores(['desde z (m)', 'N esquina, viento A (t)', 'N esquina, viento B (t)', 'N a 45° (t)', '45° / frente'], filas.slice().reverse().map(x => [x.z, x.NA, x.NB, x.N45, x.razon]), [2, 0, 0, 0, 2]),
-          h('p', { class: 'nota chica' }, `Peor tramo: desde ${fmt(peor.z, 2)} m, ${fmt(peor.N45, 0)} t a 45° contra ${fmt(Math.max(peor.NA, peor.NB), 0)} t de frente (× ${fmt(peor.razon, 2)}). Peor esquina, con los dos vientos en el sentido que suma; las diagonales de cada cara toman 0,71 de lo de frente.`));
+        const sec = seccion('Vientos oblicuos (de cuarto, «quartering»)',
+          h('p', { class: 'nota' }, reg
+            ? 'CIRSOC 102-25, Fig. 2.4-8: caso 3, el 75 % de los dos vientos a la vez (0,75·A + 0,75·B); caso 4, el 56,3 % de los dos con sus torsiones. Las columnas de las esquinas son de dos caras: suman las dos partes. Las combinaciones oblicuas ya están en la verificación del CIRSOC 301 de arriba (columna «combinación»). La tabla muestra el caso 3.'
+            : 'Viento a 45°: cada cara recibe 0,71 (cos 45°) del viento de frente y las dos direcciones actúan a la vez: 0,71·A + 0,71·B. Las columnas de las esquinas son de dos caras: suman las dos partes. Así se revisó el Citicorp en 1978. Ya está en la verificación de arriba (1,2 D + 1,6 W · a 45°).'),
+          tablaValores(['desde z (m)', 'N esquina, viento A (t)', 'N esquina, viento B (t)', reg ? 'N caso 3 (t)' : 'N a 45° (t)', 'oblicuo / frente'], filas.slice().reverse().map(x => [x.z, x.NA, x.NB, x.N45, x.razon]), [2, 0, 0, 0, 2]),
+          h('p', { class: 'nota chica' }, `Peor tramo: desde ${fmt(peor.z, 2)} m, ${fmt(peor.N45, 0)} t ${reg ? 'en el caso 3' : 'a 45°'} contra ${fmt(Math.max(peor.NA, peor.NB), 0)} t de frente (× ${fmt(peor.razon, 2)}). Peor esquina, con los dos vientos en el sentido que suma; las diagonales de cada cara toman ${reg ? '0,75' : '0,71'} de lo de frente.`));
         c.append(sec.el);
       }
     }
