@@ -792,12 +792,11 @@ function resaltarEnTablas() {
   resaltarFilas('muros', ids); resaltarFilas('medidas-A', ids); resaltarFilas('medidas-B', ids);
   const nota = document.getElementById('nota-conjunto');
   if (nota) nota.textContent = ids.size > 1 ? `${ids.size} muros elegidos en la planta (resaltados): lo que escribas en una celda de una de sus filas se aplica a todos, en esa columna. Un clic en otra fila deja de editar el conjunto.` : '';
-  let primera: HTMLElement | null = null;
+  // se resalta sin mover el panel: si saltara hasta la fila, se perderían de vista las herramientas de arriba
   document.querySelectorAll<HTMLElement>('#panel [data-muros-pieza]').forEach(tr => {
     const si = (tr.dataset.murosPieza ?? '').split(' ').some(id => ids.has(id));
-    tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr;
+    tr.classList.toggle('resaltada', si);
   });
-  (primera as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
 }
 estado.suscribirSeleccion(resaltarEnTablas);
 estado.suscribir(() => requestAnimationFrame(resaltarEnTablas));

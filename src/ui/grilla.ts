@@ -37,6 +37,17 @@ export interface OpcionesGrilla<T> {
 
 interface Sel { r0: number; c0: number; r1: number; c1: number; }
 const selecciones = new Map<string, Sel>();
+/** desplaza la caja de la grilla (y nada más) para que se vea el elemento; deja lugar para la fila de títulos */
+function verEnCaja(el: HTMLElement) {
+  const caja = el.closest<HTMLElement>('.grilla-caja');
+  if (!caja) return;
+  const rc = caja.getBoundingClientRect(), re = el.getBoundingClientRect();
+  const cab = (caja.querySelector('thead') as HTMLElement | null)?.offsetHeight ?? 0, izq = (caja.querySelector('tbody th') as HTMLElement | null)?.offsetWidth ?? 0;
+  if (re.top < rc.top + cab) caja.scrollTop -= rc.top + cab - re.top;
+  else if (re.bottom > rc.bottom) caja.scrollTop += re.bottom - rc.bottom;
+  if (re.left < rc.left + izq && el.tagName !== 'TR') caja.scrollLeft -= rc.left + izq - re.left;
+  else if (re.right > rc.right && el.tagName !== 'TR') caja.scrollLeft += re.right - rc.right;
+}
 /** filas resaltadas de cada grilla (por clave): lo elegido en la planta */
 const resaltadas = new Map<string, Set<string>>();
 /** cada grilla dibujada sabe llevar su celda activa a una fila (la primera de lo elegido en la planta) */
@@ -52,7 +63,9 @@ export function resaltarFilas(id: string, claves: Set<string>) {
   filas.forEach(tr => { const si = claves.has(tr.dataset.clave!); tr.classList.toggle('resaltada', si); if (si && !primera) primera = tr; });
   const pr = primera as HTMLTableRowElement | null;
   if (pr) {
-    pr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // solo se mueve la caja de la grilla: el panel se queda donde está (con scrollIntoView saltaba hasta la tabla y
+    // se perdían de vista las herramientas de arriba)
+    verEnCaja(pr);
     // la celda activa va a la primera fila elegida: escribir edita el conjunto
     const r = Number(pr.querySelector('th')?.dataset.r);
     if (Number.isFinite(r)) llevarA.get(id)?.(r);
@@ -341,7 +354,7 @@ export function grilla<T>(cols: Columna<T>[], op: OpcionesGrilla<T>): HTMLElemen
       const [dr, dc] = mov[e.key];
       sel = lim(e.shiftKey ? { ...sel, r1: sel.r1 + dr, c1: sel.c1 + dc } : { r0: sel.r1 + dr, c0: sel.c1 + dc, r1: sel.r1 + dr, c1: sel.c1 + dc });
       pintar(); elegirFila();
-      celdas[sel.r1]?.[sel.c1]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const cel = celdas[sel.r1]?.[sel.c1]; if (cel) verEnCaja(cel);
     } else if (e.key === 'Tab') {
       e.preventDefault();
       sel = lim({ r0: sel.r1, r1: sel.r1, c0: sel.c1 + (e.shiftKey ? -1 : 1), c1: sel.c1 + (e.shiftKey ? -1 : 1) }); pintar();

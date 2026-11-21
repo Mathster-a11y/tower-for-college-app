@@ -17,6 +17,7 @@ import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
+import { hacerMovible } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
@@ -2235,6 +2236,7 @@ export function montarPlanta(cont: HTMLElement) {
     pila.forEach(e => {
       if (!visible(e)) return;
       e.style.bottom = '';
+      if (e.classList.contains('movido')) return;             // lo movió el usuario: queda donde lo dejó
       let r = e.getBoundingClientRect();
       for (let i = 0; i < 8; i++) {
         const choca = puestos.find(p => solapan(r, p));
@@ -2259,8 +2261,23 @@ export function montarPlanta(cont: HTMLElement) {
       const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top).reduce((m, p) => Math.min(m, p.top), R.bottom);
       if (r.bottom > abajo - 6) { panelPrec.style.maxHeight = `${Math.max(80, Math.floor(abajo - 6 - r.top))}px`; panelPrec.style.overflowY = 'auto'; }
     }
+    // cuadros altos de los costados (paneles apilados, insertar, calar, medidas, contorno): no bajan hasta las barras de
+    // abajo; si no entran, se desplazan por dentro
+    [dock, panelIns, panelCal, panelMed, cont.querySelector<HTMLElement>(':scope > .contorno-panel')].forEach(e => {
+      if (!e) return;
+      e.style.maxHeight = '';
+      if (!visible(e) || e.classList.contains('movido')) return;
+      const r = e.getBoundingClientRect();
+      const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top + 60).reduce((m, p) => Math.min(m, p.top), R.bottom);
+      if (r.bottom > abajo - 6) { e.style.maxHeight = `${Math.max(120, Math.floor(abajo - 6 - r.top))}px`; e.style.overflowY = 'auto'; }
+    });
     separarRotulos();
   }
+  // todo lo que flota sobre la planta se puede mover con su asa (⠿) adonde no moleste; doble clic vuelve a su lugar
+  hacerMovible(dock, cont, 'paneles');
+  ([[panelIns, 'insertar'], [panelCal, 'calar'], [panelMed, 'medidas'], [panelPrec, 'precision']] as const).forEach(([e, k]) => hacerMovible(e, cont, k));
+  const pc = cont.querySelector<HTMLElement>(':scope > .contorno-panel'); if (pc) hacerMovible(pc, cont, 'contorno');
+  ([[barraSel, 'barra-eleccion'], [barraGrupo, 'barra-grupo'], [barraLazo, 'barra-lazo'], [barraDib, 'barra-dibujo'], [barraTr, 'barra-transformar'], [barraCtx, 'barra-contexto']] as const).forEach(([e, k]) => hacerMovible(e, cont, k, { enLinea: true }));
   let cuadroAcomodar = 0;
   const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
   new ResizeObserver(pedirAcomodar).observe(cont);

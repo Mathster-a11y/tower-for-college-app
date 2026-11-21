@@ -1610,3 +1610,36 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .esquinas-torre .campo-esq { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0; }
 .esquinas-torre .campo-esq select { max-width: 62%; }
 .esquinas-torre > button { width: 100%; margin: 4px 0; }
+
+/* Panel de la etapa angosto (menos de ~340 px, mouse o tablet): cada rótulo arriba de su campo, a todo el ancho;
+   las grillas de dos columnas pasan a una; las tablas y los botones largos no se salen del panel. */
+.lateral { container-type: inline-size; container-name: lateral; }
+@container lateral (max-width: 340px) {
+  .formulario { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; }
+  .formulario > label { grid-column: 1 / -1; margin-top: 6px; font-weight: 600; }
+  .formulario > input, .formulario > select { width: 100%; min-width: 0; }
+  .formulario .ayuda { grid-column: 1 / -1; margin-top: 0; }
+  .grilla2 { grid-template-columns: minmax(0, 1fr); }
+  .grilla2 select, .grilla2 input:not([type=checkbox]):not([type=range]) { width: 100%; min-width: 0; }
+  .panel .boton.primario, .panel button.primario { white-space: normal; text-align: center; height: auto; }
+  .panel .tabla { font-size: 11.5px; }
+  .panel .tabla td, .panel .tabla th { padding-left: 4px; padding-right: 4px; }
+  .panel .tabla .chip-estado { padding: 1px 5px; font-size: 10.5px; }
+  .esquinas-torre .campo-esq { flex-wrap: wrap; }
+  .esquinas-torre .campo-esq select { max-width: 100%; width: 100%; }
+}
+
+/* Cuadros flotantes de la planta: asa para moverlos (flotantes.ts) */
+.asa-mover { touch-action: none; cursor: grab; border: 0; background: none; padding: 0; color: var(--ink2); }
+.asa-mover:active, .moviendose .asa-mover { cursor: grabbing; }
+.asa-mover:not(.en-linea) { position: absolute; top: 1px; left: 50%; transform: translateX(-50%); width: 56px; height: 14px; z-index: 1; pointer-events: auto; }
+.asa-mover:not(.en-linea)::before { content: ''; position: absolute; left: 12px; right: 12px; top: 5px; height: 4px; border-radius: 2px; background: var(--edge); }
+.asa-mover:not(.en-linea):hover::before, .asa-mover:not(.en-linea):focus-visible::before { background: var(--accent); }
+.asa-mover.en-linea { align-self: stretch; padding: 0 2px; font-size: 14px; line-height: 1; min-height: 0 !important; }
+.asa-mover.en-linea:hover { color: var(--accent); }
+.calco-panel.movible:not(.dock-planta *), .contorno-panel.movible { padding-top: 15px; }
+.dock-planta.movible { padding-top: 15px; }
+.dock-planta.movible:not(:has(> .calco-panel:not([hidden]))) { padding-top: 0; }
+.dock-planta.movible:not(:has(> .calco-panel:not([hidden]))) > .asa-mover { display: none; }
+.moviendose { box-shadow: 0 6px 20px rgba(0,0,0,.22); opacity: .96; }
+@media (max-width: 760px) { .asa-mover { display: none; } }
