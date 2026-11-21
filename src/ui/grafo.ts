@@ -13,7 +13,7 @@
  * compresión sí llevan su rojo y su azul.
  */
 import { fmt } from './estado';
-import { h, mat, v, type H } from './comp';
+import { esc, h, mat, v, type H } from './comp';
 
 // ---------------------------------------------------------------------------------------------- tipos
 export interface ParamGrafo<D> {
@@ -78,7 +78,7 @@ export function simbolo(s: string): string {
   const i = s.indexOf('_');
   if (i < 0) return mat(s);
   const base = s.slice(0, i), sub = s.slice(i + 1);
-  return base.length === 1 ? v(base, sub) : `${mat(base)}<sub>${sub}</sub>`;
+  return base.length === 1 ? v(base, sub) : `${mat(base)}<sub>${esc(sub)}</sub>`;
 }
 /** texto de una ecuación: como mat, y además «p_PB», «h_s» con su subíndice */
 export function textoMat(t: string): string {
@@ -127,9 +127,42 @@ export function ordenar(ids: string[], fila: Record<string, number>, aristas: [s
     const orden = abajo ? capas.map((_, i) => i).slice(1) : capas.map((_, i) => i).slice(0, -1).reverse();
     for (const k of orden) {
       const p = pos();
-      const bar = (id: string) => { const vec = (abajo ? padres : hijos).get(id) ?? []; return vec.length ? vec.reduce((s, x) => s + p.get(x)!, 0) / vec.length : p.get(id)!; };
+      const bar = (id: string) => { const vec = [...(padres.get(id) ?? []), ...(hijos.get(id) ?? [])]; return vec.length ? vec.reduce((s, x) => s + p.get(x)!, 0) / vec.length : p.get(id)!; };
       capas[k] = capas[k].map(id => ({ id, b: bar(id) })).sort((a, b) => a.b - b.b).map(x => x.id);
     }
+  }
+  // cruces entre la fila k y la k+1
+  const cruces = (k: number, arriba = capas[k], abajoC = capas[k + 1]) => {
+    if (!arriba || !abajoC) return 0;
+    const ia = new Map(arriba.map((id, i) => [id, i])), ib = new Map(abajoC.map((id, i) => [id, i]));
+    const seg: [number, number][] = [];
+    arriba.forEach(id => (hijos.get(id) ?? []).forEach(c => { if (ib.has(c)) seg.push([ia.get(id)!, ib.get(c)!]); }));
+    let n = 0;
+    for (let i = 0; i < seg.length; i++) for (let j = i + 1; j < seg.length; j++) if ((seg[i][0] - seg[j][0]) * (seg[i][1] - seg[j][1]) < 0) n++;
+    return n;
+  };
+  const costo = (k: number, fila: string[]) => (k > 0 ? cruces(k - 1, capas[k - 1], fila) : 0) + cruces(k, fila, capas[k + 1]);
+  function* permutaciones(a: string[]): Generator<string[]> {
+    if (a.length <= 1) { yield a; return; }
+    for (let i = 0; i < a.length; i++) for (const r of permutaciones([...a.slice(0, i), ...a.slice(i + 1)])) yield [a[i], ...r];
+  }
+  for (let vuelta = 0; vuelta < 6; vuelta++) {
+    let mejoro = false;
+    for (let k = 0; k < capas.length; k++) {
+      const c0 = costo(k, capas[k]);
+      if (!c0) continue;
+      if (capas[k].length <= 6) {
+        let mejor = capas[k], mc = c0;
+        for (const pm of permutaciones(capas[k])) { const c = costo(k, pm); if (c < mc) { mc = c; mejor = pm; if (!c) break; } }
+        if (mc < c0) { capas[k] = mejor; mejoro = true; }
+      } else {
+        for (let i = 0; i + 1 < capas[k].length; i++) {
+          const pm = [...capas[k]]; [pm[i], pm[i + 1]] = [pm[i + 1], pm[i]];
+          if (costo(k, pm) < costo(k, capas[k])) { capas[k] = pm; mejoro = true; }
+        }
+      }
+    }
+    if (!mejoro) break;
   }
   return { capas, rutas };
 }
@@ -182,22 +215,31 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
   ids.forEach(id => usos[id].forEach(u => aristas.push([u, id])));
   const { capas, rutas } = ordenar(ids, fila, aristas);
   // color de cada cosa que se usa (los datos, gris tinta; los resultados, la paleta)
-  const productores = cap.nodos.filter(n => aristas.some(([a]) => a === n.id)).map(n => n.id);
-  const color = new Map<string, number>(productores.map((id, i) => [id, i % N_COLORES]));
+  // los resultados que se usan y los datos que usan varias cuentas llevan color (los datos de una sola cuenta, gris:
+  // quedan pegados a su cuenta); dos colores iguales no comparten filas, así cada flecha se distingue de sus vecinas
+  const consumidores = (id: string) => aristas.filter(([a]) => a === id).map(([, b]) => b);
+  const conColor = ids.filter(id => (esNodo(porId.get(id)) ? consumidores(id).length > 0 : consumidores(id).length > 1));
+  const tramo = (id: string): [number, number] => [fila[id], Math.max(fila[id], ...consumidores(id).map(x => fila[x]))];
+  const color = new Map<string, number>();
+  [...conColor].sort((a, b) => fila[a] - fila[b]).forEach(id => {
+    const [a0, a1] = tramo(id), uso = new Array(N_COLORES).fill(0);
+    color.forEach((c, otro) => { const [b0, b1] = tramo(otro); if (a0 <= b1 && b0 <= a1) uso[c]++; });
+    const libre = uso.findIndex(x => x === 0);
+    color.set(id, libre >= 0 ? libre : uso.indexOf(Math.min(...uso)));
+  });
 
   // ---- DOM
   const tablero = h('div', { class: 'gr-tablero' });
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('class', 'gr-flechas');
   svg.setAttribute('aria-hidden', 'true');
-  const filasEl: H[] = [];
-  const tarjetas = new Map<string, H>(), carriles = new Map<string, H>();
+  const tarjetas = new Map<string, H>();
   const valores = new Map<string, H>(), salidas = new Map<string, HTMLElement>();
   let r = r0;
   const uso = (id: string) => {
     const x = porId.get(id);
     const s = h('span', { class: `gr-uso${color.has(id) ? ` gc-${color.get(id)}` : ' gr-dato'}`, 'data-uso': id });
-    s.innerHTML = x ? simbolo(x.sim) : id;
+    s.innerHTML = x ? simbolo(x.sim) : esc(id);
     return s;
   };
   // [id]: uso de otro resultado o de un dato · ^{…}: exponente (puede tener usos adentro)
@@ -214,15 +256,15 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
     return e;
   };
   capas.forEach(capa => {
-    const f = h('div', { class: 'gr-fila' });
+    const f = tablero;
     capa.forEach(id => {
-      if (id.startsWith('~')) { const c = h('div', { class: 'gr-carril', 'data-carril': id }); carriles.set(id, c); f.append(c); return; }
+      if (id.startsWith('~')) return;
       const x = porId.get(id)!;
       if (!esNodo(x)) {
         // dato: chip arrastrable
         const p = x as ParamGrafo<D>;
-        const chip = h('button', { type: 'button', class: `gr-param${p.fijo ? ' fijo' : ''}`, 'data-id': id, title: `${p.nombre}${p.fuente ? ` · ${p.fuente}` : ''}${p.fijo ? '' : '. Arrastrá de costado para cambiarlo (o con las flechas del teclado).'}` });
-        const s = h('span', { class: 'gr-sal' }); s.innerHTML = simbolo(p.sim); salidas.set(id, s);
+        const chip = h('button', { type: 'button', class: `gr-param${p.fijo ? ' fijo' : ''}${color.has(id) ? ` compartido gc-${color.get(id)}` : ''}`, 'data-id': id, title: `${p.nombre}${p.fuente ? ` · ${p.fuente}` : ''}${p.fijo ? '' : '. Arrastrá de costado para cambiarlo (o con las flechas del teclado).'}` });
+        const s = h('span', { class: `gr-sal${color.has(id) ? ` gc-${color.get(id)}` : ''}` }); s.innerHTML = simbolo(p.sim); salidas.set(id, s);
         const val = h('span', { class: 'gr-num' });
         valores.set(id, val);
         chip.append(s, h('span', { class: 'gr-igual' }, ' = '), val, h('span', { class: 'gr-nombre' }, p.nombre));
@@ -254,8 +296,6 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       tarjetas.set(id, t);
       f.append(t);
     });
-    filasEl.push(f);
-    tablero.append(f);
   });
   tablero.append(svg);
 
@@ -335,25 +375,90 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       const id = s.dataset.uso!;
       const x = porId.get(id);
       if (revelados.has(id)) { s.textContent = textoValor(id); s.classList.add('revelado'); }
-      else if (s.classList.contains('revelado')) { s.innerHTML = x ? simbolo(x.sim) : id; s.classList.remove('revelado'); }
+      else if (s.classList.contains('revelado')) { s.innerHTML = x ? simbolo(x.sim) : esc(id); s.classList.remove('revelado'); }
     });
     salidas.forEach((s, id) => {
       const x = porId.get(id);
       if (!esNodo(x)) return;                              // el chip del dato ya muestra su número
       if (revelados.has(id)) { s.textContent = textoValor(id); s.classList.add('revelado'); }
-      else if (s.classList.contains('revelado')) { s.innerHTML = x ? simbolo(x.sim) : id; s.classList.remove('revelado'); }
+      else if (s.classList.contains('revelado')) { s.innerHTML = x ? simbolo(x.sim) : esc(id); s.classList.remove('revelado'); }
     });
   };
+
+  // ---- posiciones: cada tarjeta cerca de lo que usa y de lo que la usa, sin pisarse (filas de arriba hacia abajo)
+  const vecinos = new Map<string, string[]>();
+  for (const ruta of rutas) for (let k = 0; k + 1 < ruta.length; k++) {
+    vecinos.set(ruta[k], [...(vecinos.get(ruta[k]) ?? []), ruta[k + 1]]);
+    vecinos.set(ruta[k + 1], [...(vecinos.get(ruta[k + 1]) ?? []), ruta[k]]);
+  }
+  const xc = new Map<string, number>();
+  let huecos = capas.map(() => 30);
+  let cajaFila: { t: number; b: number }[] = [];
+  const PAD = 14;
+  const ancho = (id: string) => (id.startsWith('~') ? 4 : tarjetas.get(id)!.offsetWidth);
+  const sep = (a: string, b: string) => (ancho(a) + ancho(b)) / 2 + (a.startsWith('~') || b.startsWith('~') ? 10 : 22);
+  const colocarX = () => {
+    capas.forEach(c => { let x = 0; c.forEach((id, i) => { if (i) x += sep(c[i - 1], id); xc.set(id, x); }); const m = x / 2; c.forEach(id => xc.set(id, xc.get(id)! - m)); });
+    for (let it = 0; it < 24; it++) {
+      const abajo = it % 2 === 0;
+      const orden = abajo ? capas.map((_, i) => i) : capas.map((_, i) => i).reverse();
+      for (const k of orden) {
+        const c = capas[k];
+        if (!c.length) continue;
+        const desea = c.map(id => {
+          const v = (vecinos.get(id) ?? []).filter(x => fila[x] === (abajo ? k - 1 : k + 1) || (x.startsWith('~') && capas[abajo ? k - 1 : k + 1]?.includes(x)));
+          const todos = v.length ? v : vecinos.get(id) ?? [];
+          return todos.length ? todos.reduce((s2, x) => s2 + xc.get(x)!, 0) / todos.length : xc.get(id)!;
+        });
+        // lo más cerca posible de lo deseado sin pisarse: ida empujando a la derecha, vuelta a la izquierda, promedio
+        const ida = [...desea], vuelta = [...desea];
+        for (let i = 1; i < c.length; i++) ida[i] = Math.max(ida[i], ida[i - 1] + sep(c[i - 1], c[i]));
+        for (let i = c.length - 2; i >= 0; i--) vuelta[i] = Math.min(vuelta[i], vuelta[i + 1] - sep(c[i], c[i + 1]));
+        const x = c.map((_, i) => (ida[i] + vuelta[i]) / 2);
+        for (let i = 1; i < c.length; i++) x[i] = Math.max(x[i], x[i - 1] + sep(c[i - 1], c[i]));
+        c.forEach((id, i) => xc.set(id, x[i]));
+      }
+    }
+  };
+  /** segunda pasada: cada fila se reordena según dónde quedaron sus vecinos, y se vuelve a colocar */
+  const reordenar = () => {
+    capas.forEach((c, k) => {
+      const clave = (id: string) => { const v = vecinos.get(id) ?? []; return v.length ? v.reduce((s2, x) => s2 + xc.get(x)!, 0) / v.length : xc.get(id)!; };
+      const nuevo = c.map(id => ({ id, x: clave(id) })).sort((a, b) => a.x - b.x).map(x => x.id);
+      capas[k] = nuevo;
+    });
+  };
+  const colocarTodo = () => {
+    colocarX(); reordenar(); colocarX(); reordenar(); colocarX();
+    const izq = Math.min(...[...xc.entries()].map(([id, x]) => x - ancho(id) / 2));
+    xc.forEach((x, id) => xc.set(id, x - izq + PAD));
+  };
+  const colocarY = () => {
+    let y = PAD;
+    cajaFila = capas.map((c, k) => {
+      const alto = Math.max(0, ...c.filter(id => !id.startsWith('~')).map(id => tarjetas.get(id)!.offsetHeight));
+      const caja = { t: y, b: y + alto };
+      y += alto + huecos[k];
+      return caja;
+    });
+    capas.forEach((c, k) => c.forEach(id => { if (id.startsWith('~')) return; const t = tarjetas.get(id)!; t.style.left = `${xc.get(id)! - t.offsetWidth / 2}px`; t.style.top = `${cajaFila[k].t}px`; }));
+    const derecha = Math.max(...[...xc.entries()].map(([id, x]) => x + ancho(id) / 2));
+    tablero.style.width = `${derecha + PAD}px`;
+    tablero.style.height = `${(cajaFila.at(-1)?.b ?? 0) + PAD}px`;
+  };
+  let colocado = false;
 
   // ---- flechas
   const dibujar = () => {
     if (!tablero.isConnected) return;
+    if (!colocado) { colocarTodo(); colocarY(); colocado = true; }
     const base = tablero.getBoundingClientRect();
-    const rel = (e: Element) => { const b = e.getBoundingClientRect(); return { l: b.left - base.left, r: b.right - base.left, t: b.top - base.top, b: b.bottom - base.top }; };
+    const z = base.width / (tablero.offsetWidth || 1) || 1;
+    const rel = (e: Element) => { const b = e.getBoundingClientRect(); return { l: (b.left - base.left) / z, r: (b.right - base.left) / z, t: (b.top - base.top) / z, b: (b.bottom - base.top) / z }; };
     svg.setAttribute('width', String(tablero.scrollWidth));
     svg.setAttribute('height', String(tablero.scrollHeight));
     svg.replaceChildren();
-    const caja = filasEl.map(rel);
+    const caja = cajaFila;
     // tallo: debajo del símbolo de salida (los datos: debajo del chip)
     const tallo = (id: string) => {
       const t = tarjetas.get(id)!, s = salidas.get(id)!;
@@ -368,7 +473,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       const t = tarjetas.get(a)!;
       const lugares = [...t.querySelectorAll<HTMLElement>(`.gr-ec [data-uso="${de}"], .gr-cond [data-uso="${de}"]`)];
       const st = tallo(de);
-      const xsCarril = ruta.slice(1, -1).map(c => { const b = rel(carriles.get(c)!); return (b.l + b.r) / 2; });
+      const xsCarril = ruta.slice(1, -1).map(c => xc.get(c)!);
       (lugares.length ? lugares : [t]).forEach(l => {
         const b = rel(l);
         const px = (b.l + b.r) / 2;
@@ -382,14 +487,9 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
       if (!l.includes(tr.de)) l.push(tr.de);
       vias.set(g, l);
     }));
-    // el hueco crece con la cantidad de vías (se ajusta y se vuelve a medir una vez)
-    let cambio = false;
-    filasEl.forEach((f, g) => {
-      const n = vias.get(g)?.length ?? 0;
-      const alto = `${Math.max(26, 14 + n * 8)}px`;
-      if (g < filasEl.length - 1 && f.style.marginBottom !== alto) { f.style.marginBottom = alto; cambio = true; }
-    });
-    if (cambio) { requestAnimationFrame(dibujar); return; }
+    // el hueco entre filas crece con la cantidad de vías (se ajusta y se vuelve a dibujar)
+    const nuevos = capas.map((_, g) => Math.max(30, 18 + (vias.get(g)?.length ?? 0) * 9));
+    if (nuevos.some((x, g) => x !== huecos[g])) { huecos = nuevos; colocarY(); dibujar(); return; }
     vias.forEach(l => l.sort((a, b) => tallo(a).x - tallo(b).x));
     const yVia = (g: number, de: string) => {
       const l = vias.get(g)!, y0 = caja[g].b, y1 = caja[g + 1].t;
@@ -430,7 +530,7 @@ export function vistaGrafo<D, R>(cap: CapituloGrafo<D, R>, r0: R, al: {
   // primera medida: cuando el tablero ya está en la página
   const obs = new ResizeObserver(() => requestAnimationFrame(dibujar));
   requestAnimationFrame(() => { if (tablero.isConnected) obs.observe(tablero); dibujar(); });
-  if (document.fonts?.ready) document.fonts.ready.then(() => requestAnimationFrame(dibujar));
+  if (document.fonts?.ready) document.fonts.ready.then(() => { colocado = false; requestAnimationFrame(dibujar); });
   return {
     el: tablero,
     actualizar(nr, rev) { r = nr as R; revelados = rev; pintar(); requestAnimationFrame(dibujar); },

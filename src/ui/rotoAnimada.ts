@@ -125,13 +125,13 @@ export function rototraslacionAnimada(d: DatosRotoPlano & { SJ: number; SJa2: nu
 
   const Jmax = Math.max(...d.paralelos.map(p => p.J), ...d.perpendiculares.map(p => p.J), 1e-9);
   const grosor = (J: number) => 1.5 + 3.5 * Math.sqrt(J / Jmax);
-  const Fmax = Math.max(1e-9, ...d.paralelos.map(p => Math.max(Math.abs(p.tras), Math.abs(p.total))), ...d.perpendiculares.map(p => Math.abs(p.rot)));
-  const base = Y(-d.S / 2) + 30, Lmax = abajo - 90;
-  // piezas en la misma recta de acción, una al lado de la otra
-  const corr = new Map<ElementoPlano, number>();
+  // piezas en la misma recta de acción: en columna, una debajo de la otra
   const grupos = new Map<string, ElementoPlano[]>();
   d.paralelos.forEach(p => { const kk = p.pos.toFixed(2); grupos.set(kk, [...(grupos.get(kk) ?? []), p]); });
-  grupos.forEach(ps => { const ws = ps.map(p => Math.max(9, grosor(p.J) * 3) + 4); let acc = -ws.reduce((a, b) => a + b, 0) / 2; ps.forEach((p, i) => { corr.set(p, acc + ws[i] / 2); acc += ws[i]; }); });
+  const SEP = 7;
+  const Fmax = Math.max(1e-9, ...[...grupos.values()].map(ps => ps.reduce((s, p) => s + Math.max(Math.abs(p.tras), Math.abs(p.total), Math.abs(p.tras) + Math.abs(p.rot)), 0)),
+    ...d.perpendiculares.map(p => Math.abs(p.rot)));
+  const base = Y(-d.S / 2) + 30, Lmax = abajo - 90;
   const ordenGrupos = [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos);
 
   const TEXTOS = [
@@ -153,16 +153,21 @@ export function rototraslacionAnimada(d: DatosRotoPlano & { SJ: number; SJa2: nu
     sub.textContent = TEXTOS[fase][1];
     // flechas de cada tabique paralelo: total = traslación·f1 + rotación·f2
     fuerzas.replaceChildren();
-    d.paralelos.forEach(p => {
-      const x = X(p.pos) + (corr.get(p) ?? 0), w = grosor(p.J);
-      const F = p.tras * f1 + p.rot * f2, L = (Math.abs(F) / Fmax) * Lmax;
-      if (L > 1) fuerzas.append(F >= 0 ? flecha(x, base + L + 2, x, base, w, 'rt-tras') : flecha(x, base, x, base + L + 2, w, 'rt-tras'));
-      // el tramo que suma o resta la rotación, al costado
-      const lr = (Math.abs(p.rot * f2) / Fmax) * Lmax;
-      if (lr > 2) {
-        const lt = (Math.abs(p.tras * f1) / Fmax) * Lmax, xb = x + Math.max(9, w * 3) / 2 + 3;
-        fuerzas.append(el('line', { x1: xb, x2: xb, y1: base + Math.min(lt, lt + Math.sign(p.rot) * lr) + 2, y2: base + Math.max(lt, lt + Math.sign(p.rot) * lr) + 2, class: `rt-rot-tramo${p.rot < 0 ? ' resta' : ''}` }));
-      }
+    grupos.forEach(ps => {
+      const k2 = (Lmax - SEP * (ps.length - 1)) / Lmax;
+      let acc = 0;
+      ps.forEach(p => {
+        const x = X(p.pos), w = grosor(p.J), b0 = base + acc;
+        const F = p.tras * f1 + p.rot * f2, L = (Math.abs(F) / Fmax) * Lmax * k2;
+        if (L > 1) fuerzas.append(F >= 0 ? flecha(x, b0 + L + 2, x, b0, w, 'rt-tras') : flecha(x, b0, x, b0 + L + 2, w, 'rt-tras'));
+        // el tramo que suma o resta la rotación, al costado
+        const lr = (Math.abs(p.rot * f2) / Fmax) * Lmax * k2;
+        if (lr > 2) {
+          const lt = (Math.abs(p.tras * f1) / Fmax) * Lmax * k2, xb = x + Math.max(9, w * 3) / 2 + 3;
+          fuerzas.append(el('line', { x1: xb, x2: xb, y1: b0 + Math.min(lt, lt + Math.sign(p.rot) * lr) + 2, y2: b0 + Math.max(lt, lt + Math.sign(p.rot) * lr) + 2, class: `rt-rot-tramo${p.rot < 0 ? ' resta' : ''}` }));
+        }
+        acc += Math.max(L, (Math.abs(p.tras * f1) / Fmax) * Lmax * k2) + SEP;
+      });
     });
     ordenGrupos.forEach((ps, gi) => {
       const y1 = base + Lmax + 18 + (gi % 2) * 26;

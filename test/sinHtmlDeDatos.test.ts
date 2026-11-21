@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { esc } from '../src/ui/comp';
+import { simbolo, textoMat } from '../src/ui/grafo';
 
 const PERMITIDAS: [string, string][] = [
   ['src/ui/diagramaJ.ts', 'ley.innerHTML = `<span><i class="tab"></i>tabiques</span>'],   // texto fijo
@@ -23,6 +24,26 @@ const PERMITIDAS: [string, string][] = [
   ['src/app.ts', 'd.innerHTML = html;'],                                                       // dialogo(): cada dato con esc()
   ['src/app.ts', "insertAdjacentHTML('beforeend', '<span class=\"plegar\""],                  // texto fijo
   ['src/ui/planta.ts', `bMasTr.innerHTML = '<span class="ic">⋯</span>`],                       // texto fijo
+  // Ecuaciones: símbolos con simbolo()/textoMat() (mat, v y esc), ecuaciones con conSimbolos/conNumeros (textoMat y
+  // números), títulos y unidades con esc(); los nombres de piezas del proyecto solo entran por esas funciones
+  ['src/ui/grafo.ts', 's.innerHTML = x ? simbolo(x.sim) : esc(id);'],
+  ['src/ui/grafo.ts', 'sp.innerHTML = textoMat(t);'],
+  ['src/ui/grafo.ts', 's.innerHTML = simbolo(p.sim);'],
+  ['src/ui/grafo.ts', 'sal.innerHTML = simbolo(n.sim);'],
+  ['src/ui/grafo.ts', "sp.innerHTML = simbolo(n.sim) + ' ';"],
+  ['src/ui/ecuaciones/vista.ts', 'nom.innerHTML = `${simbolo(p.sim)} · ${esc(p.nombre)}`;'],
+  ['src/ui/ecuaciones/vista.ts', 'titulo.innerHTML = `${simbolo((n ?? p)!.sim)} · ${esc(n ? n.titulo : p!.nombre)}`;'],
+  ['src/ui/ecuaciones/vista.ts', 'sim.innerHTML = `${simbolo(n.sim)} = ${conSimbolos(n.ec, cap)}`;'],
+  ['src/ui/ecuaciones/vista.ts', 'num.innerHTML = `${simbolo(n.sim)} = ${conNumeros(n.ec, valorDe, decDe)}'],
+  ['src/ui/ecuaciones/vista.ts', 'cond.innerHTML = `${/^[≤≥<>=]/.test(n.control.cond.trim())'],
+  ['src/ui/ecuaciones/vista.ts', 'b.innerHTML = x ? simbolo(x.sim) : esc(id);'],
+  ['src/ui/ecuaciones/imprimir.ts', 's.innerHTML = simbolo(x.sim);'],
+  ['src/ui/ecuaciones/imprimir.ts', 'tit.innerHTML = `${simbolo(n.sim)} · ${esc(n.titulo)}`;'],
+  ['src/ui/ecuaciones/imprimir.ts', 'e1.innerHTML = `${simbolo(n.sim)} = ${conSimbolos(n.ec, cap)}`;'],
+  ['src/ui/ecuaciones/imprimir.ts', 'e2.innerHTML = `${simbolo(n.sim)} = ${conNumeros(n.ec, val, dec)}'],
+  ['src/ui/ecuaciones/imprimir.ts', 'cond.innerHTML = `${/^[≤≥<>=]/.test(n.control.cond.trim())'],
+  ['src/ui/ecuaciones/imprimir.ts', 's.innerHTML = `${simbolo(n.sim)} · ${esc(n.titulo)}`;'],
+  ['src/ui/ecuaciones/imprimir.ts', 'c.innerHTML = conSimbolos(n.control!.cond,'],
 ];
 
 function archivos(dir: string): string[] {
@@ -42,6 +63,11 @@ describe('los datos del proyecto nunca van como HTML', () => {
       });
     }
     expect(nuevas).toEqual([]);
+  });
+
+  it('los símbolos de las ecuaciones escapan los nombres de las piezas', () => {
+    const malo = '<img src=x onerror=alert(1)>';
+    for (const x of [simbolo(`J_${malo}`), simbolo(`AB_${malo}`), textoMat(`p_${malo} + ${malo}`)]) expect(x).not.toMatch(/<img/);
   });
 
   it('esc() deja el texto inerte, también dentro de un atributo entre comillas', () => {

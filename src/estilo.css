@@ -120,7 +120,8 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .riel .punto.completa { background: var(--accent); }
 .riel .punto.no-verifica { background: var(--mal); }
 .riel .punto.revisar { background: var(--revisar); }
-.riel .riel-fin { margin-top: auto; }
+.riel .riel-fin { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
+.riel button { min-width: 0; letter-spacing: -0.15px; overflow-wrap: anywhere; }
 
 .lateral { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
 .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rolb); color: #fff; }
@@ -1479,10 +1480,8 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
 .gc-0 { --c: var(--gc-0); } .gc-1 { --c: var(--gc-1); } .gc-2 { --c: var(--gc-2); } .gc-3 { --c: var(--gc-3); }
 .gc-4 { --c: var(--gc-4); } .gc-5 { --c: var(--gc-5); } .gc-6 { --c: var(--gc-6); } .gc-7 { --c: var(--gc-7); }
 .gr-marco { overflow-x: auto; padding: 4px 2px 10px; }
-.gr-tablero { position: relative; display: flex; flex-direction: column; align-items: center; min-width: max-content; padding: 6px 12px; }
-.gr-fila { display: flex; gap: 22px; align-items: flex-start; justify-content: center; margin-bottom: 26px; }
-.gr-fila.datos { gap: 8px; flex-wrap: nowrap; }
-.gr-carril { width: 10px; align-self: stretch; }
+.gr-tablero { position: relative; margin: 0 auto; min-height: 120px; }
+.gr-tablero > .gr-nodo, .gr-tablero > .gr-param { position: absolute; }
 .gr-flechas { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .gr-arista path { fill: none; stroke: var(--c, var(--ink2)); stroke-width: 1.6; }
 .gr-arista .punta { fill: var(--c, var(--ink2)); stroke: none; }
@@ -1490,7 +1489,7 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
 .gr-arista.gr-dato path:not(.punta) { stroke-dasharray: 3 3; }
 .gr-tablero.enfocado .gr-arista:not(.activo) { opacity: .12; }
 .gr-tablero.enfocado .gr-nodo:not(.activo), .gr-tablero.enfocado .gr-param:not(.activo) { opacity: .35; }
-.gr-nodo { position: relative; z-index: 1; background: var(--lienzo); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 12px 8px; min-width: 120px; max-width: 360px; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / .06); transition: opacity .15s; }
+.gr-nodo { z-index: 1; background: var(--lienzo); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 12px 8px; min-width: 120px; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / .06); transition: opacity .15s; }
 .gr-nodo:hover, .gr-nodo:focus-visible { border-color: var(--ink2); outline: none; }
 .gr-nodo.elegido { border-color: var(--elegido); box-shadow: 0 0 0 2px color-mix(in srgb, var(--elegido) 45%, transparent); }
 .gr-nodo.externo { background: var(--zebra); border-style: dashed; }
@@ -1512,7 +1511,7 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
 .gr-valor { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 12.5px var(--mono); color: var(--num); }
 .gr-valor .u { color: var(--dim); font-family: var(--fuente); }
 .gr-valor .chip-estado { margin-left: auto; }
-.gr-param { position: relative; z-index: 1; display: inline-flex; align-items: baseline; gap: 2px; padding: 5px 10px; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--field); font: 14px var(--math); color: var(--ink); cursor: ew-resize; touch-action: none; user-select: none; }
+.gr-param { z-index: 1; display: inline-flex; white-space: nowrap; align-items: baseline; gap: 2px; padding: 5px 10px; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--field); font: 14px var(--math); color: var(--ink); cursor: ew-resize; touch-action: none; user-select: none; }
 .gr-param .gr-num { font: 12.5px var(--mono); color: var(--num); }
 .gr-param .gr-nombre { display: none; }
 .gr-param.fijo { cursor: pointer; background: var(--zebra); border-style: dashed; }
@@ -1537,3 +1536,43 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
 .mini.enlace { font: 13px var(--math); padding: 1px 6px; margin: 0 2px; }
 .deslizador.movido output { color: var(--num); font-weight: 600; }
 @media (pointer: coarse) { .gr-param { padding: 8px 12px; } .gr-nodo { padding: 9px 13px 10px; } }
+
+/* datos compartidos por varias cuentas: con su color, para seguirlos de una cuenta a otra */
+.gr-param.compartido { border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 9%, var(--field)); }
+.gr-param.compartido .gr-sal { background: none; }
+.gr-uso:not(.gr-dato) { background: color-mix(in srgb, var(--c) 10%, transparent); }
+
+.gr-zoom { display: flex; gap: 4px; align-items: center; margin: 2px 0 6px; }
+.gr-zoom output { font: 12px var(--mono); color: var(--ink2); min-width: 44px; text-align: center; }
+
+/* ---------------------------------------------------------------- guía de un método, para imprimir */
+body.con-guia { height: auto; display: block; overflow: visible; }
+body.con-guia > :not(.guia-impresion) { display: none !important; }
+.guia-impresion { background: #fff; color: var(--ink); max-width: 1000px; margin: 0 auto; padding: 0 28px 40px; font: 13.5px/1.55 var(--fuente); }
+.guia-barra { position: sticky; top: 0; z-index: 5; display: flex; gap: 12px; align-items: center; padding: 10px 0; background: #fff; border-bottom: 1px solid var(--edge); margin-bottom: 18px; }
+.guia-barra strong { margin-right: auto; }
+.guia-portada h1 { font-size: 28px; margin: 4px 0; }
+.guia-sobre { font: 600 12px var(--fuente); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin: 24px 0 0; }
+.guia-sub { font-size: 15px; color: var(--ink2); margin: 0 0 14px; }
+.guia-impresion h2 { font-size: 19px; margin: 22px 0 8px; border-bottom: 2px solid var(--r-ayuda); padding-bottom: 3px; }
+.guia-impresion h3 { font-size: 15px; margin: 16px 0 6px; }
+.guia-cap { break-before: page; }
+.guia-diagrama { break-before: page; break-after: page; page: diagrama; }
+.guia-tablero { overflow: hidden; }
+.guia-tablero .gr-tablero { margin: 0; }
+.guia-paso { break-inside: avoid; border-left: 3px solid var(--edge); padding: 4px 0 4px 12px; margin: 10px 0; }
+.guia-paso.traccion { border-left-color: var(--traccion); } .guia-paso.compresion { border-left-color: var(--compresion); }
+.guia-paso.externo { border-left-style: dashed; }
+.guia-paso h4 { margin: 0 0 2px; font: 600 14px var(--fuente); }
+.guia-paso p { margin: 3px 0; }
+.guia-paso .ec { font: 14.5px var(--math); }
+.guia-control { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0 2px; font: 14px var(--math); }
+@page diagrama { size: A3 landscape; margin: 10mm; }
+@page diagramaV { size: A3 portrait; margin: 10mm; }
+.guia-diagrama.vertical { page: diagramaV; }
+@media print {
+  .guia-barra { display: none; }
+  .guia-impresion { max-width: none; padding: 0; }
+  .guia-impresion, .guia-impresion * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .guia-portada { break-after: page; }
+}

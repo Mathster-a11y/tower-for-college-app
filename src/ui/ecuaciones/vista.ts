@@ -5,11 +5,18 @@
  * depende, qué la usa y, si es un control, qué hacer cuando no verifica.
  */
 import { estado, fmt } from '../estado';
-import { h, seccion, type H } from '../comp';
+import { esc, h, seccion, type H } from '../comp';
 import { dependientes, referencias, simbolo, textoMat, vistaGrafo, type CapituloGrafo, type Grafo, type NodoGrafo, type ParamGrafo, type VistaGrafo } from '../grafo';
 import { grafoGuia } from './guia';
+import { grafoPlanilla, tablaNivelesPlanilla, type RP } from './planilla';
+import { grafoCirsoc } from './cirsoc';
+import { grafoFem } from './fem';
+import { abrirGuiaImprimible } from './imprimir';
+import { grafoFlujo } from './flujo';
+import { viento102 } from '../../engine/cargas/cirsoc102';
+import { calcularFem } from '../../engine/metodos/fem';
 
-export const METODOS_ECUACIONES = ['Guía'] as const;
+export const METODOS_ECUACIONES = ['Guía', 'Planilla', 'CIRSOC', 'FEM', 'Flujo'] as const;
 type MetodoEc = typeof METODOS_ECUACIONES[number];
 
 /** lo que se elige y se mueve en la guía (se pierde al cambiar el proyecto) */
@@ -26,14 +33,42 @@ let soltar = 0;
 
 // ---------------------------------------------------------------------------------------------- el grafo actual
 type G = Grafo<unknown, unknown>;
+let memo: { clave: string; g: G } | null = null;
 function grafoActual(): { g: G; metodo: MetodoEc } {
+  const metodo0 = (estado.sub.ecuaciones as MetodoEc) ?? 'Guía';
+  const clave = `${estado.revision}|${estado.dir}|${sel.pieza}|${sel.muro}|${metodo0}|${estado.config.version}`;
+  if (memo?.clave === clave && sel.revision === estado.revision) return { g: memo.g, metodo: metodo0 };
+  const x = armarGrafo();
+  memo = { clave: `${estado.revision}|${estado.dir}|${sel.pieza}|${sel.muro}|${x.metodo}|${estado.config.version}`, g: x.g };
+  return x;
+}
+function armarGrafo(): { g: G; metodo: MetodoEc } {
   if (sel.revision !== estado.revision) { sel.movidos = {}; sel.elegido = null; sel.revision = estado.revision; }
   const metodo = (estado.sub.ecuaciones as MetodoEc) ?? 'Guía';
   const piezas = estado.calculo.asig.piezas.filter(x => x.dir === estado.dir && x.filaHoja !== null);
   if (!piezas.some(x => x.nombre === sel.pieza)) { sel.pieza = piezas[0]?.nombre ?? ''; sel.muro = ''; }
-  const g = grafoGuia(estado.proyecto, estado.calculo.asig.piezas, { dir: estado.dir, pieza: sel.pieza, muro: sel.muro }) as unknown as G;
-  return { g, metodo };
+  return { g: grafoDeMetodo(metodo, estado.dir, sel.pieza, sel.muro), metodo };
 }
+/** el grafo de un método para la torre abierta (también para la guía impresa) */
+export function grafoDeMetodo(metodo: MetodoEc, dir: 'A' | 'B', pieza: string, muro: string): G {
+  const { asig } = estado.calculo;
+  if (metodo === 'Planilla') {
+    const iPB = estado.proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
+    const gp = grafoPlanilla(asig.datos, asig.piezas, asig.filaNivel[iPB] ?? 50, estado.proyecto.hormigon || 'H30', estado.config.version, { dir, pieza });
+    gp.capitulos[0].detalle = (id, r) => (['Q', 'Wi', 'M', 'p'].includes(id) ? tablaNivelesPlanilla(r as RP) : null);
+    return gp as unknown as G;
+  }
+  if (metodo === 'Flujo') {
+    const w = viento102(estado.proyecto);
+    let n1 = estado.calculo.fem?.n1[dir];
+    try { n1 ??= calcularFem(estado.proyecto).n1[dir]; } catch { n1 = w[dir].n1; }
+    return grafoFlujo({ U0: 0.1, D: 40, Re: 1000, cs: 0.16, St: 0.168, V: w.V, B: w[dir].B, n1, nuAire: 1.5e-5 }) as unknown as G;
+  }
+  if (metodo === 'FEM') return grafoFem(estado.proyecto, estado.config.teoria, { dir, pieza }) as unknown as G;
+  if (metodo === 'CIRSOC') return grafoCirsoc(estado.proyecto, 'cirsoc', { dir, pieza, muro }) as unknown as G;
+  return grafoGuia(estado.proyecto, asig.piezas, { dir, pieza, muro }) as unknown as G;
+}
+export type { MetodoEc };
 const capituloActual = (g: G) => g.capitulos.find(c => c.id === sel.capitulo) ?? g.capitulos[0];
 function datosMovidos(g: G, metodo: string) {
   const d = g.datos();
@@ -53,6 +88,10 @@ export function panelEcuaciones(c: H) {
   const { g, metodo } = grafoActual();
   const cap = capituloActual(g);
   c.append(h('p', { class: 'nota' }, 'Cada cuenta es una tarjeta. La flecha sale del resultado y cae en el lugar exacto de la ecuación que lo usa; cada resultado tiene su color. Pasá el mouse (o tocá) una tarjeta para ver de dónde viene y a dónde va. Los datos de arriba se arrastran de costado y toda la cadena se recalcula.'));
+  // la guía del método, para imprimir o guardar en PDF
+  const bGuia = h('button', { type: 'button', class: 'boton primario' }, `Guía del método ${metodo} (imprimir o PDF)`);
+  bGuia.addEventListener('click', () => { void abrirGuiaImprimible(metodo); });
+  c.append(h('div', { class: 'fila-acciones' }, bGuia));
   // capítulos
   const lista = h('div', { class: 'ec-capitulos', role: 'group', 'aria-label': 'Capítulos' });
   g.capitulos.forEach(k => {
@@ -63,13 +102,13 @@ export function panelEcuaciones(c: H) {
   c.append(seccion('Capítulos', lista).el);
   // pieza (para rigidez, reparto y tensiones) y muro
   const piezas = estado.calculo.asig.piezas.filter(x => x.dir === estado.dir && x.filaHoja !== null);
-  if (piezas.length && ['rigidez', 'roto', 'flexo'].includes(cap.id)) {
+  if (piezas.length && ['rigidez', 'roto', 'flexo', 'pieza', 'ensamble', 'fuerzas'].includes(cap.id)) {
     const s = h('select', { 'aria-label': 'Pieza' }) as HTMLSelectElement;
     piezas.forEach(x => s.append(h('option', { value: x.nombre }, x.nombre)));
     s.value = sel.pieza;
     s.addEventListener('change', () => { sel.pieza = s.value; sel.muro = ''; estado.avisarPanel(); });
     const fila = h('label', { class: 'fila-campo' }, h('span', {}, `Pieza (viento ${estado.dir})`), s);
-    if (cap.id === 'flexo') {
+    if (cap.id === 'flexo' && metodo !== 'Planilla') {
       const pz = piezas.find(x => x.nombre === sel.pieza);
       const m = h('select', { 'aria-label': 'Muro' }) as HTMLSelectElement;
       (pz?.muros ?? []).forEach(id => m.append(h('option', { value: id }, id)));
@@ -99,7 +138,7 @@ function pintarDatos(g: G, metodo: string, cap: CapituloGrafo<unknown, unknown>)
     const val = mv[p.id] ?? p.get(d0);
     const i = h('input', { type: 'range', min: String(p.min), max: String(p.max), step: String(p.paso), value: String(val) }) as HTMLInputElement;
     const o = h('output', {}, `${fmt(val, p.dec ?? 2)}${p.unidad ? ` ${p.unidad}` : ''}`);
-    const nom = h('span', {}); nom.innerHTML = `${simbolo(p.sim)} · ${p.nombre}`;
+    const nom = h('span', {}); nom.innerHTML = `${simbolo(p.sim)} · ${esc(p.nombre)}`;
     i.addEventListener('input', () => { mover(p.id, +i.value, false); o.textContent = `${fmt(+i.value, p.dec ?? 2)}${p.unidad ? ` ${p.unidad}` : ''}`; });
     i.addEventListener('change', () => mover(p.id, +i.value, true));
     i.addEventListener('dblclick', () => { delete (sel.movidos[metodo] ??= {})[p.id]; estado.avisarPanel(); });
@@ -128,7 +167,7 @@ function pintarDetalle(g: G, metodo: string, cap: CapituloGrafo<unknown, unknown
     return v === undefined || v === null || !isFinite(v) ? null : v;
   };
   const decDe = (k: string) => (cap.params.find(x => x.id === k)?.dec ?? cap.nodos.find(x => x.id === k)?.dec ?? 2);
-  const titulo = h('h4', {}); titulo.innerHTML = `${simbolo((n ?? p)!.sim)} · ${n ? n.titulo : p!.nombre}`;
+  const titulo = h('h4', {}); titulo.innerHTML = `${simbolo((n ?? p)!.sim)} · ${esc(n ? n.titulo : p!.nombre)}`;
   detalleEl.append(titulo);
   if (p) {
     detalleEl.append(h('p', {}, `${fmt(p.get(d), p.dec ?? 2)}${p.unidad ? ` ${p.unidad}` : ''}`), h('p', { class: 'nota' }, p.fuente ? `Sale de: ${p.fuente}.` : 'Dato del proyecto.'));
@@ -136,7 +175,7 @@ function pintarDetalle(g: G, metodo: string, cap: CapituloGrafo<unknown, unknown
     if (n.ec && !n.externo) {
       const sim = h('div', { class: 'ec gr-detalle-ec' }); sim.innerHTML = `${simbolo(n.sim)} = ${conSimbolos(n.ec, cap)}`;
       const num = h('div', { class: 'ec gr-detalle-ec' });
-      num.innerHTML = `${simbolo(n.sim)} = ${conNumeros(n.ec, valorDe, decDe)} = <span class="res">${fmt(n.valor(r) ?? NaN, n.dec ?? 2)}</span>${n.unidad ? ` <span class="u">${n.unidad}</span>` : ''}`;
+      num.innerHTML = `${simbolo(n.sim)} = ${conNumeros(n.ec, valorDe, decDe)} = <span class="res">${fmt(n.valor(r) ?? NaN, n.dec ?? 2)}</span>${n.unidad ? ` <span class="u">${esc(n.unidad)}</span>` : ''}`;
       detalleEl.append(sim, num);
     } else detalleEl.append(h('p', {}, `${fmt(n.valor(r) ?? NaN, n.dec ?? 2)}${n.unidad ? ` ${n.unidad}` : ''} · ${n.externo ?? ''}`));
     if (n.nota) detalleEl.append(h('p', { class: 'nota' }, n.nota));
@@ -170,14 +209,14 @@ function pintarDetalle(g: G, metodo: string, cap: CapituloGrafo<unknown, unknown
 function enlace(id: string, cap: CapituloGrafo<unknown, unknown>): H {
   const x = cap.nodos.find(k => k.id === id) ?? cap.params.find(k => k.id === id);
   const b = h('button', { type: 'button', class: 'mini enlace' });
-  b.innerHTML = x ? simbolo(x.sim) : id;
+  b.innerHTML = x ? simbolo(x.sim) : esc(id);
   b.title = x ? ('titulo' in x ? x.titulo : x.nombre) : id;
   b.addEventListener('click', () => elegir(id));
   return b;
 }
-const conSimbolos = (ec: string, cap: CapituloGrafo<unknown, unknown>) =>
+export const conSimbolos = (ec: string, cap: CapituloGrafo<unknown, unknown>) =>
   ec.split(/(\[[A-Za-z][A-Za-z0-9_]*\]|\^\{|\})/).map(t => { const m = /^\[(.+)\]$/.exec(t); if (m) { const x = cap.nodos.find(k => k.id === m[1]) ?? cap.params.find(k => k.id === m[1]); return x ? simbolo(x.sim) : m[1]; } return t === '^{' ? '<sup>' : t === '}' ? '</sup>' : textoMat(t); }).join('');
-const conNumeros = (ec: string, val: (k: string) => number | null, dec: (k: string) => number) =>
+export const conNumeros = (ec: string, val: (k: string) => number | null, dec: (k: string) => number) =>
   ec.split(/(\[[A-Za-z][A-Za-z0-9_]*\]|\^\{|\})/).map(t => { const m = /^\[(.+)\]$/.exec(t); if (m) { const v = val(m[1]); return `<span class="num">${v === null ? '—' : fmt(v, dec(m[1]))}</span>`; } return t === '^{' ? '<sup>' : t === '}' ? '</sup>' : textoMat(t); }).join('');
 
 // ---------------------------------------------------------------------------------------------- acciones
@@ -193,9 +232,19 @@ function señalar(ids: string[]) {
   t.forEach(x => { x.classList.remove('señalado'); void x.offsetWidth; x.classList.add('señalado'); });
   t[0]?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
 }
+let pendiente = 0;
 function mover(id: string, x: number, fin: boolean) {
-  const { g, metodo } = grafoActual();
+  const { metodo } = grafoActual();
   (sel.movidos[metodo] ??= {})[id] = x;
+  // CIRSOC y FEM recalculan el proyecto entero: mientras se arrastra, un recálculo por cuadro como mucho
+  if (!fin && (metodo === 'CIRSOC' || metodo === 'FEM')) {
+    if (!pendiente) pendiente = requestAnimationFrame(() => { pendiente = 0; aplicarMovida(id, false); });
+    return;
+  }
+  aplicarMovida(id, fin);
+}
+function aplicarMovida(id: string, fin: boolean) {
+  const { g, metodo } = grafoActual();
   const cap = capituloActual(g);
   const r = resultado(g, metodo);
   clearTimeout(soltar);
@@ -226,7 +275,16 @@ export function centroEcuaciones(c: H) {
     h('span', {}, 'Arriba, los datos (se arrastran de costado). Cada flecha lleva un resultado al lugar donde se usa.'),
     h('span', { class: 'gr-ley traccion' }, 'tracción'), h('span', { class: 'gr-ley compresion' }, 'compresión'),
     h('span', { class: 'gr-ley control' }, 'control: verifica o no'));
-  c.append(h('div', { class: 'gr-marco' }, vista.el), ley);
+  // zoom: «ajustar» hace entrar el tablero entero en el ancho (si es más ancho que el centro)
+  const marco = h('div', { class: 'gr-marco' }, vista.el);
+  const salida = h('output', {}, '100 %');
+  const poner = (z: number) => { zoom = Math.min(1.4, Math.max(0.4, z)); vista!.el.style.zoom = String(zoom); salida.textContent = `${Math.round(zoom * 100)} %`; vista!.redibujar(); };
+  const bz = (t: string, titulo: string, f: () => void) => { const b = h('button', { type: 'button', class: 'mini', title: titulo }, t); b.addEventListener('click', f); return b; };
+  const ajustar = () => { const w = vista!.el.offsetWidth; poner(w > 0 ? Math.min(1, (marco.clientWidth - 8) / w) : 1); };
+  c.append(h('div', { class: 'gr-zoom' }, bz('−', 'Alejar', () => poner((zoom ?? 1) - 0.1)), salida, bz('+', 'Acercar', () => poner((zoom ?? 1) + 0.1)), bz('Ajustar al ancho', 'Que entre todo el esquema', ajustar)), marco, ley);
+  // la primera vez, si no entra, se ajusta solo (después de que el tablero se acomoda)
+  if (zoom === null) setTimeout(() => { if (marco.isConnected) ajustar(); }, 120); else poner(zoom);
 }
+let zoom: number | null = null;
 
 export type { NodoGrafo, ParamGrafo };
