@@ -12,7 +12,7 @@ import { num, res } from './comun';
 
 const NOMBRE: Record<MetodoComparado, string> = { planilla: 'Planilla virgen', guia: 'Guía', cirsoc: 'CIRSOC', fem: 'FEM' };
 const COLOR: Record<MetodoComparado, string> = { planilla: 'A6A6A6', guia: '2E75B6', cirsoc: 'C55A11', fem: '548235' };
-const TITULO: Record<Capa, string> = { cargas: 'Cargas (viento)', estabilidad: 'Estabilidad', rigidez: 'Rigidez', reparto: 'Reparto del viento (caso 1)', 'verificación': 'Verificación del hormigón (uso ≤ 1 verifica)' };
+const TITULO: Record<Capa, string> = { cargas: 'Cargas (viento)', estabilidad: 'Estabilidad', rigidez: 'Rigidez', reparto: 'Reparto del viento (caso 1)', 'verificación': 'Verificación: compresión del hormigón solo (≤ 1 alcanza) y armadura vertical necesaria (%)' };
 
 export function libroCombinado(cmp: Comparacion, p: Proyecto): LibroK {
   const L = new LibroK();

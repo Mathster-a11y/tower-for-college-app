@@ -6,7 +6,8 @@
  *  - estabilidad: vuelco y excentricidad (con 1,5 de la guía o con 0,9 D + 1,0 W del 101-25);
  *  - rigidez: ΣJ y desplazamiento de la azotea;
  *  - reparto: la parte del viento que toma cada pieza (rototraslación de la planilla, muro por muro de la guía, modelo);
- *  - verificación: el uso del hormigón de cada pieza (tensiones admisibles o resistencia del 201).
+ *  - verificación: si el hormigón solo aguanta la compresión y cuánta armadura vertical hace falta (los cuatro métodos
+ *    verifican con criterios distintos: tensiones admisibles o resistencia del 201; estas dos cosas significan lo mismo).
  */
 import type { Calculo } from '../../ui/estado';
 import type { Proyecto } from '../modelo';
@@ -14,6 +15,7 @@ import type { Estado } from '../verificaciones';
 import { configDe, type ConfigCalculo } from './tipos';
 import { vuelco102 } from './cirsoc';
 import { TENSION_ADM } from '../verificaciones';
+import { verificarDireccion } from '../flexocompresion';
 
 export type MetodoComparado = 'planilla' | 'guia' | 'cirsoc' | 'fem';
 export const METODOS_COMPARADOS: MetodoComparado[] = ['planilla', 'guia', 'cirsoc', 'fem'];
@@ -89,10 +91,14 @@ export function compararMetodos(p: Proyecto, calcular: (p: Proyecto) => Calculo)
       return el && rg!.Q ? ((el.tras + el.rot) / rg!.Q) * 100 : null;
     });
   }
-  // ---------------------------------------------------------------- verificación: uso del hormigón (≤ 1 verifica)
+  // ---------------------------------------------------------------- verificación
+  // Los métodos verifican con criterios distintos (planilla y guía: tensiones admisibles con cargas de servicio; CIRSOC y
+  // FEM: resistencia del 201 con cargas mayoradas), así que se comparan dos cosas que significan lo mismo en los cuatro:
+  // si el hormigón solo aguanta la compresión, y cuánta armadura vertical hace falta por cálculo.
+  const adm = TENSION_ADM(p.hormigon || 'H30');
+  const guiaPiezas = (c: Calculo, dir: 'A' | 'B') => { try { return verificarDireccion(p, c.asig.piezas, c.corr, c.asig.filaNivel, dir, adm); } catch { return []; } };
   for (const pz of piezas) {
-    fila('verificación', `${pz.nombre} (viento ${pz.dir}): uso del hormigón`, '', (m, c) => {
-      const adm = TENSION_ADM(p.hormigon || 'H30');
+    fila('verificación', `${pz.nombre} (viento ${pz.dir}): compresión del hormigón solo`, '', (m, c) => {
       if (m === 'planilla') {
         if (pz.dir !== 'A') return null;                                  // la planilla solo verifica el viento A
         const i = c.asig.piezas.find(x => x.dir === 'A' && x.nombre === pz.nombre)?.filaHoja;
@@ -101,13 +107,32 @@ export function compararMetodos(p: Proyecto, calcular: (p: Proyecto) => Calculo)
       if (m === 'guia') { const x = ctrl(c, `${pz.nombre}: compresión (cargado)`); return x?.guia == null ? null : Math.abs(Math.min(0, x.guia)) / adm; }
       const v = c.cirsoc?.verif.find(x => x.dir === pz.dir && x.nombre === pz.nombre);
       if (!v?.muros.length) return null;
-      return configs[m].verificacion === 'completa' ? Math.max(...v.muros.map(x => x.relacion)) : Math.max(...v.muros.map(x => Math.max(x.NuMax / x.axialEmp, x.cordon.C / x.cordon.Cadm)));
+      // la axial (método empírico, 14.5) y el cordón comprimido (0,65·0,85 f'c del cordón), sin contar la armadura
+      return Math.max(...v.muros.map(x => Math.max(x.NuMax / x.axialEmp, x.cordon.C / x.cordon.Cadm)));
     }, (m, c) => {
       if (m === 'planilla') return null;
-      const g = m === 'guia' ? `Flexocompresión, viento ${pz.dir}` : `CIRSOC 201, viento ${pz.dir}`;
-      const cs = c.controles.filter(x => x.grupo === g && x.nombre.startsWith(`${pz.nombre}:`) && !/corte/.test(x.nombre) && !/tracción/.test(x.nombre));
-      return cs.some(x => x.estado === 'no verifica') ? 'no verifica' : cs.some(x => x.estado === 'atención') ? 'atención' : cs.length ? 'verifica' : null;
-    }, 'Planilla y guía: |σ| de compresión / σbk. CIRSOC y FEM: la relación de uso del 201 (completa: con la cuantía mínima; simple: empírico y cordones).');
+      if (m === 'guia') { const x = ctrl(c, `${pz.nombre}: compresión (cargado)`); return x ? (x.estado as Estado) : null; }
+      const v = c.cirsoc?.verif.find(x => x.dir === pz.dir && x.nombre === pz.nombre);
+      if (!v?.muros.length) return null;
+      const u = Math.max(...v.muros.map(x => Math.max(x.NuMax / x.axialEmp, x.cordon.C / x.cordon.Cadm)));
+      return u <= 1 ? 'verifica' : 'atención';                            // > 1: el cordón lleva armadura de compresión
+    }, '≤ 1: el hormigón solo alcanza para la compresión. Planilla y guía: |σ| de compresión (cargado, cargas de servicio) / σbk. CIRSOC y FEM: el mayor de la axial con el método empírico (201, 14.5) y del cordón comprimido (0,65·0,85 f\'c del cordón), con cargas mayoradas. Más de 1 no es una falla: es que esa compresión la toma también la armadura (ver la fila de la armadura).');
+    fila('verificación', `${pz.nombre} (viento ${pz.dir}): armadura vertical necesaria`, '%', (m, c) => {
+      if (m === 'planilla') return null;                                  // la planilla no calcula la armadura
+      if (m === 'guia') {
+        const v = guiaPiezas(c, pz.dir).find(x => x.nombre === pz.nombre);
+        if (!v?.muros.length) return null;
+        return Math.max(...v.muros.map(x => x.As / (x.b * x.h * 1e4))) * 100;   // As por cálculo (T / σe), sin la mínima
+      }
+      const v = c.cirsoc?.verif.find(x => x.dir === pz.dir && x.nombre === pz.nombre);
+      return v?.muros.length ? Math.max(...v.muros.map(x => x.rhoNecesaria)) * 100 : null;
+    }, (m, c) => {
+      if (m === 'planilla') return null;
+      if (m === 'guia') { const x = ctrl(c, `${pz.nombre}: tracción (descargado)`); return x ? (x.estado as Estado) : null; }
+      const v = c.cirsoc?.verif.find(x => x.dir === pz.dir && x.nombre === pz.nombre);
+      if (!v?.muros.length) return null;
+      return v.muros.every(x => x.relacionNecesaria <= 1 + 1e-9 && x.rhoNecesaria <= 0.04 + 1e-12) ? 'verifica' : 'no verifica';
+    }, 'Cuantía vertical del peor muro de la pieza (As / área). Guía: la que pide la tracción, As = T / σe, sin la mínima de la cátedra (0,8 %). CIRSOC y FEM: la menor que deja todas las combinaciones adentro del diagrama de interacción del 201 (no menos que la mínima de 14.3; máximo 4 %).');
   }
   const resumen = Object.fromEntries(METODOS_COMPARADOS.map(m => {
     const cs = calc[m].controles;

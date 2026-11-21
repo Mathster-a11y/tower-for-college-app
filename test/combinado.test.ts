@@ -49,3 +49,22 @@ describe('Excel de la comparación', () => {
     expect(Object.keys(zip.files).filter(x => /^xl\/charts\/chart\d+\.xml$/.test(x)).length).toBe(3);
   });
 });
+
+describe('verificación comparable entre métodos', () => {
+  it('compresión del hormigón solo y armadura vertical necesaria, con el mismo significado en los cuatro', () => {
+    const p = { ...ejemploGuia(), calculo: { metodo: 'combinado' as const } };
+    const cmp = calcularProyecto(p).combinado!;
+    const f = (n: string) => cmp.filas.find(x => x.nombre === n)!;
+    expect(cmp.filas.some(x => /uso del hormigón/.test(x.nombre))).toBe(false);
+    const c1 = f('T1 (viento A): compresión del hormigón solo'), a1 = f('T1 (viento A): armadura vertical necesaria');
+    // planilla y guía: |σ| / σbk (≈ 83 / 300); CIRSOC y FEM: el cordón comprimido sin armadura (> 1: lleva armadura)
+    expect(c1.valores.guia!).toBeCloseTo(82.92 / 300, 3);
+    expect(c1.valores.cirsoc!).toBeGreaterThan(1); expect(c1.estados!.cirsoc).toBe('atención');
+    // armadura: la guía por la tracción (chica: 3,5 cm² en 0,9 m²), CIRSOC 1,50 %, FEM 1,05 %
+    expect(a1.valores.planilla).toBeNull();
+    expect(a1.valores.guia!).toBeGreaterThan(0); expect(a1.valores.guia!).toBeLessThan(0.1);
+    expect(a1.valores.cirsoc!).toBeCloseTo(1.5, 6); expect(a1.valores.fem!).toBeCloseTo(1.05, 6);
+    expect(f('T5 (viento A): armadura vertical necesaria').valores.cirsoc!).toBeCloseTo(3.37, 6);
+    expect(a1.estados!.cirsoc).toBe('verifica');
+  });
+});
