@@ -15,6 +15,7 @@ import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { rototraslacionAnimada } from './rotoAnimada';
+import { centroEcuaciones, panelEcuaciones, METODOS_ECUACIONES } from './ecuaciones/vista';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
 import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
@@ -863,6 +864,17 @@ const ayuda: Etapa = {
   estado: () => 'informativo',
 };
 
+const ecuaciones: Etapa = {
+  id: 'ecuaciones', nro: 'Σ', nombre: 'Ecuaciones', rol: '--r-ayuda', dependeDir: true,
+  icono: '<rect x="3" y="3" width="8" height="5" rx="1"/><rect x="15" y="3" width="8" height="5" rx="1"/><rect x="9" y="17" width="8" height="5" rx="1"/><path d="M7 8v4h6v5M19 8v4h-6"/>',
+  globo: 'Ecuaciones|La guía de cálculo como un mapa de cuentas: de dónde sale cada número, en qué ecuación se usa, cómo saber si verifica y qué hacer si no. Los datos se arrastran y toda la cadena se recalcula.',
+  sub: [...METODOS_ECUACIONES],
+  panel(c) { panelEcuaciones(c); },
+  centro(c) { centroEcuaciones(c); },
+  nombreCentro: () => `Ecuaciones · método ${estado.sub.ecuaciones ?? METODOS_ECUACIONES[0]} · viento ${estado.dir}`,
+  estado: () => 'informativo',
+};
+
 const exoesqueleto: Etapa = {
   id: 'exo', nro: '08', nombre: 'Exoesqueleto', rol: '--r-rototrasl', dependeDir: true, conFuente: true,
   icono: '<path d="M5 21V3M19 21V3M5 3l14 6M19 3L5 9M5 9l14 6M19 9L5 15M5 15l14 6M19 15L5 21"/>',
@@ -874,7 +886,7 @@ const exoesqueleto: Etapa = {
 };
 
 export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto];
-export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ayuda];
+export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ecuaciones, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;
 export { esc };

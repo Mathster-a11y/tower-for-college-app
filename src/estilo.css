@@ -1420,9 +1420,9 @@ canvas.corte-gpu { display: block; width: 100%; height: auto; image-rendering: p
 
 /* «¿Qué pasa si…?» */
 rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); stroke: var(--elegido); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
-.que-pasa .deslizador { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 4px 0; }
-.que-pasa .deslizador input { grid-column: 1 / -1; width: 100%; }
-.que-pasa .deslizador output { font-variant-numeric: tabular-nums; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.que-pasa .deslizador, .deslizador.ec { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 4px 0; }
+.que-pasa .deslizador input, .deslizador.ec input { grid-column: 1 / -1; width: 100%; }
+.que-pasa .deslizador output, .deslizador.ec output { font-variant-numeric: tabular-nums; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
 .que-pasa td.mejor { color: var(--ok); font-weight: 600; } .que-pasa td.peor { color: var(--mal, #c62828); font-weight: 600; }
 .que-pasa .calculando { color: var(--ink2); font-size: 12px; }
 
@@ -1469,3 +1469,71 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
 .rototrasl.animada .rt-girada { stroke-dasharray: 5 4; }
 @media (pointer: coarse) { .roto-animada .roto-barra { height: 32px; } }
 .rototrasl.animada .rt-sub { font: 12px var(--fuente); fill: var(--ink2); }
+
+/* ---------------------------------------------------------------- Ecuaciones: grafo de fórmulas */
+:root {
+  --gc-0: #1d9e75; --gc-1: #c26a00; --gc-2: #6d5fd3; --gc-3: #00838f; --gc-4: #9a7b00; --gc-5: #b0408a; --gc-6: #6d4c41; --gc-7: #558b2f;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gc-0: #4fd1a5; --gc-1: #ffa64d; --gc-2: #a9a3ff; --gc-3: #4dd0e1; --gc-4: #e3c35a; --gc-5: #f48fc8; --gc-6: #bcaaa4; --gc-7: #9ccc65; } }
+:root[data-theme="dark"] { --gc-0: #4fd1a5; --gc-1: #ffa64d; --gc-2: #a9a3ff; --gc-3: #4dd0e1; --gc-4: #e3c35a; --gc-5: #f48fc8; --gc-6: #bcaaa4; --gc-7: #9ccc65; }
+.gc-0 { --c: var(--gc-0); } .gc-1 { --c: var(--gc-1); } .gc-2 { --c: var(--gc-2); } .gc-3 { --c: var(--gc-3); }
+.gc-4 { --c: var(--gc-4); } .gc-5 { --c: var(--gc-5); } .gc-6 { --c: var(--gc-6); } .gc-7 { --c: var(--gc-7); }
+.gr-marco { overflow-x: auto; padding: 4px 2px 10px; }
+.gr-tablero { position: relative; display: flex; flex-direction: column; align-items: center; min-width: max-content; padding: 6px 12px; }
+.gr-fila { display: flex; gap: 22px; align-items: flex-start; justify-content: center; margin-bottom: 26px; }
+.gr-fila.datos { gap: 8px; flex-wrap: nowrap; }
+.gr-carril { width: 10px; align-self: stretch; }
+.gr-flechas { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.gr-arista path { fill: none; stroke: var(--c, var(--ink2)); stroke-width: 1.6; }
+.gr-arista .punta { fill: var(--c, var(--ink2)); stroke: none; }
+.gr-arista.gr-dato { --c: var(--dim); }
+.gr-arista.gr-dato path:not(.punta) { stroke-dasharray: 3 3; }
+.gr-tablero.enfocado .gr-arista:not(.activo) { opacity: .12; }
+.gr-tablero.enfocado .gr-nodo:not(.activo), .gr-tablero.enfocado .gr-param:not(.activo) { opacity: .35; }
+.gr-nodo { position: relative; z-index: 1; background: var(--lienzo); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 12px 8px; min-width: 120px; max-width: 360px; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / .06); transition: opacity .15s; }
+.gr-nodo:hover, .gr-nodo:focus-visible { border-color: var(--ink2); outline: none; }
+.gr-nodo.elegido { border-color: var(--elegido); box-shadow: 0 0 0 2px color-mix(in srgb, var(--elegido) 45%, transparent); }
+.gr-nodo.externo { background: var(--zebra); border-style: dashed; }
+.gr-nodo.traccion { border-left: 4px solid var(--traccion); }
+.gr-nodo.compresion { border-left: 4px solid var(--compresion); }
+.gr-nodo.control.verifica { box-shadow: inset 0 -3px 0 var(--ok); }
+.gr-nodo.control.no-verifica { box-shadow: inset 0 -3px 0 var(--mal); background: var(--mal-fill); }
+.gr-tit { font: 600 11px var(--fuente); color: var(--head); text-transform: none; margin-bottom: 3px; }
+.gr-de { font: 11px var(--fuente); color: var(--dim); margin-top: 2px; }
+.gr-ec { font: 15px var(--math); color: var(--ink); white-space: nowrap; line-height: 1.6; }
+.gr-ec sub, .gr-cond sub { font-size: 70%; }
+.gr-sal { font-weight: 600; color: var(--c, var(--ink)); padding: 0 1px; border-radius: 3px; }
+.gr-sal.gc-0, .gr-sal.gc-1, .gr-sal.gc-2, .gr-sal.gc-3, .gr-sal.gc-4, .gr-sal.gc-5, .gr-sal.gc-6, .gr-sal.gc-7 { background: color-mix(in srgb, var(--c) 14%, transparent); }
+.gr-uso { color: var(--c, var(--ink)); font-weight: 600; border-radius: 3px; padding: 0 1px; transition: background .15s; }
+.gr-uso.gr-dato { color: var(--ink); font-weight: 500; }
+.gr-uso.ligado { background: color-mix(in srgb, var(--elegido) 35%, transparent); }
+.gr-uso.revelado, .gr-sal.revelado { font-family: var(--mono); font-size: 12.5px; color: var(--num); background: color-mix(in srgb, var(--num) 12%, transparent); }
+.gr-cond { font: 13px var(--math); color: var(--ink2); margin-top: 2px; white-space: nowrap; }
+.gr-valor { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 12.5px var(--mono); color: var(--num); }
+.gr-valor .u { color: var(--dim); font-family: var(--fuente); }
+.gr-valor .chip-estado { margin-left: auto; }
+.gr-param { position: relative; z-index: 1; display: inline-flex; align-items: baseline; gap: 2px; padding: 5px 10px; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--field); font: 14px var(--math); color: var(--ink); cursor: ew-resize; touch-action: none; user-select: none; }
+.gr-param .gr-num { font: 12.5px var(--mono); color: var(--num); }
+.gr-param .gr-nombre { display: none; }
+.gr-param.fijo { cursor: pointer; background: var(--zebra); border-style: dashed; }
+.gr-param:hover { border-color: var(--ink2); }
+.gr-param.arrastrando { border-color: var(--num); box-shadow: 0 0 0 2px color-mix(in srgb, var(--num) 30%, transparent); }
+.gr-param.elegido { border-color: var(--elegido); }
+.señalado { animation: senalar 1.6s ease-out 2; }
+@keyframes senalar { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 30% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--elegido) 70%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .señalado { animation: none; outline: 3px solid var(--elegido); } }
+.gr-leyenda { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.gr-ley { padding-left: 8px; border-left: 4px solid; }
+.gr-ley.traccion { border-color: var(--traccion); } .gr-ley.compresion { border-color: var(--compresion); }
+.gr-ley.control { border-color: var(--ok); }
+.ec-capitulos { display: flex; flex-direction: column; gap: 4px; }
+.ec-capitulos .boton { text-align: left; }
+.ec-capitulos .boton[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+.ec-detalle h4 { margin: 0 0 6px; font: 600 14px var(--fuente); }
+.gr-detalle-ec { font: 14px var(--math); margin: 4px 0; overflow-x: auto; }
+.ec-control { display: flex; gap: 8px; align-items: center; margin: 8px 0 4px; flex-wrap: wrap; }
+.ec-sino { margin: 4px 0 8px; padding-left: 18px; }
+.ec-sino li { margin: 3px 0; }
+.mini.enlace { font: 13px var(--math); padding: 1px 6px; margin: 0 2px; }
+.deslizador.movido output { color: var(--num); font-weight: 600; }
+@media (pointer: coarse) { .gr-param { padding: 8px 12px; } .gr-nodo { padding: 9px 13px 10px; } }
