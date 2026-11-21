@@ -1597,3 +1597,4 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .corte-muros .mango:hover, .corte-muros .mango.activo { fill: var(--elegido); stroke: var(--ink); }
 .corte-muros .corte-id { font-size: 11px; }
 @media (pointer: coarse) { .corte-muros .mango { stroke-width: 6px; stroke: transparent; paint-order: stroke; } }
+.estado-linea .compilacion { font: 11px var(--mono); color: var(--dim); margin-right: 12px; white-space: nowrap; }

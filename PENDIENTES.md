@@ -6,7 +6,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Motor que reproduce la planilla original (probado contra el ejemplo 20-10-26)
 - [x] Escritura de la planilla virgen (solo celdas de datos y hoja T3D), verificada con LibreOffice
 - [x] Planta SVG, vista 3D, paneles de datos, resultados y verificaciones
-- [x] Archivo único `descargar/torre3d.html` (sin internet ni servidor)
+- [x] Archivo único `torre3d.html` (sin internet ni servidor): lo arma CI y se publica junto a la página (`descargar/LEAME.md`)
 - [x] Pestaña Ayuda, deshacer y rehacer, mensajes de error, prueba con 300 proyectos al azar
 - [x] **Piezas asimétricas.** Las piezas en C, U, L, T y E van en las columnas asimétricas, un muro por columna (ala sup., alma izq., alma der., ala inf.). Solo usan la plantilla simétrica el muro suelto y la doble T con alas iguales y centradas.
   Filas: cualquier fila libre, empezando por las 10 y 11 de «paralelos». Donde la planilla lee otro módulo, la app calcula la flexocompresión con el módulo correcto y avisa.
@@ -107,6 +107,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Mover con precisión: nodo de referencia, llevar a x, y o correr dx, dy
 - [x] Piezas tipo editables: doble clic abre las medidas (alma, ala sup. e inf. por separado) con J en vivo
 - [x] Áreas de influencia de la losa (botón «Áreas» en la planta) y copiarlas a «Área inf.» de los muros
+- [x] Informe técnico, hallazgos 8 a 10: CI con pruebas, tipos y los dos builds en cada pull request sin permisos de publicación (solo «deploy» tiene pages/id-token, acciones fijadas a commits); un solo HTML descargable (el de CI) y la versión y el commit a la vista en la app; Vite 6.4.6, Vitest 5.1.1, pdfjs-dist 4.10.38 e image-size 2.1 (override) con `npm audit` en 0
 - [x] Corte para editar desde dónde hasta dónde llega cada muro (Diseño → Niveles): barras entre los niveles, puntas que se arrastran y se pegan a un nivel (mouse o dedo); punteado el muro que no arranca en la fundación (no entra al cálculo de la planilla)
 - [x] Rototraslación animada (Rototrasl. → «5 · Animada») y flechas en columna cuando dos piezas comparten la recta
 - [x] Etapa «Ecuaciones» y guías en PDF por método (`docs/guia_metodo_*.pdf`, `tools/guias_pdf.cjs`)

@@ -846,6 +846,11 @@ dibujarCapas();
 dibujarTodo();
 // aviso de autoría: si la licencia ya venció, el pie lo dice
 { const a = document.getElementById('autoria'); if (a) a.textContent = avisoActual(); }
+// versión de esta compilación (la misma en la página publicada y en el archivo único de esa versión)
+{
+  const v = document.getElementById('compilacion'), c = __COMPILACION__;
+  if (v) { v.textContent = `v${c.version} · ${c.commit}`; v.title = `Compilación ${c.commit} del ${c.fecha.split('-').reverse().join('/')} (versión ${c.version}). El archivo torre3d.html de la página publicada y esta app dicen lo mismo si coinciden.`; }
+}
 
 // ------------------------------------------------------------------ Google Sheets (dos vías)
 const CLAVE_SHEETS = 'torre3d.sheets';

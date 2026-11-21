@@ -14,8 +14,8 @@ The interface is in Spanish.
 
 ## How to get it
 
-- **One file, no internet:** [`descargar/torre3d.html`](descargar/torre3d.html) is the whole app, with the course workbook inside (about 0.8 MB). Download it and open it by double-clicking. It works in Chrome, Edge or Firefox, with no server and no internet connection, so it can be shared through the campus site or by email.
-- **Web page:** the workflow `.github/workflows/pages.yml` publishes the app on GitHub Pages on every push to `main`. To turn it on, go to Settings → Pages → Source «GitHub Actions». This needs a public repo or a paid plan. `npm run build` also produces a `dist/` folder that can be uploaded to any static host (Netlify, Cloudflare Pages, a faculty server).
+- **One file, no internet:** [`torre3d.html`](https://mathster-a11y.github.io/tower-for-college-app/torre3d.html) is the whole app, with the course workbook inside (about 5 MB). It is built by GitHub Actions for every version of `main` (after the tests pass) and published next to the web page, so there is a single download link. Download it and open it by double-clicking. It works in Chrome, Edge or Firefox, with no server and no internet connection, so it can be shared through the campus site or by email. The bottom line of the app shows its version and commit (for example `v0.1.0 · cb53f67`): the downloaded file and the published page of the same version match.
+- **Web page:** the workflow `.github/workflows/pages.yml` runs the typecheck, the tests and both builds on every pull request (with no publishing permissions) and publishes the app on GitHub Pages on every push to `main`. To turn it on, go to Settings → Pages → Source «GitHub Actions». This needs a public repo or a paid plan. `npm run build` also produces a `dist/` folder that can be uploaded to any static host (Netlify, Cloudflare Pages, a faculty server).
 
 ## Usage (for students)
 
@@ -56,7 +56,7 @@ npm install
 npm run dev        # local server
 npm test           # tests: the engine vs. the workbook results (fixture extracted from the Excel) and 300 random projects
 npm run build      # typecheck + static build in dist/
-npm run build:unico   # single HTML file in dist-unico/index.html (copy it to descargar/torre3d.html)
+npm run build:unico   # single HTML file in dist-unico/index.html (CI publishes it as torre3d.html)
 ```
 
 Code layout:
