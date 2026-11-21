@@ -35,7 +35,10 @@ LICENCIA DE USO NO COMERCIAL POR UN AÑO
 6. Material de la cátedra (no incluido en esta licencia). Lo que no es obra del autor pertenece a la
    cátedra de la Electiva Edificios en Torre (FAUD-UNMDP) y a las fuentes que ella usa, y conserva los
    derechos de sus autores:
-   - la planilla del curso «Edificios en torre» (src/assets/planilla_virgen.xlsx);
+   - las planillas del curso «Edificios en torre»: la anterior (src/assets/planilla_virgen.xlsx) y la de 2025
+     (src/assets/planilla_catedra_2025.xlsx). La cátedra autorizó que se distribuyan con la app (en la página
+     publicada y en el archivo único), tal como las entrega, para que la app las complete al exportar;
+     confirmado por el autor en noviembre de 2026. Siguen siendo de la cátedra y esta licencia no las cubre;
    - las guías, las clases (Rigidez, Resistencia) y los ejemplos de la cátedra, que la app cita y sigue;
    - el Reglamento CIRSOC 102 y demás normas que la cátedra toma como referencia.
    Las bibliotecas de código que usa la app (three.js, JSZip, fuentes IBM Plex y JetBrains Mono) conservan

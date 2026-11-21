@@ -6,7 +6,7 @@ The student draws the ground-floor plan (walls, pieces, levels). The app does th
 
 - It computes the same results as the workbook, with the same formulas and the same quirks, so the numbers match cell for cell.
 - It also computes the corrected values (CIRSOC 102 / the course guide) and shows both side by side with the checks: vuelco, eccentricity, soil, J mínimo, rototraslación, Fig. 9 torsion and flexocompresión.
-- It writes the data into the **original course workbook** (`public/planilla_virgen.xlsx`). It only writes data cells, never formulas, and adds a `T3D` sheet that stores the project so the file can be reopened in the app.
+- It writes the data into the **original course workbook** (`src/assets/planilla_virgen.xlsx`, and the 2025 version `src/assets/planilla_catedra_2025.xlsx`). It only writes data cells, never formulas, and adds a `T3D` sheet that stores the project so the file can be reopened in the app.
 
 The interface is in Spanish.
 
@@ -48,6 +48,10 @@ The interface is in Spanish.
    - the course workbook already filled in. Levels, wind and foundation come from the workbook. The walls come from the J sheets and are approximate, but ΣJ in each direction matches the workbook.
 
 The project is also saved in the browser (localStorage). ↶/↷ or Ctrl+Z / Ctrl+Y undo and redo. The **Ayuda** tab has these same steps inside the app.
+
+## Course material
+
+The two course workbooks belong to the cátedra (Electiva Edificios en Torre, FAUD-UNMDP) and are not covered by this app's license. The cátedra allowed them to be distributed with the app (web page and single file), unchanged, so the app can fill them in on export (confirmed by the author, November 2026). See section 6 of [LICENSE](LICENSE).
 
 ## Development
 

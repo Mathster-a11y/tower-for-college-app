@@ -107,6 +107,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Mover con precisión: nodo de referencia, llevar a x, y o correr dx, dy
 - [x] Piezas tipo editables: doble clic abre las medidas (alma, ala sup. e inf. por separado) con J en vivo
 - [x] Áreas de influencia de la losa (botón «Áreas» en la planta) y copiarlas a «Área inf.» de los muros
+- [x] Informe técnico, hallazgo 7: la cátedra permite publicar las dos plantillas; queda documentado en LICENSE (punto 6) y en el README
 - [x] Informe técnico, hallazgos 8 a 10: CI con pruebas, tipos y los dos builds en cada pull request sin permisos de publicación (solo «deploy» tiene pages/id-token, acciones fijadas a commits); un solo HTML descargable (el de CI) y la versión y el commit a la vista en la app; Vite 6.4.6, Vitest 5.1.1, pdfjs-dist 4.10.38 e image-size 2.1 (override) con `npm audit` en 0
 - [x] Corte para editar desde dónde hasta dónde llega cada muro (Diseño → Niveles): barras entre los niveles, puntas que se arrastran y se pegan a un nivel (mouse o dedo); punteado el muro que no arranca en la fundación (no entra al cálculo de la planilla)
 - [x] Rototraslación animada (Rototrasl. → «5 · Animada») y flechas en columna cuando dos piezas comparten la recta
