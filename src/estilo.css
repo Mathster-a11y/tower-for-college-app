@@ -420,7 +420,7 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-cr { fill: var(--elegido); stroke: var(--lienzo); stroke-width: 1.5; }
 .rototrasl .rt-cota { stroke: var(--ink); stroke-width: 1; }
 .rototrasl .rt-accion { stroke: var(--ink2); stroke-width: .8; stroke-dasharray: 2 4; opacity: .7; }
-.rototrasl .rt-J, .rototrasl .rt-tras { stroke: var(--accent); stroke-linecap: butt; }
+.rototrasl .rt-J, .rototrasl .rt-tras { stroke: var(--deformada); stroke-linecap: butt; }
 .rototrasl .rt-rot { stroke: var(--corte); stroke-linecap: butt; }
 .rototrasl .rt-rot.resta { stroke-dasharray: 3 2; }
 .rototrasl .rt-rayo { stroke: var(--ink2); stroke-width: .8; }
@@ -439,8 +439,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 /* flechas de la rototraslación: tronco fino y punta bien marcada */
 .rototrasl .rt-flecha-dib .tronco { stroke-linecap: butt; }
 .rototrasl .rt-flecha-dib .punta { stroke: var(--lienzo); stroke-width: 1; stroke-linejoin: round; }
-.rototrasl .rt-J .tronco, .rototrasl .rt-tras .tronco { stroke: var(--accent); }
-.rototrasl .rt-J .punta, .rototrasl .rt-tras .punta { fill: var(--accent); }
+.rototrasl .rt-J .tronco, .rototrasl .rt-tras .tronco { stroke: var(--deformada); }
+.rototrasl .rt-J .punta, .rototrasl .rt-tras .punta { fill: var(--deformada); }
 .rototrasl .rt-rot .tronco { stroke: var(--corte); }
 .rototrasl .rt-rot .punta { fill: var(--corte); }
 .rototrasl .rt-W .tronco { stroke: var(--carga); }
@@ -1460,3 +1460,12 @@ rect.fantasma { fill: color-mix(in srgb, var(--elegido) 18%, transparent); strok
   .controles-adapt > .solo-ancho { display: none; }
   .controles-adapt > .solo-angosto { display: flex; }
 }
+
+/* rototraslación animada */
+.roto-animada .roto-barra { flex: 1; min-width: 140px; }
+.rototrasl.animada .rt-fase { font: 600 14px var(--fuente); fill: var(--ink); }
+.rototrasl.animada .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.rototrasl.animada .rt-Mt-punta { fill: var(--ink); }
+.rototrasl.animada .rt-girada { stroke-dasharray: 5 4; }
+@media (pointer: coarse) { .roto-animada .roto-barra { height: 32px; } }
+.rototrasl.animada .rt-sub { font: 12px var(--fuente); fill: var(--ink2); }
