@@ -262,14 +262,18 @@ export class Lbm2D {
   /** ventana de detalle: las orillas con el viento del túnel grueso (equilibrio + no equilibrio de la celda de adentro) */
   private orillas(g: Float32Array) {
     const { nx, ny, N, solido } = this, b = this.borde!;
+    // densidad y velocidad del túnel grueso en toda la orilla. (Se probó imponer solo la velocidad donde el aire entra y
+    // solo la densidad donde sale: la ventana se corría 5 a 25 % del túnel grueso; las ondas que rebotan en la orilla
+    // las absorbe la banda de transición de detalle.ts)
     const una = (c: number, d: number) => {
       if (solido[c]) return;
-      // la celda de adentro (d: la de al lado hacia el interior); si es sólida, solo equilibrio
+      // la celda de adentro (d: la de al lado hacia el interior); si es sólida, solo equilibrio con el viento de afuera
       let r = 0, jx = 0, jy = 0;
       const dentro = !solido[d];
-      if (dentro) for (let i = 0; i < 9; i++) { const v = g[i * N + d]; r += v; jx += EX[i] * v; jy += EY[i] * v; }
-      const ud = dentro ? jx / r : 0, vd = dentro ? jy / r : 0;
-      for (let i = 0; i < 9; i++) g[i * N + c] = feq(i, b.rho[c], b.ux[c], b.uy[c]) + (dentro ? g[i * N + d] - feq(i, r, ud, vd) : 0);
+      if (!dentro) { for (let i = 0; i < 9; i++) g[i * N + c] = feq(i, b.rho[c], b.ux[c], b.uy[c]); return; }
+      for (let i = 0; i < 9; i++) { const v = g[i * N + d]; r += v; jx += EX[i] * v; jy += EY[i] * v; }
+      const ud = jx / r, vd = jy / r;
+      for (let i = 0; i < 9; i++) g[i * N + c] = feq(i, b.rho[c], b.ux[c], b.uy[c]) + g[i * N + d] - feq(i, r, ud, vd);
     };
     for (let x = 0; x < nx; x++) {
       const xi = Math.min(nx - 2, Math.max(1, x));

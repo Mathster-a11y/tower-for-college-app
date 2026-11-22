@@ -65,3 +65,30 @@ describe('definición automática del recuadro', () => {
     expect(d.sim.roto).toBe(false);
   }, 120_000);
 });
+
+describe('orillas de la ventana', () => {
+  it('la banda de transición achica el escalón entre la ventana y el túnel en la orilla', () => {
+    const g = geometria2D({ poligonos: [cuadrado], dir: 'B', D: 12, largo: 16, alto: 10, entrada: 4 });
+    const u0 = 0.1, nu = (u0 * 12) / 1000, r = 4;
+    const v = ajustarVentana(g, { x0: g.caja.x0 - 6, y0: g.caja.y1 - 6, w: 14, h: 14 }, r), gd = geometriaDetalle(g, v, r);
+    const escalon = (banda: number | undefined) => {
+      const gr = new Lbm2D({ nx: g.nx, ny: g.ny, nu, u0, cs: 0.16, solido: g.solido, q: g.q, colision: 'trt' });
+      for (let k = 0; k < 1500; k++) gr.paso();
+      const d = new Detalle(gd, g.nx, g.ny, nu, u0, 0.16, 'trt', true, banda === undefined ? {} : { banda }); d.arrancarDesde(gr);
+      let s = 0, n = 0;
+      for (let k = 0; k < 900; k++) {
+        gr.paso(); d.avanzar(gr);
+        if (k < 300 || k % 10) continue;
+        // la diferencia de velocidad entre la orilla y la celda de al lado (el escalón)
+        for (let i = 2; i < gd.nx - 2; i++) for (const [a, b] of [[i, i + gd.nx], [(gd.ny - 1) * gd.nx + i, (gd.ny - 2) * gd.nx + i]]) {
+          if (gd.solido[a] || gd.solido[b]) continue;
+          s += Math.hypot(d.sim.ux[a] - d.sim.ux[b], d.sim.uy[a] - d.sim.uy[b]) / u0; n++;
+        }
+      }
+      expect(d.sim.roto).toBe(false);
+      return s / n;
+    };
+    const sin = escalon(0), con = escalon(undefined);
+    expect(con).toBeLessThan(0.8 * sin);
+  }, 300_000);
+});

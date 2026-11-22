@@ -20,7 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
-import { encuadrar, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
+import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
 const RE: Record<string, { Re: number; cs: number; texto: string }> = {
@@ -45,7 +45,7 @@ const cfg = {
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
 /** la ventana de detalle de la corrida: su geometría fina y los promedios en el tiempo */
-interface CorridaDetalle { geo: GeometriaDetalle; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
+interface CorridaDetalle { geo: GeometriaDetalle; transicion: Uint8Array; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
 let det: CorridaDetalle | null = null;
 /** marcando el recuadro en el túnel (arrastrando) */
 let marcando = false, arrastre: { x0: number; y0: number; x1: number; y1: number } | null = null;
@@ -121,7 +121,10 @@ function ponerVentana(v: Ventana | null) {
   if (!v) { cfg.ventana = null; det = null; c.worker.postMessage({ tipo: 'detalle', geo: null, exactas: false } satisfies MensajeTunel); return; }
   const { v: va, r } = encuadrar(c.geo, v, cfg.fino), gd = geometriaDetalle(c.geo, va, r), n = gd.nx * gd.ny;
   cfg.ventana = va;
-  det = { geo: gd, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
+  // las celdas donde la ventana se relaja hacia el túnel grueso (la orilla y la banda): se velan y no se miden
+  const sb = sigmaBanda(gd), transicion = new Uint8Array(n);
+  for (let k = 0; k < n; k++) transicion[k] = sb[k] > 0.01 || sb[k] >= 1 ? 1 : 0;
+  det = { geo: gd, transicion, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
   c.worker.postMessage({ tipo: 'detalle', geo: gd, exactas: cfg.paredes === 'exactas' } satisfies MensajeTunel);
 }
 
@@ -280,11 +283,18 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
     } else if (cfg.vista === 'velocidad') mezcla(fondo, rapido, Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6), k);
     else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
   }
+  // la transición con el túnel grueso, velada (35 % hacia el fondo)
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    if (!det.transicion[y * nx + x]) continue;
+    const k = 4 * ((ny - 1 - y) * nx + x);
+    for (let m = 0; m < 3; m++) px[k + m] += (fondo[m] - px[k + m]) * 0.35;
+  }
   auxDet!.getContext('2d')!.putImageData(imgDet, 0, 0);
   const g = cv.getContext('2d')!;
   g.imageSmoothingEnabled = true; g.drawImage(auxDet!, 0, 0, cv.width, cv.height);
-  // el contorno real, encima
+  // la banda de transición con el túnel grueso: velada y con su borde de trazos (ahí no se mide)
   const s = cv.width / nx;
+  // el contorno real, encima
   g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
   g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
   for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.stroke(); }
@@ -303,9 +313,9 @@ function actualizarLecturaDetalle(c: Corrida) {
   if (!n) { el.replaceChildren(h('p', { class: 'nota' }, 'Los promedios de la ventana arrancan junto con las mediciones del túnel, pasado el arranque.')); return; }
   const rhoRef = c.campo?.rho[celdaRef2D(c.geo)] ?? 1;
   let vMax = 0, cpMin = Infinity;
-  for (let y = 2; y < ny - 2; y++) for (let x = 2; x < nx - 2; x++) {
+  for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) {
     const q = y * nx + x;
-    if (solido[q]) continue;
+    if (solido[q] || det.transicion[q]) continue;                 // la banda de transición no se mide
     vMax = Math.max(vMax, det.sumaV[q] / n / U0);
     if (solido[q - 1] || solido[q + 1] || solido[q - nx] || solido[q + nx]) cpMin = Math.min(cpMin, (det.sumaR[q] / n - rhoRef) / 3 / (0.5 * U0 * U0));
   }
@@ -400,7 +410,7 @@ export function centroTunel(c: H, tam: Tam) {
     panelDet = h('div', {});
     c.append(h('div', { class: 'ventana-detalle' },
       h('h3', { class: 'subtit' }, `Ventana de detalle ×${det.geo.r}`),
-      h('p', { class: 'llave' }, `El recuadro naranja del túnel, con celdas ${det.geo.r} veces más chicas (${det.geo.nx} × ${det.geo.ny}; la torre tendría ${cr.geo.D * det.geo.r} celdas de ancho). Mismos colores que arriba; la línea naranja es el contorno real.`),
+      h('p', { class: 'llave' }, `El recuadro naranja del túnel, con celdas ${det.geo.r} veces más chicas (${det.geo.nx} × ${det.geo.ny}; la torre tendría ${cr.geo.D * det.geo.r} celdas de ancho). Mismos colores que arriba; la línea naranja es el contorno real. La franja velada del borde es la transición con el túnel grueso: ahí lo fino se acerca de a poco al viento de afuera (salvo pegado a la torre) y no se mide.`),
       h('div', { class: 'tunel-marco' }, lienzoDet), panelDet,
       h('p', { class: 'nota' }, 'Anidamiento en un solo sentido: las orillas de la ventana toman el viento del túnel grueso y lo fino no le devuelve nada. Sirve para ver cómo se despega el aire en una esquina o un balcón con más definición; los remolinos que nacen en la ventana y salen de ella el túnel grueso no los ve, y lo que entra por las orillas tiene la definición del túnel grueso.')));
     ultimaLectura = 0;
