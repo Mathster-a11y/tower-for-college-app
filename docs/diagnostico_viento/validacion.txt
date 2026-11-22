@@ -1,0 +1,8 @@
+círculo Re 100 D 20 alto 12 bgk escalera: Cd 1.482 Clrms 0.244 St 0.1704 
+círculo Re 100 D 20 alto 12 bgk exactas: Cd 1.452 Clrms 0.233 St 0.1762 
+círculo Re 100 D 20 alto 12 trt escalera: Cd 1.472 Clrms 0.244 St 0.1726 
+círculo Re 100 D 20 alto 12 trt exactas: Cd 1.462 Clrms 0.240 St 0.1760 
+cuadrado Re 100 D 20 alto 12 bgk escalera: Cd 1.586 Clrms 0.166 St 0.1549 
+cuadrado Re 100 D 20 alto 12 bgk exactas: Cd 1.586 Clrms 0.166 St 0.1549 
+cuadrado Re 100 D 20 alto 12 trt escalera: Cd 1.540 Clrms 0.158 St 0.1556 
+cuadrado Re 100 D 20 alto 12 trt exactas: Cd 1.540 Clrms 0.158 St 0.1556 

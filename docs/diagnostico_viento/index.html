@@ -33,6 +33,7 @@
 <div class="caja">
 <b>En pocas palabras</b>
 <ul>
+  <li><b>Propuestas 1 y 2 implementadas:</b> paredes exactas + TRT (2D y 3D) y canal ancho; validadas contra casos publicados (sección 4 bis).</li>
   <li><b>Ya arreglado:</b> la silueta piso por piso. Una carpintería dibujada en PB no llegaba a los túneles: el corte no ofrecía PB, el 3D usaba la planta del nivel de arriba de cada piso y la carpintería solo se heredaba hacia abajo. Ahora cada piso usa la planta de su nivel, PB entra al corte, la carpintería se hereda también desde abajo y hay un botón «Copiar a todos los niveles».</li>
   <li><b>El límite más grande es la resolución:</b> 0,8 a 1,1 m por celda en el 2D y 1,5 a 2,5 m en el 3D. Las curvas se vuelven escaleras y las ochavas chicas desaparecen.</li>
   <li><b>La medición ya distingue formas:</b> con esquinas sustraídas o carpintería curva el arrastre baja 19–20 % y la sacudida lateral 22–25 % contra las esquinas vivas. Pero los valores absolutos están inflados por un canal angosto (bloqueo) y por el Reynolds bajo.</li>
@@ -169,8 +170,8 @@
 <table>
 <tr><th>#</th><th>Propuesta</th><th>Qué mejora</th><th>Costo en la computadora</th><th>Trabajo</th></tr>
 <tr><td>0</td><td><b>Silueta piso por piso</b> en los túneles</td><td>La carpintería de cada piso llega al viento</td><td>nada</td><td><span class="tag verde">hecho</span></td></tr>
-<tr><td>1</td><td><b>Paredes exactas</b> (rebote interpolado de Bouzidi) <b>+ colisión TRT</b> (Ginzburg, con el parámetro «mágico» Λ = 3/16, que deja la pared donde corresponde sin depender de la viscosidad)</td><td>Curvas, ochavas y diagonales sin escalera; fuerzas menos ruidosas; más estable con grillas gruesas</td><td>+5 a 15 %</td><td>medio</td></tr>
-<tr><td>2</td><td><b>Canal más ancho</b> en el 2D (10–12 anchos) o corrección por bloqueo</td><td>Cd y Strouhal más cerca de los valores de túnel (hoy bloquea ≈ 14 %)</td><td>+40–70 % de celdas, o nada con la corrección</td><td>bajo</td></tr>
+<tr><td>1</td><td><span class="tag verde">hecho</span> <b>Paredes exactas</b> (rebote interpolado de Bouzidi) <b>+ colisión TRT</b> (Ginzburg, con el parámetro «mágico» Λ = 3/16, que deja la pared donde corresponde sin depender de la viscosidad)</td><td>Curvas, ochavas y diagonales sin escalera; fuerzas menos ruidosas; más estable con grillas gruesas</td><td>+5 a 15 %</td><td>medio</td></tr>
+<tr><td>2</td><td><span class="tag verde">hecho</span> <b>Canal más ancho</b> en el 2D (10–12 anchos) o corrección por bloqueo</td><td>Cd y Strouhal más cerca de los valores de túnel (hoy bloquea ≈ 14 %)</td><td>+40–70 % de celdas, o nada con la corrección</td><td>bajo</td></tr>
 <tr><td>3</td><td><b>Túnel piso por piso</b> con el 2D (2,5D): cada planta distinta en paralelo, con el perfil del CIRSOC 102-25</td><td>Cd, Cl, St y fuerza por nivel; corte y momento de la simulación contra la planilla. Es «la silueta piso por piso».</td><td>solo procesador; minutos</td><td>medio</td></tr>
 <tr><td>4</td><td><b>Corrida larga y archivo para reproducir</b> (.torreviento)</td><td>Promedios estables (Cp medio, rms y picos); se calcula en una computadora y se mira en cualquiera, sin placa; video WebM</td><td>el de la simulación</td><td>medio</td></tr>
 <tr><td>5</td><td><b>Datos nuevos</b>: Cp perimetral por piso, fuerza por piso, confort Lawson en la vereda, exportar a Excel</td><td>Lo que sirve para diseñar la carpintería y para la entrega</td><td>casi nada</td><td>medio</td></tr>
@@ -179,6 +180,42 @@
 <tr><td>8</td><td><b>Validación</b>: prisma cuadrado, cilindro y edificio patrón CAARC, con los números en pantalla</td><td>Saber cuánto se acerca el simulador y mostrarlo</td><td>nada</td><td>bajo</td></tr>
 </table>
 <div class="caja"><b>Recomendación:</b> 1 + 2 primero (calidad en esquinas y curvas casi sin costo), después 3 (la información que más importa, en todas las computadoras), después 4 + 5 (corridas largas, archivo y datos), y después 6 y 7.</div>
+
+<h2>4 bis. Resultados de las propuestas 1 y 2 <span class="tag verde">implementadas</span></h2>
+<p><b>Qué se hizo.</b> En el 2D y en el 3D: rebote interpolado de Bouzidi (cuadrático; lineal o simple donde falta aire detrás) con la posición exacta de la pared en cada enlace, sacada del contorno real de cada piso, y colisión TRT (Λ = 3/16). En el 3D también la azotea y los retiros en su cota. En el 2D, canal ancho de 12 anchos (bloqueo ≈ 8 %). Las dos cosas son opciones en la app («Paredes: exactas / en escalera» y «Canal: ancho / angosto»), para poder comparar.</p>
+<h3>Pruebas</h3>
+<ul>
+  <li><b>Canal con paredes que caen entre celdas</b> (Poiseuille): error del perfil de 8,8 % en escalera → <b>0,3 %</b> con paredes exactas.</li>
+  <li><b>Cilindro circular a Re = 20</b>: con paredes exactas el arrastre cambia menos al duplicar la resolución.</li>
+  <li><b>Placa de video = referencia en JavaScript</b> con una torre curva de tres plantas: diferencia máxima 1,6 × 10⁻⁶ (TRT y BGK).</li>
+  <li><b>Validación contra casos publicados a Re = 100</b> (20 celdas por diámetro, canal de 12 diámetros):</li>
+</ul>
+<table>
+<tr><th>Caso</th><th>Paredes · colisión</th><th class="n">Cd</th><th class="n">St</th><th>Referencia (poco bloqueo)</th></tr>
+<tr><td rowspan="4">Cilindro circular</td><td>escalera · BGK</td><td class="n">1,48</td><td class="n">0,170</td><td rowspan="4">Cd 1,33–1,36 · St 0,164–0,165</td></tr>
+<tr><td>exactas · BGK</td><td class="n">1,45</td><td class="n">0,176</td></tr>
+<tr><td>escalera · TRT</td><td class="n">1,47</td><td class="n">0,173</td></tr>
+<tr><td>exactas · TRT</td><td class="n">1,46</td><td class="n">0,176</td></tr>
+<tr><td rowspan="2">Prisma cuadrado</td><td>escalera · BGK (= exactas, la pared cae entre celdas)</td><td class="n">1,59</td><td class="n">0,155</td><td rowspan="2">Cd 1,44–1,47 · St 0,141–0,146</td></tr>
+<tr><td>TRT (escalera = exactas)</td><td class="n">1,54</td><td class="n">0,156</td></tr>
+</table>
+<p>A Re = 100 todas las variantes quedan entre 5 y 10 % por encima de la referencia, lo esperable con un canal que bloquea 8 % (las referencias usan ≈ 5 % o menos) y la entrada a 5 diámetros. Las paredes exactas acercan el Cd del cilindro; TRT el del cuadrado.</p>
+<h3>Las cinco formas, a Re ≈ 1 000 (20 celdas por ancho, corte de 10º)</h3>
+<table>
+<tr><th>Planta</th><th class="n">Cd antes<br><small>escalera · BGK · angosto</small></th><th class="n">Cd<br><small>escalera · BGK · ancho</small></th><th class="n">Cd ahora<br><small>exactas · TRT · ancho</small></th><th class="n">Cl ahora</th><th class="n">St ahora</th></tr>
+<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">2,36</td><td class="n">1,90</td><td class="n">±1,48</td><td class="n">0,191</td></tr>
+<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">—</td><td class="n">1,78</td><td class="n">±1,14</td><td class="n">0,252</td></tr>
+<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">—</td><td class="n">1,63</td><td class="n">±1,34</td><td class="n">0,239</td></tr>
+<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">1,91</td><td class="n">2,28</td><td class="n">±2,05</td><td class="n">0,193</td></tr>
+<tr><td>Carpintería curva</td><td class="n">1,93</td><td class="n">—</td><td class="n">1,74</td><td class="n">±0,91</td><td class="n">0,242</td></tr>
+</table>
+<div class="caja aviso"><b>Lectura honesta.</b>
+<ul>
+  <li>El <b>canal ancho</b> casi no cambia el resultado a este Reynolds (2,42 → 2,36): el bloqueo no era la causa principal del exceso.</li>
+  <li>En una planta alineada con la grilla (esquinas vivas, sustraídas de 2 m) la pared cae justo entre celdas y las paredes exactas dan lo mismo que la escalera; el cambio de esas filas viene de la <b>colisión TRT</b>.</li>
+  <li>Que a Re ≈ 1 000 el resultado cambie hasta 20 % según la colisión (y que las sustraídas pasen a dar más arrastre) dice que <b>20 celdas por ancho no alcanzan</b> para ese Reynolds: la turbulencia y los retranqueos de 2 celdas no están resueltos. A Re = 100, en cambio, todas las variantes coinciden y se acercan a la referencia.</li>
+  <li>Conclusión práctica: para comparar formas, usar siempre la misma configuración y, en lo posible, la resolución <b>fina</b>; los números absolutos a Re alto son orientativos. El paso siguiente para la alta fidelidad es más resolución donde importa (propuesta 7: refinamiento local en el 2D y la banda de pisos en el 3D).</li>
+</ul></div>
 
 <h2>5. Niveles de fidelidad: de la computadora más limitada a la simulación de alta fidelidad</h2>
 <p>El simulador no tiene que elegir entre «liviano» y «preciso»: conviene ofrecer niveles. El de abajo anda en cualquier computadora; los de arriba se habilitan según la placa medida (ver <code>docs/informe_simulador_capacidad.md</code>) y están pensados para superficies complejas (carpinterías curvas, retranqueos, esquinas trabajadas).</p>
