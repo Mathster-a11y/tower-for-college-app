@@ -211,3 +211,38 @@ export function arcoMomento(cx: number, cy: number, r: number, a0: number, a1: n
   g.append(arco, pol);
   return g;
 }
+
+/**
+ * Explicaciones del área central (dibujos y gráficos) detrás de un botón «?»: cada texto explicativo largo (p.nota) y
+ * cada «Cómo leer este gráfico» se pliega; los que están seguidos van juntos en el mismo botón. Lo abierto se recuerda
+ * mientras la página está abierta. No toca las fórmulas ni el panel de la izquierda (sus notas siguen siempre a la vista).
+ */
+const abiertas = new Set<string>();
+export function plegarExplicaciones(raiz: HTMLElement) {
+  const notas = [...raiz.querySelectorAll<HTMLElement>('p.nota, details.como-leer')]
+    .filter(e => !e.closest('.formula, table, figcaption, .gr-zoom, .gr-acomodos, .ayuda-plegable, .kpis, .fila-acciones, .seg, svg') && (e.tagName === 'DETAILS' || (e.textContent ?? '').trim().length > 70));
+  notas.forEach(e => {
+    const clave = (e.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const anterior = e.previousElementSibling as HTMLElement | null;
+    let cuerpo: HTMLElement;
+    if (anterior?.classList.contains('ayuda-plegable')) cuerpo = anterior.querySelector<HTMLElement>(':scope > .ayuda-texto')!;
+    else {
+      const caja = document.createElement('div'); caja.className = 'ayuda-plegable';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'ayuda-boton'; b.textContent = '?';
+      cuerpo = document.createElement('div'); cuerpo.className = 'ayuda-texto';
+      const abierta = abiertas.has(clave);
+      cuerpo.hidden = !abierta; b.setAttribute('aria-expanded', String(abierta));
+      b.title = abierta ? 'Ocultar la explicación' : 'Ver la explicación'; b.setAttribute('aria-label', b.title);
+      b.dataset.clave = clave;
+      b.addEventListener('click', () => {
+        cuerpo.hidden = !cuerpo.hidden;
+        const k = b.dataset.clave!; if (cuerpo.hidden) abiertas.delete(k); else abiertas.add(k);
+        b.setAttribute('aria-expanded', String(!cuerpo.hidden));
+        b.title = cuerpo.hidden ? 'Ver la explicación' : 'Ocultar la explicación'; b.setAttribute('aria-label', b.title);
+      });
+      e.before(caja); caja.append(b, cuerpo);
+    }
+    if (e.tagName === 'DETAILS') { [...e.children].filter(x => x.tagName !== 'SUMMARY').forEach(x => cuerpo.append(x)); e.remove(); }
+    else cuerpo.append(e);
+  });
+}

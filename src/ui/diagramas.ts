@@ -323,13 +323,14 @@ export function graficoRigidez(rs: Rigidez[], tam: Tam = {}): HTMLElement {
  * referencias en 0 y en la compresión límite (σbk, como la guía).
  */
 export function graficoTensiones(v: import('../engine/flexocompresion').VerifPieza, adm: number, tam: Tam = {}): HTMLElement {
-  const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(220, tam.alto ?? 240), mi = 50, md = 16, ms = 16, mb = 36;
+  const ancho = Math.max(320, tam.ancho ?? 400), alto = Math.max(220, tam.alto ?? 240), mi = 50, md = 16, ms = 16, mb = 58;
   const fig = document.createElement('figure');
   fig.className = 'diagrama';
   const ley = document.createElement('div');
   ley.className = 'leyenda';
   // el color sale del signo de la tensión (rojo tracción, azul compresión, como en toda la app); el trazo, del caso
   ley.append(muestra('traccion', 'tracción'), muestra('compresion', 'compresión'), muestra('tinta', 'descargado, 0,7 t/m² (punteada: verifica la tracción)', true), muestra('tinta', 'cargado, 0,9 t/m² (llena: verifica la compresión)'));
+  { const sp = document.createElement('span'); sp.textContent = 'alas: ○ descargado · ● cargado · ◯ grande: viento al revés'; ley.append(sp); }
   fig.append(ley);
   const tramos = v.muros.map(m => {
     const [y1, y2] = m.papel === 'ala' ? [m.d, m.d] : [m.d - m.h / 2, m.d + m.h / 2];
@@ -352,7 +353,19 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
   svg.append(el('text', { x: mi, y: ms - 2, class: 'd-eje' }, 'σ (kg/cm²) · arriba de 0: tracción'));
   { const t = el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'distancia al baricentro (m)');
     t.append(el('title', {}, 'posición en el sentido del viento, medida desde el baricentro de la pieza (m)')); svg.append(t); }
-  marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
+  marcas(yMin, yMax, 5).forEach(t => svg.append(el('text', { x: X(t), y: alto - mb + 36, class: 'd-eje', 'text-anchor': 'middle' }, fmt(t, 1))));
+  // la pieza en corte, en la misma escala horizontal: las almas como barras a lo largo, las alas como marcas; así se ve
+  // a qué muro corresponde cada línea del gráfico
+  { const yC = alto - mb + 14;
+    svg.append(el('line', { x1: mi, x2: ancho - md, y1: yC, y2: yC, class: 'd-grilla' }));
+    const bq = el('text', { x: mi - 6, y: yC + 4, class: 'd-eje', 'text-anchor': 'end' }, 'pieza');
+    bq.append(el('title', {}, 'La pieza en corte, vista en el sentido del viento: barras = almas (a lo largo), marcas = alas')); svg.append(bq);
+    v.muros.forEach(m => {
+      const r = m.papel === 'ala' ? el('rect', { x: X(m.d) - 2, y: yC - 8, width: 4, height: 16, rx: 1, class: 'd-pieza-ala' })
+        : el('rect', { x: Math.min(X(m.d - m.h / 2), X(m.d + m.h / 2)), y: yC - 3, width: Math.max(2, Math.abs(X(m.d + m.h / 2) - X(m.d - m.h / 2))), height: 6, rx: 1, class: 'd-pieza-alma' });
+      r.append(el('title', {}, `${m.id} (${m.papel})`)); svg.append(r);
+    });
+    svg.append(el('circle', { cx: X(0), cy: yC, r: 3, class: 'd-pieza-g' })); }
   tramos.forEach(({ m, lejos, cerca }) => {
     (['desc', 'carg'] as const).forEach(k => {
       const [a, b] = m[k].map(x => x / 10);
@@ -371,8 +384,11 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
         });
       };
       if (m.papel === 'ala') {
-        tramo(X(lejos), a, X(lejos), b);
-        [a, b].forEach(s => svg.append(el('circle', { cx: X(lejos), cy: Y(s), r: 3, class: `d-c-${col(s)}` })));
+        // un ala trabaja casi solo a esfuerzo axial: un punto por caso (hueco descargado, lleno cargado), sin línea
+        [a, b].forEach(s => {
+          const c = el('circle', { cx: X(lejos), cy: Y(s), r: 3.5, class: k === 'desc' ? `d-hueco d-c-${col(s)}-l` : `d-c-${col(s)}` });
+          c.append(el('title', {}, tip)); svg.append(c);
+        });
       } else {
         tramo(X(lejos), a, X(cerca), b);
         [[lejos, a], [cerca, b]].forEach(([yy, ss]) => svg.append(el('circle', { cx: X(yy), cy: Y(ss), r: 2.5, class: `d-c-${col(ss)}` })));

@@ -1648,3 +1648,24 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .gr-acomodos select { font-size: 12px; max-width: 260px; }
 .gr-acomodos .nota { margin: 0 2px 0 6px; }
 .gr-zoom .espacio { flex: 1; }
+/* rototraslación: llave de los muros (los mismos tonos que .rt-muro) */
+.leyenda i.caja.rt-ley-alma { background: color-mix(in srgb, var(--ink) 80%, var(--lienzo)); border-color: var(--ink); }
+.leyenda i.caja.rt-ley-ala { background: color-mix(in srgb, var(--ink2) 35%, var(--lienzo)); border-color: color-mix(in srgb, var(--ink2) 50%, var(--lienzo)); }
+.rototrasl .rt-guia { fill: none; stroke: var(--ink2); stroke-width: .7; opacity: .6; }
+.rototrasl .rt-rotulo .rt-rot-nombre { fill: var(--ink2); font-weight: 400; }
+.grafico .d-hueco { fill: var(--lienzo); stroke-width: 1.6; }
+.grafico .d-pieza-alma { fill: var(--ink2); opacity: .75; }
+.grafico .d-pieza-ala { fill: var(--ink); opacity: .85; }
+.grafico .d-pieza-g { fill: var(--lienzo); stroke: var(--ink); stroke-width: 1.2; }
+details.como-leer { font-size: 12.5px; color: var(--ink2); margin: 4px 0 6px; }
+details.como-leer summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+details.como-leer ul { margin: 4px 0 0; padding-left: 18px; }
+details.como-leer li { margin: 2px 0; }
+/* explicaciones del centro detrás de «?» (comp.ts, plegarExplicaciones) */
+.ayuda-plegable { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 4px; }
+.ayuda-boton { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 13px; line-height: 1; color: var(--accent); background: var(--field); border: 1px solid var(--accent); }
+.ayuda-boton[aria-expanded="true"] { color: var(--field); background: var(--accent); }
+.ayuda-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink2); }
+.ayuda-texto[hidden] { display: none; }
+.ayuda-texto ul { margin: 0; padding-left: 18px; }
+@media (pointer: coarse) { .ayuda-boton { width: 32px; height: 32px; min-height: 32px; } }

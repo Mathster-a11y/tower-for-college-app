@@ -457,7 +457,11 @@ const rototrasl: Etapa = {
     c.append(svg);
     const ley = h('div', { class: 'leyenda' });
     const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
-    ley.append(mu('var(--deformada)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', paso === 1 ? 'eje de inercia y R' : 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
+    // los muros: oscuros los que toman este viento (almas, tubos, columnas), claros las alas y los perpendiculares
+    const caja = (clase: string, t: string, globo: string) => { const sp = h('span', { 'data-globo': globo }); sp.append(h('i', { class: `caja ${clase}` }), t); return sp; };
+    ley.append(caja('rt-ley-alma', `muro que toma el viento ${estado.dir} (alma)`, `Muro oscuro|Trabaja como alma en el viento ${estado.dir}: está paralelo al viento y su J entra en el reparto (traslación y rotación). También los tubos y las columnas.`),
+      caja('rt-ley-ala', 'ala o muro perpendicular', `Muro claro|Ala de una pieza o muro perpendicular al viento ${estado.dir}: no toma traslación en este viento (en el otro viento puede ser alma). Los perpendiculares sí toman la parte de la rotación (paso 3).`),
+      mu('var(--deformada)', paso === 1 ? 'J de cada tabique' : 'traslación'), mu('var(--corte)', 'rotación'), mu('var(--elegido)', paso === 1 ? 'eje de inercia y R' : 'eje de inercia y funicular'), mu('var(--carga)', 'viento W'));
     c.append(ley);
   },
   nombreCentro: () => (estado.sub.pasoRoto === '6' ? `Torre 3D · rototraslación exagerada, viento ${estado.dir}` : `Planta · rototraslación, viento ${estado.dir}`),
@@ -740,11 +744,26 @@ const flexion: Etapa = {
     if (!v0) { c.append(h('p', { class: 'nota' }, 'No hay piezas en este viento.')); return; }
     const z = zFlex(), nomNivel = d.p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6)?.nombre ?? 'PB';
     const anchoT = Math.min(tam.ancho ?? 600, 980);
-    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, `${v0.nombre}: tensiones de cada muro en ${nomNivel} · M = ${fmt(v0.M, 1)} tm`), graficoTensiones(v0, adm, { ancho: anchoT, alto: Math.max(300, Math.min(480, (tam.alto ?? 520) - 160)) })));
+    const comoLeer = (...items: string[]) => h('details', { class: 'como-leer' }, h('summary', {}, 'Cómo leer este gráfico'), h('ul', {}, ...items.map(t => h('li', {}, t))));
+    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, `${v0.nombre}: tensiones de cada muro en ${nomNivel} · M = ${fmt(v0.M, 1)} tm`),
+      comoLeer(
+        `Es la pieza ${v0.nombre} cortada en ${nomNivel}, vista de costado. Abajo, la franja «pieza» la dibuja en corte: las barras son las almas (los muros paralelos al viento, a lo largo) y las marcas, las alas. El eje horizontal es la posición de cada fibra en el sentido del viento, medida desde el baricentro de la pieza (el círculo de la franja).`,
+        'El eje vertical es la tensión σ en kg/cm². Arriba de 0 (franja rosada) la fibra está traccionada (rojo); abajo, comprimida (azul).',
+        'Cada alma es una recta inclinada: σ = −N/F ± M·y/J crece con la distancia y al baricentro. Del lado de barlovento el momento tracciona y del otro lado comprime; la recta cruza el 0 en el eje neutro.',
+        'Cada alma se dibuja dos veces: punteada con la losa descargada (0,7 t/m²: el peso ayuda menos y es el caso de la tracción) y llena con la losa cargada (0,9 t/m²: el caso de la compresión). Las alas trabajan casi solo a fuerza axial: un punto hueco (descargado) y uno lleno (cargado).',
+        'Lo que manda: lo que queda en la franja rosada necesita armadura para la tracción (se calcula en «cuentas» a la izquierda); lo que baje de la línea σbk no verifica a compresión. El círculo grande «viento al revés» es la compresión de una fibra cuando el viento sopla del otro lado (la que hoy está traccionada pasa a comprimirse).',
+      ),
+      graficoTensiones(v0, adm, { ancho: anchoT, alto: Math.max(320, Math.min(500, (tam.alto ?? 520) - 140)) })));
     // fibras en altura: la peor tracción (descargado) y la peor compresión (cargado) de la pieza, piso a piso
     const f = fibras().find(x => x.nombre === v0.nombre);
     if (f && f.niveles.length > 1) {
       const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
+      c.append(comoLeer(
+        `Es la misma pieza ${v0.nombre} en todos los pisos: el eje vertical es la altura (cada punto es la base de un piso) y el horizontal, la tensión σ en kg/cm² (a la derecha del 0, tracción; a la izquierda, compresión).`,
+        'Línea llena: la fibra más comprimida de cada piso, con la losa cargada. Línea punteada: la fibra más traccionada, con la losa descargada. El color sigue al signo: rojo donde tracciona, azul donde comprime.',
+        'Abajo el momento del viento es máximo, por eso las dos líneas se abren en la base: ahí están la peor compresión y la peor tracción (los valores rotulados). Hacia arriba el momento baja más rápido que el peso y las líneas se cierran.',
+        'Donde la punteada cruza el 0 deja de haber tracción: de ese piso para arriba alcanza con la armadura mínima. Si la llena pasa la línea σbk, ese piso no verifica a compresión.',
+      ));
       c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
         series: [
           { nombre: 'fibra más traccionada, descargado (0,7 t/m², punteada)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t'), porSigno: true },

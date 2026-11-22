@@ -125,6 +125,21 @@ export function tratarEsquinas(vs: Anillo, tipo: TipoEsquina, a: number, b = a, 
   return out;
 }
 
+/**
+ * curva suave que pasa por los vértices (Catmull-Rom llevada a Bézier cúbicas): cada lado recto pasa a ser una Bézier
+ * tangente a las vecinas; los arcos y las Bézier que ya había quedan. «tension» 1 es la curva clásica; menos, más tensa.
+ */
+export function suavizarAnillo(vs: Anillo, tension = 1): Anillo {
+  const n = vs.length, k = tension / 6;
+  return vs.map((a, i) => {
+    if (!recto(vs, i)) return { ...a };
+    const p0 = vs[(i - 1 + n) % n], p2 = vs[(i + 1) % n], p3 = vs[(i + 2) % n];
+    return limpio({ x: a.x, y: a.y, c1: { x: a.x + (p2.x - p0.x) * k, y: a.y + (p2.y - p0.y) * k }, c2: { x: p2.x - (p3.x - a.x) * k, y: p2.y - (p3.y - a.y) * k } });
+  });
+}
+/** todos los lados rectos (saca arcos y Bézier; quedan los vértices) */
+export const enderezarAnillo = (vs: Anillo): Anillo => vs.map(a => limpio({ x: a.x, y: a.y }));
+
 /** parte el lado i (recto) en n partes iguales */
 export function dividirLado(vs: Anillo, i: number, partes: number): Anillo | { error: string } {
   const n = vs.length, a = vs[i], b = vs[(i + 1) % n], k = Math.round(partes);

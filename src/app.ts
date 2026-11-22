@@ -14,7 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones } from './ui/comp';
 import { leerProyecto, textoErrores } from './engine/lector';
 import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
@@ -117,12 +117,12 @@ function dibujarTira(e: Etapa) {
   t.append(h('span', { class: 'nota chica' }, 'Método'), segMet);
   if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
-    ([['actual', 'Anterior'], ['nuevo', '2025']] as const).forEach(([k, txt]) => {
+    ([['actual', 'Anterior'], ['nuevo', '2025 (cátedra)']] as const).forEach(([k, txt]) => {
       const b = h('button', { type: 'button', 'aria-pressed': String(cfg.version === k) }, txt);
       b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
       segV.append(b);
     });
-    t.append(segV);
+    t.append(h('span', { class: 'nota chica' }, 'Planilla'), segV);
   }
   if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
@@ -171,6 +171,8 @@ function dibujarCentro() {
   const y = lienzo.scrollTop;
   dib.replaceChildren();
   try { e.centro(dib, tam); } catch (err) { console.error(err); dib.append(h('p', { class: 'error' }, `No se pudo dibujar: ${String(err)}`)); }
+  // las explicaciones largas del centro, detrás de un botón «?»
+  plegarExplicaciones(dib);
   // cada dibujo se puede guardar como SVG o PNG
   botonesExportar(dib, `torre3d_${e.id}_viento${estado.dir}${estado.sub[e.id] ? `_${estado.sub[e.id]}` : ''}`.replace(/[^\w-]+/g, '_'));
   lienzo.scrollTop = y;

@@ -99,7 +99,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   const conPoligono = paso === 1;
   const mi = 34, md = conPoligono ? Math.min(220, ancho * 0.3) : 30, ms = 30;
   const altoFuni = conPoligono ? alto * 0.36 : 0;
-  const abajo = conPoligono ? altoFuni + 36 : 196;                           // lugar para las flechas que entran por barlovento
+  const abajo = conPoligono ? altoFuni + 36 : 236;                           // lugar para las flechas que entran por barlovento
   const tExt = Math.max(d.T / 2, ...d.paralelos.map(p => Math.abs(p.pos))) + 1;
   const k = Math.min((ancho - mi - md) / (2 * tExt), (alto - ms - abajo) / (d.S + 2));
   const cx = mi + (ancho - mi - md) / 2;
@@ -157,7 +157,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, 'data-ancla': `${xr} ${Y(d.Yr)}`, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
   // excentricidad
   if (Math.abs(d.Xr) > 1e-3) {
-    const ye = Y(-d.S / 2) + 18;
+    const ye = paso >= 2 ? Y(-d.S / 2) - 12 : Y(-d.S / 2) + 18;      // con flechas, adentro de la planta (afuera las pisa)
     g.append(el('line', { x1: X(0), x2: xr, y1: ye, y2: ye, class: 'rt-cota' }));
     g.append(el('text', { x: (X(0) + xr) / 2, y: ye - 4, class: 'd-valor', 'text-anchor': 'middle' }, `e = ${fmt(Math.abs(d.Xr))} m`));
     ocupar((X(0) + xr) / 2, ye - 4, `e = ${fmt(Math.abs(d.Xr))} m`, 'middle');
@@ -317,7 +317,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     // la escala hace entrar la columna más larga (las fuerzas de una recta, una tras otra)
     const Fmax = Math.max(1e-9, ...[...grupos.values()].map(ps => ps.reduce((s, p) => s + medida(p), 0)),
       ...(paso === 3 ? d.perpendiculares.map(p => Math.abs(p.rot)) : []));
-    const Lmax = abajo - 76;
+    const Lmax = abajo - 116;                                                // abajo de las flechas, la fila de rótulos
     const base = Y(-d.S / 2) + 4;
     const desde = new Map<ElementoPlano, number>();
     grupos.forEach(ps => { let acc = 0; ps.forEach(p => { desde.set(p, acc); acc += (medida(p) / Fmax) * (Lmax - SEP * (ps.length - 1)) + SEP; }); });
@@ -350,12 +350,54 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     ocupados.push({ x0: X(0) - 23, x1: X(0) + 23, y: base + Lmax + 14 });
     // rótulos por recta de acción: nombres juntos y el valor (igual para todos o uno por pieza)
     const valor = (p: ElementoPlano) => (paso === 2 ? `${fmt(p.frac * 100, 1)} %` : paso === 3 ? `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(Math.abs(p.rot), 1)} t` : `${p.rot >= 0 ? '(+)' : '(−)'} ${fmt(p.total, 1)} t`);
-    [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).forEach((ps, gi) => {
-      const x = X(ps[0].pos);
-      const vals = [...new Set(ps.map(valor))];
-      const y1 = base + Lmax + 18 + (gi % 2) * 26;                           // alternados para que no se toquen
-      rotulo(x, y1, ps.map(p => p.nombre).join(' · '), 'd-eje');
-      rotulo(x, y1 + 12, vals.length === 1 ? vals[0] : ps.map(valor).join(' / '), 'd-valor');
+    // una fila ordenada de izquierda a derecha debajo de las flechas: cada recta de acción con un rótulo por pieza
+    // («T1B  43,0 %»), corridos para que no se pisen y con una guía fina hasta su flecha
+    const largoF = (p: ElementoPlano) => (medida(p) / Fmax) * Lmax * escala(grupos.get(p.pos.toFixed(2))!.length);
+    const etiquetas = [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).map(ps => {
+      const lineas = ps.map(p => ({ nombre: p.nombre, valor: valor(p) }));
+      const w = Math.max(...lineas.map(l => (l.nombre.length + l.valor.length + 2) * 6.6)) + 10;
+      return { x: X(ps[0].pos), w, lineas, pie: base + Math.max(...ps.map(p => (desde.get(p) ?? 0) + largoF(p))) + 3 };
+    });
+    // el viento W va en la misma fila, en su lugar (eje de simetría)
+    { const tx = { nombre: 'W', valor: `${fmt(d.Q, 1)} t` }; const xW = X(0), iW = etiquetas.findIndex(e => e.x > xW);
+      etiquetas.splice(iW < 0 ? etiquetas.length : iW, 0, { x: xW, w: (tx.nombre.length + tx.valor.length + 2) * 6.6 + 10, lineas: [tx], pie: base + Lmax + 3 }); }
+    // dos filas si no entran en una (las pares arriba, las impares abajo)
+    const anchoTotal = etiquetas.reduce((a, e) => a + e.w + 6, 0);
+    const filasEt = anchoTotal > ancho - 16 ? [etiquetas.filter((_, i) => i % 2 === 0), etiquetas.filter((_, i) => i % 2 === 1)] : [etiquetas];
+    let yFila = base + Lmax + 26;
+    filasEt.forEach(fila => {
+      // grupos de rótulos que se tocan: se juntan y se centran en el promedio de sus flechas, sin salir del dibujo
+      type Bloque = { items: typeof fila; x0: number; w: number };
+      let bloques: Bloque[] = fila.map(e => ({ items: [e], x0: e.x - e.w / 2, w: e.w }));
+      const GAP = 6;
+      for (let cambio = true; cambio;) {
+        cambio = false;
+        for (let i = 0; i + 1 < bloques.length; i++) {
+          const a = bloques[i], b = bloques[i + 1];
+          if (a.x0 + a.w + GAP > b.x0) {
+            const items = [...a.items, ...b.items], w = items.reduce((t, e) => t + e.w, 0) + GAP * (items.length - 1);
+            const centro = items.reduce((t, e) => t + e.x, 0) / items.length;
+            bloques.splice(i, 2, { items, x0: centro - w / 2, w }); cambio = true; break;
+          }
+        }
+        bloques = bloques.map(bq => ({ ...bq, x0: Math.max(4, Math.min(ancho - 4 - bq.w, bq.x0)) }));
+      }
+      const altoFila = Math.max(...fila.map(e => e.lineas.length)) * 13 + 6;
+      bloques.forEach(bq => {
+        let xx = bq.x0;
+        bq.items.forEach(e => {
+          const cxE = xx + e.w / 2;
+          g.append(el('path', { d: `M ${e.x} ${e.pie} L ${e.x} ${Math.max(e.pie, yFila - 18)} L ${cxE} ${yFila - 11}`, class: 'rt-guia' }));
+          e.lineas.forEach((l, j) => {
+            const t = el('text', { x: cxE, y: yFila + j * 13, class: 'd-valor rt-rotulo', 'text-anchor': 'middle' });
+            const n = el('tspan', { class: 'rt-rot-nombre' }, l.nombre), v = el('tspan', { dx: 6 }, l.valor);
+            t.append(n, v); g.append(t);
+            ocupados.push({ x0: xx, x1: xx + e.w, y: yFila + j * 13 });
+          });
+          xx += e.w + GAP;
+        });
+      });
+      yFila += altoFila + 4;
     });
     // perpendiculares: solo rotación. La flecha va sobre el muro, a lo largo del muro, con el sentido en que el giro
     // lo empuja: con giro horario, los que están por encima del CR van hacia la derecha y los de abajo, a la izquierda.
@@ -373,7 +415,6 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     // W en el eje de simetría, en la franja de las flechas (es la fuerza que las piezas se reparten)
     const yW = base + Lmax;
     g.append(flecha(X(0), yW, X(0), yW - Math.min(Lmax, 46), 2.5, 'rt-W'));
-    rotulo(X(0), yW + 14, `W = ${fmt(d.Q, 1)} t`, 'd-valor');
     if (paso >= 3 && gira) {
       // arco de 270° desde abajo: horario pasa por la izquierda y termina a la derecha bajando; antihorario, al revés
       const r = 24, c = { x: xr, y: Y(d.Yr) };

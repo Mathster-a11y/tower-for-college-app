@@ -103,7 +103,36 @@ export function montarPlanta(cont: HTMLElement) {
     estado.avisarPanel();
   };
   const bDesagSel = bSel('Desagrupar', 'Deshace los grupos elegidos; sus muros quedan sueltos y elegidos (Ctrl+Mayús+G)', () => desagruparElegidos(estado.multi.g));
-  barraSel.append(cuentaSel, bLista,
+  // sacar del cálculo (o volver): las piezas de lo elegido dejan de ir a la hoja J en los dos vientos (clasesPieza.enJ)
+  const piezasElegidas = (deGrupo: boolean) => {
+    const p = estado.proyecto, ids = new Set<string>();
+    if (deGrupo) { if (estado.grupoSel) murosDe(p, estado.grupoSel).forEach(m => ids.add(m.id)); }
+    else { estado.multi.m.forEach(id => ids.add(id)); estado.multi.g.forEach(g => murosDe(p, g).forEach(m => ids.add(m.id))); }
+    const s = new Set<string>();
+    ids.forEach(id => { const m = p.muros.find(x => x.id === id); if (m?.piezaA) s.add(m.piezaA); if (m?.piezaB) s.add(m.piezaB); });
+    return [...s];
+  };
+  const alternarCalculo = (deGrupo: boolean) => {
+    const nombres = piezasElegidas(deGrupo);
+    if (!nombres.length) { mensaje('Lo elegido no tiene pieza en ningún viento (Diseño → Muros): no entra al cálculo.'); return; }
+    const cs = estado.proyecto.clasesPieza ?? {}, adentro = nombres.every(n => cs[n]?.enJ !== false);
+    estado.cambiar(pp => {
+      const t = (pp.clasesPieza ??= {});
+      nombres.forEach(n => { const c0 = { ...(t[n] ?? {}) }; c0.enJ = adentro ? false : null; if ((!c0.clase || c0.clase === 'auto') && c0.enJ !== false) delete t[n]; else t[n] = c0; });
+      if (!Object.keys(t).length) delete pp.clasesPieza;
+    });
+    mensaje(`${nombres.join(', ')}: ${adentro ? 'fuera del cálculo (no van a la hoja J en ningún viento; quedan en gris). Ctrl+Z deshace.' : 'vuelven al cálculo.'}`);
+    estado.avisarPanel();
+  };
+  const tituloFuera = 'Saca del cálculo las piezas de lo elegido: no van a la hoja J en ningún viento y quedan en gris en la planta. Tocá de nuevo para que vuelvan.';
+  const bFueraSel = bSel('Sacar del cálculo', tituloFuera, () => alternarCalculo(false));
+  const bFueraGrupo = bSel('Sacar del cálculo', tituloFuera, () => alternarCalculo(true));
+  const ponerBotonFuera = (b: HTMLButtonElement, deGrupo: boolean) => {
+    const ns = piezasElegidas(deGrupo), cs = estado.proyecto.clasesPieza ?? {};
+    b.disabled = !ns.length;
+    b.textContent = ns.length && ns.every(n => cs[n]?.enJ === false) ? 'Volver al cálculo' : 'Sacar del cálculo';
+  };
+  barraSel.append(cuentaSel, bLista, bFueraSel,
     bSel('Borrar', 'Borra lo elegido (Supr). Ctrl+Z deshace.', () => borrarElegidos(), 'peligro'),
     bSel('Agrupar', 'Junta lo elegido en un grupo (Ctrl+G)', () => agruparElegidos()),
     bDesagSel,
@@ -137,6 +166,7 @@ export function montarPlanta(cont: HTMLElement) {
     bSel('↺ 90°', 'Girar el grupo 90° (antihorario) alrededor del centro de su caja', () => conGrupo((pp, id) => { girarNodo(pp, id); }, 'Grupo girado 90°.')),
     bSel('⇋', 'Espejar con un eje vertical por el centro de su caja', () => conGrupo((pp, id) => { espejarNodo(pp, id, 'x'); }, 'Grupo espejado.')),
     bSel('⇵', 'Espejar con un eje horizontal por el centro de su caja', () => conGrupo((pp, id) => { espejarNodo(pp, id, 'y'); }, 'Grupo espejado.')),
+    bFueraGrupo,
     bSel('Borrar', 'Borra el grupo con todo lo que tiene (Supr)', () => { conGrupo((pp, id) => borrarGrupo(pp, id), 'Grupo borrado. Ctrl+Z deshace.'); estado.grupoSel = null; estado.avisarPanel(); }, 'peligro'));
   cont.appendChild(barraGrupo);
   // opciones del lazo
@@ -536,8 +566,16 @@ export function montarPlanta(cont: HTMLElement) {
       let k = 0, lmax = -1;
       s2.forEach((a, j) => { const c = s2[(j + 1) % s2.length], l = Math.hypot(c.x - a.x, c.y - a.y); if (l > lmax) { lmax = l; k = j; } });
       const a2 = s2[k], c2 = s2[(k + 1) % s2.length];
-      s2[k] = { ...a2, b: 0 };
-      s2.splice(k + 1, 0, { x: +((a2.x + c2.x) / 2).toFixed(2), y: +((a2.y + c2.y) / 2).toFixed(2) });
+      if (a2.c1 && a2.c2) {
+        // Bézier: se parte en dos Bézier en la mitad (de Casteljau), sin cambiar la curva
+        const m = (p: Punto, q: Punto) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+        const p01 = m(a2, a2.c1), p12 = m(a2.c1, a2.c2), p23 = m(a2.c2, c2), p012 = m(p01, p12), p123 = m(p12, p23), mid = m(p012, p123);
+        s2[k] = { x: a2.x, y: a2.y, c1: p01, c2: p012 };
+        s2.splice(k + 1, 0, { x: +mid.x.toFixed(4), y: +mid.y.toFixed(4), c1: p123, c2: p23 });
+      } else {
+        s2[k] = { ...a2, b: 0 };
+        s2.splice(k + 1, 0, { x: +((a2.x + c2.x) / 2).toFixed(2), y: +((a2.y + c2.y) / 2).toFixed(2) });
+      }
       vSel = k + 1;
     }), 'Agrega un vértice en el medio del tramo más largo; después se arrastra adonde va.');
     const borrar = boton('− vértice', () => { if (vSel === null || vs.length <= 3) return; const k = vSel; vSel = null; estado.cambiar(() => { siluetaPropia().splice(k, 1); }); }, 'Borra el vértice elegido (tocalo primero). Quedan al menos 3.');
@@ -1863,6 +1901,8 @@ export function montarPlanta(cont: HTMLElement) {
     bDesagSel.hidden = !estado.multi.g.length;
     bDesagTodo.hidden = !gB || subgrupos(p, gB.id).length < 2;
     if (gB) { nombreGrupo.textContent = `${gB.bloq ? '🔒 ' : ''}${gB.nombre}${gB.comp ? ' ◆' : ''}`; barraGrupo.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = !!gB.bloq && b.textContent !== 'Duplicar' && b.textContent !== 'Copia vinculada'; }); }
+    if (nSel) ponerBotonFuera(bFueraSel, false);
+    if (gB) ponerBotonFuera(bFueraGrupo, true);
     if (nSel) { const g = estado.multi.g.length; cuentaSel.textContent = `${nSel} elegido${nSel > 1 ? 's' : ''}${g ? ` (${g} grupo${g > 1 ? 's' : ''})` : ''}`; armarListaSel(); } else listaSel.hidden = true;
     barraCtx.hidden = !estado.contexto;
     if (estado.contexto) {
@@ -2580,7 +2620,13 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'silueta') {
       if (arrastreV === null || !pasoUmbral(ev)) return;
       const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? nv.carpinteria : nv.silueta;
-      if (v && v[arrastreV]) { v[arrastreV].x = aj(q.x); v[arrastreV].y = aj(q.y); pedirDibujo(); }
+      if (v && v[arrastreV]) {
+        // los puntos de control de las Bézier que llegan y salen de este vértice se mueven con él
+        const k = arrastreV, a = v[k], dx = aj(q.x) - a.x, dy = aj(q.y) - a.y, pr = v[(k - 1 + v.length) % v.length];
+        if (a.c1) a.c1 = { x: a.c1.x + dx, y: a.c1.y + dy };
+        if (pr.c2) pr.c2 = { x: pr.c2.x + dx, y: pr.c2.y + dy };
+        a.x = aj(q.x); a.y = aj(q.y); pedirDibujo();
+      }
       return;
     }
     if (!arrastre || !pasoUmbral(ev)) return;

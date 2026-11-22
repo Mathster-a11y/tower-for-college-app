@@ -17,6 +17,11 @@ export interface Sitio {
   parapeto?: number | null;
 }
 
+/**
+ * vértice de un contorno (losa o carpintería): el lado que sale de este vértice es recto, un arco (b: bulge de AutoCAD)
+ * o una Bézier cúbica (c1 y c2: puntos de control)
+ */
+export type VerticeContorno = { x: number; y: number; b?: number; c1?: { x: number; y: number }; c2?: { x: number; y: number } };
 export interface Nivel {
   nombre: string;
   /** cota del NPT (m) */
@@ -35,12 +40,12 @@ export interface Nivel {
    * rectángulo B × L. Cada vértice puede llevar «b» (bulge, como en AutoCAD): el tramo que sale de ese vértice es un
    * arco de círculo con b = tan(ángulo / 4); b = 0 es recto.
    */
-  silueta?: { x: number; y: number; b?: number }[] | null;
+  silueta?: VerticeContorno[] | null;
   /**
    * contorno de la carpintería (cerramiento) del nivel; vacío = el del nivel de arriba. Su caja da el a máx
    * (ancho) y el b máx (largo) del perfil al que se le aplica el viento; B y L se cargan a mano.
    */
-  carpinteria?: { x: number; y: number; b?: number }[] | null;
+  carpinteria?: VerticeContorno[] | null;
 }
 
 /** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */

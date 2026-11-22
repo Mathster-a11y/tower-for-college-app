@@ -15,8 +15,8 @@ import type { Muro } from '../engine/modelo';
 import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
-import type { Punto } from '../engine/silueta';
-import { arcoConRadio, chaflan, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
+import type { Punto, Vertice } from '../engine/silueta';
+import { arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
@@ -44,7 +44,7 @@ export function montarEditorContorno(api: ApiPlanta) {
    * otro contorno (no un muro): la losa o la carpintería de un nivel. Sin huecos; los arcos se guardan exactos
    * (bulge) y las Bézier, como puntos de la curva.
    */
-  let destino: { titulo: string; guardar: (v: { x: number; y: number; b?: number }[]) => void } | null = null;
+  let destino: { titulo: string; guardar: (v: Vertice[]) => void } | null = null;
   const panel = document.createElement('div'); panel.className = 'calco-panel colocar-panel contorno-panel'; panel.hidden = true;
   (svg.parentElement ?? api.dock).appendChild(panel);
 
@@ -68,7 +68,7 @@ export function montarEditorContorno(api: ApiPlanta) {
     return true;
   }
   /** abre el editor con un contorno cerrado cualquiera (la losa o la carpintería de un nivel) */
-  function abrirContorno(o: { titulo: string; v: { x: number; y: number; b?: number }[]; guardar: (v: { x: number; y: number; b?: number }[]) => void }) {
+  function abrirContorno(o: { titulo: string; v: Vertice[]; guardar: (v: Vertice[]) => void }) {
     if (o.v.length < 3) { api.mensaje('El contorno necesita al menos tres vértices.'); return false; }
     destino = { titulo: o.titulo, guardar: o.guardar };
     id = '·contorno'; original = null;
@@ -85,16 +85,8 @@ export function montarEditorContorno(api: ApiPlanta) {
   /** guarda el contorno en el muro: tabique o tubo si sigue siéndolo, o perfil irregular (con aviso) */
   async function listo() {
     if (destino && P) {
-      // arcos exactos (bulge); cada Bézier se reemplaza por los puntos de la curva (lo que usan el viento y el 3D)
-      const v: { x: number; y: number; b?: number }[] = [];
-      P.v.forEach((a, i) => {
-        const b = P!.v[(i + 1) % P!.v.length];
-        v.push({ x: r4(a.x), y: r4(a.y), ...(a.b && !a.c1 ? { b: r4(a.b) } : {}) });
-        if (a.c1 && a.c2) for (let k = 1; k < 8; k++) {
-          const t = k / 8, u = 1 - t;
-          v.push({ x: r4(u * u * u * a.x + 3 * u * u * t * a.c1.x + 3 * u * t * t * a.c2.x + t * t * t * b.x), y: r4(u * u * u * a.y + 3 * u * u * t * a.c1.y + 3 * u * t * t * a.c2.y + t * t * t * b.y) });
-        }
-      });
+      // arcos exactos (bulge) y Bézier exactas (puntos de control): el viento y el 3D las recorren con puntosSilueta
+      const v: Vertice[] = P.v.map(a => ({ x: r4(a.x), y: r4(a.y), ...(a.c1 && a.c2 ? { c1: { x: r4(a.c1.x), y: r4(a.c1.y) }, c2: { x: r4(a.c2.x), y: r4(a.c2.y) } } : a.b ? { b: r4(a.b) } : {}) }));
       const d = destino;
       cerrar();
       d.guardar(v);
@@ -212,7 +204,21 @@ export function montarEditorContorno(api: ApiPlanta) {
     }
     else if (a.tipo === 'lado') P = moverLado(a.base, a.anillo, a.i, q);
     else if (a.tipo === 'arco') P = arcoPor(a.base, a.anillo, a.i, q);
-    else { const p = clonar(a.base), v = anilloDe(p, a.anillo)[a.i]; v[a.tipo] = { x: r4(q.x), y: r4(q.y) }; P = p; }
+    else {
+      const p = clonar(a.base), vs = anilloDe(p, a.anillo), n = vs.length, v = vs[a.i];
+      v[a.tipo] = { x: r4(q.x), y: r4(q.y) };
+      // tangente continua con la Bézier vecina (la curva no hace quiebre en el vértice); Alt: quiebre a propósito
+      if (!ev.altKey) {
+        const V = a.tipo === 'c1' ? vs[a.i] : vs[(a.i + 1) % n];
+        const vec = a.tipo === 'c1' ? vs[(a.i - 1 + n) % n] : vs[(a.i + 1) % n];
+        const otro = a.tipo === 'c1' ? 'c2' : 'c1', ctl = vec[otro];
+        if (ctl && vec.c1 && vec.c2) {
+          const lo = Math.hypot(ctl.x - V.x, ctl.y - V.y), dx = V.x - q.x, dy = V.y - q.y, l = Math.hypot(dx, dy);
+          if (l > 1e-6) vec[otro] = { x: r4(V.x + (dx / l) * lo), y: r4(V.y + (dy / l) * lo) };
+        }
+      }
+      P = p;
+    }
     api.pedirDibujo(); armarDatos();
   });
   const soltar = () => { if (pendiente) { pendiente = null; armar(); api.dibujar(); return; } if (arrastre) { arrastre = null; armar(); api.dibujar(); } };
@@ -297,7 +303,7 @@ export function montarEditorContorno(api: ApiPlanta) {
     panel.append(fila(lo));
     if (!ortogonal) panel.append(mk('p', 'Libre: tocá el medio de un lado (○) para elegirlo y hacerlo arco; arrastralo para agregar un vértice. Tocá un vértice (□) para redondearlo o cortarlo.', 'col-nota'));
     else panel.append(mk('p', 'Para curvas y diagonales, destildá «Mantener ortogonal». También podés elegir un lado (○) y usar «Arco por radio».', 'col-nota'));
-    if (tramo && !ortogonal) panel.append(fila(mk('span', 'Lado:'), boton('Recto', '', () => tipoTramo('recta')), boton('Arco', 'Arrastrá el medio para curvarlo', () => tipoTramo('arco')), boton('Bézier', 'Arrastrá los dos puntos de control', () => tipoTramo('bezier'))));
+    if (tramo) panel.append(fila(mk('span', 'Lado:'), boton('Recto', '', () => tipoTramo('recta')), boton('Arco', 'Arrastrá el medio para curvarlo', () => tipoTramo('arco')), boton('Bézier', 'Curva libre: arrastrá los dos puntos de control (○). La Bézier vecina acompaña para que no haya quiebre; con Alt, se quiebra.', () => tipoTramo('bezier'))));
     // ---- herramientas de CAD
     const campo = (etq: string, v: number, f: (x: number) => void, ancho = 46, unidad = 'm') => { const l = mk('label', '', 'col-campo'); l.append(etq); const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.style.width = `${ancho}px`; i.value = String(r4(v)).replace('.', ','); i.addEventListener('change', () => { const x = num(i.value); if (isFinite(x)) f(x); else i.value = String(r4(v)).replace('.', ','); }); l.append(i, unidad); return l; };
     if (sel) {
@@ -322,6 +328,9 @@ export function montarEditorContorno(api: ApiPlanta) {
     const kSel = sel?.anillo ?? tramo?.anillo ?? 0, nomK = kSel ? `el hueco ${kSel}` : 'el contorno';
     const det = mk('details', '', 'contorno-cad'); det.open = abiertoCad; det.addEventListener('toggle', () => { abiertoCad = det.open; });
     det.append(mk('summary', `Herramientas de CAD (sobre ${nomK})`));
+    det.append(fila(mk('span', 'Curvas:'),
+      boton('Suavizar', 'Curva continua que pasa por todos los vértices: cada lado recto pasa a ser una Bézier tangente a las vecinas (después se ajusta con los puntos de control)', () => aplicarAnillo(kSel, vs => suavizarAnillo(vs), `${nomK} suavizado: cada lado es una Bézier que pasa por los vértices.`)),
+      boton('Enderezar', 'Saca todos los arcos y las Bézier: quedan los lados rectos entre los mismos vértices', () => aplicarAnillo(kSel, vs => enderezarAnillo(vs), `${nomK} con todos los lados rectos.`, false))));
     det.append(fila(mk('span', 'Todas las esquinas:'),
       boton('Redondear', 'Empalme de radio r en cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'redondeada', her.r), `Esquinas redondeadas con r = ${fmt(her.r)} m.`)),
       boton('Chaflán', 'Corta cada esquina saliente a la distancia d', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'chaflan', her.d), `Esquinas en chaflán de ${fmt(her.d)} m.`)),

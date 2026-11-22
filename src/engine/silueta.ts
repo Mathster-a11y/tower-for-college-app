@@ -4,7 +4,7 @@
  */
 import type { Nivel, Proyecto } from './modelo';
 
-export type Vertice = { x: number; y: number; b?: number };
+export type Vertice = { x: number; y: number; b?: number; c1?: { x: number; y: number }; c2?: { x: number; y: number } };
 export type Punto = { x: number; y: number };
 
 /** puntos del contorno, con cada arco partido en tramos de a lo sumo «grados» */
@@ -13,6 +13,17 @@ export function puntosSilueta(v: Vertice[], grados = 10): Punto[] {
   v.forEach((a, i) => {
     const b = v[(i + 1) % v.length];
     out.push({ x: a.x, y: a.y });
+    // Bézier cúbica: tramos de igual parámetro, tantos como pida su giro (al menos 8)
+    if (a.c1 && a.c2) {
+      const c1 = a.c1, c2 = a.c2;
+      const giro = Math.abs(Math.atan2(c1.y - a.y, c1.x - a.x) - Math.atan2(b.y - c2.y, b.x - c2.x));
+      const n = Math.max(8, Math.ceil(Math.min(giro, 2 * Math.PI - giro) / ((grados * Math.PI) / 180)) * 2);
+      for (let k = 1; k < n; k++) {
+        const t = k / n, u = 1 - t;
+        out.push({ x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x, y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y });
+      }
+      return;
+    }
     const bu = a.b ?? 0;
     if (Math.abs(bu) < 1e-9) return;
     // arco: ángulo incluido θ = 4·atan(b); centro sobre la mediatriz de la cuerda
@@ -77,10 +88,11 @@ export function leerDXF(texto: string): Vertice[][] {
 }
 /** pasa un contorno a metros (factor) y, si se pide, lo centra en el origen (el centro de la planta) */
 export function ajustarContorno(v: Vertice[], factor: number, centrar: boolean): Vertice[] {
-  const m = v.map(q => ({ x: q.x * factor, y: q.y * factor, ...(q.b ? { b: q.b } : {}) }));
+  const m = v.map(q => ({ x: q.x * factor, y: q.y * factor, ...(q.b ? { b: q.b } : {}), ...(q.c1 && q.c2 ? { c1: { x: q.c1.x * factor, y: q.c1.y * factor }, c2: { x: q.c2.x * factor, y: q.c2.y * factor } } : {}) }));
   if (!centrar) return m;
   const c = cajaSilueta(m);
-  return m.map(q => ({ ...q, x: +(q.x - c.cx).toFixed(4), y: +(q.y - c.cy).toFixed(4) }));
+  const mover = (u: { x: number; y: number }) => ({ x: +(u.x - c.cx).toFixed(4), y: +(u.y - c.cy).toFixed(4) });
+  return m.map(q => ({ ...q, ...mover(q), ...(q.c1 && q.c2 ? { c1: mover(q.c1), c2: mover(q.c2) } : {}) }));
 }
 
 /** contorno de la carpintería que rige en el nivel i (heredado del nivel de arriba) y su caja (a máx, b máx) */
