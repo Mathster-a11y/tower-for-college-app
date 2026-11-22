@@ -101,10 +101,10 @@ function cota(g: SVGElement, x1: number, y1: number, x2: number, y2: number, t: 
 }
 /** recuadro de dato: título chico y valor grande */
 function dato(g: SVGElement, x: number, y: number, w: number, tit: string, val: string, nota = '', clase = '') {
-  g.append(el('rect', { x, y, width: w, height: 46, rx: 6, class: `ct-dato ${clase}` }));
+  g.append(el('rect', { x, y, width: w, height: 50, rx: 6, class: `ct-dato ${clase}` }));
   txt(g, x + 8, y + 14, tit, 'ct-dato-tit');
-  txt(g, x + 8, y + 32, val, 'ct-dato-val');
-  if (nota) txt(g, x + 8, y + 42, nota, 'ct-dato-nota');
+  txt(g, x + 8, y + 31, val, 'ct-dato-val');
+  if (nota) txt(g, x + 8, y + 45, nota, 'ct-dato-nota');
 }
 /** marcas «redondas» para un eje de 0 a max */
 function marcas(max: number, n = 3): number[] {

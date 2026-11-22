@@ -258,7 +258,7 @@ function dibujarEstadoCalculo() {
 function dibujarTodo(porCambio = false) {
   $<HTMLButtonElement>('b-deshacer').disabled = !estado.puedeDeshacer;
   $<HTMLButtonElement>('b-rehacer').disabled = !estado.puedeRehacer;
-  $('nombre-proyecto').textContent = estado.proyecto.nombre;
+  { const np = $('nombre-proyecto'); np.textContent = estado.proyecto.nombre; np.title = estado.proyecto.nombre; }
   const ahorrar = porCambio && estado.pendiente;
   dibujarRiel(); dibujarPanel();
   if (!ahorrar || etapaPorId(estado.etapa).centro === 'planta') dibujarCentro();

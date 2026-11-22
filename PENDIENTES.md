@@ -179,10 +179,11 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] P2 · Canal ancho en el 2D (12 anchos, bloqueo ≈ 8 %), con opción angosto
 - [x] P8 (parcial) · Validación contra casos publicados: cilindro y cuadrado a Re = 100 (`tools/diagnostico/validacion.test.ts`)
 - [x] P3 · Túnel piso por piso con el 2D (2,5D): cada planta distinta en paralelo (un worker por núcleo, hasta 4), Cd/Cl/St por planta, fuerza por nivel con el qz del CIRSOC 102-25 y corte y momento en PB contra el reglamento (Viento → Túnel 2D → «Torre piso por piso»)
-- [ ] P4 · Corrida larga con grabación y archivo para reproducir sin placa (.torreviento), video WebM
-- [ ] P5 · Datos: Cp a lo largo del perímetro de cada piso (picos de succión en esquinas), fuerza por piso, confort Lawson en la vereda, exportar a Excel
-- [ ] P6 · 3D sin placa: en el procesador con varios núcleos (workers + WebAssembly) y respaldo WebGL2
+- [x] P4 · Corrida larga con grabación (.torreviento: velocidad, presión y giro en 8 bits, hasta 360 cuadros) que se reabre y reproduce sin simular, y video WebM (Túnel 2D → «Grabar y reproducir»)
+- [x] P5 · Datos: Cp promedio a lo largo del perímetro (gráfico, puntos sobre el contorno y CSV), fuerza por piso (CSV), confort Lawson LDDC en la vereda del 3D con el viento medio del lugar. Falta: que el CSV vaya también como hoja del Excel
+- [x] P6 (parcial) · 3D sin placa: el D3Q19 en un worker del procesador (≈ 3,5 M celdas/s, grilla 80 × 40 × 32: una pasada del aire por minuto). Falta: repartir en varios núcleos o WebAssembly
 - [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
-- [ ] **Ventana de detalle en el 2D (pedido del usuario):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
+- [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
 - [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
-- [ ] Dibujar la torre del túnel 3D con su contorno real (hoy se dibuja en bloques aunque el cálculo usa la planta exacta)
+- [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso
+- [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2
