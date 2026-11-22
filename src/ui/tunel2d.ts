@@ -7,7 +7,10 @@
 import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import { vientoCirsoc } from './cirsoc102';
-import type { Tam } from './diagramas';
+import { graficoAltura, tablaValores, type Tam } from './diagramas';
+import { corteYMomento, fuerzasPorPiso, plantasDistintas, type GrupoPlanta, type ResultadoPlanta } from '../viento/porPiso';
+import type { PedidoMedicion, RespuestaMedicion } from '../viento/medicion.worker';
+import MedicionWorker from '../viento/medicion.worker?worker&inline';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
@@ -211,7 +214,9 @@ export function centroTunel(c: H, tam: Tam) {
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
-  if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2) { cr.cuadrosSinMirar = 0; correr(true); }
+  resultadosPisos(c, Math.min(ancho, 900));
+  // mientras se simula la torre piso por piso, el túnel de la vista queda en pausa
+  if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2 && !(pisos && !pisos.fin)) { cr.cuadrosSinMirar = 0; correr(true); }
   dibujar();
 }
 
@@ -256,6 +261,8 @@ export function panelTunel(c: H) {
   actualizarMediciones();
   const ca = seccion('Comparar formas de esquina').cuerpo; c.append(ca.parentElement!);
   panelAnot = h('div', {}); ca.append(panelAnot); armarAnotadas();
+  const pp = seccion('Torre piso por piso').cuerpo; c.append(pp.parentElement!);
+  armarPanelPisos(pp);
   const gp = seccion('Túnel 3D: probar la placa de video').cuerpo; c.append(gp.parentElement!);
   const ponerGpu = () => { gp.replaceChildren(seccionPruebaGpu(ponerGpu)); };
   ponerGpu();
@@ -292,6 +299,108 @@ function armarAnotadas() {
   }
   hijos.push(h('p', { class: 'nota' }, 'Para ver cuánto ayudan las esquinas: con el mismo corte, Reynolds y resolución, anotá la planta como «su caja, con esquinas vivas» y después «como está dibujada» (los porcentajes comparan con la primera anotada). Menos Cd: menos empuje en el sentido del viento. Menos Cl: menos sacudida de costado por los remolinos. La V crítica = n1·B/St conviene que quede bien por encima del viento de diseño.'));
   el.replaceChildren(...hijos);
+}
+
+// ---------------------------------------------------------------------------------------------- piso por piso
+/**
+ * Túnel piso por piso (propuesta 3): cada planta distinta de la torre en su worker, con la misma configuración del
+ * túnel (Reynolds, resolución, paredes, canal, giro); el Cd de cada planta se aplica a la franja de su piso con el qz
+ * del 102-25.
+ */
+const PASADAS: Record<string, { n: number; texto: string }> = { rapida: { n: 60, texto: 'rápida (60 pasadas)' }, normal: { n: 120, texto: 'normal (120 pasadas)' }, larga: { n: 200, texto: 'larga (200 pasadas, más estable)' } };
+interface CorridaPisos { clave: string; grupos: GrupoPlanta[]; res: Map<string, ResultadoPlanta>; avance: Map<string, number>; workers: Worker[]; pendientes: GrupoPlanta[]; t0: number; fin: number }
+let pisos: CorridaPisos | null = null;
+let pasadasPisos = 'normal';
+const clavePisos = () => JSON.stringify([estado.revision, estado.dir, cfg.angulo, cfg.re, cfg.res, cfg.paredes, cfg.canal, pasadasPisos]);
+/** la geometría y el pedido de una planta, con la configuración del túnel */
+function pedidoPlanta(g: GrupoPlanta): { pedido: PedidoMedicion; anchoM: number } {
+  const D = RES[cfg.res].D, re = RE[cfg.re];
+  const geo = geometria2D({ poligonos: [g.pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4 });
+  const exactas = cfg.paredes === 'exactas', pasos = Math.round((PASADAS[pasadasPisos].n * geo.D) / U0);
+  return { anchoM: geo.anchoM, pedido: { nx: geo.nx, ny: geo.ny, solido: geo.solido, nu: (U0 * geo.D) / re.Re, u0: U0, cs: re.cs, D: geo.D, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk', pasos, desde: Math.min(pasos - 1000, Math.round((0.6 * geo.nx) / U0)) } };
+}
+function detenerPisos() { pisos?.workers.forEach(w => w.terminate()); if (pisos) pisos.workers = []; }
+function empezarPisos() {
+  detenerPisos();
+  correr(false);                                                    // el túnel de la vista se pausa: cada núcleo, una planta
+  const grupos = plantasDistintas(estado.proyecto);
+  pisos = { clave: clavePisos(), grupos, res: new Map(), avance: new Map(), workers: [], pendientes: [...grupos], t0: performance.now(), fin: 0 };
+  const n = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1));
+  for (let k = 0; k < n; k++) siguientePlanta();
+}
+function siguientePlanta() {
+  const c = pisos;
+  if (!c) return;
+  const g = c.pendientes.shift();
+  if (!g) { if (!c.workers.length && !c.fin) { c.fin = performance.now(); estado.avisarPanel(); } return; }
+  const { pedido, anchoM } = pedidoPlanta(g);
+  const w = new MedicionWorker();
+  c.workers.push(w);
+  w.onmessage = (e: MessageEvent<RespuestaMedicion>) => {
+    if (pisos !== c) { w.terminate(); return; }
+    const r = e.data;
+    if (r.tipo === 'avance') { c.avance.set(g.clave, r.hechos / r.pasos); actualizarAvancePisos(); return; }
+    c.res.set(g.clave, { Cd: r.med.Cd, ClRms: r.med.ClRms, St: r.med.St, anchoM, roto: r.roto });
+    c.avance.set(g.clave, 1);
+    w.terminate(); c.workers = c.workers.filter(x => x !== w);
+    if (!c.pendientes.length && !c.workers.length) c.fin = performance.now();
+    estado.avisarPanel();
+    siguientePlanta();
+  };
+  w.postMessage(pedido, pedido.q ? [pedido.solido.buffer, pedido.q.buffer] : [pedido.solido.buffer]);
+}
+let panelPisos: H | null = null;
+function actualizarAvancePisos() {
+  const el = panelPisos, c = pisos;
+  if (!el?.isConnected || !c) return;
+  el.querySelectorAll<HTMLElement>('[data-planta]').forEach(b => { const a = c.avance.get(b.dataset.planta!) ?? 0; (b.firstElementChild as HTMLElement).style.width = `${Math.round(a * 100)}%`; });
+}
+/** el panel: cuántas plantas, cuánto tarda (estimado), el botón y el avance de cada una */
+function armarPanelPisos(el: H) {
+  panelPisos = el;
+  const grupos = plantasDistintas(estado.proyecto), c = pisos && pisos.clave === clavePisos() ? pisos : null;
+  const nNiv = grupos.reduce((s, g) => s + g.niveles.length, 0);
+  // tiempo estimado: ≈ 15 millones de celdas por segundo por núcleo en JavaScript
+  const est = grupos.length ? (() => { const { pedido } = pedidoPlanta(grupos[0]); const nW = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1)); return (Math.ceil(grupos.length / nW) * pedido.nx * pedido.ny * pedido.pasos) / 15e6; })() : 0;
+  const sel = h('select', {}) as HTMLSelectElement;
+  Object.entries(PASADAS).forEach(([k, v]) => sel.append(new Option(v.texto, k, false, k === pasadasPisos)));
+  sel.addEventListener('change', () => { pasadasPisos = sel.value; estado.avisarPanel(); });
+  const corriendo = !!c && !c.fin;
+  const b = h('button', { type: 'button', class: `boton${corriendo ? '' : ' primario'}` }, corriendo ? '⏹ Detener' : c?.fin ? '↺ Simular de nuevo' : '▶ Simular la torre piso por piso') as HTMLButtonElement;
+  b.addEventListener('click', () => { if (corriendo) { detenerPisos(); pisos = null; } else empezarPisos(); estado.avisarPanel(); });
+  const filas = grupos.map((g, k) => {
+    const r = c?.res.get(g.clave), barra = h('span', { class: 'pp-barra', 'data-planta': g.clave }, h('i', {}));
+    (barra.firstElementChild as HTMLElement).style.width = `${Math.round((c?.avance.get(g.clave) ?? 0) * 100)}%`;
+    const desde = g.niveles[0].nombre, hasta = g.niveles[g.niveles.length - 1].nombre;
+    return h('div', { class: 'pp-fila' }, h('span', {}, `Planta ${k + 1} · ${g.de} · ${g.niveles.length > 1 ? `${desde} a ${hasta}` : desde} (${g.niveles.length} ${g.niveles.length > 1 ? 'niveles' : 'nivel'})`),
+      r ? h('span', { class: 'nota chica' }, `Cd ${fmt(r.Cd, 2)} · Cl ±${fmt(r.ClRms, 2)} · St ${r.St ? fmt(r.St, 3) : '—'}${r.roto ? ' · inestable' : ''}`) : barra);
+  });
+  el.replaceChildren(
+    h('p', { class: 'nota' }, `${grupos.length} ${grupos.length === 1 ? 'planta distinta' : 'plantas distintas'} en ${nNiv} niveles (los pisos iguales se simulan una vez). Con la configuración del túnel de arriba. Tiempo estimado: ${est < 90 ? `${Math.max(1, Math.round(est))} s` : `${Math.round(est / 60)} min`} en ${Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1))} núcleo(s).`),
+    h('label', { class: 'campo' }, h('span', {}, 'Duración de cada simulación'), sel),
+    h('div', { class: 'fila-acciones' }, b), ...filas,
+    ...(c?.fin ? [h('p', { class: 'nota chica' }, `Listo en ${fmt((c.fin - c.t0) / 1000, 0)} s. Los resultados están debajo del túnel.`)] : []),
+  );
+}
+/** los resultados en el centro: Cd y fuerza piso por piso contra el reglamento */
+function resultadosPisos(c: H, ancho: number) {
+  const r = pisos && pisos.clave === clavePisos() ? pisos : null;
+  if (!r || !r.res.size) return;
+  let v; try { v = vientoCirsoc()[estado.dir]; } catch { return; }
+  const f = fuerzasPorPiso(v, r.grupos, r.res);
+  if (!f.length) return;
+  const pts = (x: (k: typeof f[number]) => number) => f.map(k => ({ z: k.z, nivel: k.nivel, x: x(k) }));
+  const qs = corteYMomento(f.map(k => ({ z: k.z, F: k.Fsim }))), qr = corteYMomento(f.map(k => ({ z: k.z, F: k.Freg })));
+  c.append(
+    h('h3', { class: 'subtit' }, `Torre piso por piso · viento ${estado.dir}`),
+    h('p', { class: 'llave' }, `Corte en PB: ${fmt(qs.Q, 1)} t con la simulación y ${fmt(qr.Q, 1)} t con el CIRSOC 102-25 · momento ${fmt(qs.M, 0)} tm y ${fmt(qr.M, 0)} tm.`),
+    h('p', { class: 'nota' }, 'Cada planta se simula como un prisma infinito (2D) y da el arrastre medio de esa silueta. No es una carga de diseño: no ve el aire que pasa por arriba de la azotea ni el del pie (eso baja el arrastre de una torre real) y no tiene la ráfaga del reglamento (G o Gf, que lo sube). Sirve para comparar plantas y pisos entre sí: dónde la silueta empuja más, dónde se sacude más de costado (Cl) y cómo cambia el Strouhal. El coeficiente del reglamento es (p barlovento − p sotavento) / qz, con la ráfaga incluida.'),
+    graficoAltura({ titulo: `Coeficiente de arrastre por piso · viento ${estado.dir}`, eje: 'coeficiente', unidad: '', decimales: 2,
+      series: [{ nombre: 'Cd de la simulación (planta del piso, 2D)', color: 'corte', tipo: 'linea', puntos: pts(k => k.Cd) }, { nombre: 'coeficiente del CIRSOC 102-25', color: 'carga', punteada: true, tipo: 'linea', puntos: pts(k => k.Creg) }] }, { ancho, alto: 320 }),
+    graficoAltura({ titulo: `Fuerza de cada nivel · viento ${estado.dir}`, eje: 'fuerza', unidad: 't', decimales: 1,
+      series: [{ nombre: 'con el Cd simulado', color: 'corte', tipo: 'barras', puntos: pts(k => k.Fsim) }, { nombre: 'CIRSOC 102-25', color: 'carga', punteada: true, tipo: 'linea', puntos: pts(k => k.Freg) }] }, { ancho, alto: 360 }),
+    tablaValores(['Nivel', 'z (m)', 'Cd sim.', 'Cl eficaz', 'St', 'Coef. 102-25', 'F sim. (t)', 'F 102-25 (t)'], f.map(k => [k.nivel, k.z, k.Cd, k.ClRms, k.St ?? '—', k.Creg, k.Fsim, k.Freg]), [0, 1, 2, 2, 3, 2, 2, 2]),
+  );
 }
 
 let ultimaMed = 0;

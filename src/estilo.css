@@ -1671,3 +1671,7 @@ details.como-leer li { margin: 2px 0; }
 @media (pointer: coarse) { .ayuda-boton { width: 32px; height: 32px; min-height: 32px; } }
 /* llaves para leer los dibujos: siempre a la vista, junto al dibujo */
 #centro-dibujos .llave { color: var(--ink2); font-size: 12.5px; margin: 2px 0; }
+/* túnel 2D: torre piso por piso */
+.pp-fila { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin: 3px 0; }
+.pp-barra { display: block; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.pp-barra > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }

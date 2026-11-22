@@ -172,3 +172,17 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - Editor de contorno: coordenadas x/y del vértice, empalme (radio) y chaflán, largo/ángulo/radio de un lado, dividir un
   lado, desfasar hacia afuera/adentro, simetría, girar y escalar el contorno, cambiar el contorno por una forma, huecos
   con forma, Shift = de a 15°, Ctrl+Z / Ctrl+Y.
+
+## Simulador de viento (diagnóstico en `docs/diagnostico_viento/`)
+- [x] Silueta piso por piso en los túneles (PB en el corte, cada piso con la planta de su nivel, carpintería heredada también desde abajo, «Copiar a todos los niveles»)
+- [x] P1 · Paredes exactas (rebote interpolado de Bouzidi, cuadrático) + colisión TRT, en el 2D y el 3D (placa = referencia en JS)
+- [x] P2 · Canal ancho en el 2D (12 anchos, bloqueo ≈ 8 %), con opción angosto
+- [x] P8 (parcial) · Validación contra casos publicados: cilindro y cuadrado a Re = 100 (`tools/diagnostico/validacion.test.ts`)
+- [x] P3 · Túnel piso por piso con el 2D (2,5D): cada planta distinta en paralelo (un worker por núcleo, hasta 4), Cd/Cl/St por planta, fuerza por nivel con el qz del CIRSOC 102-25 y corte y momento en PB contra el reglamento (Viento → Túnel 2D → «Torre piso por piso»)
+- [ ] P4 · Corrida larga con grabación y archivo para reproducir sin placa (.torreviento), video WebM
+- [ ] P5 · Datos: Cp a lo largo del perímetro de cada piso (picos de succión en esquinas), fuerza por piso, confort Lawson en la vereda, exportar a Excel
+- [ ] P6 · 3D sin placa: en el procesador con varios núcleos (workers + WebAssembly) y respaldo WebGL2
+- [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
+- [ ] **Ventana de detalle en el 2D (pedido del usuario):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
+- [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
+- [ ] Dibujar la torre del túnel 3D con su contorno real (hoy se dibuja en bloques aunque el cálculo usa la planta exacta)
