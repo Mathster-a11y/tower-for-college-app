@@ -19,11 +19,38 @@ export interface GeometriaDetalle {
 /** celdas finas como máximo (para que la ventana no tarde más que el túnel entero) */
 export const MAX_CELDAS_DETALLE = 160_000;
 
-/** ajusta el recuadro: adentro del túnel, al menos 6 × 6 celdas gruesas y sin pasarse de las celdas finas máximas */
+/**
+ * trabajo por paso grueso de la ventana (celdas finas × pasos finos = w·h·r³): con la definición automática, cuanto más
+ * chico el recuadro, más fina la grilla, y el costo queda parecido (como mucho, unas dos veces el del túnel con resolución normal)
+ */
+export const TRABAJO_DETALLE = 160_000;
+export const FINURA_MAX = 16;
+/** la definición automática para un recuadro de w × h celdas gruesas */
+export const finuraAuto = (w: number, h: number) => Math.max(2, Math.min(FINURA_MAX, Math.floor(Math.cbrt(TRABAJO_DETALLE / Math.max(1, w * h)))));
+/** el recuadro más chico, en celdas gruesas */
+export const VENTANA_MIN = 4;
+
+/**
+ * encuadra el recuadro y elige la definición: «auto» según el tamaño (más chico, más fino), o una fija; con una fija,
+ * el recuadro se achica si se pasa del trabajo máximo
+ */
+export function encuadrar(geo: Geometria2D, v: Ventana, fino: number | 'auto'): { v: Ventana; r: number } {
+  if (fino === 'auto') {
+    // primero el tamaño (adentro del túnel), después la definición que le corresponde
+    const v0 = ajustarVentana(geo, v, 2);
+    return { v: v0, r: finuraAuto(v0.w, v0.h) };
+  }
+  let w = Math.max(VENTANA_MIN, v.w), hh = Math.max(VENTANA_MIN, v.h);
+  const lim = Math.sqrt(TRABAJO_DETALLE / (fino ** 3 * w * hh));
+  if (lim < 1) { w *= lim; hh *= lim; }
+  return { v: ajustarVentana(geo, { x0: v.x0 + (v.w - w) / 2, y0: v.y0 + (v.h - hh) / 2, w, h: hh }, fino), r: fino };
+}
+
+/** ajusta el recuadro: adentro del túnel, al menos 4 × 4 celdas gruesas y sin pasarse de las celdas finas máximas */
 export function ajustarVentana(geo: Geometria2D, v: Ventana, r: number): Ventana {
-  let w = Math.max(6, Math.round(v.w)), hh = Math.max(6, Math.round(v.h));
+  let w = Math.max(VENTANA_MIN, Math.round(v.w)), hh = Math.max(VENTANA_MIN, Math.round(v.h));
   const lim = Math.sqrt(MAX_CELDAS_DETALLE / (r * r * w * hh));
-  if (lim < 1) { w = Math.max(6, Math.floor(w * lim)); hh = Math.max(6, Math.floor(hh * lim)); }
+  if (lim < 1) { w = Math.max(VENTANA_MIN, Math.floor(w * lim)); hh = Math.max(VENTANA_MIN, Math.floor(hh * lim)); }
   w = Math.min(w, geo.nx - 4); hh = Math.min(hh, geo.ny - 2);
   // el centro del recuadro queda donde se marcó
   const cx = v.x0 + v.w / 2, cy = v.y0 + v.h / 2;

@@ -20,7 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
-import { ajustarVentana, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
+import { encuadrar, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
 const RE: Record<string, { Re: number; cs: number; texto: string }> = {
@@ -42,7 +42,7 @@ const cfg = {
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
-  ventana: null as Ventana | null, fino: 4 as 2 | 4,
+  ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
 /** la ventana de detalle de la corrida: su geometría fina y los promedios en el tiempo */
 interface CorridaDetalle { geo: GeometriaDetalle; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
@@ -119,7 +119,7 @@ function ponerVentana(v: Ventana | null) {
   const c = corrida;
   if (!c) return;
   if (!v) { cfg.ventana = null; det = null; c.worker.postMessage({ tipo: 'detalle', geo: null, exactas: false } satisfies MensajeTunel); return; }
-  const va = ajustarVentana(c.geo, v, cfg.fino), gd = geometriaDetalle(c.geo, va, cfg.fino), n = gd.nx * gd.ny;
+  const { v: va, r } = encuadrar(c.geo, v, cfg.fino), gd = geometriaDetalle(c.geo, va, r), n = gd.nx * gd.ny;
   cfg.ventana = va;
   det = { geo: gd, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
   c.worker.postMessage({ tipo: 'detalle', geo: gd, exactas: cfg.paredes === 'exactas' } satisfies MensajeTunel);
@@ -317,6 +317,27 @@ function actualizarLecturaDetalle(c: Corrida) {
     h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`));
 }
 
+/** el tamaño del recuadro en metros, con la definición que le toca, y botones para achicarlo o agrandarlo en su lugar */
+function tamanoVentana(geo: Geometria2D): H {
+  const v = cfg.ventana!, r = det!.geo.r, m = 1 / geo.escala;             // metros por celda gruesa
+  const redim = (w: number, hh: number) => { const cx = v.x0 + v.w / 2, cy = v.y0 + v.h / 2; ponerVentana({ x0: cx - w / 2, y0: cy - hh / 2, w, h: hh }); estado.avisarPanel(); };
+  const campo = (rot: string, val: number, al: (x: number) => void) => {
+    const i = h('input', { type: 'text', inputmode: 'decimal', value: fmt(val, 1), class: 'n' }) as HTMLInputElement;
+    i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (x > 0) al(x / m); else i.value = fmt(val, 1); });
+    return h('label', { class: 'campo' }, h('span', {}, rot), i);
+  };
+  const menos = h('button', { type: 'button', class: 'boton', title: 'El mismo centro, 30 % más chico: más definición' }, '− Más chico (más fino)');
+  menos.addEventListener('click', () => redim(v.w * 0.7, v.h * 0.7));
+  const mas = h('button', { type: 'button', class: 'boton', title: 'El mismo centro, 40 % más grande: menos definición' }, '+ Más grande');
+  mas.addEventListener('click', () => redim(v.w * 1.4, v.h * 1.4));
+  const cm = (100 * m) / r;
+  return h('div', {},
+    h('div', { class: 'grilla2' }, campo('Ancho del recuadro (m)', v.w * m, x => redim(x, v.h)), campo('Alto del recuadro (m)', v.h * m, x => redim(v.w, x))),
+    h('div', { class: 'fila-acciones' }, menos, mas),
+    h('p', { class: 'llave' }, `Recuadro de ${fmt(v.w * m, 1)} × ${fmt(v.h * m, 1)} m · celda fina de ${cm >= 10 ? fmt(cm, 0) : fmt(cm, 1)} cm (×${r}; el túnel, ${fmt(100 * m, 0)} cm)`),
+    h('p', { class: 'nota chica' }, 'Más chico el recuadro, más fino el contorno que se ve y se simula, con un costo parecido. Pero el viento que entra por las orillas sigue teniendo la definición del túnel: un recuadro muy chico ve sobre todo lo que le llega de afuera. Conviene que abarque la esquina y un poco de aire alrededor (de medio ancho de torre para arriba).'));
+}
+
 /** marcar el recuadro arrastrando sobre el túnel */
 function prepararMarcado(cv: HTMLCanvasElement) {
   const aRed = (e: PointerEvent) => {
@@ -437,9 +458,10 @@ export function panelTunel(c: H) {
     const quitar = h('button', { type: 'button', class: 'boton' }, 'Quitar la ventana');
     quitar.addEventListener('click', () => { ponerVentana(null); estado.avisarPanel(); });
     if (!cfg.ventana) quitar.setAttribute('disabled', '');
-    vd.append(h('div', { class: 'grilla2' }, sel('Definición', [['2', '×2 (cuatro veces más celdas)'], ['4', '×4 (dieciséis veces, más lento)']], String(cfg.fino) as '2' | '4', x => { cfg.fino = +x as 2 | 4; if (cfg.ventana) ponerVentana(cfg.ventana); })),
+    vd.append(h('div', { class: 'grilla2' }, sel('Definición', [['auto', `automática (según el tamaño, ×2 a ×${FINURA_MAX})`], ['2', '×2 fija'], ['4', '×4 fija'], ['8', '×8 fija (el recuadro se achica si hace falta)']], String(cfg.fino) as 'auto' | '2' | '4' | '8', x => { cfg.fino = x === 'auto' ? 'auto' : (+x as 2 | 4 | 8); if (cfg.ventana) ponerVentana(cfg.ventana); })),
       h('div', { class: 'fila-acciones' }, marcar, quitar),
-      h('p', { class: 'nota' }, 'Arrastrá un recuadro sobre una esquina o un balcón (o hacé un clic: marca un ancho de torre alrededor). Esa parte se vuelve a simular con una grilla más fina, debajo del túnel, con la velocidad más alta y la succión más fuerte que se miden ahí. Como mucho cuesta lo mismo que el túnel entero.'));
+      ...(cfg.ventana && det && corrida ? [tamanoVentana(corrida.geo)] : []),
+      h('p', { class: 'nota' }, 'Arrastrá un recuadro sobre una esquina o un balcón (o hacé un clic: marca un ancho de torre alrededor). Esa parte se vuelve a simular con una grilla más fina, debajo del túnel, con la velocidad más alta y la succión más fuerte que se miden ahí. Con la definición automática, cuanto más chico el recuadro, más fina la grilla; el túnel anda, como mucho, a la mitad o un tercio de la velocidad.'));
   }
   const gr = seccion('Grabar y reproducir').cuerpo; c.append(gr.parentElement!);
   armarPanelGrabacion(gr);
