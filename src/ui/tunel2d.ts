@@ -21,6 +21,7 @@ import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
+import { colorTermico, coloresTermico, divergente, pintarSuave, type Vista as VistaPx } from './campoSuave';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
@@ -199,7 +200,7 @@ function moverHumo(c: Corrida, pasos: number) {
 }
 
 // ---------------------------------------------------------------------------------------------------- dibujo
-let imagen: ImageData | null = null, auxiliar: HTMLCanvasElement | null = null, vort: Float32Array | null = null, vortS: Float32Array | null = null;
+let vort: Float32Array | null = null, vortS: Float32Array | null = null, campoS: Float32Array | null = null, pesoAire: Uint8Array | null = null, imgPant: ImageData | null = null;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 function rgb(hex: string): [number, number, number] { const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex.trim()); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [128, 128, 128]; }
 
@@ -207,13 +208,11 @@ function dibujar() {
   const c = corrida, cv = lienzo;
   if (!c || !cv || !c.campo) return;
   const { nx, ny, solido } = c.geo, { ux, uy, rho } = c.campo;
-  if (!imagen || imagen.width !== nx || imagen.height !== ny) { imagen = new ImageData(nx, ny); auxiliar = document.createElement('canvas'); auxiliar.width = nx; auxiliar.height = ny; }
-  const px = imagen.data;
   // convención de la app: rojo tracción, azul compresión. La presión que empuja (comprime) va en azul y la succión en
-  // rojo; el giro y la velocidad no son tracción ni compresión: van con otros colores (naranja/violeta y verde)
+  // rojo; el giro y la velocidad no son tracción ni compresión: van con otros colores (naranja/violeta y el espectro
+  // térmico, sin rojo ni azul)
   const fondo = rgb(css('--lienzo', '#ffffff')), comp = rgb(css('--compresion', '#378add')), trac = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
-  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd')), rapido = rgb(css('--deformada', '#1d9e75'));
-  const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
+  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd'));
   if (cfg.vista === 'vorticidad' && c.campo.w) vort = c.campo.w;      // grabación: el giro ya viene calculado
   else if (cfg.vista === 'vorticidad') {
     if (!vort || vort.length !== nx * ny) vort = new Float32Array(nx * ny);
@@ -226,26 +225,36 @@ function dibujar() {
     }
   }
   const escV = (3 * U0) / c.geo.D, rhoRef = rho[celdaRef2D(c.geo)] || 1;   // la presión de referencia (como la toma de un túnel)
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);           // y de la red hacia arriba
-    if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
-    if (cfg.vista === 'vorticidad') { const w = vort![q] / escV; mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k); }
-    else if (cfg.vista === 'velocidad') { const s = Math.hypot(ux[q], uy[q]) / U0; mezcla(fondo, rapido, Math.min(1, s / 1.6), k); }
-    else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
+  // el valor de cada celda (normalizado para su escala de color) y qué celdas cuentan
+  if (!campoS || campoS.length !== nx * ny) campoS = new Float32Array(nx * ny);
+  const S = campoS;
+  if (!pesoAire || pesoAire.length !== nx * ny) { pesoAire = new Uint8Array(nx * ny); }
+  for (let q = 0; q < nx * ny; q++) {
+    pesoAire[q] = solido[q] ? 0 : 1;
+    if (cfg.vista === 'vorticidad') S[q] = solido[q] ? 0 : vort![q] / escV;
+    else if (cfg.vista === 'velocidad') S[q] = solido[q] ? 0 : Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6);
+    else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); S[q] = solido[q] ? 0 : cp >= 0 ? cp : cp / 1.6; }
   }
-  auxiliar!.getContext('2d')!.putImageData(imagen, 0, 0);
   const g = cv.getContext('2d')!;
   const s = cv.width / nx;
   acotarZoom(cv);
-  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  // la imagen a la resolución de la pantalla (lo que se ve con el zoom), interpolando el campo entre celdas
+  if (!imgPant || imgPant.width !== cv.width || imgPant.height !== cv.height) imgPant = new ImageData(cv.width, cv.height);
+  const vis: VistaPx = { W: cv.width, H: cv.height, x0: zoom.ox / s, dx: 1 / (zoom.z * s), y0: ny - zoom.oy / s, dy: 1 / (zoom.z * s) };
+  // la velocidad cuenta también las paredes (en la pared el aire está quieto: la capa límite se ve); lo demás, solo aire
+  const colorear = cfg.vista === 'velocidad' ? colorTermico : cfg.vista === 'vorticidad' ? divergente(fondo, giroH, giroA) : divergente(fondo, trac, comp);
+  pintarSuave(imgPant.data, vis, nx, ny, S, cfg.vista === 'velocidad' ? null : pesoAire, colorear, sol);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.putImageData(imgPant, 0, 0);
   g.setTransform(zoom.z, 0, 0, zoom.z, -zoom.ox * zoom.z, -zoom.oy * zoom.z);
-  g.imageSmoothingEnabled = zoom.z < 3;                              // de cerca se ven las celdas, como son
-  g.drawImage(auxiliar!, 0, 0, cv.width, ny * s);
+  // la torre con su contorno exacto, encima (borde liso)
+  g.fillStyle = css('--ink', '#223344');
+  for (const p of c.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); }
   // Cp promedio sobre el contorno: azul donde empuja (comprime), rojo donde succiona (tracciona)
   if (cfg.cpContorno && c.perim.muestras > 0) {
     const p = c.perim.p, az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
     for (let k = 0; k < p.celdas.length; k++) {
-      const cp = c.perim.cp(k), r = Math.max(1.5, Math.min(5, 1.5 + Math.abs(cp) * 2.2)) * Math.max(1, s / 3);
+      const cp = c.perim.cp(k), r = (Math.max(1.5, Math.min(5, 1.5 + Math.abs(cp) * 2.2)) * Math.max(1, s / 3) * Math.min(zoom.z, 2)) / zoom.z;   // del mismo tamaño en pantalla con zoom
       g.fillStyle = cp >= 0 ? az : ro; g.globalAlpha = 0.85;
       g.beginPath(); g.arc(p.px[k] * s, (ny - p.py[k]) * s, r, 0, 2 * Math.PI); g.fill();
     }
@@ -277,7 +286,7 @@ function llaveVista(D: number): Llave {
   const torre = { color: sol, texto: 'torre' };
   const cp = cfg.cpContorno ? [{ color: css('--compresion', '#378add'), texto: 'empuja', forma: 'punto' as const }, { color: css('--traccion', '#e24b4a'), texto: 'succiona (Cp en el contorno)', forma: 'punto' as const }] : [];
   if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...cp] };
-  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: [fondo, css('--deformada', '#1d9e75')], marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']], extras: [torre, ...cp] };
+  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.25, '0,4 V'], [0.5, '0,8 V'], [0.75, '1,2 V'], [1, '≥ 1,6 V']], extras: [torre, ...cp] };
   void D;
   return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...cp.length ? [cp[0], cp[1]] : []] };
 }
@@ -327,48 +336,42 @@ function recuadroArriba(g: CanvasRenderingContext2D, cv: HTMLCanvasElement, nx: 
 }
 
 /** la ventana fina, con los mismos colores que el túnel */
-let imgDet: ImageData | null = null, auxDet: HTMLCanvasElement | null = null, copiaDet: HTMLCanvasElement | null = null;
+let imgDet: ImageData | null = null, copiaDet: HTMLCanvasElement | null = null;
 function dibujarDetalle(c: Corrida, rhoRef: number) {
   const cv = lienzoDet, d = c.campo?.det;
   if (!cv || !cv.isConnected || !det || !d || d.nx !== det.geo.nx || d.ny !== det.geo.ny) return;
   const { nx, ny, solido, r } = det.geo, { ux, uy, rho } = d;
-  if (!imgDet || imgDet.width !== nx || imgDet.height !== ny) { imgDet = new ImageData(nx, ny); auxDet = document.createElement('canvas'); auxDet.width = nx; auxDet.height = ny; }
-  const px = imgDet.data;
   const fondo = rgb(css('--lienzo', '#ffffff')), comp = rgb(css('--compresion', '#378add')), trac = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
-  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd')), rapido = rgb(css('--deformada', '#1d9e75'));
-  const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
+  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd'));
   // el giro se mide en la grilla fina: la misma escala de color en 1/s físicos (3·u0/D del túnel, por r)
-  const escV = (3 * U0) / (c.geo.D * r);
-  // el giro, suavizado en 3 × 3 celdas como en el túnel (las orillas interpoladas del grueso dejan escalones chicos)
-  const wS = cfg.vista === 'vorticidad' ? new Float32Array(nx * ny) : null, wF = wS ? new Float32Array(nx * ny) : null;
-  if (wS && wF) {
+  const escV = (3 * U0) / (c.geo.D * r), n = nx * ny;
+  const S = new Float32Array(n), peso = new Uint8Array(n);
+  if (cfg.vista === 'vorticidad') {
+    // el giro, suavizado en 3 × 3 celdas como en el túnel (las orillas interpoladas del grueso dejan escalones chicos)
+    const wS = new Float32Array(n);
     for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; if (!solido[q]) wS[q] = (uy[q + 1] - uy[q - 1]) * 0.5 - (ux[q + nx] - ux[q - nx]) * 0.5; }
-    for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; wF[q] = (wS[q - nx - 1] + wS[q - nx] + wS[q - nx + 1] + wS[q - 1] + wS[q] + wS[q + 1] + wS[q + nx - 1] + wS[q + nx] + wS[q + nx + 1]) / 9; }
+    for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; S[q] = (wS[q - nx - 1] + wS[q - nx] + wS[q - nx + 1] + wS[q - 1] + wS[q] + wS[q + 1] + wS[q + nx - 1] + wS[q + nx] + wS[q + nx + 1]) / 9 / escV; }
+    // las orillas, con el valor de la de adentro
+    for (let x = 0; x < nx; x++) { S[x] = S[nx + x]; S[(ny - 1) * nx + x] = S[(ny - 2) * nx + x]; }
+    for (let y = 0; y < ny; y++) { S[y * nx] = S[y * nx + 1]; S[y * nx + nx - 1] = S[y * nx + nx - 2]; }
   }
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);
-    if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
-    if (wF) {
-      const w = wF[Math.max(1, Math.min(ny - 2, y)) * nx + Math.max(1, Math.min(nx - 2, x))] / escV;
-      mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k);
-    } else if (cfg.vista === 'velocidad') mezcla(fondo, rapido, Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6), k);
-    else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
+  for (let q = 0; q < n; q++) {
+    peso[q] = solido[q] ? 0 : 1;
+    if (solido[q]) { S[q] = 0; continue; }
+    if (cfg.vista === 'velocidad') S[q] = Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6);
+    else if (cfg.vista === 'presion') { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); S[q] = cp >= 0 ? cp : cp / 1.6; }
   }
-  // la transición con el túnel grueso, velada (35 % hacia el fondo)
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    if (!det.transicion[y * nx + x]) continue;
-    const k = 4 * ((ny - 1 - y) * nx + x);
-    for (let m = 0; m < 3; m++) px[k + m] += (fondo[m] - px[k + m]) * 0.35;
-  }
-  auxDet!.getContext('2d')!.putImageData(imgDet, 0, 0);
+  if (!imgDet || imgDet.width !== cv.width || imgDet.height !== cv.height) imgDet = new ImageData(cv.width, cv.height);
+  const colorear = cfg.vista === 'velocidad' ? colorTermico : cfg.vista === 'vorticidad' ? divergente(fondo, giroH, giroA) : divergente(fondo, trac, comp);
+  // la banda de transición con el túnel grueso, velada (35 % hacia el fondo): ahí no se mide
+  pintarSuave(imgDet.data, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, nx, ny, S, cfg.vista === 'velocidad' ? null : peso, colorear, sol, { m: det.transicion, fondo, f: 0.35 });
   const g = cv.getContext('2d')!;
-  g.imageSmoothingEnabled = true; g.drawImage(auxDet!, 0, 0, cv.width, cv.height);
-  // la banda de transición con el túnel grueso: velada y con su borde de trazos (ahí no se mide)
+  g.putImageData(imgDet, 0, 0);
   const s = cv.width / nx;
-  // el contorno real, encima
-  g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
-  g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
-  for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.stroke(); }
+  // la torre con su contorno exacto, encima
+  g.save(); g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
+  g.fillStyle = css('--ink', '#223344'); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
+  for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); g.stroke(); }
   g.restore();
   // una copia sin la llave, para el recuadro de arriba (ahí la llave quedaría ilegible)
   if (!copiaDet) copiaDet = document.createElement('canvas');
@@ -508,7 +511,7 @@ export function centroTunel(c: H, tam: Tam) {
     })(),
     h('div', { class: 'tunel-marco' }, lienzo, botonesZoom(lienzo)),
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (1,6 veces la de entrada o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
   if (det) {
     // la ventana fina: al menos 360 px de ancho, o el doble del recuadro en el túnel
@@ -880,7 +883,7 @@ function centroRepro(c: H, tam: Tam) {
   const salir = h('button', { type: 'button', class: 'boton' }, 'Volver al túnel en vivo'); salir.addEventListener('click', salirRepro);
   panelRepro = h('div', { class: 'repro' }, h('p', { class: 'llave' }, `Grabación: ${m.titulo} · ${Object.entries(m.config).map(([k, v]) => `${k} ${v}`).join(' · ')}`), h('div', { class: 'fila-acciones' }, play, barra, h('span', { class: 'nota chica repro-txt' }, ''), video, salir));
   c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, h('div', { class: 'tunel-marco' }, lienzo),
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (1,6 veces la de entrada o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
   cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900);
   mostrarCuadro(r.k);
 }

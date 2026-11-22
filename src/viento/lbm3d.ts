@@ -32,7 +32,11 @@ export interface OpcionesLbm3 {
   colision?: 'bgk' | 'trt';
   /** piso de ω− en la TRT (por defecto OMEGA_MENOS_MIN) */
   omegaMenosMin?: number;
-  /** paredes exactas con la interpolación lineal (más estable con viscosidad muy baja) en vez de la cuadrática */
+  /**
+   * paredes exactas con la interpolación lineal (por defecto) o la cuadrática (false). La cuadrática se vuelve
+   * inestable con viscosidad de red muy baja: con una torre alta y ancha en la grilla liviana (τ ≈ 0,5007) se rompía
+   * a los 200–500 pasos; la lineal anduvo 1 200 pasos sin problemas (BGK y TRT)
+   */
   paredesLineales?: boolean;
 }
 /** Λ de la colisión TRT */
@@ -41,7 +45,7 @@ export const OMEGA_MENOS_MIN = 1.5;
 export const LAMBDA_TRT3 = 3 / 16;
 
 /**
- * lo que vuelve desde una pared con q (Bouzidi, cuadrático; lineal o rebote simple si faltan celdas de aire detrás).
+ * lo que vuelve desde una pared con q (Bouzidi: cuadrático si se pasa fo3; lineal sin fo3; rebote simple sin aire detrás).
  * fo: lo que salió hacia la pared (post-colisión, dirección opuesta) en la celda; fi: post-colisión de la dirección que
  * llega, en la celda; fo2, fo3: lo que salió hacia la pared en las dos celdas de atrás (NaN si no son aire); fi2: lo que
  * llega en la celda de atrás.
@@ -76,7 +80,7 @@ export class Lbm3D {
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
     inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
     this.g.set(this.f);
-    this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN; this.lineal = !!o.paredesLineales;
+    this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN; this.lineal = o.paredesLineales ?? true;
     if (o.paredes) {
       this.fila = new Int32Array(this.N).fill(-1); this.qPared = o.paredes.q;
       o.paredes.celdas.forEach((c, k) => { this.fila![c] = k; });

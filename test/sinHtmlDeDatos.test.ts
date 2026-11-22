@@ -21,6 +21,7 @@ const PERMITIDAS: [string, string][] = [
   ['src/ui/vista3d.ts', 'info.innerHTML = `<b>Traslación ×'],                                  // números
   ['src/ui/desglose.ts', "f.innerHTML = mat(p.formula)"],                                      // mat() escapa
   ['src/app.ts', 'ic.innerHTML = e.icono;'],                                                   // íconos fijos de las etapas
+  ['src/ui/editorContorno.ts', "x.insertAdjacentHTML('beforeend', svgIcono(icono))"],      // íconos fijos de las herramientas de CAD (ICONOS)
   ['src/app.ts', 'd.innerHTML = html;'],                                                       // dialogo(): cada dato con esc()
   ['src/app.ts', "insertAdjacentHTML('beforeend', '<span class=\"plegar\""],                  // texto fijo
   ['src/ui/planta.ts', `bMasTr.innerHTML = '<span class="ic">⋯</span>`],                       // texto fijo

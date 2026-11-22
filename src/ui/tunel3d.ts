@@ -14,6 +14,8 @@ import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
+import { coloresTermico, LUT_TERMICO } from './campoSuave';
+import { llaveHtml, type Llave } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
@@ -109,7 +111,8 @@ async function ciclo() {
 
 // ------------------------------------------------------------------------------------------------ colores
 const verde = () => new THREE.Color(css('--deformada', '#1d9e75')), blanco = new THREE.Color(1, 1, 1);
-const colVel = (s: number, out: THREE.Color) => out.copy(blanco).lerp(verde(), Math.min(1, s / (1.3 * UH)));
+/** la velocidad con el espectro térmico (el mismo del túnel 2D): 0 quieto, 1,6 veces la de la altura de la torre o más */
+const colVel = (s: number, out: THREE.Color) => { const i = 3 * Math.max(0, Math.min(255, Math.round((s / (1.6 * UH)) * 255))); return out.setRGB(LUT_TERMICO[i] / 255, LUT_TERMICO[i + 1] / 255, LUT_TERMICO[i + 2] / 255, THREE.SRGBColorSpace); };
 function colCp(cp: number, out: THREE.Color) {
   // convención de la app: empuje (comprime) azul, succión (tracciona) rojo
   if (!isFinite(cp)) return out.set(0xcfd4d9);
@@ -164,22 +167,43 @@ function armarVista(cont: HTMLElement) {
   ctl.addEventListener('change', () => dibujar());
 }
 
+/**
+ * la textura de un corte: el color de cada celda, y la imagen k veces más fina interpolando entre los centros de las
+ * celdas (sin pixelado; el borde de la torre queda suave porque las celdas sólidas entran con su color en la mezcla)
+ */
+const rgbS = { r: 0, g: 0, b: 0 };
 function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean) {
-  const cv = document.createElement('canvas'); cv.width = ancho; cv.height = alto;
-  const g = cv.getContext('2d')!, img = g.createImageData(ancho, alto), col = new THREE.Color();
+  const n = ancho * alto, R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), aire = new Uint8Array(n), col = new THREE.Color();
   for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) {
-    const k = 4 * ((alto - 1 - j) * ancho + i);
-    if (!pintar(i, j, col)) { img.data[k] = 52; img.data[k + 1] = 58; img.data[k + 2] = 70; img.data[k + 3] = 255; continue; }
-    img.data[k] = col.r * 255; img.data[k + 1] = col.g * 255; img.data[k + 2] = col.b * 255; img.data[k + 3] = 235;
+    const c = j * ancho + i;
+    if (!pintar(i, j, col)) { R[c] = 52 / 255; G[c] = 58 / 255; B[c] = 70 / 255; continue; }
+    col.getRGB(rgbS, THREE.SRGBColorSpace); R[c] = rgbS.r; G[c] = rgbS.g; B[c] = rgbS.b; aire[c] = 1;
+  }
+  const k = Math.max(1, Math.min(6, Math.floor(2048 / ancho))), W = ancho * k, H = alto * k;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!, img = g.createImageData(W, H), d = img.data;
+  for (let fila = 0; fila < H; fila++) {
+    const Y = alto - (fila + 0.5) / k - 0.5;                           // la fila de arriba de la imagen es la j más alta
+    let j = Math.floor(Y), fy = Y - j; if (j < 0) { j = 0; fy = 0; } else if (j >= alto - 1) { j = alto - 2; fy = 1; }
+    for (let p = 0; p < W; p++) {
+      const X = (p + 0.5) / k - 0.5;
+      let i = Math.floor(X), fx = X - i; if (i < 0) { i = 0; fx = 0; } else if (i >= ancho - 1) { i = ancho - 2; fx = 1; }
+      const c = j * ancho + i, w = [(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy], cs = [c, c + 1, c + ancho, c + ancho + 1];
+      let r = 0, gg = 0, bb = 0, a = 0;
+      for (let m = 0; m < 4; m++) { r += w[m] * R[cs[m]]; gg += w[m] * G[cs[m]]; bb += w[m] * B[cs[m]]; a += w[m] * aire[cs[m]]; }
+      const q = 4 * (fila * W + p);
+      d[q] = r * 255; d[q + 1] = gg * 255; d[q + 2] = bb * 255; d[q + 3] = 255 - 20 * a;   // el aire, apenas transparente
+    }
   }
   g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; return t;
+  const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
 /** la velocidad del campo abierto a 1,5 m superada el 5 % del tiempo (m/s) */
 const u5Peaton = () => velocidad5(cfg.vientoMedio) * factorPeaton(datos102De(estado.proyecto).exposicion);
 
 function actualizarCampo() {
+  armarLlaves3d();
   const c = corrida, v = vista;
   if (!c || !v || !c.campo) return;
   const g = c.geo, F = c.campo, ref = F[celdaReferencia(g) * 4 + 3] || 1;
@@ -268,6 +292,22 @@ function dibujar() {
   v.ren.render(v.esc, v.cam);
 }
 
+// ------------------------------------------------------------------------------------------------ llaves de colores
+let llaves3d: H | null = null;
+/** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
+function armarLlaves3d() {
+  if (!llaves3d) return;
+  const fondo = '#ffffff', az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
+  const caras: Llave = { titulo: 'Caras de la torre: Cp promedio', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] };
+  let corte: Llave | null = null;
+  if (cfg.vereda && cfg.lawson) corte = { titulo: 'Vereda (1,5 m): confort Lawson', colores: LAWSON_LDDC.map(k => COL_LAWSON[k.codigo]), marcas: [[0, 'A sentarse'], [0.5, 'C parado'], [1, 'E incómodo']] };
+  else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): viento / campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, '0'], [1 / 1.6, '1 (igual)'], [1, '1,6 más']] };
+  else if (cfg.horizontal || cfg.vertical) corte = cfg.color === 'cp'
+    ? { titulo: 'Cortes: presión (Cp)', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] }
+    : { titulo: 'Cortes: velocidad (V a la altura de la torre)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
+  llaves3d.replaceChildren(llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []));
+}
+
 // ------------------------------------------------------------------------------------------------ centro y panel
 export function centroTunel3d(c: H, _tam: Tam) {
   c.append(h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'));
@@ -289,11 +329,12 @@ export function centroTunel3d(c: H, _tam: Tam) {
   if (cr.cargando) { c.append(h('p', { class: 'nota' }, cfg.motor === 'procesador' ? 'Preparando la torre…' : 'Preparando la torre y la placa de video…')); return; }
   if (cr.error) { c.append(h('p', { class: 'aviso-viejo' }, `No se pudo arrancar el túnel 3D: ${cr.error}`)); return; }
   const marco = h('div', { class: 'tunel-marco tunel3d' });
+  llaves3d = h('div', {}); marco.append(llaves3d); armarLlaves3d();
   c.append(marco);
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad, de blanco (quieto) a verde (1,3 veces la de la altura de la torre).'} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (1,6 veces la de la altura de la torre o más).'} Girá con el mouse.`));
   dibujar();
 }
 

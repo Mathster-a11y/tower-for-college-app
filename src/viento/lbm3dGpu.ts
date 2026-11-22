@@ -64,7 +64,7 @@ fn paso(@builtin(global_invocation_id) g: vec3<u32>) {
     if (sx >= i32(p.nx)) { sxx = i32(p.nx) - 2; }
     let s = (u32(sz) * p.ny + u32(sy)) * p.nx + u32(sxx);
     if (sol[s] != 1u) { v[i] = fi[i * n + s]; continue; }
-    // rebote: a mitad de camino, o con la pared exacta (Bouzidi cuadrático; lineal si falta aire detrás)
+    // rebote: a mitad de camino, o con la pared exacta (Bouzidi lineal)
     let io = OPP[i]; let fo = fi[io * n + c];
     var qb = 0u;
     if (sol[c] >= 2u) { let k = sol[c] - 2u; qb = (qtab[k * 5u + i / 4u] >> (8u * (i % 4u))) & 255u; }
@@ -76,17 +76,9 @@ fn paso(@builtin(global_invocation_id) g: vec3<u32>) {
       if (q < 0.5) { v[i] = fo; } else { v[i] = fo / (2.0 * q) + ((2.0 * q - 1.0) / (2.0 * q)) * fic; }
       continue;
     }
+    // Bouzidi lineal (la cuadrática se vuelve inestable con viscosidad de red muy baja; ver lbm3d, paredesLineales)
     let fo2 = fi[io * n + u32(c2)];
-    let c3 = aire(i32(x) + 2 * EX[i], i32(y) + 2 * EY[i], i32(z) + 2 * EZ[i]);
-    if (c3 < 0) {
-      if (q < 0.5) { v[i] = 2.0 * q * fo + (1.0 - 2.0 * q) * fo2; } else { v[i] = fo / (2.0 * q) + ((2.0 * q - 1.0) / (2.0 * q)) * fic; }
-      continue;
-    }
-    if (q < 0.5) {
-      v[i] = q * (1.0 + 2.0 * q) * fo + (1.0 - 4.0 * q * q) * fo2 - q * (1.0 - 2.0 * q) * fi[io * n + u32(c3)];
-    } else {
-      v[i] = fo / (q * (2.0 * q + 1.0)) + ((2.0 * q - 1.0) / q) * fic + ((1.0 - 2.0 * q) / (1.0 + 2.0 * q)) * fi[i * n + u32(c2)];
-    }
+    if (q < 0.5) { v[i] = 2.0 * q * fo + (1.0 - 2.0 * q) * fo2; } else { v[i] = fo / (2.0 * q) + ((2.0 * q - 1.0) / (2.0 * q)) * fic; }
   }
   var r = 0.0; var jx = 0.0; var jy = 0.0; var jz = 0.0;
   for (var i = 0u; i < 19u; i++) { r += v[i]; jx += v[i] * f32(EX[i]); jy += v[i] * f32(EY[i]); jz += v[i] * f32(EZ[i]); }
