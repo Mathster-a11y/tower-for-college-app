@@ -30,6 +30,8 @@ export interface OpcionesLbm3 {
   paredes?: { celdas: Int32Array; q: Uint8Array };
   /** colisión: «bgk» o «trt» (Λ = 3/16: la pared del rebote queda en su lugar; más estable con grillas gruesas) */
   colision?: 'bgk' | 'trt';
+  /** piso de ω− en la TRT (por defecto OMEGA_MENOS_MIN) */
+  omegaMenosMin?: number;
 }
 /** Λ de la colisión TRT */
 /** piso de ω− en la colisión TRT (como en lbm2d: a Reynolds alto, sin piso, el ruido de la grilla no se amortigua) */
@@ -62,7 +64,7 @@ export class Lbm3D {
   readonly tau0: number; readonly cs: number; readonly uIn: Float32Array; readonly solido: Uint8Array;
   f: Float32Array; private g: Float32Array;
   pasos = 0;
-  readonly trt: boolean;
+  readonly trt: boolean; readonly ommMin: number;
   /** por celda: la fila de su tabla de paredes (−1 si no toca ninguna pared exacta) */
   private fila: Int32Array | null = null; private qPared: Uint8Array | null = null;
 
@@ -72,7 +74,7 @@ export class Lbm3D {
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
     inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
     this.g.set(this.f);
-    this.trt = o.colision === 'trt';
+    this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN;
     if (o.paredes) {
       this.fila = new Int32Array(this.N).fill(-1); this.qPared = o.paredes.q;
       o.paredes.celdas.forEach((c, k) => { this.fila![c] = k; });
@@ -124,7 +126,7 @@ export class Lbm3D {
         const c2 = this.aire(x + EX3[i], y + EY3[i], z + EZ3[i]), c3 = c2 >= 0 ? this.aire(x + 2 * EX3[i], y + 2 * EY3[i], z + 2 * EZ3[i]) : -1;
         v[i] = rebote(qb / 255, fo, f[i * N + c], c2 >= 0 ? f[io * N + c2] : NaN, c3 >= 0 ? f[io * N + c3] : NaN, c2 >= 0 ? f[i * N + c2] : NaN);
       }
-      chocar3(v, tau0, cs2, this.trt);
+      chocar3(v, tau0, cs2, this.trt, this.ommMin);
       for (let i = 0; i < 19; i++) g[i * N + c] = v[i];
     }
     this.f = g; this.g = f; this.pasos++;
@@ -151,7 +153,7 @@ export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uI
 /** colisión BGK con Smagorinsky sobre las 19 poblaciones (en el lugar) */
 // memoria de trabajo de la colisión (sin crear arreglos en cada celda)
 const V19 = new Float64Array(19), EQ19 = new Float64Array(19), W19b = new Float64Array(19);
-export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false) {
+export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false, ommMin = OMEGA_MENOS_MIN) {
   let r = 0, jx = 0, jy = 0, jz = 0;
   for (let i = 0; i < 19; i++) { r += v[i]; jx += v[i] * EX3[i]; jy += v[i] * EY3[i]; jz += v[i] * EZ3[i]; }
   const u = jx / r, w2 = jy / r, w = jz / r;
@@ -170,7 +172,7 @@ export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false)
   const om = 1 / tau;
   if (!trt) { for (let i = 0; i < 19; i++) v[i] += om * (eq[i] - v[i]); return; }
   // TRT: la parte simétrica de cada par relaja con ω+ (la viscosidad) y la antisimétrica con ω−
-  const omm = Math.max(OMEGA_MENOS_MIN, 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5)), w0 = W19b;
+  const omm = Math.max(ommMin, 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5)), w0 = W19b;
   w0.set(v);
   for (let i = 0; i < 19; i++) {
     const o = OPP3[i];
