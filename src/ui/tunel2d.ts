@@ -27,6 +27,10 @@ const U0 = 0.1;
 /** lo que eligió el alumno (vive mientras la página está abierta; no se guarda en el proyecto) */
 const cfg = {
   nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0, forma: 'dibujada' as 'dibujada' | 'vivas',
+  /** paredes exactas (rebote interpolado + TRT) o en escalera (como antes, para comparar) */
+  paredes: 'exactas' as 'exactas' | 'escalera',
+  /** canal ancho (12 anchos de alto: bloquea ≈ 8 %) o angosto (7 anchos: ≈ 14 %, más rápido) */
+  canal: 'ancho' as 'ancho' | 'angosto',
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
 };
 
@@ -55,7 +59,7 @@ function nivelElegido() {
 }
 
 function claveCorrida(): string {
-  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.segunda, cfg.distancia]);
+  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia]);
 }
 
 function iniciar() {
@@ -74,7 +78,7 @@ function iniciar() {
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
   if (cfg.ochava > 0) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
-  const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia } });
+  const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia } });
   const nu = (U0 * geo.D) / re.Re;
   // el worker va adentro del script (también en el archivo único, que se abre con doble clic: ahí no se pueden cargar
   // workers desde el disco)
@@ -83,7 +87,8 @@ function iniciar() {
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * geo.nx; humo[2 * k + 1] = Math.random() * geo.ny; }
   corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota };
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
-  worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs } satisfies MensajeTunel);
+  const exactas = cfg.paredes === 'exactas';
+  worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk' } satisfies MensajeTunel);
 }
 
 /** pausa o sigue (el worker calcula sin parar mientras corre) */
@@ -203,7 +208,7 @@ export function centroTunel(c: H, tam: Tam) {
       return [h('p', { class: 'llave' }, `Contorno en el túnel: ${c.de === 'carpintería' ? `la carpintería${(p.niveles[ne.i].carpinteria?.length ?? 0) >= 3 ? ` de ${ne.n.nombre}` : ' (heredada de otro nivel)'}` : 'la losa (no hay carpintería dibujada)'}.`)];
     })(),
     h('div', { class: 'tunel-marco' }, lienzo),
-    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
+    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
   if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2) { cr.cuadrosSinMirar = 0; correr(true); }
@@ -234,6 +239,8 @@ export function panelTunel(c: H) {
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }),
     sel('Reynolds', Object.entries(RE).map(([k, v]) => [k, v.texto] as [string, string]), cfg.re, x => { cfg.re = x; }),
     sel('Resolución', Object.entries(RES).map(([k, v]) => [k, v.texto] as [string, string]), cfg.res, x => { cfg.res = x; }),
+    sel('Paredes', [['exactas', 'exactas: la curva real (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x; }),
+    sel('Canal', [['ancho', 'ancho: 12 anchos (bloquea ≈ 8 %, más preciso)'], ['angosto', 'angosto: 7 anchos (≈ 14 %, más rápido)']], cfg.canal, x => { cfg.canal = x; }),
     sel('Planta', [['dibujada', 'como está dibujada'], ['vivas', 'su caja, con esquinas vivas (para comparar)']], cfg.forma, x => { cfg.forma = x; }),
     sel('Ochavas', ['0', '5', '10', '15'].map(v => [v, v === '0' ? 'sin ochavas (esquinas vivas)' : `${v} % del ancho`] as [string, string]), String(cfg.ochava), x => { cfg.ochava = +x; }),
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
@@ -266,7 +273,7 @@ function armarAnotadas() {
     if (!c || !md || !isFinite(md.Cd)) { anotar.textContent = 'Todavía midiendo: esperá unas pasadas'; return; }
     let n1 = NaN; try { n1 = vientoCirsoc()[estado.dir].n1; } catch { /* sin datos */ }
     const St = md.St ?? null;
-    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re}`;
+    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re} · paredes ${cfg.paredes} · canal ${cfg.canal}`;
     anotadas.push({ forma, Cd: md.Cd, Cl: md.ClRms, St, Vcr: St ? velocidadCritica(n1, c.geo.anchoM, St) : NaN });
     armarAnotadas();
   });

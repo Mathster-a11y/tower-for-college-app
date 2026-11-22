@@ -30,6 +30,45 @@ export interface Geometria2D {
   caja: { x0: number; x1: number; y0: number; y1: number };
   /** los polígonos en coordenadas de la red (para dibujarlos) */
   contornos: P[][];
+  /**
+   * paredes exactas: q[i·N + c] es dónde corta la pared el enlace que llega a la celda de aire c desde la celda sólida
+   * c − e_i, como fracción del camino de c hacia esa celda (0 < q ≤ 1; 0 = no hay enlace). Lo usa el rebote
+   * interpolado: la pared está donde está el contorno, no en el borde de las celdas.
+   */
+  q: Float32Array;
+}
+
+// las 9 direcciones de D2Q9 (las mismas que lbm2d)
+const EXg = [0, 1, 0, -1, 0, 1, -1, -1, 1], EYg = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+/** primer corte del segmento a→b con los contornos (fracción de a a b), o null */
+function corteSegmento(pols: P[][], a: P, b: P): number | null {
+  let mejor: number | null = null;
+  const rx = b.x - a.x, ry = b.y - a.y;
+  for (const p of pols) for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const c = p[j], d = p[i], sx = d.x - c.x, sy = d.y - c.y, den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-14) continue;
+    const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den, u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+    if (t >= -1e-9 && t <= 1 + 1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && (mejor === null || t < mejor)) mejor = t;
+  }
+  return mejor;
+}
+/** la fracción q de cada enlace aire → sólido (ver Geometria2D.q) */
+export function distanciasPared(nx: number, ny: number, solido: Uint8Array, contornos: P[][], periodico: { x?: boolean; y?: boolean } = { y: true }): Float32Array {
+  const N = nx * ny, q = new Float32Array(9 * N);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const c = y * nx + x;
+    if (solido[c]) continue;
+    for (let i = 1; i < 9; i++) {
+      // la celda de atrás (con la vuelta en los bordes periódicos); el corte se busca sin dar la vuelta
+      const xs = x - EXg[i], ys = y - EYg[i];
+      const xw = periodico.x ? (xs + nx) % nx : xs, yw = periodico.y ? (ys + ny) % ny : ys;
+      if (xw < 0 || xw >= nx || yw < 0 || yw >= ny || !solido[yw * nx + xw]) continue;
+      const a = { x: x + 0.5, y: y + 0.5 }, b = { x: xs + 0.5, y: ys + 0.5 };
+      const t = corteSegmento(contornos, a, b);
+      q[i * N + c] = t === null ? 0.5 : Math.min(1, Math.max(1e-3, t));
+    }
+  }
+  return q;
 }
 
 /** área con signo (positiva antihoraria) */
@@ -101,5 +140,5 @@ export function geometria2D(o: OpcionesGeometria): Geometria2D {
       solido[c] = 1;
     }
   });
-  return { nx, ny, solido, escala, anchoM, D, celdasTorre, caja, contornos };
+  return { nx, ny, solido, escala, anchoM, D, celdasTorre, caja, contornos, q: distanciasPared(nx, ny, solido, contornos) };
 }

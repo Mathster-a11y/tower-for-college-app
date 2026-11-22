@@ -22,7 +22,7 @@ const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }>
 const UH = 0.08, RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
-const cfg = { tam: 'liviano', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false };
+const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false };
 
 interface Corrida {
   clave: string; geo: Geometria3D; uIn: Float32Array; gpu: Lbm3dGpu | null; error: string | null; cargando: boolean;
@@ -35,7 +35,7 @@ let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam:
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
-function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.angulo]); }
+function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo]); }
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
@@ -55,7 +55,8 @@ async function iniciar() {
   try {
     const { crearLbm3dGpu } = await import('../viento/lbm3dGpu');
     const anchoC = geo.B * geo.escala;
-    const gpu = await crearLbm3dGpu({ nx: T.nx, ny: T.ny, nz: T.nz, nu: (UH * anchoC) / RE, cs: CS, uIn, solido: geo.solido });
+    const exactas = cfg.paredes === 'exactas';
+    const gpu = await crearLbm3dGpu({ nx: T.nx, ny: T.ny, nz: T.nz, nu: (UH * anchoC) / RE, cs: CS, uIn, solido: geo.solido, paredes: exactas ? geo.paredes : undefined, colision: exactas ? 'trt' : 'bgk' });
     if (corrida !== c) { gpu.destruir(); return; }
     c.gpu = gpu;
   } catch (e) { c.error = e instanceof Error ? e.message : String(e); }
@@ -267,7 +268,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).' : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad, de blanco (quieto) a verde (1,3 veces la de la altura de la torre).'} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).' : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad, de blanco (quieto) a verde (1,3 veces la de la altura de la torre).'} Girá con el mouse.`));
   dibujar();
 }
 
@@ -298,6 +299,7 @@ export function panelTunel3d(c: H) {
   const d = seccion('Túnel 3D').cuerpo; c.append(d.parentElement!);
   d.append(h('div', { class: 'grilla2' },
     sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
+    sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
     sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),
@@ -306,7 +308,7 @@ export function panelTunel3d(c: H) {
   chk('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), chk('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
   chk('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; if (corrida) corrida.ultimasLineas = 0; }),
   chk('Viento en la vereda (1,5 m)', cfg.vereda, x => { cfg.vereda = x; }),
-  h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. La grilla y el giro empiezan la simulación de nuevo; los cortes y los colores, no.'));
+  h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. La grilla, las paredes y el giro empiezan la simulación de nuevo; los cortes y los colores, no.'));
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);
   actualizarPanel(true);

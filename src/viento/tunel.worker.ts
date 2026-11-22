@@ -6,7 +6,7 @@
 import { Lbm2D } from './lbm2d';
 
 export type MensajeTunel =
-  | { tipo: 'iniciar'; nx: number; ny: number; solido: Uint8Array; nu: number; u0: number; cs: number }
+  | { tipo: 'iniciar'; nx: number; ny: number; solido: Uint8Array; nu: number; u0: number; cs: number; q?: Float32Array; colision?: 'bgk' | 'trt' }
   | { tipo: 'correr'; si: boolean }
   | { tipo: 'listo' };
 
@@ -40,7 +40,7 @@ function ciclo() {
 
 self.onmessage = (e: MessageEvent<MensajeTunel>) => {
   const m = e.data;
-  if (m.tipo === 'iniciar') { sim = new Lbm2D({ nx: m.nx, ny: m.ny, nu: m.nu, u0: m.u0, cs: m.cs, solido: m.solido }); Fx = []; Fy = []; listo = true; corriendo = true; seguir(); }
+  if (m.tipo === 'iniciar') { sim = new Lbm2D({ nx: m.nx, ny: m.ny, nu: m.nu, u0: m.u0, cs: m.cs, solido: m.solido, q: m.q, colision: m.colision }); Fx = []; Fy = []; listo = true; corriendo = true; seguir(); }
   else if (m.tipo === 'correr') { const antes = corriendo; corriendo = m.si; if (corriendo && !antes) seguir(); }
   else if (m.tipo === 'listo') { listo = true; if (!corriendo && Fx.length) mandar(); }
 };

@@ -26,6 +26,28 @@ export interface OpcionesLbm3 {
   /** velocidad de entrada en cada altura z (red) */
   uIn: Float32Array;
   solido: Uint8Array;
+  /** paredes exactas (rebote interpolado de Bouzidi): ver geometria3d, Paredes3D. Sin ellas, a mitad de camino */
+  paredes?: { celdas: Int32Array; q: Uint8Array };
+  /** colisión: «bgk» o «trt» (Λ = 3/16: la pared del rebote queda en su lugar; más estable con grillas gruesas) */
+  colision?: 'bgk' | 'trt';
+}
+/** Λ de la colisión TRT */
+export const LAMBDA_TRT3 = 3 / 16;
+
+/**
+ * lo que vuelve desde una pared con q (Bouzidi, cuadrático; lineal o rebote simple si faltan celdas de aire detrás).
+ * fo: lo que salió hacia la pared (post-colisión, dirección opuesta) en la celda; fi: post-colisión de la dirección que
+ * llega, en la celda; fo2, fo3: lo que salió hacia la pared en las dos celdas de atrás (NaN si no son aire); fi2: lo que
+ * llega en la celda de atrás.
+ */
+export function rebote(q: number, fo: number, fi: number, fo2: number, fo3: number, fi2: number): number {
+  if (!(fo2 === fo2)) return q < 0.5 ? fo : fo / (2 * q) + ((2 * q - 1) / (2 * q)) * fi;
+  if (fo3 === fo3) {
+    return q < 0.5
+      ? q * (1 + 2 * q) * fo + (1 - 4 * q * q) * fo2 - q * (1 - 2 * q) * fo3
+      : fo / (q * (2 * q + 1)) + ((2 * q - 1) / q) * fi + ((1 - 2 * q) / (1 + 2 * q)) * fi2;
+  }
+  return q < 0.5 ? 2 * q * fo + (1 - 2 * q) * fo2 : fo / (2 * q) + ((2 * q - 1) / (2 * q)) * fi;
 }
 
 export function feq3(i: number, r: number, u: number, v: number, w: number): number {
@@ -38,6 +60,9 @@ export class Lbm3D {
   readonly tau0: number; readonly cs: number; readonly uIn: Float32Array; readonly solido: Uint8Array;
   f: Float32Array; private g: Float32Array;
   pasos = 0;
+  readonly trt: boolean;
+  /** por celda: la fila de su tabla de paredes (−1 si no toca ninguna pared exacta) */
+  private fila: Int32Array | null = null; private qPared: Uint8Array | null = null;
 
   constructor(o: OpcionesLbm3) {
     this.nx = o.nx; this.ny = o.ny; this.nz = o.nz; this.N = o.nx * o.ny * o.nz;
@@ -45,6 +70,17 @@ export class Lbm3D {
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
     inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
     this.g.set(this.f);
+    this.trt = o.colision === 'trt';
+    if (o.paredes) {
+      this.fila = new Int32Array(this.N).fill(-1); this.qPared = o.paredes.q;
+      o.paredes.celdas.forEach((c, k) => { this.fila![c] = k; });
+    }
+  }
+  /** índice de la celda (x, y, z) si es aire y está dentro del dominio (y periódico); −1 si no */
+  private aire(x: number, y: number, z: number): number {
+    if (x < 0 || x >= this.nx || z < 0 || z >= this.nz) return -1;
+    const c = (z * this.ny + ((y + this.ny) % this.ny)) * this.nx + x;
+    return this.solido[c] ? -1 : c;
   }
 
   paso() {
@@ -60,9 +96,15 @@ export class Lbm3D {
         let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
         if (sz >= nz || sz < 0) { v[i] = f[ESP3[i] * N + c]; continue; }    // tapa (y fondo sin suelo): refleja
         const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx);            // salida: la de atrás
-        v[i] = solido[s] ? f[OPP3[i] * N + c] : f[i * N + s];
+        if (!solido[s]) { v[i] = f[i * N + s]; continue; }
+        const io = OPP3[i], fo = f[io * N + c];
+        const k = this.fila ? this.fila[c] : -1, qb = k >= 0 ? this.qPared![k * 19 + i] : 0;
+        if (!qb) { v[i] = fo; continue; }
+        // pared exacta: las dos celdas de aire del otro lado (c + e_i y c + 2·e_i)
+        const c2 = this.aire(x + EX3[i], y + EY3[i], z + EZ3[i]), c3 = c2 >= 0 ? this.aire(x + 2 * EX3[i], y + 2 * EY3[i], z + 2 * EZ3[i]) : -1;
+        v[i] = rebote(qb / 255, fo, f[i * N + c], c2 >= 0 ? f[io * N + c2] : NaN, c3 >= 0 ? f[io * N + c3] : NaN, c2 >= 0 ? f[i * N + c2] : NaN);
       }
-      chocar3(v, tau0, cs2);
+      chocar3(v, tau0, cs2, this.trt);
       for (let i = 0; i < 19; i++) g[i * N + c] = v[i];
     }
     this.f = g; this.g = f; this.pasos++;
@@ -87,7 +129,7 @@ export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uI
 }
 
 /** colisión BGK con Smagorinsky sobre las 19 poblaciones (en el lugar) */
-export function chocar3(v: Float64Array, tau0: number, cs2: number) {
+export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false) {
   let r = 0, jx = 0, jy = 0, jz = 0;
   for (let i = 0; i < 19; i++) { r += v[i]; jx += v[i] * EX3[i]; jy += v[i] * EY3[i]; jz += v[i] * EZ3[i]; }
   const u = jx / r, w2 = jy / r, w = jz / r;
@@ -104,7 +146,14 @@ export function chocar3(v: Float64Array, tau0: number, cs2: number) {
     tau = 0.5 * (tau0 + Math.sqrt(tau0 * tau0 + (18 * cs2 * Q) / r));
   }
   const om = 1 / tau;
-  for (let i = 0; i < 19; i++) v[i] += om * (eq[i] - v[i]);
+  if (!trt) { for (let i = 0; i < 19; i++) v[i] += om * (eq[i] - v[i]); return; }
+  // TRT: la parte simétrica de cada par relaja con ω+ (la viscosidad) y la antisimétrica con ω−
+  const omm = 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5), w0 = new Float64Array(v);
+  for (let i = 0; i < 19; i++) {
+    const o = OPP3[i];
+    const sp = 0.5 * ((w0[i] + w0[o]) - (eq[i] + eq[o])), sm = 0.5 * ((w0[i] - w0[o]) - (eq[i] - eq[o]));
+    v[i] = w0[i] - om * sp - omm * sm;
+  }
 }
 
 /**

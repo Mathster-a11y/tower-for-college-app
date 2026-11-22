@@ -6,15 +6,25 @@
 <script type="module">
 import { Lbm3D, canalConPrisma, perfilPotencia } from '/src/viento/lbm3d.ts';
 import { crearLbm3dGpu } from '/src/viento/lbm3dGpu.ts';
+import { geometria3D } from '/src/viento/geometria3d.ts';
 const out = document.getElementById('r');
 try {
   const casos = [
     { nx: 40, ny: 17, nz: 14, a: 5, hT: 8, x0: 10, nu: 0.02, cs: 0.12, pasos: 120 },
     { nx: 70, ny: 9, nz: 8, a: 3, hT: 4, x0: 12, nu: 0.05, cs: 0, pasos: 60 },
+    // torre de planta curva con paredes exactas (rebote interpolado) y colisión TRT, y la misma con BGK
+    { curva: true, nx: 48, ny: 24, nz: 20, nu: 0.02, cs: 0.12, pasos: 150, colision: 'trt' },
+    { curva: true, nx: 48, ny: 24, nz: 20, nu: 0.02, cs: 0, pasos: 100, colision: 'bgk' },
   ];
+  const planta = Array.from({ length: 40 }, (_, k) => ({ x: 9 * Math.cos(k / 40 * 2 * Math.PI), y: 7 * Math.sin(k / 40 * 2 * Math.PI) + 2 * Math.sin(k / 40 * 6 * Math.PI) }));
   const res = [];
   for (const k of casos) {
-    const o = { nx: k.nx, ny: k.ny, nz: k.nz, nu: k.nu, cs: k.cs, uIn: perfilPotencia(k.nz, 0.08, k.nz * 0.6, 0.2), solido: canalConPrisma(k.nx, k.ny, k.nz, k.a, k.hT, k.x0) };
+    let o;
+    if (k.curva) {
+      const g = geometria3D({ niveles: [{ cota: 0, silueta: planta }, { cota: 20, silueta: planta.map(q => ({ x: q.x * 0.7, y: q.y * 0.7 })) }, { cota: 36, silueta: planta }], dir: 'B', nx: k.nx, ny: k.ny, nz: k.nz });
+      k.hT = g.hC;
+      o = { nx: k.nx, ny: k.ny, nz: k.nz, nu: k.nu, cs: k.cs, uIn: perfilPotencia(k.nz, 0.08, k.nz * 0.6, 0.2), solido: g.solido, paredes: g.paredes, colision: k.colision };
+    } else o = { nx: k.nx, ny: k.ny, nz: k.nz, nu: k.nu, cs: k.cs, uIn: perfilPotencia(k.nz, 0.08, k.nz * 0.6, 0.2), solido: canalConPrisma(k.nx, k.ny, k.nz, k.a, k.hT, k.x0) };
     const cpu = new Lbm3D(o), gpu = await crearLbm3dGpu(o);
     for (let i = 0; i < k.pasos; i++) cpu.paso();
     gpu.avanzar(k.pasos); await gpu.esperar();
@@ -26,7 +36,7 @@ try {
     let peorCampo = 0, peorCorte = 0; const zc = Math.round(k.hT / 2), N = k.nx * k.ny * k.nz;
     for (let q = 0; q < N; q++) { if (o.solido[q]) continue; const m = cpu.macro(q); peorCampo = Math.max(peorCampo, Math.abs(campo[4 * q] - m.u), Math.abs(campo[4 * q + 2] - m.w), Math.abs(campo[4 * q + 3] - m.r)); }
     for (let y = 0; y < k.ny; y++) for (let x = 0; x < k.nx; x++) { const q = (zc * k.ny + y) * k.nx + x; if (o.solido[q]) continue; const m = cpu.macro(q); peorCorte = Math.max(peorCorte, Math.abs(c[4 * (y * k.nx + x)] - m.u)); }
-    res.push({ grilla: `${k.nx}×${k.ny}×${k.nz}`, pasos: k.pasos, peorDiferencia: peor, peorCampo, peorCorte, noFinitos: nan, adaptador: gpu.adaptador });
+    res.push({ caso: k.curva ? `torre curva, paredes exactas (${o.paredes.celdas.length} celdas de pared), ${k.colision}` : 'prisma', grilla: `${k.nx}×${k.ny}×${k.nz}`, pasos: k.pasos, peorDiferencia: peor, peorCampo, peorCorte, noFinitos: nan, adaptador: gpu.adaptador });
     gpu.destruir();
   }
   out.textContent = JSON.stringify({ ok: res.every(r => r.peorDiferencia < 1e-4 && r.peorCampo < 1e-4 && r.peorCorte < 1e-4 && r.noFinitos === 0), res }, null, 1);

@@ -29,6 +29,72 @@ export interface Geometria3D {
   caja: { x0: number; x1: number; y0: number; y1: number };
   /** celdas sólidas de la torre (sin el suelo) */
   celdas: number;
+  /** paredes exactas: para cada celda de aire pegada a un sólido, dónde corta la pared cada uno de sus 19 enlaces */
+  paredes: Paredes3D;
+}
+
+/**
+ * paredes exactas del 3D (rebote interpolado): las celdas de aire que tienen algún enlace con un sólido y, por cada
+ * una, 19 bytes con q (dónde corta la pared el enlace que llega desde c − e_i, en 255avos del camino; 0 = no hay
+ * pared en esa dirección). Compacto: la placa de video solo guarda estas celdas, no 19 números por celda.
+ */
+export interface Paredes3D { celdas: Int32Array; q: Uint8Array }
+
+// las 19 direcciones de D3Q19 (las mismas que lbm3d)
+const EXd = [0, 1, -1, 0, 0, 0, 0, 1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0];
+const EYd = [0, 0, 0, 1, -1, 0, 0, 1, -1, -1, 1, 0, 0, 0, 0, 1, -1, 1, -1];
+const EZd = [0, 0, 0, 0, 0, 1, -1, 0, 0, 0, 0, 1, -1, -1, 1, 1, -1, -1, 1];
+
+/** primer corte (fracción de a a b) del segmento a→b, en planta, con el contorno p */
+function corteEnPlanta(p: P[], ax: number, ay: number, bx: number, by: number): number | null {
+  let mejor: number | null = null;
+  const rx = bx - ax, ry = by - ay;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const c = p[j], d = p[i], sx = d.x - c.x, sy = d.y - c.y, den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-14) continue;
+    const t = ((c.x - ax) * sy - (c.y - ay) * sx) / den, u = ((c.x - ax) * ry - (c.y - ay) * rx) / den;
+    if (t >= -1e-9 && t <= 1 + 1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && (mejor === null || t < mejor)) mejor = t;
+  }
+  return mejor;
+}
+
+/**
+ * q de los enlaces aire → sólido. Contra una fachada (el enlace cruza el contorno de su piso): el corte exacto en
+ * planta. Contra una losa de arriba de un retiro o la azotea (enlace vertical): la cota del nivel. Contra el suelo: a
+ * mitad de camino (el suelo está justo entre celdas). Si no se puede decir con certeza, a mitad de camino.
+ * capa[z]: el contorno (en celdas) que rige en la altura z, o null; planos: las alturas (en coordenadas de la red) donde
+ * cambia la planta.
+ */
+export function paredes3D(nx: number, ny: number, nz: number, solido: Uint8Array, capa: (P[] | null)[], planos: number[]): Paredes3D {
+  const celdas: number[] = [], qs: number[] = [];
+  const sol = (x: number, y: number, z: number) => z >= 0 && z < nz && x >= 0 && x < nx && solido[(z * ny + ((y + ny) % ny)) * nx + x] === 1;
+  for (let z = 1; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const c = (z * ny + y) * nx + x;
+    if (solido[c]) continue;
+    let tiene = false;
+    const fila = new Array<number>(19).fill(0);
+    for (let i = 1; i < 19; i++) {
+      const sx = x - EXd[i], sy = y - EYd[i], sz = z - EZd[i];
+      if (!sol(sx, sy, sz)) continue;
+      tiene = true;
+      let q = 0.5;
+      if (sz === 0) q = 0.5;                                                   // el suelo, entre celdas
+      else if (EXd[i] === 0 && EYd[i] === 0) {
+        // vertical: la losa del retiro o la azotea está en un plano de cambio de planta entre las dos celdas
+        const z0 = Math.min(z, sz) + 0.5, z1 = Math.max(z, sz) + 0.5;
+        const pl = planos.find(h => h > z0 - 1e-9 && h < z1 + 1e-9);
+        if (pl !== undefined) q = Math.abs(z + 0.5 - pl);
+      } else {
+        // con componente horizontal: si las dos alturas tienen la misma planta, la pared es vertical y el corte
+        // en planta da la fracción del enlace
+        const p0 = capa[z], p1 = capa[sz];
+        if (p0 && p0 === p1) { const t = corteEnPlanta(p0, x + 0.5, y + 0.5, sx + 0.5, sy + 0.5); if (t !== null) q = t; }
+      }
+      fila[i] = Math.max(1, Math.min(255, Math.round(Math.min(1, Math.max(1e-3, q)) * 255)));
+    }
+    if (tiene) { celdas.push(c); qs.push(...fila); }
+  }
+  return { celdas: Int32Array.from(celdas), q: Uint8Array.from(qs) };
 }
 
 function dentro(p: P[], x: number, y: number): boolean {
@@ -64,6 +130,7 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) solido[y * nx + x] = 1;      // suelo
   let celdas = 0;
   const caja = { x0: nx, x1: 0, y0: ny, y1: 0 };
+  const capa: (P[] | null)[] = new Array(nz).fill(null);
   for (let z = 1; z < nz; z++) {
     const h = (z - 0.5) / escala;                                            // altura del centro de la celda (m)
     if (h > H) break;
@@ -71,6 +138,7 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
     // la del primero
     const n = [...pols].reverse().find(q => q.cota <= h + 1e-9) ?? pols[0];
     if (!n) continue;
+    capa[z] = n.pol;
     const bx0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...n.pol.map(q => q.x))));
     const by0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...n.pol.map(q => q.y))));
     for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
@@ -79,7 +147,9 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
       caja.x0 = Math.min(caja.x0, x); caja.x1 = Math.max(caja.x1, x); caja.y0 = Math.min(caja.y0, y); caja.y1 = Math.max(caja.y1, y);
     }
   }
-  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas };
+  // planos donde cambia la planta (en coordenadas de la red: la altura h está en z = h·escala + 1) y la azotea
+  const planos = [...new Set(pols.map(q => q.cota))].map(h => h * escala + 1);
+  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos) };
 }
 
 /**

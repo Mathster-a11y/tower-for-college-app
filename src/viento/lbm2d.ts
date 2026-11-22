@@ -31,7 +31,19 @@ export interface OpcionesLbm {
   solido?: Uint8Array;
   /** perturbación inicial transversal (fracción de u0, 0,02 por defecto) y su semilla */
   perturbacion?: number; semilla?: number;
+  /**
+   * paredes exactas (rebote interpolado de Bouzidi, Firdaouss y Lallemand, 2001): q de cada enlace aire → sólido
+   * (ver geometria2d, Geometria2D.q). Sin q, la pared queda a mitad de camino entre celdas (en escalera).
+   */
+  q?: Float32Array;
+  /**
+   * colisión: «bgk» (un tiempo de relajación) o «trt» (dos tiempos, Ginzburg: con Λ = 3/16 la pared del rebote queda
+   * donde corresponde sea cual sea la viscosidad, y es más estable con grillas gruesas)
+   */
+  colision?: 'bgk' | 'trt';
 }
+/** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
+export const LAMBDA_TRT = 3 / 16;
 
 export class Lbm2D {
   readonly nx: number; readonly ny: number; readonly N: number;
@@ -47,6 +59,10 @@ export class Lbm2D {
   roto = false;
   /** enlaces fluido → sólido: celda, dirección (la que llega desde el sólido) */
   private enlaces: Int32Array;
+  /** por enlace: q (dónde está la pared, 0,5 = mitad de camino) y la celda de aire del otro lado (−1 si no hay) */
+  private qEnl: Float32Array; private otra: Int32Array; private otra2: Int32Array;
+  readonly trt: boolean;
+  readonly exactas: boolean;
 
   constructor(o: OpcionesLbm) {
     this.nx = o.nx; this.ny = o.ny; this.N = o.nx * o.ny;
@@ -79,6 +95,27 @@ export class Lbm2D {
       }
     }
     this.enlaces = Int32Array.from(enl);
+    this.trt = o.colision === 'trt';
+    this.exactas = !!o.q;
+    const nE = this.enlaces.length / 2;
+    this.qEnl = new Float32Array(nE).fill(0.5); this.otra = new Int32Array(nE).fill(-1); this.otra2 = new Int32Array(nE).fill(-1);
+    for (let k = 0; k < nE; k++) {
+      const c = this.enlaces[2 * k], i = this.enlaces[2 * k + 1];
+      if (o.q && o.q[i * this.N + c] > 0) this.qEnl[k] = o.q[i * this.N + c];
+      // la celda de aire del otro lado (c + e_i): la usa el rebote interpolado cuando la pared está cerca (q < ½)
+      const x = c % this.nx, y = (c - x) / this.nx;
+      let x2 = x + EX[i], y2 = y + EY[i];
+      if (y2 < 0) y2 += this.ny; else if (y2 >= this.ny) y2 -= this.ny;
+      if (x2 < 0 || x2 >= this.nx) { if (!this.periodicoX) continue; x2 = (x2 + this.nx) % this.nx; }
+      const c2 = y2 * this.nx + x2;
+      if (this.solido[c2]) continue;
+      this.otra[k] = c2;
+      // y la siguiente (c + 2·e_i), para la interpolación cuadrática
+      let x3 = x2 + EX[i], y3 = y2 + EY[i];
+      if (y3 < 0) y3 += this.ny; else if (y3 >= this.ny) y3 -= this.ny;
+      if (x3 < 0 || x3 >= this.nx) { if (!this.periodicoX) continue; x3 = (x3 + this.nx) % this.nx; }
+      if (!this.solido[y3 * this.nx + x3]) this.otra2[k] = y3 * this.nx + x3;
+    }
   }
 
   /** un paso: colisión, propagación con rebote en los sólidos, entrada y salida */
@@ -112,6 +149,30 @@ export class Lbm2D {
         tau = 0.5 * (tau0 + Math.sqrt(tau0 * tau0 + (18 * cs2 * Q) / r));
       }
       const om = 1 / tau;
+      if (this.trt && !conFuerza) {
+        // TRT: la parte simétrica de cada par de direcciones relaja con ω+ (la viscosidad) y la antisimétrica con ω−
+        const omm = 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5);
+        f[c] = f0 + om * (e0 - f0);
+        const par = (a: number, b: number, fa: number, fb: number, ea: number, eb: number) => {
+          const sp = om * ((fa + fb) - (ea + eb)) * 0.5, sm = omm * ((fa - fb) - (ea - eb)) * 0.5;
+          f[a * N + c] = fa - sp - sm; f[b * N + c] = fb - sp + sm;
+        };
+        par(1, 3, f1, f3, e1, e3); par(2, 4, f2, f4, e2, e4); par(5, 7, f5, f7, e5, e7); par(6, 8, f6, f8, e6, e8);
+        continue;
+      }
+      if (conFuerza && this.trt) {
+        // TRT con fuerza (al estilo Guo): equilibrio con u = (j + g/2)/ρ y la fuerza como fuente en la parte
+        // antisimétrica, con su factor (1 − ω−/2)
+        const omm = 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5), uu = u + gx / (2 * r), vv = v + gy / (2 * r);
+        const fi = [f0, f1, f2, f3, f4, f5, f6, f7, f8], ei = fi.map((_, i) => feq(i, r, uu, vv));
+        f[c] = f0 + om * (ei[0] - f0);
+        for (const [a, b] of [[1, 3], [2, 4], [5, 7], [6, 8]]) {
+          const sp = om * ((fi[a] + fi[b]) - (ei[a] + ei[b])) * 0.5, sm = omm * ((fi[a] - fi[b]) - (ei[a] - ei[b])) * 0.5;
+          const fu = (1 - omm / 2) * 3 * W9[a] * r * (EX[a] * gx + EY[a] * gy);       // fuente: impar (la de b es −fu)
+          f[a * N + c] = fi[a] - sp - sm + fu; f[b * N + c] = fi[b] - sp + sm - fu;
+        }
+        continue;
+      }
       if (conFuerza) {
         // fuerza por corrimiento de la velocidad de equilibrio (Shan-Chen): u_eq = u + τ·g/ρ... con ρ ≈ 1
         u += (tau * gx) / r; v += (tau * gy) / r;
@@ -140,14 +201,27 @@ export class Lbm2D {
         }
       }
     }
-    // rebote a mitad de camino en los sólidos: la población opuesta salió hacia el sólido con −e y volvió; el sólido
-    // recibe 2·fo·(−e)
+    // rebote en los sólidos: la población opuesta salió hacia el sólido con −e y vuelve. A mitad de camino (en
+    // escalera) vuelve igual; con paredes exactas se interpola según dónde está la pared (Bouzidi): con q < ½ entre esta
+    // celda y la de atrás, con q ≥ ½ entre lo que salió y lo que llegaba. El sólido recibe (fo + lo que vuelve)·(−e).
     let Fx = 0, Fy = 0;
-    const en = this.enlaces;
-    for (let k = 0; k < en.length; k += 2) {
-      const c = en[k], i = en[k + 1], fo = f[OPUESTA[i] * N + c];
-      g[i * N + c] = fo;
-      Fx -= 2 * fo * EX[i]; Fy -= 2 * fo * EY[i];
+    const en = this.enlaces, qE = this.qEnl, otra = this.otra, otra2 = this.otra2, exactas = this.exactas;
+    for (let k = 0, n = 0; k < en.length; k += 2, n++) {
+      const c = en[k], i = en[k + 1], io = OPUESTA[i], fo = f[io * N + c];
+      let vuelve = fo;
+      if (exactas) {
+        // interpolación cuadrática de Bouzidi (exacta para un perfil parabólico); lineal si no hay dos celdas de aire
+        // detrás; y el rebote simple si no hay ninguna
+        const q = qE[n], c2 = otra[n], c3 = otra2[n];
+        if (c2 >= 0 && c3 >= 0) {
+          vuelve = q < 0.5
+            ? q * (1 + 2 * q) * fo + (1 - 4 * q * q) * f[io * N + c2] - q * (1 - 2 * q) * f[io * N + c3]
+            : fo / (q * (2 * q + 1)) + ((2 * q - 1) / q) * f[i * N + c] + ((1 - 2 * q) / (1 + 2 * q)) * f[i * N + c2];
+        } else if (q < 0.5) { if (c2 >= 0) vuelve = 2 * q * fo + (1 - 2 * q) * f[io * N + c2]; }
+        else vuelve = fo / (2 * q) + ((2 * q - 1) / (2 * q)) * f[i * N + c];
+      }
+      g[i * N + c] = vuelve;
+      Fx -= (fo + vuelve) * EX[i]; Fy -= (fo + vuelve) * EY[i];
     }
     // --- entrada (equilibrio a u0) y salida (gradiente nulo)
     if (!perX) {
