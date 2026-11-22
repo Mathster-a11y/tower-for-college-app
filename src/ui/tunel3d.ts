@@ -14,7 +14,7 @@ import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
-import { coloresTermico, LUT_TERMICO } from './campoSuave';
+import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { llaveHtml, type Llave } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
@@ -32,7 +32,9 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** confort del peatón: viento medio anual a 10 m del lugar (m/s, de una estación meteorológica) y si se pinta Lawson */
   vientoMedio: 4, lawson: true,
   /** motor: la placa de video (WebGPU) o el procesador (sin placa, más lento y con la grilla gruesa) */
-  motor: 'placa' as 'placa' | 'procesador' };
+  motor: 'placa' as 'placa' | 'procesador',
+  /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
+  flechas: 'fijas' as ModoFlechas };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -172,7 +174,7 @@ function armarVista(cont: HTMLElement) {
  * celdas (sin pixelado; el borde de la torre queda suave porque las celdas sólidas entran con su color en la mezcla)
  */
 const rgbS = { r: 0, g: 0, b: 0 };
-function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean) {
+function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean, vel?: (i: number, j: number) => [number, number] | null) {
   const n = ancho * alto, R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), aire = new Uint8Array(n), col = new THREE.Color();
   for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) {
     const c = j * ancho + i;
@@ -196,6 +198,12 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
     }
   }
   g.putImageData(img, 0, 0);
+  // las flechas de la velocidad en el plano del corte, dibujadas sobre la textura (unas 32 a lo ancho)
+  if (vel && cfg.flechas !== 'no') {
+    const VA = new Float32Array(n), VB = new Float32Array(n), sol = new Uint8Array(n);
+    for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) { const c = j * ancho + i, m = vel(i, j); if (m) { VA[c] = m[0]; VB[c] = m[1]; } else sol[c] = 1; }
+    dibujarFlechas(g, { W, H, x0: 0, dx: 1 / k, y0: alto, dy: 1 / k }, cfg.flechas, muestraVelocidad(VA, VB, sol, ancho, alto, 1), Math.max(18, Math.round(W / 32)), '#1d1d24', '#f4f4f4', cfg.vereda || cfg.color === 'cp');
+  }
   const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -235,13 +243,13 @@ function actualizarCampo() {
   v.planoH = v.planoV = null;
   const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
   if (cfg.horizontal || cfg.vereda) {
-    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc));
+    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = (zc - 0.5) / g.escala; v.esc.add(m); v.planoH = m;
   }
   if (cfg.vertical) {
     const yc = Math.max(0, Math.min(g.ny - 1, Math.round(cfg.yRel * (g.ny - 1))));
-    const t = textura(g.nx, g.nz, (i, j, o) => pintarCelda((j * g.ny + yc) * g.nx + i, o, j));
+    const t = textura(g.nx, g.nz, (i, j, o) => pintarCelda((j * g.ny + yc) * g.nx + i, o, j), (i, j) => { const cel = (j * g.ny + yc) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 2] / UH]; });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.nz / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
     m.position.set(0, g.nz / g.escala / 2, -((yc + 0.5) - g.ny / 2) / g.escala); v.esc.add(m); v.planoV = m;
   }
@@ -305,7 +313,13 @@ function armarLlaves3d() {
   else if (cfg.horizontal || cfg.vertical) corte = cfg.color === 'cp'
     ? { titulo: 'Cortes: presión (Cp)', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] }
     : { titulo: 'Cortes: velocidad (V a la altura de la torre)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
-  llaves3d.replaceChildren(llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []));
+  // las flechas: si el corte ya va en velocidad, su llave sirve; si no, una aparte arriba a la derecha
+  const conCortes = cfg.horizontal || cfg.vertical || cfg.vereda;
+  let flechas: Llave | null = null;
+  if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: 'Flechas: el color dice la velocidad', colores: coloresTermico(), marcas: [[0, 'quieta'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
+  else if (conCortes && cfg.flechas === 'proporcionales') flechas = { titulo: 'Flechas: el largo dice la velocidad', colores: ['#f4f4f4', '#1d1d24'], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
+  const lf = flechas ? llaveHtml(flechas) : null; lf?.classList.add('derecha');
+  llaves3d.replaceChildren(llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(lf ? [lf] : []));
 }
 
 // ------------------------------------------------------------------------------------------------ centro y panel
@@ -369,6 +383,7 @@ export function panelTunel3d(c: H) {
     sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
     sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
+    sel('Flechas en los cortes', [['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad'], ['no', 'sin flechas']], cfg.flechas, x => { cfg.flechas = x as ModoFlechas; }),
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),
     rango('Posición del corte vertical', cfg.yRel, x => { cfg.yRel = x; }),
   ),

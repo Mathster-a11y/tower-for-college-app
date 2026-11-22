@@ -73,3 +73,52 @@ export const divergente = (fondo: number[], neg: number[], pos: number[]) => (v:
   const c = v >= 0 ? pos : neg, t = Math.min(1, Math.abs(v));
   px[k] = fondo[0] + (c[0] - fondo[0]) * t; px[k + 1] = fondo[1] + (c[1] - fondo[1]) * t; px[k + 2] = fondo[2] + (c[2] - fondo[2]) * t;
 };
+
+/** cómo se dibujan las flechas de la velocidad: largo fijo con el color de la velocidad, o largo proporcional */
+export type ModoFlechas = 'no' | 'fijas' | 'proporcionales';
+
+/**
+ * flechas de la velocidad en una grilla pareja de la pantalla (cada «paso» píxeles, así no se amontonan con el zoom).
+ * muestra(X, Y): la velocidad en ese punto de la red (u, v, con v hacia arriba) normalizada por la de referencia, o
+ * null si ahí no hay aire. «fijas»: todas del mismo largo, con el color del espectro térmico; «proporcionales»: el
+ * largo dice la velocidad (1,6 veces la de referencia = un paso entero), en el color de la tinta.
+ * Siempre con un borde del color del fondo, para que se lean sobre cualquier mapa de colores. Con colorear = false (el
+ * fondo ya es la velocidad), las fijas van en tinta: solo dicen la dirección.
+ */
+export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: ModoFlechas, muestra: (X: number, Y: number) => [number, number] | null, paso: number, tinta: string, borde: string, colorear = true) {
+  if (modo === 'no') return;
+  g.save();
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const px = new Uint8ClampedArray(4);
+  for (let fy = paso / 2; fy < v.H; fy += paso) for (let fx = paso / 2; fx < v.W; fx += paso) {
+    const m = muestra(v.x0 + fx * v.dx, v.y0 - fy * v.dy);
+    if (!m) continue;
+    const s = Math.hypot(m[0], m[1]);
+    if (s < 1e-4) continue;
+    const L = modo === 'fijas' ? paso * 0.72 : Math.min(paso * 1.25, (paso * s) / 1.6);
+    if (L < 2) continue;
+    const ux = m[0] / s, uy = -m[1] / s;                               // en pantalla, y hacia abajo
+    const x0 = fx - (ux * L) / 2, y0 = fy - (uy * L) / 2, x1 = fx + (ux * L) / 2, y1 = fy + (uy * L) / 2;
+    const cab = Math.min(6, Math.max(3, L * 0.32)), ax = -ux * cab, ay = -uy * cab, nx = -uy * cab * 0.6, ny = ux * cab * 0.6;
+    let color = tinta;
+    if (modo === 'fijas' && colorear) { colorTermico(Math.min(1, s / 1.6), px, 0); color = `rgb(${px[0]},${px[1]},${px[2]})`; }
+    const trazo = () => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.moveTo(x1 + ax + nx, y1 + ay + ny); g.lineTo(x1, y1); g.lineTo(x1 + ax - nx, y1 + ay - ny); g.stroke(); };
+    g.strokeStyle = borde; g.lineWidth = 3.4; g.globalAlpha = 0.75; trazo();
+    g.strokeStyle = color; g.lineWidth = 1.6; g.globalAlpha = 1; trazo();
+  }
+  g.restore();
+}
+
+/** la velocidad interpolada (bilineal entre centros de celda) en un punto de la red, dividida por «ref»; null en la torre */
+export const muestraVelocidad = (ux: ArrayLike<number>, uy: ArrayLike<number>, solido: Uint8Array, nx: number, ny: number, ref: number) => (X: number, Y: number): [number, number] | null => {
+  const ci = Math.floor(X), cj = Math.floor(Y);
+  if (ci < 0 || cj < 0 || ci >= nx || cj >= ny || solido[cj * nx + ci]) return null;
+  let x = X - 0.5, y = Y - 0.5, i = Math.floor(x), j = Math.floor(y);
+  if (i < 0) { i = 0; x = 0; } else if (i >= nx - 1) { i = nx - 2; x = nx - 1; }
+  if (j < 0) { j = 0; y = 0; } else if (j >= ny - 1) { j = ny - 2; y = ny - 1; }
+  const fx = x - i, fy = y - j, c = j * nx + i;
+  const w = [(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy], cs = [c, c + 1, c + nx, c + nx + 1];
+  let u = 0, v = 0;
+  for (let k = 0; k < 4; k++) { u += w[k] * ux[cs[k]]; v += w[k] * uy[cs[k]]; }
+  return [u / ref, v / ref];
+};

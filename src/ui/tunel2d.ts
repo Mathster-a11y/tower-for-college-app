@@ -21,7 +21,7 @@ import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
-import { colorTermico, coloresTermico, divergente, pintarSuave, type Vista as VistaPx } from './campoSuave';
+import { colorTermico, coloresTermico, dibujarFlechas, divergente, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
@@ -43,6 +43,8 @@ const cfg = {
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
+  /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
+  flechas: 'fijas' as ModoFlechas,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
@@ -250,6 +252,10 @@ function dibujar() {
   // la torre con su contorno exacto, encima (borde liso)
   g.fillStyle = css('--ink', '#223344');
   for (const p of c.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); }
+  // las flechas de la velocidad, en una grilla pareja de la pantalla (no se amontonan con el zoom)
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  dibujarFlechas(g, vis, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 30, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
+  g.setTransform(zoom.z, 0, 0, zoom.z, -zoom.ox * zoom.z, -zoom.oy * zoom.z);
   // Cp promedio sobre el contorno: azul donde empuja (comprime), rojo donde succiona (tracciona)
   if (cfg.cpContorno && c.perim.muestras > 0) {
     const p = c.perim.p, az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
@@ -277,7 +283,16 @@ function dibujar() {
   // lo que no se mueve con el zoom: el recuadro de la ventana arriba, la llave de colores y el aumento
   g.setTransform(1, 0, 0, 1, 0, 0);
   if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
-  llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  const lf = llaveFlechas();
+  if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+}
+
+/** la llave de las flechas, si hace falta una aparte (con el color de fondo de velocidad, la del fondo sirve) */
+function llaveFlechas(): Llave | null {
+  if (cfg.flechas === 'fijas' && cfg.vista !== 'velocidad') return { titulo: 'Flechas: dirección; el color, la velocidad', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
+  if (cfg.flechas === 'proporcionales') return { titulo: 'Flechas: el largo dice la velocidad', colores: [css('--lienzo', '#ffffff'), css('--ink', '#223344')], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
+  return null;
 }
 
 /** la llave de colores de la vista elegida (la misma en el túnel y en la ventana) */
@@ -373,6 +388,7 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   g.fillStyle = css('--ink', '#223344'); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
   for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); g.stroke(); }
   g.restore();
+  dibujarFlechas(g, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 28, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
   // una copia sin la llave, para el recuadro de arriba (ahí la llave quedaría ilegible)
   if (!copiaDet) copiaDet = document.createElement('canvas');
   if (copiaDet.width !== cv.width || copiaDet.height !== cv.height) { copiaDet.width = cv.width; copiaDet.height = cv.height; }
@@ -566,6 +582,7 @@ export function panelTunel(c: H) {
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
     cfg.segunda !== 'no' ? sel('Separación (anchos)', ['0.5', '1', '2', '3', '4'].map(v => [v, v.replace('.', ',')] as [string, string]), String(cfg.distancia), x => { cfg.distancia = +x; }) : h('span', {}),
     sel('Color', [['vorticidad', 'giro del aire (remolinos)'], ['velocidad', 'velocidad'], ['presion', 'presión (Cp)']], cfg.vista, x => { cfg.vista = x; }),
+    sel('Flechas de la velocidad', [['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad'], ['no', 'sin flechas']], cfg.flechas, x => { cfg.flechas = x; }),
   ));
   const humo = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.humo ? { checked: '' } : {}) }), ' Humo (partículas que lleva el viento)');
   humo.querySelector('input')!.addEventListener('change', e => { cfg.humo = (e.target as HTMLInputElement).checked; dibujar(); });
