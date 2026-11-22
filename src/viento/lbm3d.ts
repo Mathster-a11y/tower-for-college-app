@@ -32,6 +32,8 @@ export interface OpcionesLbm3 {
   colision?: 'bgk' | 'trt';
   /** piso de ω− en la TRT (por defecto OMEGA_MENOS_MIN) */
   omegaMenosMin?: number;
+  /** paredes exactas con la interpolación lineal (más estable con viscosidad muy baja) en vez de la cuadrática */
+  paredesLineales?: boolean;
 }
 /** Λ de la colisión TRT */
 /** piso de ω− en la colisión TRT (como en lbm2d: a Reynolds alto, sin piso, el ruido de la grilla no se amortigua) */
@@ -64,7 +66,7 @@ export class Lbm3D {
   readonly tau0: number; readonly cs: number; readonly uIn: Float32Array; readonly solido: Uint8Array;
   f: Float32Array; private g: Float32Array;
   pasos = 0;
-  readonly trt: boolean; readonly ommMin: number;
+  readonly trt: boolean; readonly ommMin: number; readonly lineal: boolean;
   /** por celda: la fila de su tabla de paredes (−1 si no toca ninguna pared exacta) */
   private fila: Int32Array | null = null; private qPared: Uint8Array | null = null;
 
@@ -74,7 +76,7 @@ export class Lbm3D {
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
     inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
     this.g.set(this.f);
-    this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN;
+    this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN; this.lineal = !!o.paredesLineales;
     if (o.paredes) {
       this.fila = new Int32Array(this.N).fill(-1); this.qPared = o.paredes.q;
       o.paredes.celdas.forEach((c, k) => { this.fila![c] = k; });
@@ -123,7 +125,7 @@ export class Lbm3D {
         const k = this.fila ? this.fila[c] : -1, qb = k >= 0 ? this.qPared![k * 19 + i] : 0;
         if (!qb) { v[i] = fo; continue; }
         // pared exacta: las dos celdas de aire del otro lado (c + e_i y c + 2·e_i)
-        const c2 = this.aire(x + EX3[i], y + EY3[i], z + EZ3[i]), c3 = c2 >= 0 ? this.aire(x + 2 * EX3[i], y + 2 * EY3[i], z + 2 * EZ3[i]) : -1;
+        const c2 = this.aire(x + EX3[i], y + EY3[i], z + EZ3[i]), c3 = c2 >= 0 && !this.lineal ? this.aire(x + 2 * EX3[i], y + 2 * EY3[i], z + 2 * EZ3[i]) : -1;
         v[i] = rebote(qb / 255, fo, f[i * N + c], c2 >= 0 ? f[io * N + c2] : NaN, c3 >= 0 ? f[io * N + c3] : NaN, c2 >= 0 ? f[i * N + c2] : NaN);
       }
       chocar3(v, tau0, cs2, this.trt, this.ommMin);

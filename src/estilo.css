@@ -1684,3 +1684,22 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .ventana-detalle canvas.tunel2d { margin: 0 auto; }
 .ventana-detalle .tunel-marco { width: fit-content; max-width: 100%; margin: 0 auto 6px; }
 .grafico .d-pico { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+/* herramientas de CAD del contorno: grupos con rótulo y botones con ícono */
+.contorno-panel .cad-grupo { display: grid; gap: 4px; margin-top: 7px; }
+.contorno-panel .cad-rot { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3, var(--ink2)); }
+.contorno-panel button.con-icono { display: inline-flex; align-items: center; gap: 4px; }
+.contorno-panel button.con-icono svg { flex: none; }
+/* llaves de colores sobre las simulaciones (3D) y botones de zoom del túnel 2D */
+.tunel-marco { position: relative; }
+.llave-sim { position: absolute; left: 8px; bottom: 8px; background: color-mix(in srgb, var(--lienzo) 88%, transparent); border-radius: 6px; padding: 5px 7px; font-size: 11px; color: var(--ink); min-width: 170px; pointer-events: none; }
+.llave-sim + .llave-sim { bottom: auto; top: 8px; }
+.llave-sim b { display: block; font-size: 11px; margin-bottom: 3px; }
+.llave-sim-barra { height: 9px; border-radius: 2px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+.llave-sim-marcas { position: relative; height: 14px; }
+.llave-sim-marcas span { position: absolute; top: 1px; white-space: nowrap; }
+.llave-sim-extras { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 2px; }
+.llave-sim-extras i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+.zoom-tunel { position: absolute; top: 6px; left: 6px; display: flex; gap: 3px; }
+.zoom-tunel button { min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--lienzo) 90%, transparent); color: var(--ink); cursor: pointer; font-size: 14px; line-height: 1; }
+.zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
+canvas.tunel2d.arrastrable { cursor: grab; }

@@ -22,6 +22,31 @@ const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
 type Sel = { anillo: number; i: number } | null;
 
+/** íconos de las herramientas de CAD (trazos de 24 × 24, con el color del texto) */
+const ICONOS = {
+  recto: '<path d="M4 18 20 6"/>',
+  arco: '<path d="M4 18Q12 0 20 18"/>',
+  bezier: '<path d="M4 18C7 3 17 21 20 6"/><circle cx="7" cy="3" r="1.6"/><circle cx="17" cy="21" r="1.6"/>',
+  redondear: '<path d="M4 20V11a7 7 0 0 1 7-7h9"/>',
+  chaflan: '<path d="M4 20V11l7-7h9"/>',
+  sustraer: '<path d="M4 20V10h6V4h10"/>',
+  suavizar: '<path d="M3 17C8 4 16 20 21 7"/>',
+  enderezar: '<path d="M3 17 9 6l6 10 6-9"/>',
+  afuera: '<rect x="8" y="8" width="8" height="8" stroke-dasharray="2 2"/><rect x="4" y="4" width="16" height="16"/>',
+  adentro: '<rect x="4" y="4" width="16" height="16" stroke-dasharray="2 2"/><rect x="8" y="8" width="8" height="8"/>',
+  espejoX: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 6 3 12l6 6zM15 6l6 6-6 6z"/>',
+  espejoY: '<path d="M3 12h18" stroke-dasharray="2 2"/><path d="M6 9l6-6 6 6zM6 15l6 6 6-6z"/>',
+  girar: '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17 3v4h-4"/>',
+  escalar: '<rect x="4" y="13" width="7" height="7"/><path d="M11 13l8-8M14 5h5v5"/>',
+  dividir: '<path d="M3 12h18M9 8v8M15 8v8"/>',
+  arcoRadio: '<path d="M4 18a8 8 0 0 1 16 0"/><path d="M12 18V10" stroke-dasharray="2 2"/>',
+  forma: '<rect x="4" y="5" width="16" height="14" rx="2"/>',
+  hueco: '<rect x="3" y="4" width="18" height="16"/><rect x="9" y="9" width="6" height="6"/>',
+  deshacer: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  rehacer: '<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+} as const;
+const svgIcono = (k: keyof typeof ICONOS) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONOS[k]}</svg>`;
+
 export function montarEditorContorno(api: ApiPlanta) {
   const { svg, el } = api;
   let id: string | null = null, P: Perfil | null = null, original: Muro | null = null, ortogonal = true;
@@ -272,7 +297,15 @@ export function montarEditorContorno(api: ApiPlanta) {
 
   // ---------------------------------------------------------------- panel
   const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
-  const boton = (t: string, titulo: string, f: () => void, activo = false) => { const x = mk('button', t); x.type = 'button'; x.title = titulo; if (activo) x.classList.add('activo'); x.addEventListener('click', f); return x; };
+  /** botón con su ícono (o solo el ícono, si no hay texto: entonces el título es su nombre) */
+  const boton = (t: string, titulo: string, f: () => void, activo = false, icono?: keyof typeof ICONOS) => {
+    const x = mk('button'); x.type = 'button'; x.title = titulo; if (activo) x.classList.add('activo'); x.addEventListener('click', f);
+    if (icono) { x.insertAdjacentHTML('beforeend', svgIcono(icono)); x.classList.add('con-icono'); if (!t) x.setAttribute('aria-label', titulo.split('.')[0]); }
+    if (t) x.append(t);
+    return x;
+  };
+  /** un grupo de herramientas: rótulo chico arriba y las filas abajo */
+  const grupo = (rot: string, ...filas: HTMLElement[]) => { const g = mk('div', '', 'cad-grupo'); g.append(mk('span', rot, 'cad-rot'), ...filas); return g; };
   const fila = (...h: (Node | string)[]) => { const d = mk('div', '', 'col-fila'); d.append(...h); return d; };
   const datos = mk('div', '', 'col-nota contorno-datos');
   let abiertoCad = false;
@@ -303,17 +336,17 @@ export function montarEditorContorno(api: ApiPlanta) {
     panel.append(fila(lo));
     if (!ortogonal) panel.append(mk('p', 'Libre: tocá el medio de un lado (○) para elegirlo y hacerlo arco; arrastralo para agregar un vértice. Tocá un vértice (□) para redondearlo o cortarlo.', 'col-nota'));
     else panel.append(mk('p', 'Para curvas y diagonales, destildá «Mantener ortogonal». También podés elegir un lado (○) y usar «Arco por radio».', 'col-nota'));
-    if (tramo) panel.append(fila(mk('span', 'Lado:'), boton('Recto', '', () => tipoTramo('recta')), boton('Arco', 'Arrastrá el medio para curvarlo', () => tipoTramo('arco')), boton('Bézier', 'Curva libre: arrastrá los dos puntos de control (○). La Bézier vecina acompaña para que no haya quiebre; con Alt, se quiebra.', () => tipoTramo('bezier'))));
+    if (tramo) panel.append(grupo('Tipo de lado', fila(boton('Recto', 'Lado recto', () => tipoTramo('recta'), false, 'recto'), boton('Arco', 'Arrastrá el medio para curvarlo', () => tipoTramo('arco'), false, 'arco'), boton('Bézier', 'Curva libre: arrastrá los dos puntos de control (○). La Bézier vecina acompaña para que no haya quiebre; con Alt, se quiebra.', () => tipoTramo('bezier'), false, 'bezier'))));
     // ---- herramientas de CAD
     const campo = (etq: string, v: number, f: (x: number) => void, ancho = 46, unidad = 'm') => { const l = mk('label', '', 'col-campo'); l.append(etq); const i = mk('input'); i.type = 'text'; i.inputMode = 'decimal'; i.style.width = `${ancho}px`; i.value = String(r4(v)).replace('.', ','); i.addEventListener('change', () => { const x = num(i.value); if (isFinite(x)) f(x); else i.value = String(r4(v)).replace('.', ','); }); l.append(i, unidad); return l; };
     if (sel) {
       const k = sel.anillo, i = sel.i, q = anilloDe(P, k)[i];
       panel.append(mk('b', `Vértice ${i + 1}${k ? ` del hueco ${k}` : ''}`, 'col-sub'));
       panel.append(fila(campo('x', q.x, x => { guardar(); P = moverVertice(P!, k, i, { x, y: q.y }); armar(); api.dibujar(); }, 60), campo('y', q.y, y => { guardar(); P = moverVertice(P!, k, i, { x: q.x, y }); armar(); api.dibujar(); }, 60)));
-      panel.append(fila(
-        boton('Empalme', 'Redondea la esquina con un arco tangente de radio r', () => aplicarAnillo(k, vs => empalme(vs, i, her.r), `Esquina redondeada con radio ${fmt(her.r)} m.`)), campo('r', her.r, x => { her.r = x; }),
-        boton('Chaflán', 'Corta la esquina a la distancia d sobre cada lado', () => aplicarAnillo(k, vs => chaflan(vs, i, her.d), `Esquina cortada a ${fmt(her.d)} m.`)), campo('d', her.d, x => { her.d = x; }),
-        boton('Sustraer', 'Saca de la esquina un rectángulo de d × d (retranqueo)', () => aplicarAnillo(k, vs => sustraerEsquina(vs, i, her.d), `Esquina sustraída ${fmt(her.d)} × ${fmt(her.d)} m.`))));
+      panel.append(grupo('Esta esquina', fila(campo('r', her.r, x => { her.r = x; }), campo('d', her.d, x => { her.d = x; })),
+        fila(boton('Empalme', 'Redondea la esquina con un arco tangente de radio r', () => aplicarAnillo(k, vs => empalme(vs, i, her.r), `Esquina redondeada con radio ${fmt(her.r)} m.`), false, 'redondear'),
+          boton('Chaflán', 'Corta la esquina a la distancia d sobre cada lado', () => aplicarAnillo(k, vs => chaflan(vs, i, her.d), `Esquina cortada a ${fmt(her.d)} m.`), false, 'chaflan'),
+          boton('Sustraer', 'Saca de la esquina un rectángulo de d × d (retranqueo)', () => aplicarAnillo(k, vs => sustraerEsquina(vs, i, her.d), `Esquina sustraída ${fmt(her.d)} × ${fmt(her.d)} m.`), false, 'sustraer'))));
     }
     if (tramo) {
       const k = tramo.i >= 0 ? tramo.anillo : 0, i = tramo.i, md = medidaLado(anilloDe(P, k), i), a0 = anilloDe(P, k)[i];
@@ -322,44 +355,47 @@ export function montarEditorContorno(api: ApiPlanta) {
         campo('largo', md.largo, x => aplicarAnillo(k, vs => ladoCon(vs, i, x), `Lado de ${fmt(x)} m (queda fijo su primer vértice).`), 52),
         campo('ángulo', md.angulo, x => aplicarAnillo(k, vs => ladoCon(vs, i, md.largo, x), `Lado a ${fmt(x)}°.`), 44, '°')));
       else if (a0.b) panel.append(fila(mk('span', `arco de ${fmt(md.largo)} m`), campo('radio', md.radio ?? 0, x => aplicarAnillo(k, vs => arcoConRadio(vs, i, x), `Arco de radio ${fmt(x)} m.`), 52)));
-      if (!a0.b && !a0.c1) panel.append(fila(boton('Dividir', 'Parte el lado en partes iguales (agrega vértices)', () => aplicarAnillo(k, vs => dividirLado(vs, i, her.partes), `Lado dividido en ${her.partes}.`)), campo('en', her.partes, x => { her.partes = Math.max(2, Math.round(x)); }, 32, 'partes'),
-        boton('Arco por radio', 'Convierte el lado en un arco del radio escrito (hacia afuera; el radio es al menos la mitad del lado)', () => aplicarAnillo(k, vs => arcoConRadio(vs, i, her.r), `Arco de radio ${fmt(her.r)} m.`)), campo('r', her.r, x => { her.r = x; })));
+      if (!a0.b && !a0.c1) panel.append(fila(campo('en', her.partes, x => { her.partes = Math.max(2, Math.round(x)); }, 32, 'partes'), boton('Dividir', 'Parte el lado en partes iguales (agrega vértices)', () => aplicarAnillo(k, vs => dividirLado(vs, i, her.partes), `Lado dividido en ${her.partes}.`), false, 'dividir')),
+        fila(campo('r', her.r, x => { her.r = x; }), boton('Arco por radio', 'Convierte el lado en un arco del radio escrito (hacia afuera; el radio es al menos la mitad del lado)', () => aplicarAnillo(k, vs => arcoConRadio(vs, i, her.r), `Arco de radio ${fmt(her.r)} m.`), false, 'arcoRadio')));
     }
     const kSel = sel?.anillo ?? tramo?.anillo ?? 0, nomK = kSel ? `el hueco ${kSel}` : 'el contorno';
     const det = mk('details', '', 'contorno-cad'); det.open = abiertoCad; det.addEventListener('toggle', () => { abiertoCad = det.open; });
     det.append(mk('summary', `Herramientas de CAD (sobre ${nomK})`));
-    det.append(fila(mk('span', 'Curvas:'),
-      boton('Suavizar', 'Curva continua que pasa por todos los vértices: cada lado recto pasa a ser una Bézier tangente a las vecinas (después se ajusta con los puntos de control)', () => aplicarAnillo(kSel, vs => suavizarAnillo(vs), `${nomK} suavizado: cada lado es una Bézier que pasa por los vértices.`)),
-      boton('Enderezar', 'Saca todos los arcos y las Bézier: quedan los lados rectos entre los mismos vértices', () => aplicarAnillo(kSel, vs => enderezarAnillo(vs), `${nomK} con todos los lados rectos.`, false))));
-    det.append(fila(mk('span', 'Todas las esquinas:'),
-      boton('Redondear', 'Empalme de radio r en cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'redondeada', her.r), `Esquinas redondeadas con r = ${fmt(her.r)} m.`)),
-      boton('Chaflán', 'Corta cada esquina saliente a la distancia d', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'chaflan', her.d), `Esquinas en chaflán de ${fmt(her.d)} m.`)),
-      boton('Sustraer', 'Saca d × d de cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'sustraida', her.d), `Esquinas sustraídas ${fmt(her.d)} × ${fmt(her.d)} m.`)),
-      campo('r', her.r, x => { her.r = x; }), campo('d', her.d, x => { her.d = x; })));
-    det.append(fila(
-      boton('Desfasar ⇱', 'Contorno paralelo hacia afuera (arcos exactos, esquinas en inglete)', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? -her.desf : her.desf), `${nomK} agrandado ${fmt(her.desf)} m.`, false)),
-      boton('⇲', 'Contorno paralelo hacia adentro', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? her.desf : -her.desf), `${nomK} achicado ${fmt(her.desf)} m.`, false)),
-      campo('d', her.desf, x => { her.desf = Math.abs(x); })));
-    det.append(fila(
-      boton('Simetría ↔', 'Espeja el contorno con un eje vertical por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'x', centroAnillo(kSel)), 'Espejado.', false)),
-      boton('↕', 'Eje horizontal por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'y', centroAnillo(kSel)), 'Espejado.', false))));
-    det.append(fila(
-      boton('Girar', 'Gira el contorno alrededor de su baricentro (positivo: antihorario)', () => aplicarAnillo(kSel, vs => girarAnillo(vs, her.giro, centroAnillo(kSel)), `Girado ${fmt(her.giro)}°.`)), campo('', her.giro, x => { her.giro = x; }, 40, '°'),
-      boton('Escalar', 'Agranda o achica el contorno desde su baricentro', () => aplicarAnillo(kSel, vs => (her.escala > 0 ? escalarAnillo(vs, her.escala, centroAnillo(kSel)) : { error: 'El factor tiene que ser mayor que cero.' }), `Escalado × ${fmt(her.escala)}.`, false)), campo('×', her.escala, x => { her.escala = x; }, 40, '')));
+    // ordenadas de lo más común (las esquinas) a lo menos: en cada grupo, primero las medidas y después las acciones
+    det.append(grupo('Todas las esquinas salientes',
+      fila(campo('r', her.r, x => { her.r = x; }), campo('d', her.d, x => { her.d = x; })),
+      fila(boton('Redondear', 'Empalme de radio r en cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'redondeada', her.r), `Esquinas redondeadas con r = ${fmt(her.r)} m.`), false, 'redondear'),
+        boton('Chaflán', 'Corta cada esquina saliente a la distancia d', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'chaflan', her.d), `Esquinas en chaflán de ${fmt(her.d)} m.`), false, 'chaflan'),
+        boton('Sustraer', 'Saca d × d de cada esquina saliente', () => aplicarAnillo(kSel, vs => tratarEsquinas(vs, 'sustraida', her.d), `Esquinas sustraídas ${fmt(her.d)} × ${fmt(her.d)} m.`), false, 'sustraer'))));
+    det.append(grupo('Curvas',
+      fila(boton('Suavizar', 'Curva continua que pasa por todos los vértices: cada lado recto pasa a ser una Bézier tangente a las vecinas (después se ajusta con los puntos de control)', () => aplicarAnillo(kSel, vs => suavizarAnillo(vs), `${nomK} suavizado: cada lado es una Bézier que pasa por los vértices.`), false, 'suavizar'),
+        boton('Enderezar', 'Saca todos los arcos y las Bézier: quedan los lados rectos entre los mismos vértices', () => aplicarAnillo(kSel, vs => enderezarAnillo(vs), `${nomK} con todos los lados rectos.`, false), false, 'enderezar'))));
+    det.append(grupo('Contorno paralelo',
+      fila(campo('d', her.desf, x => { her.desf = Math.abs(x); }),
+        boton('Afuera', 'Contorno paralelo hacia afuera, a la distancia d (arcos exactos, esquinas en inglete)', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? -her.desf : her.desf), `${nomK} agrandado ${fmt(her.desf)} m.`, false), false, 'afuera'),
+        boton('Adentro', 'Contorno paralelo hacia adentro, a la distancia d', () => aplicarAnillo(kSel, vs => desfasarAnillo(vs, kSel ? her.desf : -her.desf), `${nomK} achicado ${fmt(her.desf)} m.`, false), false, 'adentro'))));
+    det.append(grupo('Mover la forma (desde su baricentro)',
+      fila(boton('', 'Simetría con un eje vertical por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'x', centroAnillo(kSel)), 'Espejado.', false), false, 'espejoX'),
+        boton('', 'Simetría con un eje horizontal por su baricentro', () => aplicarAnillo(kSel, vs => espejarAnillo(vs, 'y', centroAnillo(kSel)), 'Espejado.', false), false, 'espejoY'),
+        campo('', her.giro, x => { her.giro = x; }, 40, '°'),
+        boton('Girar', 'Gira el contorno alrededor de su baricentro (positivo: antihorario)', () => aplicarAnillo(kSel, vs => girarAnillo(vs, her.giro, centroAnillo(kSel)), `Girado ${fmt(her.giro)}°.`), false, 'girar')),
+      fila(campo('×', her.escala, x => { her.escala = x; }, 40, ''),
+        boton('Escalar', 'Agranda o achica el contorno desde su baricentro', () => aplicarAnillo(kSel, vs => (her.escala > 0 ? escalarAnillo(vs, her.escala, centroAnillo(kSel)) : { error: 'El factor tiene que ser mayor que cero.' }), `Escalado × ${fmt(her.escala)}.`, false), false, 'escalar'))));
     const selForma = mk('select'); ([['rect', 'Rectángulo'], ['circulo', 'Círculo'], ['poligono', 'Polígono regular'], ['elipse', 'Elipse']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = her.forma === v; selForma.append(o); });
     selForma.addEventListener('change', () => { her.forma = selForma.value as typeof her.forma; armar(); });
-    det.append(fila(mk('span', 'Forma:'), selForma, ...(her.forma === 'poligono' ? [campo('lados', her.lados, x => { her.lados = Math.max(3, Math.round(x)); }, 32, '')] : [])));
-    det.append(fila(
-      boton(`Cambiar ${nomK}`, 'Reemplaza el contorno por la forma elegida, con el mismo centro y la misma caja', () => aplicarAnillo(kSel, () => formaEn(kSel, her.forma), `${nomK}: ${selForma.selectedOptions[0].textContent?.toLowerCase()}.`)),
+    det.append(grupo('Reemplazar por una forma',
+      fila(selForma, ...(her.forma === 'poligono' ? [campo('lados', her.lados, x => { her.lados = Math.max(3, Math.round(x)); }, 32, '')] : [])),
+      fila(
+      boton(`Cambiar ${nomK}`, 'Reemplaza el contorno por la forma elegida, con el mismo centro y la misma caja', () => aplicarAnillo(kSel, () => formaEn(kSel, her.forma), `${nomK}: ${selForma.selectedOptions[0].textContent?.toLowerCase()}.`), false, 'forma'),
       ...(destino ? [] : [boton('Hueco con esa forma', 'Agrega un hueco con la forma elegida en el medio', () => {
         if (!P) return; guardar(); const k = propiedades(P), ax = (k.x1 - k.x0) * 0.4, ay = (k.y1 - k.y0) * 0.4;
         const base = rectangulo(k.xg, k.yg, ax, ay), h = her.forma === 'rect' ? base : her.forma === 'circulo' ? circulo(k.xg, k.yg, Math.min(ax, ay) / 2) : her.forma === 'elipse' ? elipse(k.xg, k.yg, ax / 2, ay / 2) : poligonoRegular(k.xg, k.yg, Math.min(ax, ay) / 2, her.lados);
         P.huecos = [...(P.huecos ?? []), h]; if (her.forma !== 'rect') ortogonal = false; armar(); api.dibujar();
-      })])));
+      }, false, 'hueco')]))));
     det.append(mk('p', 'Shift al arrastrar un vértice: el lado va de a 15°. Ctrl+Z / Ctrl+Y deshacen y rehacen dentro del contorno.', 'col-nota'));
     panel.append(det);
     panel.append(fila(
-      boton('Deshacer', 'Ctrl+Z', () => deshacer(), false), boton('Rehacer', 'Ctrl+Y', () => deshacer(true), false)));
+      boton('Deshacer', 'Ctrl+Z', () => deshacer(), false, 'deshacer'), boton('Rehacer', 'Ctrl+Y', () => deshacer(true), false, 'rehacer')));
     if (destino) panel.append(fila(...(sel && !ortogonal ? [boton('Borrar vértice', 'También: Supr', borrarVertice)] : [])));
     else panel.append(fila(
       boton('Agregar hueco', 'Un hueco rectangular en el medio (se edita igual que el contorno)', () => {

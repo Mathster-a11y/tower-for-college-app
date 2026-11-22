@@ -20,6 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
+import { llaveEnLienzo, type Llave } from './llaveColor';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
@@ -50,6 +51,13 @@ let det: CorridaDetalle | null = null;
 /** marcando el recuadro en el túnel (arrastrando) */
 let marcando = false, arrastre: { x0: number; y0: number; x1: number; y1: number } | null = null;
 let lienzoDet: HTMLCanvasElement | null = null, panelDet: H | null = null;
+/**
+ * zoom del túnel: z (1 = todo el túnel) y la esquina de arriba a la izquierda de lo que se ve, en píxeles del lienzo
+ * sin zoom. Rueda o botones para acercar, arrastrar para moverse, doble clic para volver a ver todo.
+ */
+const zoom = { z: 1, ox: 0, oy: 0 };
+/** ver la ventana de detalle también arriba, como recuadro sobre el túnel */
+let verRecuadroArriba = true;
 
 interface Corrida {
   clave: string; geo: Geometria2D; nu: number; cs: number; worker: Worker;
@@ -228,7 +236,10 @@ function dibujar() {
   auxiliar!.getContext('2d')!.putImageData(imagen, 0, 0);
   const g = cv.getContext('2d')!;
   const s = cv.width / nx;
-  g.imageSmoothingEnabled = true;
+  acotarZoom(cv);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  g.setTransform(zoom.z, 0, 0, zoom.z, -zoom.ox * zoom.z, -zoom.oy * zoom.z);
+  g.imageSmoothingEnabled = zoom.z < 3;                              // de cerca se ven las celdas, como son
   g.drawImage(auxiliar!, 0, 0, cv.width, ny * s);
   // Cp promedio sobre el contorno: azul donde empuja (comprime), rojo donde succiona (tracciona)
   if (cfg.cpContorno && c.perim.muestras > 0) {
@@ -243,20 +254,80 @@ function dibujar() {
   // el recuadro de la ventana de detalle (o el que se está marcando)
   const rec = arrastre ? { x0: Math.min(arrastre.x0, arrastre.x1), y0: Math.min(arrastre.y0, arrastre.y1), w: Math.abs(arrastre.x1 - arrastre.x0), h: Math.abs(arrastre.y1 - arrastre.y0) } : cfg.ventana;
   if (rec) {
-    g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 2; g.setLineDash([6, 4]);
+    g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 2 / zoom.z; g.setLineDash([6 / zoom.z, 4 / zoom.z]);
     g.strokeRect(rec.x0 * s, (ny - rec.y0 - rec.h) * s, rec.w * s, rec.h * s); g.restore();
   }
   dibujarDetalle(c, rhoRef);
   if (cfg.humo) {
     g.fillStyle = css('--ink2', '#556'); g.globalAlpha = 0.55;
     const hm = c.humo;
-    for (let k = 0; k < hm.length; k += 2) g.fillRect(hm[k] * s - 1, (ny - hm[k + 1]) * s - 1, 2, 2);
+    const t = 2 / zoom.z;
+    for (let k = 0; k < hm.length; k += 2) g.fillRect(hm[k] * s - t / 2, (ny - hm[k + 1]) * s - t / 2, t, t);
     g.globalAlpha = 1;
   }
+  // lo que no se mueve con el zoom: el recuadro de la ventana arriba, la llave de colores y el aumento
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
+  llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+}
+
+/** la llave de colores de la vista elegida (la misma en el túnel y en la ventana) */
+function llaveVista(D: number): Llave {
+  const fondo = css('--lienzo', '#ffffff'), sol = css('--ink', '#223344');
+  const torre = { color: sol, texto: 'torre' };
+  const cp = cfg.cpContorno ? [{ color: css('--compresion', '#378add'), texto: 'empuja', forma: 'punto' as const }, { color: css('--traccion', '#e24b4a'), texto: 'succiona (Cp en el contorno)', forma: 'punto' as const }] : [];
+  if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...cp] };
+  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: [fondo, css('--deformada', '#1d9e75')], marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']], extras: [torre, ...cp] };
+  void D;
+  return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...cp.length ? [cp[0], cp[1]] : []] };
+}
+
+/** que el zoom no deje ver afuera del túnel */
+function acotarZoom(cv: HTMLCanvasElement) {
+  zoom.z = Math.max(1, Math.min(12, zoom.z));
+  zoom.ox = Math.max(0, Math.min(cv.width - cv.width / zoom.z, zoom.ox));
+  zoom.oy = Math.max(0, Math.min(cv.height - cv.height / zoom.z, zoom.oy));
+}
+/** acerca o aleja alrededor de un punto del lienzo (px, en coordenadas de lo que se ve) */
+function acercar(cv: HTMLCanvasElement, f: number, px = cv.width / 2, py = cv.height / 2) {
+  const wx = zoom.ox + px / zoom.z, wy = zoom.oy + py / zoom.z;
+  zoom.z *= f; acotarZoom(cv);
+  zoom.ox = wx - px / zoom.z; zoom.oy = wy - py / zoom.z; acotarZoom(cv);
+  cv.classList.toggle('arrastrable', zoom.z > 1.001 && !marcando);
+  dibujar(); actualizarAumento();
+}
+let aumento: HTMLElement | null = null;
+const actualizarAumento = () => { if (aumento) aumento.textContent = zoom.z > 1.001 ? `× ${fmt(zoom.z, 1)}` : 'todo'; };
+
+/**
+ * la ventana de detalle también arriba, en la esquina del túnel más lejos del recuadro, con líneas que la unen con él
+ * (lo de abajo, la ventana grande con sus mediciones, sigue igual)
+ */
+function recuadroArriba(g: CanvasRenderingContext2D, cv: HTMLCanvasElement, nx: number, ny: number, s: number) {
+  const v = cfg.ventana!, d = copiaDet!;
+  // el recuadro en pantalla (con el zoom)
+  const a = { x: (v.x0 * s - zoom.ox) * zoom.z, y: ((ny - v.y0 - v.h) * s - zoom.oy) * zoom.z };
+  const b = { x: a.x + v.w * s * zoom.z, y: a.y + v.h * s * zoom.z };
+  const W = Math.min(cv.width * 0.34, 320), Hh = (W * d.height) / d.width, m = 8;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  // la esquina más lejos del recuadro (arriba a la derecha si se puede)
+  const esquinas = [[cv.width - W - m, m], [m, m], [cv.width - W - m, cv.height - Hh - m - 60]] as const;
+  const [ix, iy] = esquinas.reduce((best, e) => (Math.hypot(e[0] + W / 2 - cx, e[1] + Hh / 2 - cy) > Math.hypot(best[0] + W / 2 - cx, best[1] + Hh / 2 - cy) ? e : best), esquinas[0]);
+  g.save();
+  g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1; g.setLineDash([4, 4]); g.globalAlpha = 0.8;
+  g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(ix, iy); g.moveTo(b.x, a.y); g.lineTo(ix + W, iy); g.moveTo(a.x, b.y); g.lineTo(ix, iy + Hh); g.moveTo(b.x, b.y); g.lineTo(ix + W, iy + Hh); g.stroke();
+  g.setLineDash([]); g.globalAlpha = 1;
+  g.drawImage(d, ix, iy, W, Hh);
+  g.lineWidth = 2; g.strokeRect(ix, iy, W, Hh);
+  g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'top';
+  const rot = `ventana ×${det!.geo.r}`, tw = g.measureText(rot).width;
+  g.fillStyle = css('--elegido', '#ef9f27'); g.fillRect(ix, iy, tw + 10, 16); g.fillStyle = '#1b1b1b'; g.fillText(rot, ix + 5, iy + 2);
+  g.restore();
+  void nx;
 }
 
 /** la ventana fina, con los mismos colores que el túnel */
-let imgDet: ImageData | null = null, auxDet: HTMLCanvasElement | null = null;
+let imgDet: ImageData | null = null, auxDet: HTMLCanvasElement | null = null, copiaDet: HTMLCanvasElement | null = null;
 function dibujarDetalle(c: Corrida, rhoRef: number) {
   const cv = lienzoDet, d = c.campo?.det;
   if (!cv || !cv.isConnected || !det || !d || d.nx !== det.geo.nx || d.ny !== det.geo.ny) return;
@@ -299,6 +370,11 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
   for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.stroke(); }
   g.restore();
+  // una copia sin la llave, para el recuadro de arriba (ahí la llave quedaría ilegible)
+  if (!copiaDet) copiaDet = document.createElement('canvas');
+  if (copiaDet.width !== cv.width || copiaDet.height !== cv.height) { copiaDet.width = cv.width; copiaDet.height = cv.height; }
+  copiaDet.getContext('2d')!.drawImage(cv, 0, 0);
+  llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(170, cv.width * 0.4), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   actualizarLecturaDetalle(c);
 }
 
@@ -348,12 +424,46 @@ function tamanoVentana(geo: Geometria2D): H {
     h('p', { class: 'nota chica' }, 'Más chico el recuadro, más fino el contorno que se ve y se simula, con un costo parecido. Pero el viento que entra por las orillas sigue teniendo la definición del túnel: un recuadro muy chico ve sobre todo lo que le llega de afuera. Conviene que abarque la esquina y un poco de aire alrededor (de medio ancho de torre para arriba).'));
 }
 
+/** los botones de zoom encima del túnel */
+function botonesZoom(cv: HTMLCanvasElement): H {
+  const b = (t: string, tit: string, f: () => void) => { const x = h('button', { type: 'button', title: tit, 'aria-label': tit }, t); x.addEventListener('click', f); return x; };
+  aumento = h('span', {}); actualizarAumento();
+  const chk = h('label', { class: 'zoom-chk', title: 'La ventana de detalle también arriba, sobre el túnel' }, h('input', { type: 'checkbox', ...(verRecuadroArriba ? { checked: '' } : {}) }), ' ventana arriba');
+  chk.querySelector('input')!.addEventListener('change', e => { verRecuadroArriba = (e.target as HTMLInputElement).checked; dibujar(); });
+  return h('div', { class: 'zoom-tunel' },
+    b('+', 'Acercar (también con la rueda)', () => acercar(cv, 1.5)), b('−', 'Alejar', () => acercar(cv, 1 / 1.5)),
+    b('⤢', 'Ver todo el túnel (también: doble clic)', () => { zoom.z = 1; zoom.ox = zoom.oy = 0; acercar(cv, 1); }), aumento,
+    ...(det ? [chk] : []));
+}
+
 /** marcar el recuadro arrastrando sobre el túnel */
 function prepararMarcado(cv: HTMLCanvasElement) {
-  const aRed = (e: PointerEvent) => {
-    const c = corrida!, b = cv.getBoundingClientRect();
-    return { x: ((e.clientX - b.left) / b.width) * c.geo.nx, y: c.geo.ny - ((e.clientY - b.top) / b.height) * c.geo.ny };
+  /** del puntero a la red (con el zoom) */
+  const aRed = (e: PointerEvent | MouseEvent) => {
+    const c = corrida!, b = cv.getBoundingClientRect(), k = cv.width / b.width;
+    const bx = zoom.ox + ((e.clientX - b.left) * k) / zoom.z, by = zoom.oy + ((e.clientY - b.top) * k) / zoom.z, s = cv.width / c.geo.nx;
+    return { x: bx / s, y: c.geo.ny - by / s };
   };
+  // zoom: rueda (alrededor del puntero), arrastrar para moverse, doble clic para ver todo
+  cv.addEventListener('wheel', e => {
+    if (!corrida && !repro) return;
+    e.preventDefault();
+    const b = cv.getBoundingClientRect(), k = cv.width / b.width;
+    acercar(cv, e.deltaY < 0 ? 1.2 : 1 / 1.2, (e.clientX - b.left) * k, (e.clientY - b.top) * k);
+  }, { passive: false });
+  cv.addEventListener('dblclick', () => { if (marcando) return; zoom.z = 1; zoom.ox = zoom.oy = 0; acercar(cv, 1); });
+  let paneo: { x: number; y: number; ox: number; oy: number } | null = null;
+  cv.addEventListener('pointerdown', e => {
+    if (marcando || zoom.z <= 1.001) return;
+    paneo = { x: e.clientX, y: e.clientY, ox: zoom.ox, oy: zoom.oy }; cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!paneo) return;
+    const k = cv.width / cv.getBoundingClientRect().width;
+    zoom.ox = paneo.ox - ((e.clientX - paneo.x) * k) / zoom.z; zoom.oy = paneo.oy - ((e.clientY - paneo.y) * k) / zoom.z; dibujar();
+  });
+  const finPaneo = () => { paneo = null; };
+  cv.addEventListener('pointerup', finPaneo); cv.addEventListener('pointercancel', finPaneo);
   cv.addEventListener('pointerdown', e => {
     if (!marcando || !corrida || repro) return;
     e.preventDefault(); cv.setPointerCapture(e.pointerId);
@@ -396,7 +506,7 @@ export function centroTunel(c: H, tam: Tam) {
       if (c.de === 'losa' && otros.length) return [h('p', { class: 'aviso-linea' }, `En ${ne.n.nombre} el viento choca con la losa: la carpintería está dibujada en ${otros.join(', ')}. Elegí ese corte o, en Diseño → Contornos → Carpintería, «Copiar a todos los niveles».`)];
       return [h('p', { class: 'llave' }, `Contorno en el túnel: ${c.de === 'carpintería' ? `la carpintería${(p.niveles[ne.i].carpinteria?.length ?? 0) >= 3 ? ` de ${ne.n.nombre}` : ' (heredada de otro nivel)'}` : 'la losa (no hay carpintería dibujada)'}.`)];
     })(),
-    h('div', { class: 'tunel-marco' }, lienzo),
+    h('div', { class: 'tunel-marco' }, lienzo, botonesZoom(lienzo)),
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
