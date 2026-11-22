@@ -1669,3 +1669,5 @@ details.como-leer li { margin: 2px 0; }
 .ayuda-texto[hidden] { display: none; }
 .ayuda-texto ul { margin: 0; padding-left: 18px; }
 @media (pointer: coarse) { .ayuda-boton { width: 32px; height: 32px; min-height: 32px; } }
+/* llaves para leer los dibujos: siempre a la vista, junto al dibujo */
+#centro-dibujos .llave { color: var(--ink2); font-size: 12.5px; margin: 2px 0; }

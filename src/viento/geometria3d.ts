@@ -42,9 +42,10 @@ function dentro(p: P[], x: number, y: number): boolean {
 
 export function geometria3D(o: OpcionesGeo3): Geometria3D {
   const { nx, ny, nz } = o;
-  const niv = o.niveles.filter(n => n.cota > 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
+  const niv = o.niveles.filter(n => n.cota >= 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
   if (!niv.length) throw new Error('No hay niveles con planta sobre PB.');
   const H = niv[niv.length - 1].cota;
+  if (!(H > 0)) throw new Error('No hay niveles con planta sobre PB.');
   // giro: el viento pasa a +x (viento A sopla hacia +y: −90°; viento B, hacia +x: 0°), más el giro extra
   const th = ((o.dir === 'A' ? -90 : 0) - (o.angulo ?? 0)) * (Math.PI / 180), co = Math.cos(th), si = Math.sin(th);
   const rot = niv.map(n => ({ cota: n.cota, pol: n.silueta.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
@@ -66,8 +67,9 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   for (let z = 1; z < nz; z++) {
     const h = (z - 0.5) / escala;                                            // altura del centro de la celda (m)
     if (h > H) break;
-    // la losa que cubre esta altura: el primer nivel con cota ≥ h
-    const n = pols.find(q => q.cota >= h - 1e-9);
+    // cada piso con la planta de su nivel (como se dibuja: «Planta: PB» es el piso de PB a 1º); debajo del primer nivel,
+    // la del primero
+    const n = [...pols].reverse().find(q => q.cota <= h + 1e-9) ?? pols[0];
     if (!n) continue;
     const bx0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...n.pol.map(q => q.x))));
     const by0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...n.pol.map(q => q.y))));

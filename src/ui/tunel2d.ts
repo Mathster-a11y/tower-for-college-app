@@ -45,11 +45,13 @@ const anotadas: { forma: string; Cd: number; Cl: number; St: number | null; Vcr:
 function niveles() {
   const p = estado.proyecto;
   const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-  return p.niveles.slice(0, iPB + 1).map((n, i) => ({ n, i })).filter(x => x.n.cota > (p.niveles[iPB]?.cota ?? 0));
+  // de PB a la azotea: cada corte es el piso de ese nivel, con su carpintería (o su losa si no hay)
+  return p.niveles.slice(0, iPB + 1).map((n, i) => ({ n, i })).filter(x => x.n.cota >= (p.niveles[iPB]?.cota ?? 0));
 }
 function nivelElegido() {
-  const ns = niveles();
-  return ns.find(x => x.n.nombre === cfg.nivel) ?? ns[Math.floor(ns.length / 2)] ?? null;
+  const ns = niveles(), p = estado.proyecto;
+  // sin elegir: el primer nivel con carpintería propia (lo que se está diseñando); si no hay, uno a media altura
+  return ns.find(x => x.n.nombre === cfg.nivel) ?? ns.find(x => (p.niveles[x.i].carpinteria?.length ?? 0) >= 3) ?? ns[Math.floor(ns.length / 2)] ?? null;
 }
 
 function claveCorrida(): string {
@@ -193,8 +195,16 @@ export function centroTunel(c: H, tam: Tam) {
   const reRed = (U0 * cr.geo.D) / cr.nu, reReal = (estimarV() * cr.geo.anchoM) / 1.5e-5;
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
+    ...(() => {
+      // qué contorno está en el túnel: la carpintería (propia o heredada) o la losa, y si hay carpintería en otro piso
+      const ne = nivelElegido(); if (!ne) return [];
+      const p = estado.proyecto, c = contornoAlViento(p, ne.i), otros = p.niveles.filter(n => (n.carpinteria?.length ?? 0) >= 3).map(n => n.nombre);
+      if (c.de === 'losa' && otros.length) return [h('p', { class: 'aviso-linea' }, `En ${ne.n.nombre} el viento choca con la losa: la carpintería está dibujada en ${otros.join(', ')}. Elegí ese corte o, en Diseño → Contornos → Carpintería, «Copiar a todos los niveles».`)];
+      return [h('p', { class: 'llave' }, `Contorno en el túnel: ${c.de === 'carpintería' ? `la carpintería${(p.niveles[ne.i].carpinteria?.length ?? 0) >= 3 ? ` de ${ne.n.nombre}` : ' (heredada de otro nivel)'}` : 'la losa (no hay carpintería dibujada)'}.`)];
+    })(),
     h('div', { class: 'tunel-marco' }, lienzo),
-    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no. ${cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'}`),
+    h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
   if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2) { cr.cuadrosSinMirar = 0; correr(true); }
   dibujar();
@@ -220,7 +230,7 @@ export function panelTunel(c: H) {
   c.append(h('div', { class: 'fila-acciones' }, play, reini));
   const d = seccion('Túnel').cuerpo; c.append(d.parentElement!);
   d.append(h('div', { class: 'grilla2' },
-    sel('Corte en planta', ns.map(x => [x.n.nombre, `${x.n.nombre} (${fmt(x.n.cota, 1)} m)`] as [string, string]), nivelElegido()?.n.nombre ?? '', x => { cfg.nivel = x; }),
+    sel('Corte en planta', ns.map(x => [x.n.nombre, `${x.n.nombre} (${fmt(x.n.cota, 1)} m) · ${contornoAlViento(estado.proyecto, x.i).de}${(estado.proyecto.niveles[x.i].carpinteria?.length ?? 0) >= 3 ? ' propia' : ''}`] as [string, string]), nivelElegido()?.n.nombre ?? '', x => { cfg.nivel = x; }),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }),
     sel('Reynolds', Object.entries(RE).map(([k, v]) => [k, v.texto] as [string, string]), cfg.re, x => { cfg.re = x; }),
     sel('Resolución', Object.entries(RES).map(([k, v]) => [k, v.texto] as [string, string]), cfg.res, x => { cfg.res = x; }),

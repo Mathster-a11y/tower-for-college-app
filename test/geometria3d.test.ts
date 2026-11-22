@@ -22,7 +22,8 @@ describe('la torre en celdas', () => {
     expect(g.hC).toBeLessThanOrEqual(Math.ceil(63 / 1.5));
   });
   it('un retiro arriba: la planta de arriba es más chica', () => {
-    const niveles: NivelPlanta[] = [{ cota: 30, silueta: rect(20, 20) }, { cota: 60, silueta: rect(10, 10) }];
+    // cada piso con la planta de su nivel: de 0 a 30 m la de PB, de 30 a 60 m la del nivel 30 (la azotea cierra arriba)
+    const niveles: NivelPlanta[] = [{ cota: 0, silueta: rect(20, 20) }, { cota: 30, silueta: rect(10, 10) }, { cota: 60, silueta: rect(10, 10) }];
     const g = geometria3D({ niveles, dir: 'B', nx: 120, ny: 60, nz: 60 });
     const area = (z: number) => { let n = 0; for (let y = 0; y < g.ny; y++) for (let x = 0; x < g.nx; x++) n += g.solido[(z * g.ny + y) * g.nx + x]; return n / g.escala ** 2; };
     // con unas 13 celdas por lado, el error de pasar a celdas es de una fila

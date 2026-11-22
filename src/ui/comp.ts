@@ -213,21 +213,37 @@ export function arcoMomento(cx: number, cy: number, r: number, a0: number, a1: n
 }
 
 /**
- * Explicaciones del área central (dibujos y gráficos) detrás de un botón «?»: cada texto explicativo largo (p.nota) y
- * cada «Cómo leer este gráfico» se pliega; los que están seguidos van juntos en el mismo botón. Lo abierto se recuerda
- * mientras la página está abierta. No toca las fórmulas ni el panel de la izquierda (sus notas siguen siempre a la vista).
+ * Explicaciones del área central (dibujos y gráficos) detrás de un botón «?»: cada párrafo explicativo largo (p.nota) se
+ * pliega; los que están seguidos van juntos en el mismo botón. Las llaves para leer los diagramas quedan siempre a la
+ * vista junto a ellos: las leyendas, los «Cómo leer este gráfico», lo marcado como .llave y, dentro de cada párrafo, las
+ * oraciones que dicen qué es cada color o trazo. Lo abierto se recuerda mientras la página está abierta. No toca las
+ * fórmulas ni el panel de la izquierda (sus notas siguen siempre a la vista).
  */
 const abiertas = new Set<string>();
+/** una oración que explica cómo leer el dibujo (colores, trazos, franjas): no se esconde */
+export const esLlave = (t: string) => t.length <= 170 && /\b(colou?r(es)?|rojo|roja|azul|verde|violeta|naranja|gris|amarill[oa]|punteada?s?|punteados?|llena|en trazos|sombreada|franja (rosada|sombreada|gris|verde)|banda|grosor)\b/i.test(t);
 export function plegarExplicaciones(raiz: HTMLElement) {
-  const notas = [...raiz.querySelectorAll<HTMLElement>('p.nota, details.como-leer')]
-    .filter(e => !e.closest('.formula, table, figcaption, .gr-zoom, .gr-acomodos, .ayuda-plegable, .kpis, .fila-acciones, .seg, svg') && (e.tagName === 'DETAILS' || (e.textContent ?? '').trim().length > 70));
+  const notas = [...raiz.querySelectorAll<HTMLElement>('p.nota')]
+    .filter(e => !e.classList.contains('llave') && !e.closest('.formula, table, figcaption, .gr-zoom, .gr-acomodos, .ayuda-plegable, .kpis, .fila-acciones, .seg, svg, details') && (e.textContent ?? '').trim().length > 70);
   notas.forEach(e => {
+    // las oraciones que son llave se separan y quedan a la vista (solo en párrafos de texto puro)
+    let llave: HTMLElement | null = null;
+    if (!e.children.length) {
+      const oraciones = (e.textContent ?? '').split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ«(¿])/);
+      const si = oraciones.filter(esLlave), no = oraciones.filter(o => !esLlave(o));
+      if (!no.join(' ').trim()) return;                                  // todo es llave: queda como está
+      if (si.length) {
+        llave = document.createElement('p'); llave.className = 'nota llave'; llave.textContent = si.join(' ');
+        e.textContent = no.join(' ');
+        if (e.textContent.trim().length <= 70) { e.after(llave); return; }     // lo que queda es corto: no hace falta el «?»
+      }
+    }
     const clave = (e.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const anterior = e.previousElementSibling as HTMLElement | null;
-    let cuerpo: HTMLElement;
-    if (anterior?.classList.contains('ayuda-plegable')) cuerpo = anterior.querySelector<HTMLElement>(':scope > .ayuda-texto')!;
+    let cuerpo: HTMLElement, caja: HTMLElement;
+    if (anterior?.classList.contains('ayuda-plegable')) { caja = anterior; cuerpo = anterior.querySelector<HTMLElement>(':scope > .ayuda-texto')!; }
     else {
-      const caja = document.createElement('div'); caja.className = 'ayuda-plegable';
+      caja = document.createElement('div'); caja.className = 'ayuda-plegable';
       const b = document.createElement('button'); b.type = 'button'; b.className = 'ayuda-boton'; b.textContent = '?';
       cuerpo = document.createElement('div'); cuerpo.className = 'ayuda-texto';
       const abierta = abiertas.has(clave);
@@ -242,7 +258,7 @@ export function plegarExplicaciones(raiz: HTMLElement) {
       });
       e.before(caja); caja.append(b, cuerpo);
     }
-    if (e.tagName === 'DETAILS') { [...e.children].filter(x => x.tagName !== 'SUMMARY').forEach(x => cuerpo.append(x)); e.remove(); }
-    else cuerpo.append(e);
+    cuerpo.append(e);
+    if (llave) caja.after(llave);
   });
 }
