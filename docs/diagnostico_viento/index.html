@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico de los túneles de viento</title>
+<style>
+  :root { --tinta: #1f2328; --gris: #5b6472; --suave: #eef1f5; --acento: #1565c0; --ok: #2e7d32; --mal: #c62828; --aviso: #8a5f00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--tinta); font: 15px/1.55 "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 21px; margin: 38px 0 8px; border-bottom: 2px solid var(--suave); padding-bottom: 4px; }
+  h3 { font-size: 17px; margin: 24px 0 6px; } p, li { max-width: 78ch; } .sub { color: var(--gris); margin: 0 0 18px; }
+  figure { margin: 14px 0; } figure img { max-width: 100%; border: 1px solid #dde2e8; border-radius: 6px; display: block; }
+  figcaption { color: var(--gris); font-size: 13px; margin-top: 4px; }
+  .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .fila3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fila3 figure { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 10px 0; } th, td { border-bottom: 1px solid #e3e7ec; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--suave); font-weight: 600; } td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .caja { background: var(--suave); border-radius: 8px; padding: 12px 16px; margin: 12px 0; } .caja.ok { background: #e8f5e9; } .caja.aviso { background: #fff7e0; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--suave); color: var(--gris); }
+  .tag.verde { background: #e8f5e9; color: var(--ok); } .tag.azul { background: #e3f2fd; color: var(--acento); }
+  a { color: var(--acento); } code { background: var(--suave); padding: 0 4px; border-radius: 3px; font-size: 13px; }
+  @media (max-width: 700px) { .fila3 { grid-template-columns: 1fr; } }
+  @media print { main { max-width: none; padding: 0 6mm; } h2 { break-before: auto; } figure, table, .caja { break-inside: avoid; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Diagnóstico de los túneles de viento</h1>
+<p class="sub">Torre 3D · túnel 2D y túnel 3D · 22 de noviembre de 2026. Capturas y mediciones hechas con la app (ejemplo de la guía 2024, 20 pisos, planta 20 × 16 m). Lo que queda propuesto <b>no está implementado</b>: es para decidir.</p>
+
+<div class="caja">
+<b>En pocas palabras</b>
+<ul>
+  <li><b>Ya arreglado:</b> la silueta piso por piso. Una carpintería dibujada en PB no llegaba a los túneles: el corte no ofrecía PB, el 3D usaba la planta del nivel de arriba de cada piso y la carpintería solo se heredaba hacia abajo. Ahora cada piso usa la planta de su nivel, PB entra al corte, la carpintería se hereda también desde abajo y hay un botón «Copiar a todos los niveles».</li>
+  <li><b>El límite más grande es la resolución:</b> 0,8 a 1,1 m por celda en el 2D y 1,5 a 2,5 m en el 3D. Las curvas se vuelven escaleras y las ochavas chicas desaparecen.</li>
+  <li><b>La medición ya distingue formas:</b> con esquinas sustraídas o carpintería curva el arrastre baja 19–20 % y la sacudida lateral 22–25 % contra las esquinas vivas. Pero los valores absolutos están inflados por un canal angosto (bloqueo) y por el Reynolds bajo.</li>
+  <li><b>Lo que más rinde para mejorar:</b> paredes exactas (rebote interpolado) + colisión TRT, un canal más ancho, el túnel piso por piso con el 2D, y un 3D en el procesador para computadoras sin placa de video (mide 8 veces más que la placa emulada).</li>
+</ul>
+</div>
+
+<h2>1. Cómo funcionan hoy</h2>
+<table>
+<tr><th></th><th>Túnel 2D</th><th>Túnel 3D</th></tr>
+<tr><td>Método</td><td>Lattice Boltzmann D2Q9, BGK + Smagorinsky</td><td>Lattice Boltzmann D3Q19, BGK + Smagorinsky</td></tr>
+<tr><td>Dónde corre</td><td>procesador, un núcleo (worker)</td><td>placa de video (WebGPU)</td></tr>
+<tr><td>Geometría</td><td>un corte en planta: la carpintería del piso, o su losa</td><td>todos los pisos, cada uno con su planta</td></tr>
+<tr><td>Grilla</td><td>14 / 20 / 30 celdas por ancho; canal de 16 × 7 anchos</td><td>96×48×40 · 160×80×64 · 256×128×96</td></tr>
+<tr><td>Celda (torre de 20 × 16 m, 64 m)</td><td>1,0 · 0,8 · 0,5 m (según el ancho transversal)</td><td>2,46 · 1,5 · 1,0 m (manda la altura)</td></tr>
+<tr><td>Paredes</td><td colspan="2">rebote a mitad de camino: la pared es el borde de las celdas (escalera)</td></tr>
+<tr><td>Reynolds</td><td>150 · 1 000 · 20 000 (el real: ≈ 78 millones)</td><td>≈ 5 000</td></tr>
+<tr><td>Velocidad medida acá</td><td class="n">≈ 17 M celdas/s (un núcleo, JavaScript)</td><td class="n">≈ 2 M celdas/s (placa emulada por software, SwiftShader)</td></tr>
+<tr><td>Qué entrega</td><td>Cd, Cl eficaz, Strouhal, V crítica, tabla para comparar formas</td><td>Cp medio por cara contra el reglamento, cortes, líneas de corriente, vereda</td></tr>
+</table>
+<div class="fila">
+  <figure><img src="img/tunel2d_vivas.png" alt="Túnel 2D, esquinas vivas"><figcaption>Túnel 2D, planta de 10º con esquinas vivas: la calle de remolinos de von Kármán (naranja antihorario, violeta horario).</figcaption></figure>
+  <figure><img src="img/tunel3d_rapida.png" alt="Túnel 3D"><figcaption>Túnel 3D (grilla rápida, placa emulada por software): Cp de cada cara (azul empuja, rojo succiona), corte de velocidad y líneas de corriente.</figcaption></figure>
+</div>
+
+<h2>2. Diagnóstico</h2>
+
+<h3>2.1 La silueta piso por piso no llegaba al túnel <span class="tag verde">arreglado hoy</span></h3>
+<p>La carpintería curva dibujada en «Planta: PB» no aparecía en el túnel, por tres motivos que se sumaban:</p>
+<ol>
+  <li>el corte del túnel 2D solo ofrecía los niveles <i>sobre</i> PB;</li>
+  <li>el 3D armaba cada piso con la planta del nivel de <i>arriba</i> (la de PB no se usaba nunca);</li>
+  <li>un nivel sin carpintería heredaba la del nivel de arriba; si estaba dibujada solo en PB, ningún piso la tomaba.</li>
+</ol>
+<p>Cambios: cada piso usa la planta de su nivel (como se dibuja: «Planta: PB» es el piso de PB a 1º); PB entra a la lista de cortes y cada opción dice si usa carpintería o losa; si arriba no hay carpintería se toma la de abajo más cercana; el corte arranca en el primer nivel con carpintería propia; y si el corte usa la losa habiendo carpintería en otro piso, el túnel lo avisa. En Contornos, «Copiar a todos los niveles» (carpintería y losa).</p>
+<div class="fila">
+  <figure><img src="img/planta_curva.png" alt="Carpintería curva"><figcaption>Carpintería curva hecha con «Suavizar» (Bézier por los vértices) y copiada a todos los niveles.</figcaption></figure>
+  <figure><img src="img/tunel2d_curva.png" alt="Túnel con carpintería curva"><figcaption>El túnel 2D ya usa esa carpintería en el corte de 10º.</figcaption></figure>
+</div>
+
+<h3>2.2 Resolución: las curvas son escaleras y los detalles chicos desaparecen</h3>
+<p>El túnel marca una celda como sólida si su centro cae adentro del contorno. Con celdas de 0,8 a 1,1 m, un radio de 3 m queda en dos o tres escalones y una ochava de 1 m casi no existe. Abajo, la misma planta con 14, 20 y 30 celdas por ancho (azul: el contorno real; gris: lo que ve el túnel).</p>
+<div class="fila3">
+  <figure><img src="img/celdas_redondeadas_14.svg" alt=""><figcaption>Redondeadas r = 3 m, 14 celdas.</figcaption></figure>
+  <figure><img src="img/celdas_redondeadas_20.svg" alt=""><figcaption>20 celdas.</figcaption></figure>
+  <figure><img src="img/celdas_redondeadas_30.svg" alt=""><figcaption>30 celdas.</figcaption></figure>
+  <figure><img src="img/celdas_ochava1_14.svg" alt=""><figcaption>Ochava de 1 m, 14 celdas: desaparece.</figcaption></figure>
+  <figure><img src="img/celdas_ochava1_20.svg" alt=""><figcaption>20 celdas: un escalón.</figcaption></figure>
+  <figure><img src="img/celdas_ochava1_30.svg" alt=""><figcaption>30 celdas: dos escalones.</figcaption></figure>
+  <figure><img src="img/celdas_sustraidas_20.svg" alt=""><figcaption>Sustraídas 2 × 2 m, 20 celdas: entran bien (son rectas en x e y).</figcaption></figure>
+  <figure><img src="img/celdas_chaflan_20.svg" alt=""><figcaption>Chaflán de 2 m, 20 celdas: diagonal en escalera.</figcaption></figure>
+  <figure><img src="img/celdas_curva_20.svg" alt=""><figcaption>Carpintería curva, 20 celdas.</figcaption></figure>
+</div>
+<p>En el 3D es peor: la celda depende de la altura de la torre (el dominio contiene 1,5 veces la altura). Con la grilla rápida la celda es de 2,46 m y la curva se vuelve un prisma de bloques:</p>
+<div class="fila">
+  <figure><img src="img/tunel3d_rapida.png" alt=""><figcaption>3D, planta rectangular.</figcaption></figure>
+  <figure><img src="img/tunel3d_curva.png" alt=""><figcaption>3D, la carpintería curva: bloques de 2,46 m.</figcaption></figure>
+</div>
+<div class="caja"><b>Cómo se arregla sin agregar celdas:</b> con el <b>rebote interpolado</b> (Bouzidi, 2001) cada enlace que cruza la pared usa la distancia exacta hasta la curva, en vez de suponer la pared en el medio de la celda. Pasa de primer orden («escalera») a segundo orden en paredes curvas. Las distancias las tenemos exactas: contornos con arcos y Bézier.
+<figure><img src="img/enlaces_curva_20.svg" alt="" style="max-width:560px"><figcaption>En naranja, los enlaces entre una celda de aire y una sólida, hasta el punto exacto donde cruzan la carpintería: lo que usaría el rebote interpolado.</figcaption></figure></div>
+
+<h3>2.3 Mediciones del túnel 2D: las formas se distinguen, pero los valores están inflados</h3>
+<p>Mismo corte (10º), viento A, Reynolds medio (≈ 1 000), resolución normal (20 celdas), 150 pasadas del aire por el ancho (≈ 30 000 pasos, 85 s cada una en esta computadora):</p>
+<table>
+<tr><th>Planta</th><th class="n">Cd (arrastre)</th><th class="n">Cl eficaz (sacudida)</th><th class="n">Strouhal</th><th class="n">Δ Cd</th><th class="n">Δ Cl</th></tr>
+<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">±1,38</td><td class="n">0,174</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">±1,24</td><td class="n">0,182</td><td class="n">−11 %</td><td class="n">−10 %</td></tr>
+<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">±1,29</td><td class="n">0,181</td><td class="n">−9 %</td><td class="n">−7 %</td></tr>
+<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">±1,07</td><td class="n">0,206</td><td class="n">−19 %</td><td class="n">−22 %</td></tr>
+<tr><td>Carpintería curva (Bézier)</td><td class="n">1,93</td><td class="n">±1,03</td><td class="n">0,237</td><td class="n">−20 %</td><td class="n">−25 %</td></tr>
+</table>
+<div class="fila">
+  <figure><img src="img/tunel2d_redondeadas.png" alt=""><figcaption>Redondeadas.</figcaption></figure>
+  <figure><img src="img/tunel2d_sustraidas.png" alt=""><figcaption>Sustraídas.</figcaption></figure>
+  <figure><img src="img/tunel2d_curva_presion.png" alt=""><figcaption>Curva, vista de presión (azul empuja, rojo succiona).</figcaption></figure>
+  <figure><img src="img/tunel2d_curva_velocidad.png" alt=""><figcaption>Curva, vista de velocidad.</figcaption></figure>
+</div>
+<div class="caja aviso"><b>Lectura crítica.</b>
+<ul>
+  <li>La <b>tendencia</b> coincide con la bibliografía de túnel de viento: tratar las esquinas baja el arrastre y, sobre todo, la sacudida lateral.</li>
+  <li>Los <b>valores absolutos</b> están altos. Un prisma cuadrado da Cd ≈ 2,1 y St ≈ 0,13 en túnel con poco bloqueo; acá salen 2,42 y 0,174. Las causas probables:
+    <ul>
+      <li>el canal mide 7 anchos de alto y es periódico: bloquea ≈ 14 % y acelera el aire alrededor;</li>
+      <li>el Reynolds de 1 000;</li>
+      <li>las paredes en escalera.</li>
+    </ul>
+  </li>
+  <li>Redondeadas y chaflán rinden menos que en la bibliografía. En parte es la escalera: con 0,8 m por celda, un radio de 3 m es casi un chaflán. En parte es el Reynolds: el beneficio del redondeo depende mucho del Reynolds real.</li>
+</ul></div>
+
+<h3>2.4 Velocidad y computadoras modestas</h3>
+<ul>
+  <li>El 3D con la placa <b>emulada por software</b> (lo que tiene una computadora sin placa compatible) midió <b>≈ 2 M celdas/s</b>. Con la grilla rápida son ≈ 9 pasos por segundo: una pasada del aire tarda unos 2 minutos.</li>
+  <li>El 2D en JavaScript, en <b>un solo núcleo</b> del procesador, midió <b>≈ 17 M celdas/s</b>.</li>
+  <li>Conclusión: para las computadoras sin placa, un 3D grueso en el <b>procesador con varios núcleos</b> (workers) rendiría bastante más que la emulación de WebGPU. El criterio actual para la grilla liviana es de 164 M celdas/s, solo alcanzable con placa.</li>
+</ul>
+
+<h3>2.5 Lo que falta en los datos</h3>
+<ul>
+  <li><b>Cp a lo largo del perímetro de cada piso</b>, con los picos de succión en las esquinas: lo más útil para diseñar la carpintería.</li>
+  <li><b>Cd, Cl y fuerza piso por piso</b>, con el perfil del viento, y el corte y el momento en la base, comparados con la planilla y el CIRSOC.</li>
+  <li><b>Corridas largas, guardadas y reproducibles:</b> hoy todo se pierde al cerrar la página.</li>
+  <li><b>Confort en la vereda</b> con un criterio reconocido (Lawson LDDC: sentarse, pararse, caminar).</li>
+  <li><b>Exportación</b> a Excel/CSV.</li>
+</ul>
+
+<h2>3. Programas parecidos</h2>
+<p>No pude sacar capturas de estos programas: este entorno de trabajo no tiene acceso a sus sitios. Van los enlaces, qué hacen y qué podemos tomar de cada uno. Las licencias son las que publica cada proyecto; antes de reutilizar código hay que leer su archivo de licencia.</p>
+<h3>Túneles de viento y CFD</h3>
+<table>
+<tr><th>Programa</th><th>Qué es</th><th>Método · dónde corre</th><th>Licencia</th><th>Qué tomar</th></tr>
+<tr><td><a href="https://physics.weber.edu/schroeder/fluids/">Fluid Dynamics Simulation</a> (D. Schroeder, Weber State)</td><td>Túnel 2D didáctico en la página web</td><td>LBM D2Q9 en JavaScript · navegador</td><td>código a la vista; versiones en Java y Python</td><td>La simpleza: dibujar el obstáculo, trazadores, sin instalar nada. Es nuestro mismo enfoque.</td></tr>
+<tr><td><a href="https://blogs.autodesk.com/simulation/?p=513">Autodesk Flow Design</a> (2014–2018)</td><td>«Túnel de viento virtual» para arquitectos, dentro de Revit</td><td>CFD propio · escritorio</td><td>comercial, discontinuado</td><td>Respuesta inmediata al cambiar la forma; presión pintada sobre las caras dentro del programa de dibujo.</td></tr>
+<tr><td><a href="https://www.autodesk.com/learn/ondemand/tutorial/wind-analysis-in-forma">Autodesk Forma</a> (análisis de viento)</td><td>Viento para diseño temprano: confort del peatón</td><td>modo «rápido» con IA y modo «detallado» con CFD · nube</td><td>comercial</td><td>Dos modos (rápido para diseñar, detallado para documentar) y la escala de confort Lawson LDDC.</td></tr>
+<tr><td><a href="https://www.simscale.com/docs/validation-cases/caarc-facade-pressure/">SimScale</a></td><td>CFD en la nube; incluye un LBM en GPU (Pacefish) para viento sobre edificios</td><td>LBM GPU · nube</td><td>comercial (tiene plan gratuito comunitario)</td><td>Publica casos de validación, entre ellos el edificio patrón CAARC: el modelo a seguir para mostrar cuánto se acerca el simulador.</td></tr>
+<tr><td><a href="https://es.aap.cornell.edu/research/eddy">Eddy3D</a> (Cornell)</td><td>Viento y confort exterior en Grasshopper/Rhino</td><td>OpenFOAM · escritorio</td><td>gratuito (confirmar licencia)</td><td>Pensado para arquitectos; dominios cilíndricos para correr muchas direcciones de viento.</td></tr>
+<tr><td><a href="https://www.ladybug.tools/butterfly.html">Butterfly</a> (Ladybug Tools)</td><td>Arma y corre casos de OpenFOAM desde Grasshopper/Dynamo</td><td>OpenFOAM · escritorio (Linux o Docker)</td><td>GPL-3.0</td><td>Flujo de trabajo de arquitecto: geometría → caso → resultados sobre el modelo.</td></tr>
+<tr><td><a href="https://openfoam.org/licence/">OpenFOAM</a></td><td>La referencia del CFD libre (volúmenes finitos)</td><td>C++ · escritorio/servidor</td><td>GPL-3.0</td><td>Validación y comparación; demasiado pesado para el navegador.</td></tr>
+<tr><td><a href="https://github.com/ProjectPhysX/FluidX3D">FluidX3D</a></td><td>LBM en GPU muy rápido y con poca memoria</td><td>OpenCL · cualquier GPU</td><td>gratuito no comercial</td><td>Técnicas para ahorrar memoria (16 bits por población) y velocidad: base de un 3D más fino en la misma placa.</td></tr>
+<tr><td><a href="https://github.com/Autodesk/XLB">XLB</a> (Autodesk Research)</td><td>Biblioteca LBM diferenciable en Python</td><td>JAX / Warp · GPU</td><td>Apache-2.0</td><td>Colisiones y bordes de referencia con licencia permisiva; útil para validar nuestras cuentas.</td></tr>
+<tr><td>OpenLB · Palabos · waLBerla</td><td>Bibliotecas LBM de investigación</td><td>C++ · CPU/GPU, paralelo</td><td>GPL-2.0 · GPL-3.0 · GPL-3.0</td><td>Bordes curvos (Bouzidi), refinamiento de grilla y modelos de turbulencia probados.</td></tr>
+<tr><td><a href="https://github.com/rafaelanderka/lattice-boltzmann-simulator">lattice-boltzmann-simulator</a></td><td>LBM en WebGL2 en el navegador</td><td>WebGL2 · navegador</td><td>MIT</td><td>Cómo correr LBM en WebGL2: la base del respaldo para computadoras sin WebGPU.</td></tr>
+<tr><td><a href="https://wartets.github.io/Wartets/lib/assets/Turbulence-sim.pdf">Turbulence-sim</a></td><td>LBM multifísica en el navegador</td><td>WebAssembly + WebGL2</td><td>código abierto (ver repositorio)</td><td>WebAssembly para el cálculo en el procesador: otro camino para computadoras modestas.</td></tr>
+</table>
+<h3>Cálculo estructural de torres</h3>
+<table>
+<tr><th>Programa</th><th>Qué es</th><th>Licencia</th><th>Relación con Torre 3D</th></tr>
+<tr><td><a href="https://opensees.berkeley.edu/OpenSees/home/about.php">OpenSees</a></td><td>Elementos finitos para estructuras, sísmico y no lineal</td><td>uso educativo y de investigación, no comercial</td><td>Ya se usa para verificar el FEM de la app (mismos resultados).</td></tr>
+<tr><td><a href="https://www.github.com/JWock82/PyNite">PyNite</a></td><td>Análisis elástico 3D de pórticos en Python</td><td>ver repositorio</td><td>También se usó para verificar el FEM.</td></tr>
+</table>
+
+<h2>4. Propuestas</h2>
+<p>Ordenadas por lo que rinden. Todas pensadas para que el simulador ande en la mayor cantidad de computadoras.</p>
+<table>
+<tr><th>#</th><th>Propuesta</th><th>Qué mejora</th><th>Costo en la computadora</th><th>Trabajo</th></tr>
+<tr><td>0</td><td><b>Silueta piso por piso</b> en los túneles</td><td>La carpintería de cada piso llega al viento</td><td>nada</td><td><span class="tag verde">hecho</span></td></tr>
+<tr><td>1</td><td><b>Paredes exactas</b> (rebote interpolado de Bouzidi) <b>+ colisión TRT</b> (Ginzburg, con el parámetro «mágico» Λ = 3/16, que deja la pared donde corresponde sin depender de la viscosidad)</td><td>Curvas, ochavas y diagonales sin escalera; fuerzas menos ruidosas; más estable con grillas gruesas</td><td>+5 a 15 %</td><td>medio</td></tr>
+<tr><td>2</td><td><b>Canal más ancho</b> en el 2D (10–12 anchos) o corrección por bloqueo</td><td>Cd y Strouhal más cerca de los valores de túnel (hoy bloquea ≈ 14 %)</td><td>+40–70 % de celdas, o nada con la corrección</td><td>bajo</td></tr>
+<tr><td>3</td><td><b>Túnel piso por piso</b> con el 2D (2,5D): cada planta distinta en paralelo, con el perfil del CIRSOC 102-25</td><td>Cd, Cl, St y fuerza por nivel; corte y momento de la simulación contra la planilla. Es «la silueta piso por piso».</td><td>solo procesador; minutos</td><td>medio</td></tr>
+<tr><td>4</td><td><b>Corrida larga y archivo para reproducir</b> (.torreviento)</td><td>Promedios estables (Cp medio, rms y picos); se calcula en una computadora y se mira en cualquiera, sin placa; video WebM</td><td>el de la simulación</td><td>medio</td></tr>
+<tr><td>5</td><td><b>Datos nuevos</b>: Cp perimetral por piso, fuerza por piso, confort Lawson en la vereda, exportar a Excel</td><td>Lo que sirve para diseñar la carpintería y para la entrega</td><td>casi nada</td><td>medio</td></tr>
+<tr><td>6</td><td><b>3D sin placa</b>: en el procesador con varios núcleos (workers + WebAssembly) y respaldo WebGL2</td><td>El 3D en muchas más computadoras (la placa emulada rinde 8 veces menos que el procesador)</td><td>según la computadora</td><td>medio–alto</td></tr>
+<tr><td>7</td><td><b>Más detalle donde importa</b>: banda de pisos periódica, dominio más ajustado, refinamiento local en el 2D</td><td>3 a 4 veces más detalle en planta con las mismas celdas</td><td>igual</td><td>bajo a alto</td></tr>
+<tr><td>8</td><td><b>Validación</b>: prisma cuadrado, cilindro y edificio patrón CAARC, con los números en pantalla</td><td>Saber cuánto se acerca el simulador y mostrarlo</td><td>nada</td><td>bajo</td></tr>
+</table>
+<div class="caja"><b>Recomendación:</b> 1 + 2 primero (calidad en esquinas y curvas casi sin costo), después 3 (la información que más importa, en todas las computadoras), después 4 + 5 (corridas largas, archivo y datos), y después 6 y 7.</div>
+
+<h3>Límites que no cambian</h3>
+<ul>
+  <li>Ningún simulador de navegador llega al Reynolds real de una torre. Con aristas vivas importa poco; con curvas, el resultado da la <b>tendencia</b> (qué forma es mejor), no el número final.</li>
+  <li>Sirve para comparar formas y entender el flujo. No reemplaza al CIRSOC 102 ni a un ensayo en túnel de viento.</li>
+</ul>
+
+<h2>Fuentes</h2>
+<ul style="font-size:13px">
+  <li>D. V. Schroeder, <a href="https://physics.weber.edu/schroeder/fluids/">Fluid Dynamics Simulation</a> y <a href="https://physics.weber.edu/schroeder/fluids/FluidSimulationsForUndergrads.pdf">Fluid simulations for undergraduates</a>.</li>
+  <li>Autodesk: <a href="https://blogs.autodesk.com/simulation/?p=513">Flow Design</a>, <a href="https://www.autodesk.com/support/account/manage/billing/retired-products">productos retirados</a>, <a href="https://www.autodesk.com/learn/ondemand/tutorial/wind-analysis-in-forma">Wind analysis in Forma</a>, <a href="https://blogs.autodesk.com/forma/?p=2064">Forma blog</a>.</li>
+  <li>SimScale: <a href="https://www.simscale.com/docs/validation-cases/caarc-facade-pressure/">CAARC facade pressure</a>, <a href="https://digitalengineering247.com/article/simscale-releases-a-gpu-based-lattice-boltzmann-solver">LBM en GPU</a>, <a href="https://www.simscale.com/blog/lawson-wind-comfort-criteria/">criterios de Lawson</a>.</li>
+  <li><a href="https://es.aap.cornell.edu/research/eddy">Eddy3D</a>; <a href="https://www.ladybug.tools/butterfly.html">Butterfly</a> y <a href="https://www.github.com/ladybug-tools/butterfly/blob/master/README.md">su README</a>; <a href="https://openfoam.org/licence/">licencia de OpenFOAM</a>.</li>
+  <li><a href="https://github.com/ProjectPhysX/FluidX3D">FluidX3D</a>; <a href="https://github.com/Autodesk/XLB">XLB</a> y <a href="https://arxiv.org/html/2311.16080v3">su artículo</a>; <a href="https://arxiv.org/html/2307.11752v2">OpenLB</a>; <a href="https://arxiv.org/pdf/1909.13772">waLBerla</a>; <a href="https://directory.fsf.org/wiki/Palabos">Palabos</a>.</li>
+  <li><a href="https://github.com/rafaelanderka/lattice-boltzmann-simulator">lattice-boltzmann-simulator (WebGL2)</a>; <a href="https://wartets.github.io/Wartets/lib/assets/Turbulence-sim.pdf">Turbulence-sim</a>.</li>
+  <li>Bordes curvos: <a href="https://arxiv.org/pdf/1906.05445">comparación rebote interpolado / borde inmerso</a>, <a href="https://arxiv.org/pdf/2009.04604">condición de un nodo</a>. TRT: <a href="https://access.archive-ouverte.unige.ch/access/metadata/0960f163-a54a-4cdc-8542-d2b94833624a/download">posición de la pared y Λ = 3/16</a>.</li>
+  <li>CAARC: <a href="https://structurae.net/en/literature/journal-article/towards-a-standard-cfd-setup-for-wind-load-assessment-of-high-rise-buildings-part-1-benchmark-of-the-caarc-building">Thordal et al., estándar de CFD para torres</a>. Esquinas: <a href="https://scholars.cityu.edu.hk/en/publications/aerodynamic-performance-of-caarc-standard-tall-building-model-by-/">chaflanes en el CAARC</a>, <a href="https://scholar.hit.edu.cn/en/publications/effects-of-corner-modifications-on-wind-loads-and-local-pressures/">efecto de las esquinas en cargas y presiones locales</a>.</li>
+  <li>Teoría de franjas (2D por tramos): <a href="https://arxiv.org/pdf/2012.07845">Modelling of flow past long cylindrical structures</a>.</li>
+  <li>Estructuras: <a href="https://opensees.berkeley.edu/OpenSees/home/about.php">OpenSees</a>, <a href="https://en.wikipedia.org/wiki/OpenSees">licencia (Wikipedia)</a>, <a href="https://www.github.com/JWock82/PyNite">PyNite</a>.</li>
+</ul>
+</main>
+</body>
+</html>

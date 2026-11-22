@@ -1,5 +1,7 @@
 # Simulador de viento: diagnóstico y propuestas
 
+> El diagnóstico completo, con capturas, mediciones, programas parecidos y fuentes, está en [`docs/diagnostico_viento/`](diagnostico_viento/index.html) (también en PDF: `diagnostico_tuneles_viento.pdf`).
+
 Noviembre de 2026. Son propuestas: **no se cambió nada del simulador**. El criterio que manda es que ande en la mayor
 cantidad posible de computadoras, empezando por las más modestas.
 
