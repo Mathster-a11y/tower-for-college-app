@@ -163,8 +163,11 @@ export function perfil102(nz: number, escala: number, H: number, exp: Exposicion
 }
 export const exponentePerfil = (exp: Exposicion) => 1 / EXPOSICIONES[exp].alfa;
 
-/** la celda de referencia de la presión: 2 celdas después de la entrada, en el borde lateral, a la altura de la torre */
-export const celdaReferencia = (g: Geometria3D) => (Math.min(g.nz - 1, g.hC) * g.ny + 0) * g.nx + 2;
+/**
+ * la celda de referencia de la presión: en el borde lateral, a la altura de la torre y a mitad de camino entre la
+ * entrada y la torre (cerca de la entrada la presión todavía está perturbada por la condición de entrada)
+ */
+export const celdaReferencia = (g: Geometria3D) => (Math.min(g.nz - 1, g.hC) * g.ny + 0) * g.nx + Math.max(4, Math.round(g.caja.x0 / 2));
 
 export type Cara = 'barlovento' | 'sotavento' | 'lateral' | 'cubierta';
 /**

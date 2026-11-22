@@ -41,9 +41,13 @@ export interface OpcionesLbm {
    * donde corresponde sea cual sea la viscosidad, y es más estable con grillas gruesas)
    */
   colision?: 'bgk' | 'trt';
+  /** TRT: ω− no baja de este valor (con Λ = 3/16, a Reynolds alto ω− → 0 y el ruido de la grilla no se amortigua) */
+  omegaMenosMin?: number;
 }
 /** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
 export const LAMBDA_TRT = 3 / 16;
+/** piso de ω− en la colisión TRT (ver OpcionesLbm.omegaMenosMin) */
+export const OMEGA_MENOS_MIN = 1;
 
 export class Lbm2D {
   readonly nx: number; readonly ny: number; readonly N: number;
@@ -63,6 +67,7 @@ export class Lbm2D {
   private qEnl: Float32Array; private otra: Int32Array; private otra2: Int32Array;
   readonly trt: boolean;
   readonly exactas: boolean;
+  readonly ommMin: number;
 
   constructor(o: OpcionesLbm) {
     this.nx = o.nx; this.ny = o.ny; this.N = o.nx * o.ny;
@@ -96,6 +101,7 @@ export class Lbm2D {
     }
     this.enlaces = Int32Array.from(enl);
     this.trt = o.colision === 'trt';
+    this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN;
     this.exactas = !!o.q;
     const nE = this.enlaces.length / 2;
     this.qEnl = new Float32Array(nE).fill(0.5); this.otra = new Int32Array(nE).fill(-1); this.otra2 = new Int32Array(nE).fill(-1);
@@ -151,7 +157,7 @@ export class Lbm2D {
       const om = 1 / tau;
       if (this.trt && !conFuerza) {
         // TRT: la parte simétrica de cada par de direcciones relaja con ω+ (la viscosidad) y la antisimétrica con ω−
-        const omm = 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5);
+        const omm = Math.max(this.ommMin, 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5));
         f[c] = f0 + om * (e0 - f0);
         const par = (a: number, b: number, fa: number, fb: number, ea: number, eb: number) => {
           const sp = om * ((fa + fb) - (ea + eb)) * 0.5, sm = omm * ((fa - fb) - (ea - eb)) * 0.5;
@@ -163,7 +169,7 @@ export class Lbm2D {
       if (conFuerza && this.trt) {
         // TRT con fuerza (al estilo Guo): equilibrio con u = (j + g/2)/ρ y la fuerza como fuente en la parte
         // antisimétrica, con su factor (1 − ω−/2)
-        const omm = 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5), uu = u + gx / (2 * r), vv = v + gy / (2 * r);
+        const omm = Math.max(this.ommMin, 1 / (LAMBDA_TRT / (tau - 0.5) + 0.5)), uu = u + gx / (2 * r), vv = v + gy / (2 * r);
         const fi = [f0, f1, f2, f3, f4, f5, f6, f7, f8], ei = fi.map((_, i) => feq(i, r, uu, vv));
         f[c] = f0 + om * (ei[0] - f0);
         for (const [a, b] of [[1, 3], [2, 4], [5, 7], [6, 8]]) {

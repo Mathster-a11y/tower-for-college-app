@@ -11,6 +11,9 @@ import { graficoAltura, tablaValores, type Tam } from './diagramas';
 import { corteYMomento, fuerzasPorPiso, plantasDistintas, type GrupoPlanta, type ResultadoPlanta } from '../viento/porPiso';
 import type { PedidoMedicion, RespuestaMedicion } from '../viento/medicion.worker';
 import MedicionWorker from '../viento/medicion.worker?worker&inline';
+import { celdaRef2D, perimetro, PromedioPerimetro } from '../viento/perimetro';
+import { descargarCSV } from './csv';
+import { abrirGrabacion, cuadroDe, empaquetar, Grabadora, type GrabacionAbierta } from '../viento/grabacion';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
@@ -35,12 +38,16 @@ const cfg = {
   /** canal ancho (12 anchos de alto: bloquea ≈ 8 %) o angosto (7 anchos: ≈ 14 %, más rápido) */
   canal: 'ancho' as 'ancho' | 'angosto',
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
+  /** el Cp promedio dibujado sobre el contorno de la planta */
+  cpContorno: true,
 };
 
 interface Corrida {
   clave: string; geo: Geometria2D; nu: number; cs: number; worker: Worker;
   campo: CuadroTunel | null; pasos: number; Fx: number[]; Fy: number[]; corriendo: boolean; esperando: boolean;
   roto: boolean; med: Mediciones | null; humo: Float32Array; cuadrosSinMirar: number; nivel: string; cota: number;
+  /** Cp promediado en el tiempo a lo largo del perímetro de la planta */
+  perim: PromedioPerimetro;
 }
 let corrida: Corrida | null = null;
 let lienzo: HTMLCanvasElement | null = null;
@@ -66,6 +73,8 @@ function claveCorrida(): string {
 }
 
 function iniciar() {
+  if (repro) { if (repro.reloj !== null) clearInterval(repro.reloj); repro = null; }   // empezar de nuevo sale de la reproducción
+  if (grab) grab = null;
   corrida?.worker.terminate();
   corrida = null;
   const ne = nivelElegido();
@@ -88,7 +97,7 @@ function iniciar() {
   const worker = new TunelWorker();
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * geo.nx; humo[2 * k + 1] = Math.random() * geo.ny; }
-  corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota };
+  corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota, perim: new PromedioPerimetro(perimetro(geo), U0) };
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
   const exactas = cfg.paredes === 'exactas';
   worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk' } satisfies MensajeTunel);
@@ -106,6 +115,12 @@ function recibir(r: CuadroTunel) {
   const c = corrida;
   if (!c) return;
   c.esperando = false; c.campo = r; c.pasos = r.pasos; c.roto = r.roto;
+  if (grab && grab.clave === c.clave) {
+    grab.g.agregar(r.pasos, r.ux, r.uy, r.rho, r.Fx, r.Fy);
+    // corrida larga: al llegar a las pasadas pedidas, se guarda sola
+    if (grab.hasta && (r.pasos * U0) / c.geo.D >= grab.hasta) void terminarGrabacion();
+    else if (performance.now() - grab.ultimoAviso > 1000) { grab.ultimoAviso = performance.now(); actualizarGrabacion(); }
+  }
   for (let k = 0; k < r.Fx.length; k++) { c.Fx.push(r.Fx[k]); c.Fy.push(r.Fy[k]); }
   const MAX = 30000;
   if (c.Fx.length > MAX) { c.Fx.splice(0, c.Fx.length - MAX); c.Fy.splice(0, c.Fy.length - MAX); }
@@ -118,6 +133,7 @@ function recibir(r: CuadroTunel) {
   if (c.pasos > (0.6 * c.geo.nx) / U0) {
     const desde = Math.max(0, c.Fx.length - Math.min(c.Fx.length, c.pasos - Math.round((0.6 * c.geo.nx) / U0)));
     c.med = medir(c.Fx.slice(desde), c.Fy.slice(desde), U0, c.geo.D);
+    c.perim.sumar(r.rho);                                             // la presión en el perímetro, pasado el arranque
   }
   actualizarMediciones();
 }
@@ -159,7 +175,8 @@ function dibujar() {
   const fondo = rgb(css('--lienzo', '#ffffff')), comp = rgb(css('--compresion', '#378add')), trac = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
   const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd')), rapido = rgb(css('--deformada', '#1d9e75'));
   const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
-  if (cfg.vista === 'vorticidad') {
+  if (cfg.vista === 'vorticidad' && c.campo.w) vort = c.campo.w;      // grabación: el giro ya viene calculado
+  else if (cfg.vista === 'vorticidad') {
     if (!vort || vort.length !== nx * ny) vort = new Float32Array(nx * ny);
     if (!vortS || vortS.length !== nx * ny) vortS = new Float32Array(nx * ny);
     for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; vortS[q] = (uy[q + 1] - uy[q - 1]) * 0.5 - (ux[q + nx] - ux[q - nx]) * 0.5; }
@@ -169,19 +186,29 @@ function dibujar() {
       vort[q] = (vortS[q - nx - 1] + vortS[q - nx] + vortS[q - nx + 1] + vortS[q - 1] + vortS[q] + vortS[q + 1] + vortS[q + nx - 1] + vortS[q + nx] + vortS[q + nx + 1]) / 9;
     }
   }
-  const escV = (3 * U0) / c.geo.D;
+  const escV = (3 * U0) / c.geo.D, rhoRef = rho[celdaRef2D(c.geo)] || 1;   // la presión de referencia (como la toma de un túnel)
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);           // y de la red hacia arriba
     if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
     if (cfg.vista === 'vorticidad') { const w = vort![q] / escV; mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k); }
     else if (cfg.vista === 'velocidad') { const s = Math.hypot(ux[q], uy[q]) / U0; mezcla(fondo, rapido, Math.min(1, s / 1.6), k); }
-    else { const cp = (rho[q] - 1) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
+    else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
   }
   auxiliar!.getContext('2d')!.putImageData(imagen, 0, 0);
   const g = cv.getContext('2d')!;
   const s = cv.width / nx;
   g.imageSmoothingEnabled = true;
   g.drawImage(auxiliar!, 0, 0, cv.width, ny * s);
+  // Cp promedio sobre el contorno: azul donde empuja (comprime), rojo donde succiona (tracciona)
+  if (cfg.cpContorno && c.perim.muestras > 0) {
+    const p = c.perim.p, az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
+    for (let k = 0; k < p.celdas.length; k++) {
+      const cp = c.perim.cp(k), r = Math.max(1.5, Math.min(5, 1.5 + Math.abs(cp) * 2.2)) * Math.max(1, s / 3);
+      g.fillStyle = cp >= 0 ? az : ro; g.globalAlpha = 0.85;
+      g.beginPath(); g.arc(p.px[k] * s, (ny - p.py[k]) * s, r, 0, 2 * Math.PI); g.fill();
+    }
+    g.globalAlpha = 1;
+  }
   if (cfg.humo) {
     g.fillStyle = css('--ink2', '#556'); g.globalAlpha = 0.55;
     const hm = c.humo;
@@ -192,6 +219,7 @@ function dibujar() {
 
 // ---------------------------------------------------------------------------------------------------- centro
 export function centroTunel(c: H, tam: Tam) {
+  if (repro) { centroRepro(c, tam); return; }
   if (!corrida || corrida.clave !== claveCorrida()) iniciar();
   const cr = corrida;
   if (!cr) { c.append(h('p', { class: 'nota' }, 'Hace falta una planta con losa sobre PB para armar el túnel.')); return; }
@@ -214,6 +242,7 @@ export function centroTunel(c: H, tam: Tam) {
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
+  cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900); ultimoCp = 0; armarCp();
   resultadosPisos(c, Math.min(ancho, 900));
   // mientras se simula la torre piso por piso, el túnel de la vista queda en pausa
   if (!cr.corriendo && !cr.roto && cr.cuadrosSinMirar > 2 && !(pisos && !pisos.fin)) { cr.cuadrosSinMirar = 0; correr(true); }
@@ -254,7 +283,12 @@ export function panelTunel(c: H) {
   ));
   const humo = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.humo ? { checked: '' } : {}) }), ' Humo (partículas que lleva el viento)');
   humo.querySelector('input')!.addEventListener('change', e => { cfg.humo = (e.target as HTMLInputElement).checked; dibujar(); });
+  const cpc = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.cpContorno ? { checked: '' } : {}) }), ' Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)');
+  cpc.querySelector('input')!.addEventListener('change', e => { cfg.cpContorno = (e.target as HTMLInputElement).checked; dibujar(); });
+  d.append(cpc);
   d.append(humo, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
+  const gr = seccion('Grabar y reproducir').cuerpo; c.append(gr.parentElement!);
+  armarPanelGrabacion(gr);
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelMed = h('div', {});
   m.append(panelMed);
@@ -401,10 +435,198 @@ function resultadosPisos(c: H, ancho: number) {
       series: [{ nombre: 'con el Cd simulado', color: 'corte', tipo: 'barras', puntos: pts(k => k.Fsim) }, { nombre: 'CIRSOC 102-25', color: 'carga', punteada: true, tipo: 'linea', puntos: pts(k => k.Freg) }] }, { ancho, alto: 360 }),
     tablaValores(['Nivel', 'z (m)', 'Cd sim.', 'Cl eficaz', 'St', 'Coef. 102-25', 'F sim. (t)', 'F 102-25 (t)'], f.map(k => [k.nivel, k.z, k.Cd, k.ClRms, k.St ?? '—', k.Creg, k.Fsim, k.Freg]), [0, 1, 2, 2, 3, 2, 2, 2]),
   );
+  const csv = h('button', { type: 'button', class: 'mini' }, '⤓ Piso por piso (CSV para Excel)');
+  csv.addEventListener('click', () => descargarCSV(`piso_por_piso_viento${estado.dir}.csv`,
+    ['Nivel', 'z (m)', 'ancho (m)', 'h influencia (m)', 'Cd simulado', 'Cl eficaz', 'Strouhal', 'coeficiente 102-25', 'F simulada (t)', 'F 102-25 (t)'],
+    f.map(k => [k.nivel, k.z, k.ancho, k.hInf, k.Cd, k.ClRms, k.St, k.Creg, k.Fsim, k.Freg]), 3));
+  c.append(h('div', { class: 'fila-acciones' }, csv));
+}
+
+// ---------------------------------------------------------------------------------------------- grabar y reproducir
+/**
+ * Grabación (propuesta 4): los cuadros que llegan del worker se guardan (8 bits, a la mitad de resolución si la grilla
+ * es grande) junto con las fuerzas de cada paso; «Detener y guardar» descarga un .torreviento. «Abrir grabación…» lo
+ * reproduce sin simular, con los mismos colores, el humo y el Cp del contorno, y lo puede pasar a video (WebM).
+ */
+const DURACIONES: Record<string, { n: number | null; texto: string }> = { libre: { n: null, texto: 'hasta que la detenga' }, '100': { n: 100, texto: '100 pasadas' }, '300': { n: 300, texto: '300 pasadas' }, '1000': { n: 1000, texto: 'corrida larga: 1000 pasadas' } };
+let duracion = 'libre';
+let grab: { g: Grabadora; clave: string; hasta: number | null; t0: number; ultimoAviso: number; pasos0: number } | null = null;
+let panelGrab: H | null = null;
+function empezarGrabacion() {
+  const c = corrida;
+  if (!c) return;
+  const f = c.geo.nx * c.geo.ny > 60000 ? 2 : 1;
+  grab = { g: new Grabadora(c.geo.nx, c.geo.ny, c.geo.solido, f, 2.2 * U0, 0.06, 360, (3 * U0) / c.geo.D), clave: c.clave, hasta: DURACIONES[duracion].n !== null ? (c.pasos * U0) / c.geo.D + DURACIONES[duracion].n! : null, t0: performance.now(), ultimoAviso: 0, pasos0: c.pasos };
+  if (!c.corriendo) correr(true);
+  estado.avisarPanel();
+}
+async function terminarGrabacion() {
+  const gr = grab, c = corrida;
+  grab = null;
+  if (!gr || !c || !gr.g.cuadros.length) { estado.avisarPanel(); return; }
+  const f = gr.g.factor, { default: JSZip } = await import('jszip');
+  const blob = await empaquetar(JSZip, gr.g, {
+    titulo: `${estado.proyecto.nombre || 'Torre'} · ${c.nivel} · viento ${estado.dir}`, nivel: c.nivel, cota: c.cota, dir: estado.dir,
+    config: { angulo: cfg.angulo, re: cfg.re, res: cfg.res, paredes: cfg.paredes, canal: cfg.canal, forma: cfg.forma, ochava: cfg.ochava },
+    D: c.geo.D / f, anchoM: c.geo.anchoM, escala: c.geo.escala / f, contornos: c.geo.contornos.map(p => p.map(q => ({ x: q.x / f, y: q.y / f }))),
+    caja: { x0: Math.floor(c.geo.caja.x0 / f), x1: Math.floor(c.geo.caja.x1 / f), y0: Math.floor(c.geo.caja.y0 / f), y1: Math.floor(c.geo.caja.y1 / f) },
+    u0: U0, med: c.med ? { Cd: c.med.Cd, ClRms: c.med.ClRms, St: c.med.St } : null,
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tunel_${c.nivel}_viento${estado.dir}.torreviento`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '_');
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  mensajeTunel(`Grabación guardada: ${gr.g.cuadros.length} cuadros, ${(blob.size / 1e6).toFixed(1)} MB.`);
+  estado.avisarPanel();
+}
+const mensajeTunel = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+function actualizarGrabacion() {
+  const el = panelGrab?.querySelector<HTMLElement>('.grab-estado'), gr = grab, c = corrida;
+  if (!el || !gr || !c) return;
+  const pas = ((c.pasos - gr.pasos0) * U0) / c.geo.D;
+  el.textContent = `● Grabando: ${gr.g.cuadros.length} cuadros · ${fmt(pas, 0)} pasadas${gr.hasta ? ` de ${fmt(gr.hasta - (gr.pasos0 * U0) / c.geo.D, 0)}` : ''} · ${(gr.g.bytes() / 1e6).toFixed(1)} MB en memoria (el archivo sale comprimido)`;
+}
+function armarPanelGrabacion(el: H) {
+  panelGrab = el;
+  const sel = h('select', {}) as HTMLSelectElement;
+  Object.entries(DURACIONES).forEach(([k, v]) => sel.append(new Option(v.texto, k, false, k === duracion)));
+  sel.addEventListener('change', () => { duracion = sel.value; });
+  sel.disabled = !!grab;
+  const b = h('button', { type: 'button', class: `boton${grab ? '' : ' primario'}` }, grab ? '■ Detener y guardar' : '● Grabar');
+  b.addEventListener('click', () => { if (grab) void terminarGrabacion(); else empezarGrabacion(); });
+  const abrir = h('label', { class: 'boton' }, 'Abrir grabación…');
+  const inp = h('input', { type: 'file', accept: '.torreviento,.zip', hidden: '' }) as HTMLInputElement;
+  abrir.append(inp);
+  inp.addEventListener('change', async () => {
+    const f = inp.files?.[0]; inp.value = '';
+    if (!f) return;
+    try { const { default: JSZip } = await import('jszip'); empezarRepro(await abrirGrabacion(JSZip, await f.arrayBuffer())); }
+    catch (e) { mensajeTunel(e instanceof Error ? e.message : String(e)); }
+  });
+  el.replaceChildren(
+    h('p', { class: 'nota' }, 'Graba la corrida (los cuadros y las fuerzas) en un archivo .torreviento para verla después sin simular, en esta o en otra computadora, o pasarla a video. Una corrida larga se guarda sola al llegar a las pasadas pedidas.'),
+    h('label', { class: 'campo' }, h('span', {}, 'Duración'), sel),
+    h('div', { class: 'fila-acciones' }, b, abrir),
+    h('p', { class: 'nota chica grab-estado' }, ''),
+  );
+  actualizarGrabacion();
+}
+
+let repro: { g: GrabacionAbierta; k: number; reloj: number | null; video: MediaRecorder | null } | null = null;
+let panelRepro: H | null = null;
+function empezarRepro(g: GrabacionAbierta) {
+  if (grab) grab = null;
+  corrida?.worker.terminate();
+  const m = g.meta;
+  const geo: Geometria2D = { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0) };
+  const humo = new Float32Array(2 * 700);
+  for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * m.nx; humo[2 * k + 1] = Math.random() * m.ny; }
+  // la corrida «en pantalla» pasa a ser la grabación: dibujar() y las mediciones la muestran igual que en vivo
+  corrida = { clave: 'grabacion', geo, nu: 0, cs: 0, worker: { terminate() {}, postMessage() {} } as unknown as Worker, campo: null, pasos: m.pasos[0] ?? 0, Fx: Array.from(g.Fx), Fy: Array.from(g.Fy), corriendo: false, esperando: false, roto: false,
+    med: m.med ? { Cd: m.med.Cd, Cl: 0, ClRms: m.med.ClRms, f: null, St: m.med.St } : null, humo, cuadrosSinMirar: 0, nivel: m.nivel, cota: m.cota, perim: new PromedioPerimetro(perimetro(geo), m.u0) };
+  repro = { g, k: 0, reloj: null, video: null };
+  mostrarCuadro(0);
+  estado.avisarPanel();
+}
+function mostrarCuadro(k: number) {
+  const r = repro, c = corrida;
+  if (!r || !c) return;
+  const m = r.g.meta, kk = Math.max(0, Math.min(m.cuadros - 1, k)), f = cuadroDe(r.g, kk);
+  const pasosAntes = c.pasos;
+  const escV = (3 * m.u0) / m.D;
+  c.campo = { tipo: 'cuadro', pasos: m.pasos[kk], hechos: 0, roto: false, ux: f.ux, uy: f.uy, rho: f.rho, w: f.wn.map(x => x * escV), Fx: new Float32Array(0), Fy: new Float32Array(0) };
+  c.pasos = m.pasos[kk];
+  if (kk > r.k) moverHumo(c, Math.max(1, (c.pasos - pasosAntes) / m.factor));
+  if (kk >= m.cuadros * 0.3 && kk > r.k) c.perim.sumar(f.rho);
+  r.k = kk;
+  dibujar();
+  const barra = panelRepro?.querySelector<HTMLInputElement>('input[type=range]'), txt = panelRepro?.querySelector<HTMLElement>('.repro-txt');
+  if (barra) barra.value = String(kk);
+  if (txt) txt.textContent = `cuadro ${kk + 1} de ${m.cuadros} · ${fmt((m.pasos[kk] * m.u0) / m.D, 0)} pasadas`;
+  ultimoCp = 0; armarCp();
+}
+function reproducir(si: boolean) {
+  const r = repro;
+  if (!r) return;
+  if (r.reloj !== null) { clearInterval(r.reloj); r.reloj = null; }
+  if (si) r.reloj = window.setInterval(() => { if (!repro) return; if (repro.k >= repro.g.meta.cuadros - 1) { reproducir(false); if (repro.video) repro.video.stop(); return; } mostrarCuadro(repro.k + 1); }, 1000 / 15);
+  const b = panelRepro?.querySelector<HTMLButtonElement>('.repro-play');
+  if (b) b.textContent = si ? '⏸ Pausa' : '▶ Reproducir';
+}
+function salirRepro() { reproducir(false); repro = null; corrida = null; estado.avisarPanel(); }
+function grabarVideo() {
+  const r = repro, cv = lienzo;
+  if (!r || !cv) return;
+  const tipo = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t));
+  if (!tipo) { mensajeTunel('Este navegador no puede grabar video (MediaRecorder con WebM).'); return; }
+  const partes: Blob[] = [], rec = new MediaRecorder(cv.captureStream(15), { mimeType: tipo });
+  rec.ondataavailable = e => { if (e.data.size) partes.push(e.data); };
+  rec.onstop = () => {
+    r.video = null;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(partes, { type: 'video/webm' }));
+    a.download = `tunel_${r.g.meta.nivel}_viento${r.g.meta.dir}.webm`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '_');
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    mensajeTunel('Video guardado (WebM).');
+  };
+  r.video = rec;
+  mostrarCuadro(0); rec.start(); reproducir(true);
+}
+function centroRepro(c: H, tam: Tam) {
+  const r = repro!, m = r.g.meta, ancho = Math.max(320, (tam.ancho ?? 900) - 10);
+  if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; }
+  lienzo.width = Math.round(ancho); lienzo.height = Math.round((ancho * m.ny) / m.nx);
+  const play = h('button', { type: 'button', class: 'boton primario repro-play' }, r.reloj !== null ? '⏸ Pausa' : '▶ Reproducir');
+  play.addEventListener('click', () => reproducir(repro?.reloj === null));
+  const barra = h('input', { type: 'range', min: '0', max: String(m.cuadros - 1), value: String(r.k), 'aria-label': 'Cuadro de la grabación' }) as HTMLInputElement;
+  barra.addEventListener('input', () => { reproducir(false); mostrarCuadro(+barra.value); });
+  const video = h('button', { type: 'button', class: 'boton' }, '⤓ Video (WebM)'); video.addEventListener('click', grabarVideo);
+  const salir = h('button', { type: 'button', class: 'boton' }, 'Volver al túnel en vivo'); salir.addEventListener('click', salirRepro);
+  panelRepro = h('div', { class: 'repro' }, h('p', { class: 'llave' }, `Grabación: ${m.titulo} · ${Object.entries(m.config).map(([k, v]) => `${k} ${v}`).join(' · ')}`), h('div', { class: 'fila-acciones' }, play, barra, h('span', { class: 'nota chica repro-txt' }, ''), video, salir));
+  c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, h('div', { class: 'tunel-marco' }, lienzo),
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
+  cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900);
+  mostrarCuadro(r.k);
+}
+
+// ---------------------------------------------------------------------------------------------- Cp del perímetro
+let cajaCp: H | null = null, anchoCp = 800, ultimoCp = 0;
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (t: string, a: Record<string, string | number>, txt?: string) => { const e = document.createElementNS(NS, t); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, String(v))); if (txt !== undefined) e.textContent = txt; return e; };
+/** el gráfico del Cp promedio a lo largo del perímetro: esquinas marcadas, pico de succión y empuje máximo */
+function armarCp() {
+  const el = cajaCp, c = corrida;
+  if (!el?.isConnected || !c) return;
+  const ahora = performance.now();
+  if (ahora - ultimoCp < 1500 && el.childElementCount) return;
+  ultimoCp = ahora;
+  const pr = c.perim, t = pr.tramos(120);
+  if (pr.muestras < 5 || t.length < 4) { el.replaceChildren(h('p', { class: 'nota chica' }, 'Cp a lo largo del perímetro: se empieza a promediar pasado el arranque (medio recorrido del canal).')); return; }
+  const W = anchoCp, Hh = 230, mi = 46, md = 12, ms = 18, mb = 34, L = pr.p.largo;
+  const cps = t.map(x => x.cp), c0 = Math.min(-0.5, ...cps), c1 = Math.max(0.5, ...cps);
+  const X = (sv: number) => mi + (sv / L) * (W - mi - md), Y = (cp: number) => ms + ((c1 - cp) / (c1 - c0)) * (Hh - ms - mb);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, width: W, height: Hh, class: 'grafico', role: 'img', 'aria-label': 'Cp promedio a lo largo del perímetro de la planta' });
+  [c0, 0, c1].forEach(v => { svg.append(svgEl('line', { x1: mi, x2: W - md, y1: Y(v), y2: Y(v), class: v === 0 ? 'd-cero' : 'd-grilla' })); svg.append(svgEl('text', { x: mi - 6, y: Y(v) + 4, class: 'd-eje', 'text-anchor': 'end' }, fmt(v, 1))); });
+  pr.p.esquinas.forEach(e => { svg.append(svgEl('line', { x1: X(e), x2: X(e), y1: ms, y2: Hh - mb, class: 'd-grilla', 'stroke-dasharray': '3 3' })); });
+  // barras finas por tramo, con el color del signo (azul empuja, rojo succiona)
+  const ancho = Math.max(1, (W - mi - md) / 120 - 0.5);
+  t.forEach(x => svg.append(svgEl('rect', { x: X(x.s) - ancho / 2, y: Math.min(Y(0), Y(x.cp)), width: ancho, height: Math.abs(Y(x.cp) - Y(0)), class: x.cp >= 0 ? 'd-c-compresion' : 'd-c-traccion' })));
+  const ex = pr.extremos(120);
+  if (ex.min) svg.append(svgEl('text', { x: Math.min(W - md - 4, Math.max(mi + 4, X(ex.min.s))), y: Y(ex.min.cp) + 14, class: 'd-valor', 'text-anchor': 'middle' }, `succión pico ${fmt(ex.min.cp, 2)}`));
+  if (ex.max) svg.append(svgEl('text', { x: Math.min(W - md - 4, Math.max(mi + 4, X(ex.max.s))), y: Y(ex.max.cp) - 5, class: 'd-valor', 'text-anchor': 'middle' }, `empuje ${fmt(ex.max.cp, 2)}`));
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => svg.append(svgEl('text', { x: X(f * L), y: Hh - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, `${fmt(f * L, 0)} m`)));
+  svg.append(svgEl('text', { x: (mi + W - md) / 2, y: Hh - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición a lo largo del perímetro, desde el punto de barlovento, en sentido antihorario (las líneas punteadas son las esquinas)'));
+  const csv = h('button', { type: 'button', class: 'mini' }, '⤓ Cp del perímetro (CSV)');
+  csv.addEventListener('click', () => {
+    const p = pr.p;
+    descargarCSV(`cp_perimetro_${c.nivel}_viento${estado.dir}.csv`, ['s (m)', 'Cp promedio', 'x (red)', 'y (red)'], Array.from(p.celdas, (_, k) => [p.s[k], pr.cp(k), p.px[k], p.py[k]]), 4);
+  });
+  el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Cp promedio a lo largo del perímetro · ${c.nivel} · ${pr.muestras} muestras`), h('div', { class: 'leyenda' }, h('span', {}, h('i', { class: 'caja', style: 'background: var(--compresion)' }), 'empuja (comprime)'), h('span', {}, h('i', { class: 'caja', style: 'background: var(--traccion)' }), 'succiona (tracciona)')), svg, h('div', { class: 'fila-acciones' }, csv)));
 }
 
 let ultimaMed = 0;
 function actualizarMediciones() {
+  armarCp();
   const el = panelMed;
   if (!el?.isConnected || !corrida) return;
   const ahora = performance.now();

@@ -13,6 +13,7 @@ import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
+import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
   rapida: { nx: 96, ny: 48, nz: 40, texto: 'rápida (96 × 48 × 40, 0,2 M celdas: gruesa)' },
@@ -22,7 +23,11 @@ const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }>
 const UH = 0.08, RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
-const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false };
+const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false,
+  /** confort del peatón: viento medio anual a 10 m del lugar (m/s, de una estación meteorológica) y si se pinta Lawson */
+  vientoMedio: 4, lawson: true };
+/** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
+const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
 interface Corrida {
   clave: string; geo: Geometria3D; uIn: Float32Array; gpu: Lbm3dGpu | null; error: string | null; cargando: boolean;
@@ -159,6 +164,9 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
   const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; return t;
 }
 
+/** la velocidad del campo abierto a 1,5 m superada el 5 % del tiempo (m/s) */
+const u5Peaton = () => velocidad5(cfg.vientoMedio) * factorPeaton(datos102De(estado.proyecto).exposicion);
+
 function actualizarCampo() {
   const c = corrida, v = vista;
   if (!c || !v || !c.campo) return;
@@ -169,6 +177,7 @@ function actualizarCampo() {
     if (cfg.vereda && z === zVereda(g)) {
       // vereda: la velocidad relativa a la del campo abierto a la misma altura (1 = como en el campo; > 1, más viento)
       const f = Math.hypot(u, w, q) / (c.uIn[z] || UH);
+      if (cfg.lawson) { out.set(COL_LAWSON[categoriaLawson(f * u5Peaton()).codigo]); return true; }
       return !!(f <= 1 ? out.copy(blanco).lerp(verde(), f) : out.copy(verde()).lerp(new THREE.Color(css('--elegido', '#ef9f27')), Math.min(1, (f - 1) / 0.6)));
     }
     if (cfg.color === 'cp') return !!colCp((r - ref) / 3 / (0.5 * UH * UH), out);
@@ -287,7 +296,7 @@ export function panelTunel3d(c: H) {
   };
   const chk = (rot: string, val: boolean, al: (x: boolean) => void) => {
     const l = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(val ? { checked: '' } : {}) }), ` ${rot}`);
-    l.querySelector('input')!.addEventListener('change', e => { al((e.target as HTMLInputElement).checked); actualizarCampo(); });
+    l.querySelector('input')!.addEventListener('change', e => { al((e.target as HTMLInputElement).checked); actualizarCampo(); actualizarPanel(true); });
     return l;
   };
   c.append(h('p', { class: 'nota' }, 'La torre entera dentro de un túnel de viento 3D, con el viento que crece con la altura como en el CIRSOC 102-25. Se ve cómo baja el aire por la cara de barlovento, cómo se despega en las esquinas y la estela detrás; el Cp de cada cara se promedia en el tiempo y se compara con el del reglamento. Necesita la placa de video (WebGPU). Didáctico: no cambia ningún número.'));
@@ -308,6 +317,11 @@ export function panelTunel3d(c: H) {
   chk('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), chk('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
   chk('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; if (corrida) corrida.ultimasLineas = 0; }),
   chk('Viento en la vereda (1,5 m)', cfg.vereda, x => { cfg.vereda = x; }),
+  chk('Vereda con el confort del peatón (Lawson)', cfg.lawson, x => { cfg.lawson = x; }), (() => {
+    const i = h('input', { type: 'text', inputmode: 'decimal', value: String(cfg.vientoMedio).replace('.', ','), class: 'n' }) as HTMLInputElement;
+    i.addEventListener('change', () => { const v = parseFloat(i.value.replace(',', '.')); if (v > 0 && v < 30) { cfg.vientoMedio = v; actualizarCampo(); actualizarPanel(true); } else i.value = String(cfg.vientoMedio).replace('.', ','); });
+    return h('label', { class: 'campo' }, h('span', {}, 'Viento medio anual del lugar a 10 m (m/s, estación meteorológica)'), i);
+  })(),
   h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. La grilla, las paredes y el giro empiezan la simulación de nuevo; los cortes y los colores, no.'));
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);
@@ -327,11 +341,20 @@ function actualizarPanel(forzar = false) {
     h('thead', {}, h('tr', {}, h('th', {}, 'Cara'), h('th', {}, 'Cp simulación'), h('th', {}, 'Cp CIRSOC 102-25'))),
     h('tbody', {}, ...nombres.map(([k, t]) => h('tr', {}, h('td', {}, t), h('td', { class: 'n' }, c.prom.muestras ? fmt(cp[k], 2) : '…'), h('td', { class: 'n' }, reg[k] === null ? '—' : fmt(reg[k]!, 2))))));
   // vereda: el mayor factor de viento a 1,5 m
-  let vereda = '';
+  let vereda = '', lawson: H | null = null;
   if (c.campo) {
     const z = zVereda(g); let max = 0;
     for (let y = 0; y < g.ny; y++) for (let x = 2; x < g.nx - 2; x++) { const cel = (z * g.ny + y) * g.nx + x; if (g.solido[cel]) continue; max = Math.max(max, Math.hypot(c.campo[4 * cel], c.campo[4 * cel + 1], c.campo[4 * cel + 2]) / (c.uIn[z] || UH)); }
     vereda = `En la vereda (1,5 m), el viento llega a ${fmt(max, 2)} veces el del campo abierto a esa altura (esquinas y bajada por la cara de barlovento).`;
+    if (cfg.vereda && cfg.lawson) {
+      // confort: qué parte de la vereda (alrededor de la torre) cae en cada categoría Lawson LDDC
+      const cuenta: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, E: 0 }; let n = 0;
+      const x0 = Math.max(2, g.caja.x0 - (g.caja.x1 - g.caja.x0)), x1 = Math.min(g.nx - 2, g.caja.x1 + 2 * (g.caja.x1 - g.caja.x0)), y0 = Math.max(0, g.caja.y0 - (g.caja.y1 - g.caja.y0)), y1 = Math.min(g.ny - 1, g.caja.y1 + (g.caja.y1 - g.caja.y0));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const cel = (z * g.ny + y) * g.nx + x; if (g.solido[cel]) continue; n++; cuenta[categoriaLawson((Math.hypot(c.campo[4 * cel], c.campo[4 * cel + 1], c.campo[4 * cel + 2]) / (c.uIn[z] || UH)) * u5Peaton()).codigo]++; }
+      lawson = h('div', {}, h('p', { class: 'llave' }, `Confort del peatón (Lawson LDDC, 5 % del tiempo) alrededor de la torre, con ${fmt(cfg.vientoMedio, 1)} m/s de viento medio anual: en campo abierto, a 1,5 m, se superan ${fmt(u5Peaton(), 1)} m/s el 5 % del tiempo.`),
+        h('div', { class: 'leyenda' }, ...LAWSON_LDDC.map(k => { const sp = h('span', {}); const i = h('i', { class: 'caja' }); i.style.background = COL_LAWSON[k.codigo]; sp.append(i, `${k.codigo} ${k.texto}${isFinite(k.hasta) ? ` (≤ ${fmt(k.hasta, 1)} m/s)` : ''}: ${n ? fmt((100 * cuenta[k.codigo]) / n, 0) : '—'} %`); return sp; })),
+        h('p', { class: 'nota chica' }, 'Supone vientos de Rayleigh (Weibull k = 2) con el viento medio del lugar, el perfil del 102-25 para bajar a 1,5 m y la dirección simulada todo el año. Un estudio de confort real usa la rosa de vientos de la estación y todas las direcciones.'));
+    }
   }
   el.replaceChildren(
     h('div', { class: 'kpis' },
@@ -339,6 +362,7 @@ function actualizarPanel(forzar = false) {
       kpi('Placa de video', `${fmt(c.mlups, 0)} M/s`, 'millones de celdas por segundo'),
     ),
     tabla,
+    ...(lawson ? [lawson] : []),
     h('p', { class: 'nota' }, `${c.prom.muestras ? `Cp promediado en ${c.prom.muestras} muestras (desde la primera pasada del aire), con qh de la altura de la torre y la presión de referencia aguas arriba.` : 'El Cp se empieza a promediar después de la primera pasada del aire.'} El reglamento da valores de diseño de un edificio aislado; la simulación, con la planta real, una sola dirección y un Reynolds de red ≈ ${fmt(RE, 0)}, da el orden de magnitud: en barlovento se parecen; en los costados y sotavento la simulación suele dar más succión. ${vereda}`),
   );
 }

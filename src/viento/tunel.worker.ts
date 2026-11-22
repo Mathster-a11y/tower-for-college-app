@@ -13,6 +13,8 @@ export type MensajeTunel =
 export interface CuadroTunel {
   tipo: 'cuadro'; pasos: number; hechos: number; roto: boolean;
   ux: Float32Array; uy: Float32Array; rho: Float32Array; Fx: Float32Array; Fy: Float32Array;
+  /** el giro del aire ya calculado (solo en las reproducciones de una grabación) */
+  w?: Float32Array;
 }
 
 let sim: Lbm2D | null = null, corriendo = false, listo = true, ultimo = 0;
