@@ -180,6 +180,30 @@
 </table>
 <div class="caja"><b>Recomendación:</b> 1 + 2 primero (calidad en esquinas y curvas casi sin costo), después 3 (la información que más importa, en todas las computadoras), después 4 + 5 (corridas largas, archivo y datos), y después 6 y 7.</div>
 
+<h2>5. Niveles de fidelidad: de la computadora más limitada a la simulación de alta fidelidad</h2>
+<p>El simulador no tiene que elegir entre «liviano» y «preciso»: conviene ofrecer niveles. El de abajo anda en cualquier computadora; los de arriba se habilitan según la placa medida (ver <code>docs/informe_simulador_capacidad.md</code>) y están pensados para superficies complejas (carpinterías curvas, retranqueos, esquinas trabajadas).</p>
+<table>
+<tr><th>Nivel</th><th>Para qué computadora</th><th>Qué corre</th><th>Detalle en la fachada (torre de 64 m)</th><th>Para qué sirve</th></tr>
+<tr><td><b>Básico</b></td><td>cualquiera, sin placa de video</td><td>2D piso por piso en el procesador (14–20 celdas por ancho); 3D grueso en el procesador con varios núcleos</td><td>≈ 1 m (2D) · ≈ 2,5 m (3D)</td><td>entender el flujo, comparar formas grandes</td></tr>
+<tr><td><b>Intermedio</b></td><td>placa integrada con WebGPU</td><td>2D de 30–60 celdas; 3D liviano; paredes exactas (P1)</td><td>0,3–0,7 m (2D) · ≈ 1,5 m (3D)</td><td>comparar esquinas y carpinterías; tendencias confiables</td></tr>
+<tr><td><b>Alto</b></td><td>placa dedicada (4–8 GB)</td><td>3D fino o «muy fino» con tres técnicas que ahorran memoria: poblaciones en 16 bits, una sola copia de la grilla («esoteric pull», publicado por Lehmann, 2022) y bloques refinados al doble alrededor de la torre. Más rebote interpolado y TRT, corridas largas con grabación y promedios.</td><td>0,25–0,4 m en la grilla general y 0,12–0,2 m en el bloque refinado junto a la fachada</td><td>superficies complejas: picos de succión en curvas y esquinas, Cp por piso a lo largo del perímetro</td></tr>
+<tr><td><b>Máximo (laboratorio)</b></td><td>computadora de laboratorio o servidor</td><td>la app <b>exporta el caso</b> (la torre piso por piso en STL, el perfil del viento del 102-25 y los archivos de malla) para correrlo en <b>OpenFOAM</b> con LES, y <b>vuelve a importar</b> el Cp de cada cara para compararlo en la app</td><td>centímetros, con capa límite</td><td>la referencia: validar los otros niveles y estudiar la forma final</td></tr>
+</table>
+<p>Memoria por celda del 3D (D3Q19): hoy 172 bytes (dos copias en 32 bits). Con 16 bits y una sola copia baja a unos 40–60 bytes: en una placa de 8 GB pasa de unos 45 millones de celdas a unos 130–200 millones, lo que permite celdas de 0,25 m en una torre de 64 m sin achicar el dominio. Los límites del navegador (bloques de memoria de 1–4 GB según la placa) obligan a partir la grilla en varios bloques; es parte del trabajo del nivel alto.</p>
+<p>El nivel máximo no mete un programa de terceros dentro de la app: Torre 3D solo escribe archivos de entrada y lee resultados. OpenFOAM corre aparte, con su propia licencia (GPL-3.0).</p>
+
+<h2>6. Derechos de autor: cómo se usa lo que se aprende de otros programas</h2>
+<div class="caja aviso">
+<ul>
+  <li><b>Ideas, métodos y fórmulas no se copian, se reimplementan.</b> El rebote interpolado, la colisión TRT, las poblaciones en 16 bits o el «esoteric pull» son técnicas publicadas en artículos científicos. Se programan desde el artículo, citándolo, sin tomar código de otro programa.</li>
+  <li><b>Código GPL (OpenFOAM, Butterfly, OpenLB, Palabos, waLBerla): no se incorpora.</b> Copiar código GPL obligaría a publicar Torre 3D con la misma licencia, y eso es incompatible con su licencia actual (no comercial). Usarlos como programas separados, por ejemplo exportar un caso para OpenFOAM, sí se puede.</li>
+  <li><b>Licencias «solo uso no comercial» (FluidX3D) u otras propietarias (Autodesk, SimScale): ni código ni recursos.</b> De ellas solo se toman ideas generales de uso (por ejemplo, ofrecer un modo rápido y uno detallado), que no están protegidas.</li>
+  <li><b>MIT y Apache-2.0 (XLB, lattice-boltzmann-simulator):</b> se podría reutilizar código conservando el aviso de autor y la licencia, pero la preferencia es reimplementar para que la app sea toda propia y coherente.</li>
+  <li><b>Capturas e imágenes de otros programas:</b> este informe no reproduce ninguna. Se enlaza a sus sitios. Si en algún momento hace falta mostrar una, se usará una captura propia, con cita y solo lo necesario para comentarla, o el permiso del autor.</li>
+  <li><b>Casos de validación:</b> los datos de ensayos publicados (el edificio CAARC, el prisma cuadrado) se usan como referencia citando la fuente; los números de un artículo no se copian en bloque como tablas de la app sin cita.</li>
+</ul>
+</div>
+
 <h3>Límites que no cambian</h3>
 <ul>
   <li>Ningún simulador de navegador llega al Reynolds real de una torre. Con aristas vivas importa poco; con curvas, el resultado da la <b>tendencia</b> (qué forma es mejor), no el número final.</li>
@@ -196,6 +220,7 @@
   <li><a href="https://github.com/rafaelanderka/lattice-boltzmann-simulator">lattice-boltzmann-simulator (WebGL2)</a>; <a href="https://wartets.github.io/Wartets/lib/assets/Turbulence-sim.pdf">Turbulence-sim</a>.</li>
   <li>Bordes curvos: <a href="https://arxiv.org/pdf/1906.05445">comparación rebote interpolado / borde inmerso</a>, <a href="https://arxiv.org/pdf/2009.04604">condición de un nodo</a>. TRT: <a href="https://access.archive-ouverte.unige.ch/access/metadata/0960f163-a54a-4cdc-8542-d2b94833624a/download">posición de la pared y Λ = 3/16</a>.</li>
   <li>CAARC: <a href="https://structurae.net/en/literature/journal-article/towards-a-standard-cfd-setup-for-wind-load-assessment-of-high-rise-buildings-part-1-benchmark-of-the-caarc-building">Thordal et al., estándar de CFD para torres</a>. Esquinas: <a href="https://scholars.cityu.edu.hk/en/publications/aerodynamic-performance-of-caarc-standard-tall-building-model-by-/">chaflanes en el CAARC</a>, <a href="https://scholar.hit.edu.cn/en/publications/effects-of-corner-modifications-on-wind-loads-and-local-pressures/">efecto de las esquinas en cargas y presiones locales</a>.</li>
+  <li>Una sola copia de la grilla: M. Lehmann, <a href="https://mdpi.com/2079-3197/10/6/92">«Esoteric Pull and Esoteric Push»</a>, Computation 10(6), 92 (2022). Poblaciones en 16 bits: M. Lehmann et al., <a href="https://doi.org/10.1103%2FPhysRevE.106.015308">«Accuracy and performance of the lattice Boltzmann method with 64-bit, 32-bit, and customized 16-bit number formats»</a>, Phys. Rev. E 106, 015308 (2022).</li>
   <li>Teoría de franjas (2D por tramos): <a href="https://arxiv.org/pdf/2012.07845">Modelling of flow past long cylindrical structures</a>.</li>
   <li>Estructuras: <a href="https://opensees.berkeley.edu/OpenSees/home/about.php">OpenSees</a>, <a href="https://en.wikipedia.org/wiki/OpenSees">licencia (Wikipedia)</a>, <a href="https://www.github.com/JWock82/PyNite">PyNite</a>.</li>
 </ul>
