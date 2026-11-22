@@ -265,12 +265,17 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
   // el giro se mide en la grilla fina: la misma escala de color en 1/s físicos (3·u0/D del túnel, por r)
   const escV = (3 * U0) / (c.geo.D * r);
+  // el giro, suavizado en 3 × 3 celdas como en el túnel (las orillas interpoladas del grueso dejan escalones chicos)
+  const wS = cfg.vista === 'vorticidad' ? new Float32Array(nx * ny) : null, wF = wS ? new Float32Array(nx * ny) : null;
+  if (wS && wF) {
+    for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; if (!solido[q]) wS[q] = (uy[q + 1] - uy[q - 1]) * 0.5 - (ux[q + nx] - ux[q - nx]) * 0.5; }
+    for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const q = y * nx + x; wF[q] = (wS[q - nx - 1] + wS[q - nx] + wS[q - nx + 1] + wS[q - 1] + wS[q] + wS[q + 1] + wS[q + nx - 1] + wS[q + nx] + wS[q + nx + 1]) / 9; }
+  }
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);
     if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
-    if (cfg.vista === 'vorticidad') {
-      const xa = Math.max(1, Math.min(nx - 2, x)), ya = Math.max(1, Math.min(ny - 2, y)), qa = ya * nx + xa;
-      const w = ((uy[qa + 1] - uy[qa - 1]) * 0.5 - (ux[qa + nx] - ux[qa - nx]) * 0.5) / escV;
+    if (wF) {
+      const w = wF[Math.max(1, Math.min(ny - 2, y)) * nx + Math.max(1, Math.min(nx - 2, x))] / escV;
       mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k);
     } else if (cfg.vista === 'velocidad') mezcla(fondo, rapido, Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6), k);
     else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
@@ -366,7 +371,7 @@ export function centroTunel(c: H, tam: Tam) {
   );
   if (det) {
     // la ventana fina: al menos 360 px de ancho, o el doble del recuadro en el túnel
-    const sG = lienzo.width / cr.geo.nx, wD = Math.min(ancho, Math.max(360, Math.min(720, 2 * det.geo.v.w * sG)));
+    const wD = Math.min(ancho, 640, Math.max(360, (520 * det.geo.nx) / det.geo.ny));
     if (!lienzoDet) { lienzoDet = document.createElement('canvas'); lienzoDet.className = 'tunel2d'; lienzoDet.setAttribute('role', 'img'); }
     lienzoDet.width = Math.round(wD); lienzoDet.height = Math.round((wD * det.geo.ny) / det.geo.nx);
     lienzoDet.style.maxWidth = `${Math.round(wD)}px`;
@@ -760,17 +765,20 @@ function armarCp() {
   // barras finas por tramo, con el color del signo (azul empuja, rojo succiona)
   const ancho = Math.max(1, (W - mi - md) / 120 - 0.5);
   t.forEach(x => svg.append(svgEl('rect', { x: X(x.s) - ancho / 2, y: Math.min(Y(0), Y(x.cp)), width: ancho, height: Math.abs(Y(x.cp) - Y(0)), class: x.cp >= 0 ? 'd-c-compresion' : 'd-c-traccion' })));
+  // los picos: un punto en la punta de la barra; el valor va en la leyenda (sobre el gráfico se pisaba con los ejes)
   const ex = pr.extremos(120);
-  if (ex.min) svg.append(svgEl('text', { x: Math.min(W - md - 4, Math.max(mi + 4, X(ex.min.s))), y: Y(ex.min.cp) + 14, class: 'd-valor', 'text-anchor': 'middle' }, `succión pico ${fmt(ex.min.cp, 2)}`));
-  if (ex.max) svg.append(svgEl('text', { x: Math.min(W - md - 4, Math.max(mi + 4, X(ex.max.s))), y: Y(ex.max.cp) - 5, class: 'd-valor', 'text-anchor': 'middle' }, `empuje ${fmt(ex.max.cp, 2)}`));
-  [0, 0.25, 0.5, 0.75, 1].forEach(f => svg.append(svgEl('text', { x: X(f * L), y: Hh - mb + 14, class: 'd-eje', 'text-anchor': 'middle' }, `${fmt(f * L, 0)} m`)));
-  svg.append(svgEl('text', { x: (mi + W - md) / 2, y: Hh - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición a lo largo del perímetro, desde el punto de barlovento, en sentido antihorario (las líneas punteadas son las esquinas)'));
+  if (ex.min) svg.append(svgEl('circle', { cx: X(ex.min.s), cy: Y(ex.min.cp), r: 4, class: 'd-pico' }));
+  if (ex.max) svg.append(svgEl('circle', { cx: X(ex.max.s), cy: Y(ex.max.cp), r: 4, class: 'd-pico' }));
+  [0, 0.25, 0.5, 0.75, 1].forEach((f, i) => svg.append(svgEl('text', { x: X(f * L), y: Hh - mb + 14, class: 'd-eje', 'text-anchor': i === 0 ? 'start' : i === 4 ? 'end' : 'middle' }, `${fmt(f * L, 0)} m`)));
+  svg.append(svgEl('text', { x: (mi + W - md) / 2, y: Hh - 6, class: 'd-eje', 'text-anchor': 'middle' }, 'posición a lo largo del perímetro (m)'));
   const csv = h('button', { type: 'button', class: 'mini' }, '⤓ Cp del perímetro (CSV)');
   csv.addEventListener('click', () => {
     const p = pr.p;
     descargarCSV(`cp_perimetro_${c.nivel}_viento${estado.dir}.csv`, ['s (m)', 'Cp promedio', 'x (red)', 'y (red)'], Array.from(p.celdas, (_, k) => [p.s[k], pr.cp(k), p.px[k], p.py[k]]), 4);
   });
-  el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Cp promedio a lo largo del perímetro · ${c.nivel} · ${pr.muestras} muestras`), h('div', { class: 'leyenda' }, h('span', {}, h('i', { class: 'caja', style: 'background: var(--compresion)' }), 'empuja (comprime)'), h('span', {}, h('i', { class: 'caja', style: 'background: var(--traccion)' }), 'succiona (tracciona)')), svg, h('div', { class: 'fila-acciones' }, csv)));
+  el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Cp promedio a lo largo del perímetro · ${c.nivel} · ${pr.muestras} muestras`), h('div', { class: 'leyenda' }, h('span', {}, h('i', { class: 'caja', style: 'background: var(--compresion)' }), 'empuja (comprime)'), h('span', {}, h('i', { class: 'caja', style: 'background: var(--traccion)' }), 'succiona (tracciona)'),
+    ...(ex.max ? [h('span', {}, `● empuje máximo ${fmt(ex.max.cp, 2)} a ${fmt(ex.max.s, 1)} m`)] : []), ...(ex.min ? [h('span', {}, `● succión pico ${fmt(ex.min.cp, 2)} a ${fmt(ex.min.s, 1)} m`)] : [])),
+    svg, h('p', { class: 'nota chica' }, 'Desde el punto de barlovento (donde choca el viento), en sentido antihorario; las líneas punteadas son las esquinas.'), h('div', { class: 'fila-acciones' }, csv)));
 }
 
 let ultimaMed = 0;

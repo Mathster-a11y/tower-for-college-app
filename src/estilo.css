@@ -1682,3 +1682,5 @@ details.como-leer li { margin: 2px 0; }
 canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px dashed var(--elegido); }
 .ventana-detalle { margin: 10px 0 14px; }
 .ventana-detalle canvas.tunel2d { margin: 0 auto; }
+.ventana-detalle .tunel-marco { width: fit-content; max-width: 100%; margin: 0 auto 6px; }
+.grafico .d-pico { fill: none; stroke: var(--ink); stroke-width: 1.5; }
