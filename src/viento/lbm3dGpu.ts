@@ -109,7 +109,7 @@ fn paso(@builtin(global_invocation_id) g: vec3<u32>) {
     return;
   }
   // TRT (Λ = 3/16): simétrica con ω+, antisimétrica con ω−
-  let omm = 1.0 / (0.1875 / (tau - 0.5) + 0.5);
+  let omm = max(1.5, 1.0 / (0.1875 / (tau - 0.5) + 0.5));   // piso de ω− (OMEGA_MENOS_MIN de lbm2d: ruido a Reynolds alto)
   for (var i = 0u; i < 19u; i++) {
     let o = OPP[i];
     let sp = 0.5 * ((v[i] + v[o]) - (eq[i] + eq[o]));

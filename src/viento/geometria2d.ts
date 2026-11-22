@@ -93,7 +93,7 @@ export function chaflanar(pol: P[], d: number): P[] {
   return out;
 }
 
-function dentro(p: P[], x: number, y: number): boolean {
+export function dentro(p: P[], x: number, y: number): boolean {
   let s = false;
   for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
     const a = p[i], b = p[j];

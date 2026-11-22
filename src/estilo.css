@@ -1678,3 +1678,7 @@ details.como-leer li { margin: 2px 0; }
 /* túnel 2D: reproductor de grabaciones */
 .repro .fila-acciones { align-items: center; flex-wrap: wrap; }
 .repro input[type=range] { flex: 1; min-width: 160px; }
+/* ventana de detalle del túnel 2D */
+canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px dashed var(--elegido); }
+.ventana-detalle { margin: 10px 0 14px; }
+.ventana-detalle canvas.tunel2d { margin: 0 auto; }

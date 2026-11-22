@@ -32,6 +32,8 @@ export interface OpcionesLbm3 {
   colision?: 'bgk' | 'trt';
 }
 /** Λ de la colisión TRT */
+/** piso de ω− en la colisión TRT (como en lbm2d: a Reynolds alto, sin piso, el ruido de la grilla no se amortigua) */
+export const OMEGA_MENOS_MIN = 1.5;
 export const LAMBDA_TRT3 = 3 / 16;
 
 /**
@@ -148,7 +150,7 @@ export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false)
   const om = 1 / tau;
   if (!trt) { for (let i = 0; i < 19; i++) v[i] += om * (eq[i] - v[i]); return; }
   // TRT: la parte simétrica de cada par relaja con ω+ (la viscosidad) y la antisimétrica con ω−
-  const omm = 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5), w0 = new Float64Array(v);
+  const omm = Math.max(OMEGA_MENOS_MIN, 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5)), w0 = new Float64Array(v);
   for (let i = 0; i < 19; i++) {
     const o = OPP3[i];
     const sp = 0.5 * ((w0[i] + w0[o]) - (eq[i] + eq[o])), sm = 0.5 * ((w0[i] - w0[o]) - (eq[i] - eq[o]));

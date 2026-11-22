@@ -20,6 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
+import { ajustarVentana, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
 const RE: Record<string, { Re: number; cs: number; texto: string }> = {
@@ -40,7 +41,15 @@ const cfg = {
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
+  /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
+  ventana: null as Ventana | null, fino: 4 as 2 | 4,
 };
+/** la ventana de detalle de la corrida: su geometría fina y los promedios en el tiempo */
+interface CorridaDetalle { geo: GeometriaDetalle; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
+let det: CorridaDetalle | null = null;
+/** marcando el recuadro en el túnel (arrastrando) */
+let marcando = false, arrastre: { x0: number; y0: number; x1: number; y1: number } | null = null;
+let lienzoDet: HTMLCanvasElement | null = null, panelDet: H | null = null;
 
 interface Corrida {
   clave: string; geo: Geometria2D; nu: number; cs: number; worker: Worker;
@@ -101,6 +110,19 @@ function iniciar() {
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
   const exactas = cfg.paredes === 'exactas';
   worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk' } satisfies MensajeTunel);
+  det = null;
+  if (cfg.ventana) ponerVentana(cfg.ventana);
+}
+
+/** pone (o saca, con null) la ventana de detalle en la corrida */
+function ponerVentana(v: Ventana | null) {
+  const c = corrida;
+  if (!c) return;
+  if (!v) { cfg.ventana = null; det = null; c.worker.postMessage({ tipo: 'detalle', geo: null, exactas: false } satisfies MensajeTunel); return; }
+  const va = ajustarVentana(c.geo, v, cfg.fino), gd = geometriaDetalle(c.geo, va, cfg.fino), n = gd.nx * gd.ny;
+  cfg.ventana = va;
+  det = { geo: gd, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
+  c.worker.postMessage({ tipo: 'detalle', geo: gd, exactas: cfg.paredes === 'exactas' } satisfies MensajeTunel);
 }
 
 /** pausa o sigue (el worker calcula sin parar mientras corre) */
@@ -134,7 +156,13 @@ function recibir(r: CuadroTunel) {
     const desde = Math.max(0, c.Fx.length - Math.min(c.Fx.length, c.pasos - Math.round((0.6 * c.geo.nx) / U0)));
     c.med = medir(c.Fx.slice(desde), c.Fy.slice(desde), U0, c.geo.D);
     c.perim.sumar(r.rho);                                             // la presión en el perímetro, pasado el arranque
+    if (det && r.det && r.det.nx === det.geo.nx && r.det.ny === det.geo.ny) {
+      const d = r.det; let mx = 0;
+      for (let k = 0; k < d.ux.length; k++) { const v = Math.hypot(d.ux[k], d.uy[k]); det.sumaV[k] += v; det.sumaR[k] += d.rho[k]; if (!det.geo.solido[k]) mx = Math.max(mx, v); }
+      det.muestras++; det.maxInst = Math.max(det.maxInst, mx / U0);
+    }
   }
+  if (det && r.det) det.roto = r.det.roto;
   actualizarMediciones();
 }
 
@@ -209,12 +237,105 @@ function dibujar() {
     }
     g.globalAlpha = 1;
   }
+  // el recuadro de la ventana de detalle (o el que se está marcando)
+  const rec = arrastre ? { x0: Math.min(arrastre.x0, arrastre.x1), y0: Math.min(arrastre.y0, arrastre.y1), w: Math.abs(arrastre.x1 - arrastre.x0), h: Math.abs(arrastre.y1 - arrastre.y0) } : cfg.ventana;
+  if (rec) {
+    g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 2; g.setLineDash([6, 4]);
+    g.strokeRect(rec.x0 * s, (ny - rec.y0 - rec.h) * s, rec.w * s, rec.h * s); g.restore();
+  }
+  dibujarDetalle(c, rhoRef);
   if (cfg.humo) {
     g.fillStyle = css('--ink2', '#556'); g.globalAlpha = 0.55;
     const hm = c.humo;
     for (let k = 0; k < hm.length; k += 2) g.fillRect(hm[k] * s - 1, (ny - hm[k + 1]) * s - 1, 2, 2);
     g.globalAlpha = 1;
   }
+}
+
+/** la ventana fina, con los mismos colores que el túnel */
+let imgDet: ImageData | null = null, auxDet: HTMLCanvasElement | null = null;
+function dibujarDetalle(c: Corrida, rhoRef: number) {
+  const cv = lienzoDet, d = c.campo?.det;
+  if (!cv || !cv.isConnected || !det || !d || d.nx !== det.geo.nx || d.ny !== det.geo.ny) return;
+  const { nx, ny, solido, r } = det.geo, { ux, uy, rho } = d;
+  if (!imgDet || imgDet.width !== nx || imgDet.height !== ny) { imgDet = new ImageData(nx, ny); auxDet = document.createElement('canvas'); auxDet.width = nx; auxDet.height = ny; }
+  const px = imgDet.data;
+  const fondo = rgb(css('--lienzo', '#ffffff')), comp = rgb(css('--compresion', '#378add')), trac = rgb(css('--traccion', '#e24b4a')), sol = rgb(css('--ink', '#223344'));
+  const giroA = rgb(css('--carga', '#d85a30')), giroH = rgb(css('--corte', '#7f77dd')), rapido = rgb(css('--deformada', '#1d9e75'));
+  const mezcla = (a: number[], b: number[], t: number, k: number) => { px[k] = a[0] + (b[0] - a[0]) * t; px[k + 1] = a[1] + (b[1] - a[1]) * t; px[k + 2] = a[2] + (b[2] - a[2]) * t; px[k + 3] = 255; };
+  // el giro se mide en la grilla fina: la misma escala de color en 1/s físicos (3·u0/D del túnel, por r)
+  const escV = (3 * U0) / (c.geo.D * r);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const q = y * nx + x, k = 4 * ((ny - 1 - y) * nx + x);
+    if (solido[q]) { mezcla(sol, sol, 0, k); continue; }
+    if (cfg.vista === 'vorticidad') {
+      const xa = Math.max(1, Math.min(nx - 2, x)), ya = Math.max(1, Math.min(ny - 2, y)), qa = ya * nx + xa;
+      const w = ((uy[qa + 1] - uy[qa - 1]) * 0.5 - (ux[qa + nx] - ux[qa - nx]) * 0.5) / escV;
+      mezcla(fondo, w >= 0 ? giroA : giroH, Math.min(1, Math.abs(w)), k);
+    } else if (cfg.vista === 'velocidad') mezcla(fondo, rapido, Math.min(1, Math.hypot(ux[q], uy[q]) / U0 / 1.6), k);
+    else { const cp = (rho[q] - rhoRef) / 3 / (0.5 * U0 * U0); mezcla(fondo, cp >= 0 ? comp : trac, Math.min(1, Math.abs(cp) / (cp >= 0 ? 1 : 1.6)), k); }
+  }
+  auxDet!.getContext('2d')!.putImageData(imgDet, 0, 0);
+  const g = cv.getContext('2d')!;
+  g.imageSmoothingEnabled = true; g.drawImage(auxDet!, 0, 0, cv.width, cv.height);
+  // el contorno real, encima
+  const s = cv.width / nx;
+  g.save(); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
+  g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
+  for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.stroke(); }
+  g.restore();
+  actualizarLecturaDetalle(c);
+}
+
+/** lo que se lee en la ventana: la velocidad más alta (promedio y pico) y la succión más fuerte en la pared */
+let ultimaLectura = 0;
+function actualizarLecturaDetalle(c: Corrida) {
+  const el = panelDet;
+  if (!el?.isConnected || !det || performance.now() - ultimaLectura < 700) return;
+  ultimaLectura = performance.now();
+  const { nx, ny, solido } = det.geo, n = det.muestras;
+  if (det.roto) { el.replaceChildren(h('p', { class: 'aviso-linea' }, 'La ventana se volvió inestable: probá con ×2 o con un recuadro que no corte la torre tan cerca de una esquina.')); return; }
+  if (!n) { el.replaceChildren(h('p', { class: 'nota' }, 'Los promedios de la ventana arrancan junto con las mediciones del túnel, pasado el arranque.')); return; }
+  const rhoRef = c.campo?.rho[celdaRef2D(c.geo)] ?? 1;
+  let vMax = 0, cpMin = Infinity;
+  for (let y = 2; y < ny - 2; y++) for (let x = 2; x < nx - 2; x++) {
+    const q = y * nx + x;
+    if (solido[q]) continue;
+    vMax = Math.max(vMax, det.sumaV[q] / n / U0);
+    if (solido[q - 1] || solido[q + 1] || solido[q - nx] || solido[q + nx]) cpMin = Math.min(cpMin, (det.sumaR[q] / n - rhoRef) / 3 / (0.5 * U0 * U0));
+  }
+  const V = estimarV();
+  el.replaceChildren(h('div', { class: 'kpis' },
+    kpi('Viento medio más alto', `${fmt(vMax, 2)} × V`, `≈ ${fmt(vMax * V, 0)} m/s con V = ${fmt(V, 0)} m/s`),
+    kpi('Pico (remolinos)', `${fmt(det.maxInst, 2)} × V`, `≈ ${fmt(det.maxInst * V, 0)} m/s`),
+    ...(isFinite(cpMin) ? [kpi('Succión más fuerte en la pared', `Cp ${fmt(cpMin, 2)}`, 'promedio en el tiempo')] : [])),
+    h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`));
+}
+
+/** marcar el recuadro arrastrando sobre el túnel */
+function prepararMarcado(cv: HTMLCanvasElement) {
+  const aRed = (e: PointerEvent) => {
+    const c = corrida!, b = cv.getBoundingClientRect();
+    return { x: ((e.clientX - b.left) / b.width) * c.geo.nx, y: c.geo.ny - ((e.clientY - b.top) / b.height) * c.geo.ny };
+  };
+  cv.addEventListener('pointerdown', e => {
+    if (!marcando || !corrida || repro) return;
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    const p = aRed(e); arrastre = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  });
+  cv.addEventListener('pointermove', e => { if (!arrastre || !corrida) return; const p = aRed(e); arrastre.x1 = p.x; arrastre.y1 = p.y; dibujar(); });
+  const soltar = (e: PointerEvent) => {
+    if (!arrastre || !corrida) return;
+    const a = arrastre; arrastre = null; marcando = false; cv.classList.remove('marcando');
+    try { cv.releasePointerCapture(e.pointerId); } catch { /* ya estaba suelto */ }
+    const w = Math.abs(a.x1 - a.x0), hh = Math.abs(a.y1 - a.y0);
+    // un clic sin arrastrar: un recuadro de un ancho de torre alrededor del punto
+    const D = corrida.geo.D, v = w < 3 && hh < 3 ? { x0: a.x0 - D / 2, y0: a.y0 - D / 2, w: D, h: D } : { x0: Math.min(a.x0, a.x1), y0: Math.min(a.y0, a.y1), w, h: hh };
+    ponerVentana(v); estado.avisarPanel();
+  };
+  cv.addEventListener('pointerup', soltar);
+  cv.addEventListener('pointercancel', () => { arrastre = null; dibujar(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && (marcando || arrastre)) { marcando = false; arrastre = null; cv.classList.remove('marcando'); dibujar(); estado.avisarPanel(); } });
 }
 
 // ---------------------------------------------------------------------------------------------------- centro
@@ -224,7 +345,8 @@ export function centroTunel(c: H, tam: Tam) {
   const cr = corrida;
   if (!cr) { c.append(h('p', { class: 'nota' }, 'Hace falta una planta con losa sobre PB para armar el túnel.')); return; }
   const ancho = Math.max(320, (tam.ancho ?? 900) - 10);
-  if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; }
+  if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; prepararMarcado(lienzo); }
+  lienzo.classList.toggle('marcando', marcando);
   lienzo.width = Math.round(ancho); lienzo.height = Math.round((ancho * cr.geo.ny) / cr.geo.nx);
   lienzo.setAttribute('role', 'img');
   lienzo.setAttribute('aria-label', `Túnel de viento 2D: la planta de ${cr.nivel} con el viento ${estado.dir} de izquierda a derecha`);
@@ -242,6 +364,21 @@ export function centroTunel(c: H, tam: Tam) {
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad, de blanco (quieto) a verde (1,6 veces la de entrada).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
+  if (det) {
+    // la ventana fina: al menos 360 px de ancho, o el doble del recuadro en el túnel
+    const sG = lienzo.width / cr.geo.nx, wD = Math.min(ancho, Math.max(360, Math.min(720, 2 * det.geo.v.w * sG)));
+    if (!lienzoDet) { lienzoDet = document.createElement('canvas'); lienzoDet.className = 'tunel2d'; lienzoDet.setAttribute('role', 'img'); }
+    lienzoDet.width = Math.round(wD); lienzoDet.height = Math.round((wD * det.geo.ny) / det.geo.nx);
+    lienzoDet.style.maxWidth = `${Math.round(wD)}px`;
+    lienzoDet.setAttribute('aria-label', 'Ventana de detalle del túnel 2D, con la grilla más fina');
+    panelDet = h('div', {});
+    c.append(h('div', { class: 'ventana-detalle' },
+      h('h3', { class: 'subtit' }, `Ventana de detalle ×${det.geo.r}`),
+      h('p', { class: 'llave' }, `El recuadro naranja del túnel, con celdas ${det.geo.r} veces más chicas (${det.geo.nx} × ${det.geo.ny}; la torre tendría ${cr.geo.D * det.geo.r} celdas de ancho). Mismos colores que arriba; la línea naranja es el contorno real.`),
+      h('div', { class: 'tunel-marco' }, lienzoDet), panelDet,
+      h('p', { class: 'nota' }, 'Anidamiento en un solo sentido: las orillas de la ventana toman el viento del túnel grueso y lo fino no le devuelve nada. Sirve para ver cómo se despega el aire en una esquina o un balcón con más definición; los remolinos que nacen en la ventana y salen de ella el túnel grueso no los ve, y lo que entra por las orillas tiene la definición del túnel grueso.')));
+    ultimaLectura = 0;
+  }
   cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900); ultimoCp = 0; armarCp();
   resultadosPisos(c, Math.min(ancho, 900));
   // mientras se simula la torre piso por piso, el túnel de la vista queda en pausa
@@ -287,6 +424,18 @@ export function panelTunel(c: H) {
   cpc.querySelector('input')!.addEventListener('change', e => { cfg.cpContorno = (e.target as HTMLInputElement).checked; dibujar(); });
   d.append(cpc);
   d.append(humo, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
+  const vd = seccion('Ventana de detalle').cuerpo; c.append(vd.parentElement!);
+  {
+    const rotulo = () => (marcando ? 'Arrastrá sobre el túnel… (Esc cancela)' : '▭ Marcar un recuadro en el túnel');
+    const marcar = h('button', { type: 'button', class: 'boton' }, rotulo());
+    marcar.addEventListener('click', () => { marcando = !marcando; lienzo?.classList.toggle('marcando', marcando); marcar.textContent = rotulo(); });
+    const quitar = h('button', { type: 'button', class: 'boton' }, 'Quitar la ventana');
+    quitar.addEventListener('click', () => { ponerVentana(null); estado.avisarPanel(); });
+    if (!cfg.ventana) quitar.setAttribute('disabled', '');
+    vd.append(h('div', { class: 'grilla2' }, sel('Definición', [['2', '×2 (cuatro veces más celdas)'], ['4', '×4 (dieciséis veces, más lento)']], String(cfg.fino) as '2' | '4', x => { cfg.fino = +x as 2 | 4; if (cfg.ventana) ponerVentana(cfg.ventana); })),
+      h('div', { class: 'fila-acciones' }, marcar, quitar),
+      h('p', { class: 'nota' }, 'Arrastrá un recuadro sobre una esquina o un balcón (o hacé un clic: marca un ancho de torre alrededor). Esa parte se vuelve a simular con una grilla más fina, debajo del túnel, con la velocidad más alta y la succión más fuerte que se miden ahí. Como mucho cuesta lo mismo que el túnel entero.'));
+  }
   const gr = seccion('Grabar y reproducir').cuerpo; c.append(gr.parentElement!);
   armarPanelGrabacion(gr);
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
@@ -574,7 +723,7 @@ function grabarVideo() {
 }
 function centroRepro(c: H, tam: Tam) {
   const r = repro!, m = r.g.meta, ancho = Math.max(320, (tam.ancho ?? 900) - 10);
-  if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; }
+  if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; prepararMarcado(lienzo); }
   lienzo.width = Math.round(ancho); lienzo.height = Math.round((ancho * m.ny) / m.nx);
   const play = h('button', { type: 'button', class: 'boton primario repro-play' }, r.reloj !== null ? '⏸ Pausa' : '▶ Reproducir');
   play.addEventListener('click', () => reproducir(repro?.reloj === null));

@@ -43,11 +43,17 @@ export interface OpcionesLbm {
   colision?: 'bgk' | 'trt';
   /** TRT: ω− no baja de este valor (con Λ = 3/16, a Reynolds alto ω− → 0 y el ruido de la grilla no se amortigua) */
   omegaMenosMin?: number;
+  /**
+   * ventana de detalle (anidada): sin entrada, salida ni bordes periódicos; las cuatro orillas toman el viento de
+   * «borde» (densidad y velocidad de cada celda de la orilla, que vienen del túnel grueso), con la parte de no
+   * equilibrio de la celda de adentro (extrapolación de Guo, Zheng y Shi, 2002)
+   */
+  marco?: boolean;
 }
 /** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
 export const LAMBDA_TRT = 3 / 16;
 /** piso de ω− en la colisión TRT (ver OpcionesLbm.omegaMenosMin) */
-export const OMEGA_MENOS_MIN = 1;
+export const OMEGA_MENOS_MIN = 1.5;
 
 export class Lbm2D {
   readonly nx: number; readonly ny: number; readonly N: number;
@@ -68,12 +74,17 @@ export class Lbm2D {
   readonly trt: boolean;
   readonly exactas: boolean;
   readonly ommMin: number;
+  readonly marco: boolean;
+  /** con «marco»: el viento impuesto en las orillas (solo se leen las celdas de la orilla) */
+  readonly borde: { rho: Float32Array; ux: Float32Array; uy: Float32Array } | null;
 
   constructor(o: OpcionesLbm) {
     this.nx = o.nx; this.ny = o.ny; this.N = o.nx * o.ny;
     this.tau0 = 3 * o.nu + 0.5; this.u0 = o.u0 ?? 0; this.cs = o.cs ?? 0; this.periodicoX = !!o.periodicoX;
     [this.gx, this.gy] = o.fuerza ?? [0, 0];
     this.solido = o.solido ?? new Uint8Array(this.N);
+    this.marco = !!o.marco;
+    this.borde = this.marco ? { rho: new Float32Array(this.N).fill(1), ux: new Float32Array(this.N).fill(this.u0 ?? 0), uy: new Float32Array(this.N) } : null;
     this.f = new Float32Array(9 * this.N); this.g = new Float32Array(9 * this.N);
     this.rho = new Float32Array(this.N).fill(1); this.ux = new Float32Array(this.N); this.uy = new Float32Array(this.N);
     // arranca con el flujo uniforme (fuera de los sólidos), con una perturbación chica transversal: en un canal
@@ -94,6 +105,7 @@ export class Lbm2D {
       if (this.solido[c]) continue;
       for (let i = 1; i < 9; i++) {
         let xs = x - EX[i], ys = y - EY[i];
+        if (this.marco && (ys < 0 || ys >= this.ny)) continue;
         if (ys < 0) ys += this.ny; else if (ys >= this.ny) ys -= this.ny;
         if (xs < 0 || xs >= this.nx) { if (!this.periodicoX) continue; xs = (xs + this.nx) % this.nx; }
         if (this.solido[ys * this.nx + xs]) enl.push(c, i);
@@ -111,6 +123,7 @@ export class Lbm2D {
       // la celda de aire del otro lado (c + e_i): la usa el rebote interpolado cuando la pared está cerca (q < ½)
       const x = c % this.nx, y = (c - x) / this.nx;
       let x2 = x + EX[i], y2 = y + EY[i];
+      if (this.marco && (y2 < 0 || y2 >= this.ny)) continue;
       if (y2 < 0) y2 += this.ny; else if (y2 >= this.ny) y2 -= this.ny;
       if (x2 < 0 || x2 >= this.nx) { if (!this.periodicoX) continue; x2 = (x2 + this.nx) % this.nx; }
       const c2 = y2 * this.nx + x2;
@@ -118,6 +131,7 @@ export class Lbm2D {
       this.otra[k] = c2;
       // y la siguiente (c + 2·e_i), para la interpolación cuadrática
       let x3 = x2 + EX[i], y3 = y2 + EY[i];
+      if (this.marco && (y3 < 0 || y3 >= this.ny)) continue;
       if (y3 < 0) y3 += this.ny; else if (y3 >= this.ny) y3 -= this.ny;
       if (x3 < 0 || x3 >= this.nx) { if (!this.periodicoX) continue; x3 = (x3 + this.nx) % this.nx; }
       if (!this.solido[y3 * this.nx + x3]) this.otra2[k] = y3 * this.nx + x3;
@@ -230,7 +244,8 @@ export class Lbm2D {
       Fx -= (fo + vuelve) * EX[i]; Fy -= (fo + vuelve) * EY[i];
     }
     // --- entrada (equilibrio a u0) y salida (gradiente nulo)
-    if (!perX) {
+    if (this.borde) this.orillas(g);
+    else if (!perX) {
       for (let y = 0; y < ny; y++) {
         const c0 = y * nx, cN = c0 + nx - 1;
         if (!solido[c0]) for (let i = 0; i < 9; i++) g[i * N + c0] = feq(i, 1, this.u0, 0);
@@ -242,6 +257,25 @@ export class Lbm2D {
     this.Fx = Fx; this.Fy = Fy;
     this.pasos++;
     if (roto) this.roto = true;
+  }
+
+  /** ventana de detalle: las orillas con el viento del túnel grueso (equilibrio + no equilibrio de la celda de adentro) */
+  private orillas(g: Float32Array) {
+    const { nx, ny, N, solido } = this, b = this.borde!;
+    const una = (c: number, d: number) => {
+      if (solido[c]) return;
+      // la celda de adentro (d: la de al lado hacia el interior); si es sólida, solo equilibrio
+      let r = 0, jx = 0, jy = 0;
+      const dentro = !solido[d];
+      if (dentro) for (let i = 0; i < 9; i++) { const v = g[i * N + d]; r += v; jx += EX[i] * v; jy += EY[i] * v; }
+      const ud = dentro ? jx / r : 0, vd = dentro ? jy / r : 0;
+      for (let i = 0; i < 9; i++) g[i * N + c] = feq(i, b.rho[c], b.ux[c], b.uy[c]) + (dentro ? g[i * N + d] - feq(i, r, ud, vd) : 0);
+    };
+    for (let x = 0; x < nx; x++) {
+      const xi = Math.min(nx - 2, Math.max(1, x));
+      una(x, nx + xi); una((ny - 1) * nx + x, (ny - 2) * nx + xi);
+    }
+    for (let y = 1; y < ny - 1; y++) { una(y * nx, y * nx + 1); una(y * nx + nx - 1, y * nx + nx - 2); }
   }
 
   /** la vorticidad ∂v/∂x − ∂u/∂y (diferencias centradas; 0 en los sólidos y en los bordes) */
