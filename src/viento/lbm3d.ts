@@ -85,20 +85,38 @@ export class Lbm3D {
     return this.solido[c] ? -1 : c;
   }
 
+  /**
+   * de dónde tira cada población de cada celda (se arma una vez): ≥ 0 la celda de atrás; −1 la tapa (refleja); −2 un
+   * sólido (rebota). Así el paso no recalcula vecinos ni bordes en cada celda (unas 20 veces más rápido en JavaScript).
+   */
+  private origen: Int32Array | null = null;
+  private armarOrigen(): Int32Array {
+    const { nx, ny, nz, N, solido } = this, o = new Int32Array(19 * N);
+    for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+      const c = (z * ny + y) * nx + x;
+      for (let i = 0; i < 19; i++) {
+        const sx = x - EX3[i], sz = z - EZ3[i];
+        let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
+        if (sz >= nz || sz < 0) { o[i * N + c] = -1; continue; }             // tapa (y fondo sin suelo): refleja
+        const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx < 0 ? 0 : sx); // salida: la de atrás
+        o[i * N + c] = solido[s] ? -2 : s;
+      }
+    }
+    return o;
+  }
+
   paso() {
     const { nx, ny, nz, N, f, g, solido, uIn } = this;
     const tau0 = this.tau0, cs2 = this.cs * this.cs;
-    const v = new Float64Array(19);
+    const v = V19, org = this.origen ??= this.armarOrigen();
     for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
       const c = (z * ny + y) * nx + x;
       if (solido[c]) continue;
       if (x === 0) { for (let i = 0; i < 19; i++) g[i * N + c] = feq3(i, 1, uIn[z], 0, 0); continue; }
       for (let i = 0; i < 19; i++) {
-        const sx = x - EX3[i], sz = z - EZ3[i];
-        let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
-        if (sz >= nz || sz < 0) { v[i] = f[ESP3[i] * N + c]; continue; }    // tapa (y fondo sin suelo): refleja
-        const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx);            // salida: la de atrás
-        if (!solido[s]) { v[i] = f[i * N + s]; continue; }
+        const s = org[i * N + c];
+        if (s >= 0) { v[i] = f[i * N + s]; continue; }
+        if (s === -1) { v[i] = f[ESP3[i] * N + c]; continue; }
         const io = OPP3[i], fo = f[io * N + c];
         const k = this.fila ? this.fila[c] : -1, qb = k >= 0 ? this.qPared![k * 19 + i] : 0;
         if (!qb) { v[i] = fo; continue; }
@@ -131,13 +149,15 @@ export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uI
 }
 
 /** colisión BGK con Smagorinsky sobre las 19 poblaciones (en el lugar) */
+// memoria de trabajo de la colisión (sin crear arreglos en cada celda)
+const V19 = new Float64Array(19), EQ19 = new Float64Array(19), W19b = new Float64Array(19);
 export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false) {
   let r = 0, jx = 0, jy = 0, jz = 0;
   for (let i = 0; i < 19; i++) { r += v[i]; jx += v[i] * EX3[i]; jy += v[i] * EY3[i]; jz += v[i] * EZ3[i]; }
   const u = jx / r, w2 = jy / r, w = jz / r;
   let tau = tau0;
-  const eq = new Float64Array(19);
-  for (let i = 0; i < 19; i++) eq[i] = feq3(i, r, u, w2, w);
+  const eq = EQ19, usq = 1.5 * (u * u + w2 * w2 + w * w);
+  for (let i = 0; i < 19; i++) { const eu = EX3[i] * u + EY3[i] * w2 + EZ3[i] * w; eq[i] = W19[i] * r * (1 + 3 * eu + 4.5 * eu * eu - usq); }
   if (cs2 > 0) {
     let xx = 0, yy = 0, zz = 0, xy = 0, xz = 0, yz = 0;
     for (let i = 1; i < 19; i++) {
@@ -150,7 +170,8 @@ export function chocar3(v: Float64Array, tau0: number, cs2: number, trt = false)
   const om = 1 / tau;
   if (!trt) { for (let i = 0; i < 19; i++) v[i] += om * (eq[i] - v[i]); return; }
   // TRT: la parte simétrica de cada par relaja con ω+ (la viscosidad) y la antisimétrica con ω−
-  const omm = Math.max(OMEGA_MENOS_MIN, 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5)), w0 = new Float64Array(v);
+  const omm = Math.max(OMEGA_MENOS_MIN, 1 / (LAMBDA_TRT3 / (tau - 0.5) + 0.5)), w0 = W19b;
+  w0.set(v);
   for (let i = 0; i < 19; i++) {
     const o = OPP3[i];
     const sp = 0.5 * ((w0[i] + w0[o]) - (eq[i] + eq[o])), sm = 0.5 * ((w0[i] - w0[o]) - (eq[i] - eq[o]));

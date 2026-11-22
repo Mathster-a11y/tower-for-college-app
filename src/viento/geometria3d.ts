@@ -31,6 +31,11 @@ export interface Geometria3D {
   celdas: number;
   /** paredes exactas: para cada celda de aire pegada a un sólido, dónde corta la pared cada uno de sus 19 enlaces */
   paredes: Paredes3D;
+  /**
+   * la torre como tramos de planta (para dibujarla con su contorno real, no en escalones): de h0 a h1 (m sobre PB),
+   * con el contorno en coordenadas de la red (x, y)
+   */
+  tramos: { h0: number; h1: number; pol: P[] }[];
 }
 
 /**
@@ -149,7 +154,9 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   }
   // planos donde cambia la planta (en coordenadas de la red: la altura h está en z = h·escala + 1) y la azotea
   const planos = [...new Set(pols.map(q => q.cota))].map(h => h * escala + 1);
-  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos) };
+  // los tramos: cada nivel rige de su cota a la del siguiente (el primero, desde el suelo); el último es la azotea
+  const tramos = pols.slice(0, -1).map((n, k) => ({ h0: k === 0 ? 0 : n.cota, h1: pols[k + 1].cota, pol: n.pol })).filter(t => t.h1 > t.h0 + 1e-9);
+  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos };
 }
 
 /**

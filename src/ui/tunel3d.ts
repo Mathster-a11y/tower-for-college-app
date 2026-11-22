@@ -13,6 +13,7 @@ import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
+import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
@@ -20,12 +21,16 @@ const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }>
   liviano: { nx: 160, ny: 80, nz: 64, texto: 'liviana (160 × 80 × 64, 0,8 M celdas)' },
   fino: { nx: 256, ny: 128, nz: 96, texto: 'fina (256 × 128 × 96, 3,1 M celdas: placa potente)' },
 };
+/** sin placa de video: el procesador, con una grilla gruesa (unas 25 a 40 veces más lento por celda que una placa media) */
+const TAM_CPU = { nx: 80, ny: 40, nz: 32, texto: 'procesador (80 × 40 × 32, 0,1 M celdas)' };
 const UH = 0.08, RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
 const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false,
   /** confort del peatón: viento medio anual a 10 m del lugar (m/s, de una estación meteorológica) y si se pinta Lawson */
-  vientoMedio: 4, lawson: true };
+  vientoMedio: 4, lawson: true,
+  /** motor: la placa de video (WebGPU) o el procesador (sin placa, más lento y con la grilla gruesa) */
+  motor: 'placa' as 'placa' | 'procesador' };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -36,11 +41,12 @@ interface Corrida {
 }
 let corrida: Corrida | null = null;
 let soporteGpu: string | null | undefined;                    // undefined: todavía no se preguntó
-let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam: THREE.PerspectiveCamera; ctl: OrbitControls; torre: THREE.Mesh | null; planoH: THREE.Mesh | null; planoV: THREE.Mesh | null; lineas: THREE.Group; clave: string } | null = null;
+let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam: THREE.PerspectiveCamera; ctl: OrbitControls; torre: THREE.Mesh | null; trozos: { desde: number; n: number; caras: number[] }[]; planoH: THREE.Mesh | null; planoV: THREE.Mesh | null; lineas: THREE.Group; clave: string } | null = null;
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
-function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo]); }
+function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor]); }
+const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
@@ -49,7 +55,7 @@ function nivelesProyecto() {
 
 async function iniciar() {
   detener();
-  const T = TAM[cfg.tam];
+  const T = tamActual();
   const geo = geometria3D({ niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz });
   const exp = datos102De(estado.proyecto).exposicion;
   const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
@@ -58,10 +64,10 @@ async function iniciar() {
     corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0 };
   corrida = c;
   try {
-    const { crearLbm3dGpu } = await import('../viento/lbm3dGpu');
     const anchoC = geo.B * geo.escala;
     const exactas = cfg.paredes === 'exactas';
-    const gpu = await crearLbm3dGpu({ nx: T.nx, ny: T.ny, nz: T.nz, nu: (UH * anchoC) / RE, cs: CS, uIn, solido: geo.solido, paredes: exactas ? geo.paredes : undefined, colision: exactas ? 'trt' : 'bgk' });
+    const o = { nx: T.nx, ny: T.ny, nz: T.nz, nu: (UH * anchoC) / RE, cs: CS, uIn, solido: geo.solido, paredes: exactas ? geo.paredes : undefined, colision: exactas ? 'trt' as const : 'bgk' as const };
+    const gpu = cfg.motor === 'procesador' ? (await import('../viento/lbm3dCpu')).crearLbm3dCpu(o) : await (await import('../viento/lbm3dGpu')).crearLbm3dGpu(o);
     if (corrida !== c) { gpu.destruir(); return; }
     c.gpu = gpu;
   } catch (e) { c.error = e instanceof Error ? e.message : String(e); }
@@ -130,14 +136,20 @@ function armarVista(cont: HTMLElement) {
   const sol = new THREE.DirectionalLight(0xffffff, 1.1); sol.position.set(-60, 120, 80); esc.add(sol);
   const suelo = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshStandardMaterial({ color: 0xeef0f2 }));
   suelo.rotation.x = -Math.PI / 2; esc.add(suelo);
-  // la torre: una cara por celda de cara, con el color del Cp de la celda de aire pegada
-  const pos: number[] = [];
-  for (const f of c.caras) {
+  // la torre: con paredes exactas, su contorno real piso por piso (la superficie, coloreada con el Cp de la celda de
+  // cara más cercana); en escalera, una cara por celda de cara, como la ve la simulación
+  const pos: number[] = [], trozos: { desde: number; n: number; caras: number[] }[] = [];
+  if (cfg.paredes === 'exactas' && g.tramos.length) {
+    const m = mallaTorre(g, c.caras);
+    for (let k = 0; k < m.pos.length; k += 3) { const q = aMundo(g, m.pos[k], m.pos[k + 1], m.pos[k + 2]); pos.push(q.x, q.y, q.z); }
+    trozos.push(...m.trozos);
+  } else for (const f of c.caras) {
     // la cara está entre la celda de aire y el sólido vecino (en −normal)
     const { x, y, z } = f, q: THREE.Vector3[] = [];
     if (f.nx !== 0) { const xf = f.nx < 0 ? x + 1 : x; q.push(aMundo(g, xf, y, z - 1), aMundo(g, xf, y + 1, z - 1), aMundo(g, xf, y + 1, z), aMundo(g, xf, y, z)); }
     else if (f.ny !== 0) { const yf = f.ny < 0 ? y + 1 : y; q.push(aMundo(g, x, yf, z - 1), aMundo(g, x + 1, yf, z - 1), aMundo(g, x + 1, yf, z), aMundo(g, x, yf, z)); }
     else { const zf = z - 1; q.push(aMundo(g, x, y, zf), aMundo(g, x + 1, y, zf), aMundo(g, x + 1, y + 1, zf), aMundo(g, x, y + 1, zf)); }
+    trozos.push({ desde: pos.length / 3, n: 6, caras: [trozos.length] });
     [0, 1, 2, 0, 2, 3].forEach(k => pos.push(q[k].x, q[k].y, q[k].z));
   }
   const gt = new THREE.BufferGeometry();
@@ -147,7 +159,7 @@ function armarVista(cont: HTMLElement) {
   const torre = new THREE.Mesh(gt, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }));
   esc.add(torre);
   const lineas = new THREE.Group(); esc.add(lineas);
-  vista = { cont, ren, esc, cam, ctl, torre, planoH: null, planoV: null, lineas, clave: c.clave };
+  vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave };
   cont.append(ren.domElement);
   ctl.addEventListener('change', () => dibujar());
 }
@@ -185,10 +197,12 @@ function actualizarCampo() {
   };
   // caras de la torre: Cp promediado (si todavía no hay muestras, el instantáneo)
   const colA = v.torre!.geometry.getAttribute('color') as THREE.BufferAttribute, col = new THREE.Color();
-  c.caras.forEach((f, k) => {
-    const cp = c.prom.muestras ? c.prom.cp(k) : (F[4 * f.celda + 3] - ref) / 3 / (0.5 * UH * UH);
-    colCp(cp, col);
-    for (let s = 0; s < 6; s++) colA.setXYZ(6 * k + s, col.r, col.g, col.b);
+  const cpCara = (k: number) => (c.prom.muestras ? c.prom.cp(k) : (F[4 * c.caras[k].celda + 3] - ref) / 3 / (0.5 * UH * UH));
+  v.trozos.forEach(t => {
+    let s = 0, n = 0;
+    for (const k of t.caras) { const cp = cpCara(k); if (isFinite(cp)) { s += cp; n++; } }
+    colCp(n ? s / n : NaN, col);
+    for (let i = 0; i < t.n; i++) colA.setXYZ(t.desde + i, col.r, col.g, col.b);
   });
   colA.needsUpdate = true;
   // corte horizontal
@@ -262,22 +276,24 @@ export function centroTunel3d(c: H, _tam: Tam) {
     void import('../viento/lbm3dGpu').then(m => m.hayWebGpu()).then(r => { soporteGpu = r; estado.avisarPanel(); });
     return;
   }
-  if (soporteGpu === null) {
+  if (soporteGpu === null && cfg.motor !== 'procesador') {
     const b = h('button', { type: 'button', class: 'boton' }, 'Ir al túnel 2D');
+    const cpu = h('button', { type: 'button', class: 'boton' }, 'Simular con el procesador (más lento)');
+    cpu.addEventListener('click', () => { cfg.motor = 'procesador'; estado.avisarPanel(); });
     b.addEventListener('click', () => { estado.sub.viento = 'Túnel 2D'; estado.avisarPanel(); });
-    c.append(h('p', { class: 'aviso-viejo' }, 'Este navegador no tiene WebGPU, que hace falta para el túnel 3D (Chrome y Edge sí; Safari desde la versión 26; Firefox, todavía no en Linux, Android ni Mac con Intel). El túnel 2D funciona en cualquier navegador.'), b);
+    c.append(h('p', { class: 'aviso-viejo' }, 'Este navegador no tiene WebGPU, la placa de video del túnel 3D (Chrome y Edge sí; Safari desde la versión 26; Firefox, todavía no en Linux, Android ni Mac con Intel). Se puede simular igual con el procesador, con una grilla gruesa (0,1 millones de celdas) y bastante más lento: una pasada del aire tarda alrededor de un minuto. El túnel 2D funciona en cualquier navegador.'), h('div', { class: 'fila-acciones' }, cpu, b));
     return;
   }
   if (!corrida || corrida.clave !== claveCorrida()) { void iniciar(); }
   const cr = corrida!;
-  if (cr.cargando) { c.append(h('p', { class: 'nota' }, 'Preparando la torre y la placa de video…')); return; }
+  if (cr.cargando) { c.append(h('p', { class: 'nota' }, cfg.motor === 'procesador' ? 'Preparando la torre…' : 'Preparando la torre y la placa de video…')); return; }
   if (cr.error) { c.append(h('p', { class: 'aviso-viejo' }, `No se pudo arrancar el túnel 3D: ${cr.error}`)); return; }
   const marco = h('div', { class: 'tunel-marco tunel3d' });
   c.append(marco);
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).' : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad, de blanco (quieto) a verde (1,3 veces la de la altura de la torre).'} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad, de blanco (quieto) a verde (1,3 veces la de la altura de la torre).'} Girá con el mouse.`));
   dibujar();
 }
 
@@ -299,7 +315,7 @@ export function panelTunel3d(c: H) {
     l.querySelector('input')!.addEventListener('change', e => { al((e.target as HTMLInputElement).checked); actualizarCampo(); actualizarPanel(true); });
     return l;
   };
-  c.append(h('p', { class: 'nota' }, 'La torre entera dentro de un túnel de viento 3D, con el viento que crece con la altura como en el CIRSOC 102-25. Se ve cómo baja el aire por la cara de barlovento, cómo se despega en las esquinas y la estela detrás; el Cp de cada cara se promedia en el tiempo y se compara con el del reglamento. Necesita la placa de video (WebGPU). Didáctico: no cambia ningún número.'));
+  c.append(h('p', { class: 'nota' }, 'La torre entera dentro de un túnel de viento 3D, con el viento que crece con la altura como en el CIRSOC 102-25. Se ve cómo baja el aire por la cara de barlovento, cómo se despega en las esquinas y la estela detrás; el Cp de cada cara se promedia en el tiempo y se compara con el del reglamento. Usa la placa de video (WebGPU); sin ella, el procesador con una grilla gruesa. Didáctico: no cambia ningún número.'));
   const play = h('button', { type: 'button', class: 'boton' }, corrida && !corrida.corriendo ? '▶ Seguir' : '⏸ Pausa');
   play.addEventListener('click', () => { if (!corrida) return; corrida.corriendo = !corrida.corriendo; if (corrida.corriendo) requestAnimationFrame(ciclo); estado.avisarPanel(); });
   const reini = h('button', { type: 'button', class: 'boton' }, '↺ Empezar de nuevo');
@@ -307,7 +323,8 @@ export function panelTunel3d(c: H) {
   c.append(h('div', { class: 'fila-acciones' }, play, reini));
   const d = seccion('Túnel 3D').cuerpo; c.append(d.parentElement!);
   d.append(h('div', { class: 'grilla2' },
-    sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
+    sel('Motor', [['placa', soporteGpu === null ? 'placa de video (no hay WebGPU)' : 'placa de video (WebGPU)'], ['procesador', 'procesador (sin placa, más lento)']], cfg.motor, x => { cfg.motor = x as 'placa' | 'procesador'; }, true),
+    cfg.motor === 'procesador' ? h('label', { class: 'campo' }, h('span', {}, 'Grilla'), h('span', { class: 'nota chica' }, TAM_CPU.texto)) : sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
     sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
     sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
@@ -323,6 +340,15 @@ export function panelTunel3d(c: H) {
     return h('label', { class: 'campo' }, h('span', {}, 'Viento medio anual del lugar a 10 m (m/s, estación meteorológica)'), i);
   })(),
   h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. La grilla, las paredes y el giro empiezan la simulación de nuevo; los cortes y los colores, no.'));
+  {
+    const stl = h('button', { type: 'button', class: 'boton' }, '⤓ La torre en STL (piso por piso)');
+    stl.addEventListener('click', () => {
+      const b = new Blob([stlTorre(nivelesProyecto())], { type: 'model/stl' }), a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = `torre_${(estado.proyecto.nombre || 'proyecto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '')}.stl`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+    d.append(h('div', { class: 'fila-acciones' }, stl), h('p', { class: 'nota chica' }, 'Un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba: para imprimir en 3D o llevar la forma a un programa de CAD o a otro simulador de viento.'));
+  }
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);
   actualizarPanel(true);
@@ -334,7 +360,7 @@ function actualizarPanel(forzar = false) {
   if (!el?.isConnected) return;
   if (!forzar && performance.now() - ultimoPanel < 800) return;
   ultimoPanel = performance.now();
-  if (!c || !c.gpu) { el.replaceChildren(h('p', { class: 'nota' }, soporteGpu === null ? 'Sin WebGPU no hay túnel 3D.' : 'Arrancando…')); return; }
+  if (!c || !c.gpu) { el.replaceChildren(h('p', { class: 'nota' }, soporteGpu === null && cfg.motor !== 'procesador' ? 'Sin WebGPU: elegí el procesador como motor.' : 'Arrancando…')); return; }
   const g = c.geo, pasadas = (c.gpu.pasos * UH) / g.nx, reg = cpReglamento(g), cp = c.prom.porCara();
   const nombres: [Cara, string][] = [['barlovento', 'Barlovento'], ['lateral', 'Laterales'], ['sotavento', 'Sotavento'], ['cubierta', 'Cubierta']];
   const tabla = h('table', { class: 'tabla' },
@@ -359,7 +385,7 @@ function actualizarPanel(forzar = false) {
   el.replaceChildren(
     h('div', { class: 'kpis' },
       kpi('Tiempo', fmt(pasadas, 1), `pasadas del aire por el túnel (${c.gpu.pasos} pasos)${c.corriendo ? '' : ' · en pausa'}`),
-      kpi('Placa de video', `${fmt(c.mlups, 0)} M/s`, 'millones de celdas por segundo'),
+      kpi(cfg.motor === 'procesador' ? 'Procesador' : 'Placa de video', `${fmt(c.mlups, c.mlups < 10 ? 1 : 0)} M/s`, 'millones de celdas por segundo'),
     ),
     tabla,
     ...(lawson ? [lawson] : []),
