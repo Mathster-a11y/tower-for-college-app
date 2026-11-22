@@ -203,18 +203,20 @@
 <p>A Re = 100 todas las variantes quedan entre 5 y 10 % por encima de la referencia, lo esperable con un canal que bloquea 8 % (las referencias usan ≈ 5 % o menos) y la entrada a 5 diámetros. Las paredes exactas acercan el Cd del cilindro; TRT el del cuadrado.</p>
 <h3>Las cinco formas, a Re ≈ 1 000 (20 celdas por ancho, corte de 10º)</h3>
 <table>
-<tr><th>Planta</th><th class="n">Cd antes<br><small>escalera · BGK · angosto</small></th><th class="n">Cd<br><small>escalera · BGK · ancho</small></th><th class="n">Cd ahora<br><small>exactas · TRT · ancho</small></th><th class="n">Cl ahora</th><th class="n">St ahora</th></tr>
-<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">2,36</td><td class="n">1,90</td><td class="n">±1,48</td><td class="n">0,191</td></tr>
-<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">—</td><td class="n">1,78</td><td class="n">±1,14</td><td class="n">0,252</td></tr>
-<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">—</td><td class="n">1,63</td><td class="n">±1,34</td><td class="n">0,239</td></tr>
-<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">1,91</td><td class="n">2,28</td><td class="n">±2,05</td><td class="n">0,193</td></tr>
-<tr><td>Carpintería curva</td><td class="n">1,93</td><td class="n">—</td><td class="n">1,74</td><td class="n">±0,91</td><td class="n">0,242</td></tr>
+<tr><th>Planta</th><th class="n">Cd antes<br><small>escalera · BGK · angosto</small></th><th class="n">Cd<br><small>escalera · BGK · ancho</small></th><th class="n">Cd<br><small>exactas · TRT sin piso · ancho</small></th><th class="n">Cd ahora<br><small>exactas · TRT ω− ≥ 1,5 · ancho</small></th><th class="n">Cl ahora</th><th class="n">St ahora</th></tr>
+<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">2,36</td><td class="n">1,90</td><td class="n">2,29</td><td class="n">±1,29</td><td class="n">0,170</td></tr>
+<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">—</td><td class="n">1,78</td><td class="n">1,90</td><td class="n">±1,08</td><td class="n">0,199</td></tr>
+<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">—</td><td class="n">1,63</td><td class="n">2,06</td><td class="n">±1,22</td><td class="n">0,187</td></tr>
+<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">1,91</td><td class="n">2,28</td><td class="n">1,92</td><td class="n">±1,09</td><td class="n">0,207</td></tr>
+<tr><td>Carpintería curva</td><td class="n">1,93</td><td class="n">—</td><td class="n">1,74</td><td class="n">1,67</td><td class="n">±0,88</td><td class="n">0,254</td></tr>
 </table>
 <div class="caja aviso"><b>Lectura honesta.</b>
 <ul>
   <li>El <b>canal ancho</b> casi no cambia el resultado a este Reynolds (2,42 → 2,36): el bloqueo no era la causa principal del exceso.</li>
   <li>En una planta alineada con la grilla (esquinas vivas, sustraídas de 2 m) la pared cae justo entre celdas y las paredes exactas dan lo mismo que la escalera; el cambio de esas filas viene de la <b>colisión TRT</b>.</li>
-  <li>Que a Re ≈ 1 000 el resultado cambie hasta 20 % según la colisión (y que las sustraídas pasen a dar más arrastre) dice que <b>20 celdas por ancho no alcanzan</b> para ese Reynolds: la turbulencia y los retranqueos de 2 celdas no están resueltos. A Re = 100, en cambio, todas las variantes coinciden y se acercan a la referencia.</li>
+  <li>La columna «TRT sin piso» tenía un problema: con Λ = 3/16, a Re ≈ 1 000 el tiempo de relajación de la parte antisimétrica se va a casi cero y el ruido de la grilla (un damero) no se amortigua; medido aguas arriba de la torre, el giro del aire «de ruido» era 37 veces el de BGK. Con un piso ω− ≥ 1,5 baja al nivel de BGK y el arrastre del cuadrado vuelve a 2,05 (BGK: 2,06). Por eso las sustraídas daban más arrastre que las vivas.</li>
+  <li>Con el piso, el orden es el que se espera: toda esquina trabajada baja el arrastre respecto de las vivas (2,29): curva 1,67 (−27 %), redondeadas 1,90 (−17 %), sustraídas 1,92 (−16 %), chaflán 2,06 (−10 %); la fuerza lateral baja en el mismo orden y el Strouhal sube (remolinos más chicos y más seguidos).</li>
+  <li>Aun así, 20 celdas por ancho no resuelven la turbulencia a este Reynolds ni retranqueos de 2 celdas: para comparar formas usar siempre la misma configuración; los números absolutos son orientativos. Para ver una esquina con más definición está la ventana de detalle del 2D (anidada, hasta 16 veces más fina).</li>
   <li>Conclusión práctica: para comparar formas, usar siempre la misma configuración y, en lo posible, la resolución <b>fina</b>; los números absolutos a Re alto son orientativos. El paso siguiente para la alta fidelidad es más resolución donde importa (propuesta 7: refinamiento local en el 2D y la banda de pisos en el 3D).</li>
 </ul></div>
 
