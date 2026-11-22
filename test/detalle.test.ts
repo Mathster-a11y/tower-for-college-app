@@ -51,6 +51,9 @@ describe('definición automática del recuadro', () => {
     for (let k = 1; k < rs.length; k++) expect(rs[k].r).toBeGreaterThanOrEqual(rs[k - 1].r);
     expect(rs[3].r).toBeGreaterThan(rs[0].r);
     rs.forEach(x => { expect(x.r).toBeLessThanOrEqual(FINURA_MAX); if (x.r > 2) expect(x.v.w * x.v.h * x.r ** 3).toBeLessThanOrEqual(TRABAJO_DETALLE); });
+    // automática con un recuadro enorme (todo el túnel): tampoco se pasa
+    const e = encuadrar(g, { x0: 0, y0: 0, w: 1000, h: 1000 }, 'auto');
+    expect(e.v.w * e.v.h * e.r ** 3).toBeLessThanOrEqual(TRABAJO_DETALLE * 1.1);
     // fija ×8 en un recuadro grande: se achica para no pasarse
     const f = encuadrar(g, { x0: 40, y0: 60, w: 80, h: 80 }, 8);
     expect(f.r).toBe(8); expect(f.v.w * f.v.h * 512).toBeLessThanOrEqual(TRABAJO_DETALLE * 1.1);

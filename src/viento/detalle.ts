@@ -37,8 +37,9 @@ export const VENTANA_MIN = 4;
 export function encuadrar(geo: Geometria2D, v: Ventana, fino: number | 'auto'): { v: Ventana; r: number } {
   if (fino === 'auto') {
     // primero el tamaño (adentro del túnel), después la definición que le corresponde
-    const v0 = ajustarVentana(geo, v, 2);
-    return { v: v0, r: finuraAuto(v0.w, v0.h) };
+    const v0 = ajustarVentana(geo, v, 2), r = finuraAuto(v0.w, v0.h);
+    // tan grande que ni ×2 entra en el trabajo: se achica como con una definición fija
+    return r === 2 && v0.w * v0.h * 8 > TRABAJO_DETALLE ? encuadrar(geo, v0, 2) : { v: v0, r };
   }
   let w = Math.max(VENTANA_MIN, v.w), hh = Math.max(VENTANA_MIN, v.h);
   const lim = Math.sqrt(TRABAJO_DETALLE / (fino ** 3 * w * hh));
