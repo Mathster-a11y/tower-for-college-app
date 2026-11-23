@@ -11,7 +11,8 @@ import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { carpinteriaDeNivel, plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { prepararSecciones } from '../engine/loft';
 import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
@@ -220,6 +221,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs));
     });
+    // fachada: una superficie que une la carpintería (o, si no hay, la losa) de cada nivel de PB a la azotea; muestra
+    // el perfil, los lofts y las curvas como una piel continua (sin la deformada: ahí se mueven las losas)
+    if (estado.capas.fachada && !roto) agregarFachada();
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const h = top - fondoCota;
@@ -356,6 +360,34 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         grupo.add(m);
       }));
     });
+  }
+
+  function agregarFachada() {
+    const p = estado.proyecto;
+    const nivs = p.niveles.map((n, i) => ({ n, i })).filter(({ n }) => n.cota >= -1e-6).sort((a, b) => a.n.cota - b.n.cota);
+    if (nivs.length < 2) return;
+    const contornos = nivs.map(({ i }) => carpinteriaDeNivel(p, i)?.v ?? plantaDeNivel(p, i).silueta);
+    let anillos: { x: number; y: number }[][];
+    try { anillos = prepararSecciones(contornos, 400); } catch { return; }
+    const m = anillos[0].length, pos: number[] = [];
+    const v3 = (q: { x: number; y: number }, z: number) => [q.x, z, -q.y];
+    for (let k = 0; k + 1 < anillos.length; k++) {
+      const z0 = nivs[k].n.cota, z1 = nivs[k + 1].n.cota, A = anillos[k], Bn = anillos[k + 1];
+      for (let j = 0; j < m; j++) {
+        const a0 = A[j], a1 = A[(j + 1) % m], b0 = Bn[j], b1 = Bn[(j + 1) % m];
+        pos.push(...v3(a0, z0), ...v3(a1, z0), ...v3(b1, z1), ...v3(a0, z0), ...v3(b1, z1), ...v3(b0, z1));
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    const vidrio = new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--dim', '#8a949e')), transparent: true, opacity: 0.28, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
+    grupo.add(new THREE.Mesh(g, vidrio));
+    // las aristas verticales de la piel (cada tanto), para leer la curvatura
+    const paso = Math.max(1, Math.round(m / 24)), lin: number[] = [];
+    for (let j = 0; j < m; j += paso) for (let k = 0; k + 1 < anillos.length; k++) lin.push(...v3(anillos[k][j], nivs[k].n.cota), ...v3(anillos[k + 1][j], nivs[k + 1].n.cota));
+    const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3));
+    grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(css('--ink2', '#556')), transparent: true, opacity: 0.35 })));
   }
 
   /** torre sin deformar (trazos), eje del CR deformado y flecha curva del giro en la azotea */

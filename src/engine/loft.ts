@@ -102,7 +102,8 @@ function mejorCostura(a: Curva, b: Curva): number {
 }
 
 /** secciones listas para interpolar: mismas cantidades de puntos, en los mismos parámetros */
-export function prepararSecciones(siluetas: Vertice[][]): Punto[][] {
+/** @param maxPuntos si las esquinas de todas las secciones juntas pasan este número, se usa solo la grilla pareja (para no armar mallas enormes) */
+export function prepararSecciones(siluetas: Vertice[][], maxPuntos = Infinity): Punto[][] {
   const cs = siluetas.map(curvaDe);
   // costura de la primera: su primer vértice; las demás, alineadas una con la anterior
   for (let k = 1; k < cs.length; k++) cs[k] = correr(cs[k], mejorCostura(cs[k - 1], cs[k]));
@@ -112,6 +113,7 @@ export function prepararSecciones(siluetas: Vertice[][]): Punto[][] {
   cs.forEach(c => c.s.forEach((s, i) => { if (c.esquina[i]) us.add(s); }));
   const lista = [...us].sort((a, b) => a - b).filter((u, i, a) => i === 0 || u - a[i - 1] > 1e-6);
   if (lista.length && 1 - lista[lista.length - 1] < 1e-6) lista.pop();
+  if (lista.length > maxPuntos) return cs.map(c => Array.from({ length: UNIFORMES }, (_, i) => enParametro(c, i / UNIFORMES)));
   return cs.map(c => lista.map(u => enParametro(c, u)));
 }
 
