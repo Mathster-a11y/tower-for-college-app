@@ -374,7 +374,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     if (p.paneleria && p.paneleria.modulo > 0) {
       // panelería: vidrio, antepechos opacos (gris más oscuro: no es tracción ni compresión) y montantes y travesaños
       const r = calcularPaneleria(bandas, p.paneleria), vid: number[] = [], opa: number[] = [], lin: number[] = [];
-      r.paneles.forEach(pa => { const [a, b, c, d] = pa.p; (pa.opaco ? opa : vid).push(...v3(a), ...v3(b), ...v3(c), ...v3(a), ...v3(c), ...v3(d)); lin.push(...v3(a), ...v3(b)); });
+      r.paneles.forEach(pa => {
+        const q = pa.p, dst = pa.opaco ? opa : vid;
+        for (let i = 1; i + 1 < q.length; i++) dst.push(...v3(q[0]), ...v3(q[i]), ...v3(q[i + 1]));
+        // travesaños: los lados horizontales del paño
+        q.forEach((a, i) => { const b = q[(i + 1) % q.length]; if (Math.abs(a.z - b.z) < 1e-6) lin.push(...v3(a), ...v3(b)); });
+      });
       r.montantes.forEach(([a, b]) => lin.push(...v3(a), ...v3(b)));
       malla(vid, vidrio);
       malla(opa, new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--ink2', '#5f6b76')), transparent: true, opacity: 0.6, roughness: 0.8, side: THREE.DoubleSide }));

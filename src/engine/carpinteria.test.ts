@@ -99,3 +99,31 @@ describe('carpintería plana (facetas)', () => {
     expect(p.niveles[iPB].carpinteria!.some(q => q.b)).toBe(true);
   });
 });
+
+import { aplicarPlanosCorte } from './planos_corte';
+describe('grilla a plomo en la corona recortada a 45° (como el Citicorp)', () => {
+  const armar = (forma: 'plana' | 'curva') => {
+    const p = ejemploGuia(); const z = (nom: string) => p.niveles.find(n => n.nombre === nom)!.cota;
+    p.niveles.forEach(n => { n.silueta = null; }); p.niveles.find(n => n.nombre === 'PB')!.silueta = rectangulo(20, 16);
+    p.planosCorte = [{ id: 'P1', eje: 'x', a: { w: -10, z: z('15º') }, b: { w: 10, z: z('15º') + 20 } }];
+    aplicarPlanosCorte(p);
+    p.carpinteriaTramos = [{ desde: 0, modo: 'continua', forma }];
+    p.paneleria = { modulo: 1.5, antepecho: 0.9 };
+    aplicarCarpinteriaTramos(p);
+    return { p, r: calcularPaneleria(bandasFachada(p), p.paneleria) };
+  };
+  for (const forma of ['plana', 'curva'] as const) {
+    it(`${forma}: los montantes no se tuercen (suben a plomo o por la pendiente del plano, nunca en diagonal)`, () => {
+      const { r } = armar(forma);
+      r.montantes.forEach(([a, b]) => { const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y); expect(Math.min(dx, dy)).toBeLessThan(1e-3); });
+      if (forma === 'plana') expect(r.alabeados).toBe(0);
+    });
+  }
+  it('plana: la corona inclinada es una sola cara con una sola grilla (los montantes de un piso siguen en el de arriba)', () => {
+    const { r } = armar('plana');
+    // montantes de la cara inclinada (los que suben corriéndose en x): sus y forman una sola serie pareja
+    const ys = [...new Set(r.montantes.filter(([a, b]) => Math.abs(b.x - a.x) > 1e-3).map(([a]) => a.y.toFixed(3)))].map(Number).sort((a, b) => a - b);
+    expect(ys.length).toBe(Math.ceil(16 / 1.5) + 1);
+    ys.forEach((y, i) => i && expect(y - ys[i - 1]).toBeCloseTo(16 / Math.ceil(16 / 1.5), 2));
+  });
+});
