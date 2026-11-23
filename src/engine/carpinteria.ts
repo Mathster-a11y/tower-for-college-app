@@ -21,7 +21,7 @@ export type ModoCarpinteria = 'sin' | 'losa' | 'continua';
 export type FormaCarpinteria = 'plana' | 'curva';
 export interface TramoCarpinteria { desde: number; modo: ModoCarpinteria; retiro?: number | null; forma?: FormaCarpinteria | null }
 export const esPlana = (t: TramoCarpinteria | null | undefined) => t?.forma === 'plana';
-export const NOMBRE_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería', losa: 'Por losa (de losa a losa)', continua: 'Continua (sigue la superficie)' };
+export const NOMBRE_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería', losa: 'Por piso (de losa a losa)', continua: 'Envolvente (sigue la superficie)' };
 
 /** los tramos del proyecto (si solo había «carpintería que sigue a la losa», un tramo continuo desde PB) */
 export function tramosCarpinteria(p: Proyecto): TramoCarpinteria[] {
@@ -54,10 +54,6 @@ export function comunLosas(a: Vertice[], b: Vertice[]): { v: Vertice[]; piezas: 
   const r = ri.map(q => q.map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) })));
   return { v: r[0] ?? [], piezas: r, exacto: true };
 }
-/** la carpintería de un piso: la principal y las demás piezas */
-export const piezasCarpinteria = (n: { carpinteria?: Vertice[] | null; carpinteriaPiezas?: Vertice[][] | null }): Vertice[][] =>
-  [...(n.carpinteria && n.carpinteria.length >= 3 ? [n.carpinteria] : []), ...(n.carpinteriaPiezas ?? []).filter(q => q.length >= 3)];
-
 // ------------------------------------------------------------------ facetas: la carpintería plana
 const curvo = (q: Vertice) => !!(q.c1 && q.c2) || Math.abs(q.b ?? 0) > 1e-9;
 /** largo de un lado (con su arco o su Bézier) */
@@ -96,7 +92,7 @@ export const moduloFacetas = (p: Proyecto) => Math.max(0.3, p.paneleria?.modulo 
 export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproximados: number[] } {
   const tramos = tramosCarpinteria(p);
   // las piezas de más las calculan los tramos: sin tramos (o en los pisos a mano) no hay
-  p.niveles.forEach(nv => { if (!tramos.length || nv.carpManual) delete nv.carpinteriaPiezas; });
+  p.niveles.forEach(nv => { delete nv.carpinteriaPartida; });
   if (!tramos.length) return { niveles: 0, aproximados: [] };
   // niveles de abajo hacia arriba (para saber cuál es la losa de arriba de cada piso)
   const orden = p.niveles.map((n, i) => ({ n, i })).sort((x, y) => x.n.cota - y.n.cota);
@@ -107,7 +103,7 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
     const t = tramoEn(p, nv.cota);
     if (!t) return;                                            // debajo del primer tramo: a mano
     if (nv.carpManual) return;                                 // editada a mano: la controlan los avisos
-    if (t.modo === 'sin') { nv.carpinteria = null; delete nv.carpinteriaPiezas; return; }
+    if (t.modo === 'sin') { nv.carpinteria = null; return; }
     const d = Math.max(0, t.retiro ?? 0), arriba = orden[k + 1];
     let bases: Vertice[][] = [sil.get(i)!];
     if (t.modo === 'losa' && arriba) bases = comunLosas(sil.get(i)!, sil.get(arriba.i)!).piezas;
@@ -129,8 +125,9 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
   });
   hecho.forEach((vs, i) => {
     const nv = p.niveles[i];
+    // lo común partido: la carpintería es la pieza más grande; lo demás queda sin carpintería (y se avisa)
     nv.carpinteria = vs[0];
-    if (vs.length > 1) nv.carpinteriaPiezas = vs.slice(1); else delete nv.carpinteriaPiezas;
+    if (vs.length > 1) nv.carpinteriaPartida = { piezas: vs.length, area: +vs.slice(1).reduce((x, v) => x + Math.abs(area(puntosSilueta(v, 8))), 0).toFixed(2) };
     n++;
   });
   return { niveles: n, aproximados: aprox };
@@ -225,9 +222,8 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
     if (md === 'sin') { k++; continue; }
     const plana = esPlana(tramoEn(p, nivs[k].n.cota));
     if (md === 'losa') {
-      // una banda por pieza de carpintería del piso
-      const nv = p.niveles[nivs[k].i], ps = piezasCarpinteria(nv);
-      (ps.length ? ps : [contorno(nivs[k].i)]).forEach(v => { const pts = ccwP(puntosSilueta(v, 8)); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts, plana }); });
+      const pts = ccwP(puntosSilueta(contorno(nivs[k].i), 8));
+      out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts, plana });
       k++; continue;
     }
     let f = k + 1;

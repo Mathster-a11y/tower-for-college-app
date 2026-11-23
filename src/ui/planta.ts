@@ -610,7 +610,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelSil.hidden = true;
   dock.appendChild(panelSil);
   /** editar a mano la carpintería de un piso que calcula un tramo la suelta (los tramos dejan de recalcularla) */
-  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual) { n.carpManual = true; delete n.carpinteriaPiezas; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
+  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual) { n.carpManual = true; delete n.carpinteriaPartida; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
@@ -703,8 +703,8 @@ export function montarPlanta(cont: HTMLElement) {
       const ponerTramos = (f: (ts: TramoCarpinteria[]) => void) => estado.cambiar(pp => { const ts = tramosCarpinteria(pp).map(t => ({ ...t })); f(ts); delete pp.carpinteriaRetiro; if (ts.length) pp.carpinteriaTramos = ts.sort((x, y) => x.desde - y.desde); else delete pp.carpinteriaTramos; });
       const nivelesFach = p.niveles.filter(x => x.cota >= -1e-6).sort((x, y) => x.cota - y.cota);
       if (!tramos.length) {
-        segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por losa» va vertical de losa a losa (siempre entre las dos, sin tapas) y «continua» sigue la superficie.' }),
-          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3, forma: 'plana' }); }), 'Un tramo «por losa», plano, metido 0,30 m, desde el nivel más bajo'));
+        segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por piso» va vertical de losa a losa (siempre entre las dos, sin tapas) y «envolvente» sigue la superficie.' }),
+          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3, forma: 'plana' }); }), 'Un tramo «por piso», plano, metido 0,30 m, desde el nivel más bajo'));
       } else {
         segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Carpintería por tramos' }));
         tramos.forEach((t, k) => {
@@ -716,7 +716,7 @@ export function montarPlanta(cont: HTMLElement) {
           // el modo, a la vista: un control segmentado como el resto de la app
           const sm = document.createElement('div'); sm.className = 'seg chico modo-tramo'; sm.setAttribute('role', 'group'); sm.setAttribute('aria-label', 'Modo del tramo');
           const AYUDA_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería: la base abierta', losa: 'Vertical, de la losa de abajo a la de arriba (siempre entre las dos)', continua: 'Sigue la superficie de borde a borde de las losas' };
-          const CORTO: Record<ModoCarpinteria, string> = { sin: 'Sin', losa: 'Por losa', continua: 'Continua' };
+          const CORTO: Record<ModoCarpinteria, string> = { sin: 'Sin', losa: 'Por piso', continua: 'Envolvente' };
           (Object.keys(NOMBRE_MODO) as ModoCarpinteria[]).forEach(m => { const x = boton(CORTO[m], () => { if (m !== t.modo) ponerTramos(ts => { ts[k].modo = m; }); }, AYUDA_MODO[m]); x.setAttribute('aria-pressed', String(m === t.modo)); sm.append(x); });
           const rt = document.createElement('input'); rt.type = 'text'; rt.inputMode = 'decimal'; rt.className = 'campo-vertice'; rt.value = String(t.retiro ?? 0).replace('.', ','); rt.setAttribute('aria-label', 'Retiro desde el borde de la losa');
           rt.addEventListener('change', () => { const x = parseFloat(rt.value.replace(',', '.')); if (isFinite(x) && x >= 0) ponerTramos(ts => { ts[k].retiro = x; }); });
@@ -735,7 +735,7 @@ export function montarPlanta(cont: HTMLElement) {
         const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
         segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3, forma: ult.forma ?? 'plana' }); }), `Otro tramo desde ${sig.nombre}`)] : []),
           boton('Volver a la carpintería a mano', () => ponerTramos(ts => { ts.length = 0; }), 'Las carpinterías quedan como están ahora y se editan nivel por nivel')),
-          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por losa: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Continua: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón). Plana: los lados curvos pasan a facetas rectas, cada una un paño plano; Curva: vidrio que sigue la curva.' }));
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por piso: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Envolvente: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón). Plana: los lados curvos pasan a facetas rectas, cada una un paño plano; Curva: vidrio que sigue la curva.' }));
         // panelería: montantes cada «módulo» m (en las esquinas siempre), antepecho opaco y travesaños intermedios
         const pn = p.paneleria;
         const pan = document.createElement('div'); pan.className = 'paneleria';
@@ -749,7 +749,7 @@ export function montarPlanta(cont: HTMLElement) {
             cpn('montantes cada', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', 'distancia entre montantes por el contorno (siempre hay uno en cada esquina)'),
             cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
-            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.alabeados ? ` · ${r.alabeados} paños alabeados (no planos): para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por losa».` : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
+            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.alabeados ? ` · ${r.alabeados} paños alabeados (no planos): para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
             boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), ''));
         }
         segue.append(pan);
@@ -757,10 +757,10 @@ export function montarPlanta(cont: HTMLElement) {
         // este piso: lo calcula el tramo, o se soltó para editarlo a mano (con control de que no pase sobre un vacío)
         const piso: HTMLElement[] = [];
         if (tn && tn.modo !== 'sin') {
-          const nPiezas = 1 + (n.carpinteriaPiezas?.length ?? 0);
+          const pt = n.carpinteriaPartida;
           if (!n.carpManual) {
-            piso.push(linea(nPiezas > 1 ? `lo común a esta losa y la de arriba son ${nPiezas} piezas separadas: ${nPiezas} carpinterías en este piso` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
-              h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.carpManual = true; delete nv.carpinteriaPiezas; }), 'Queda con la forma de ahora y el tramo deja de recalcularla. Si pasa sobre un vacío, aparece un aviso.')));
+            piso.push(linea(pt ? `lo común a esta losa y la de arriba son ${pt.piezas} piezas separadas: la carpintería va por la más grande y ${String(pt.area).replace('.', ',')} m² quedan sin carpintería (ver avisos)` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
+              h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.carpManual = true; delete nv.carpinteriaPartida; }), 'Queda con la forma de ahora y el tramo deja de recalcularla. Si pasa sobre un vacío, aparece un aviso.')));
           } else {
             const vol = document.createElement('label'); vol.className = 'campo-esq'; vol.title = 'Un vidrio en voladizo o un atrio hecho a propósito: no se avisa aunque salga de lo común a las dos losas';
             const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!n.carpVoladizo;
@@ -2127,8 +2127,6 @@ export function montarPlanta(cont: HTMLElement) {
     }
     // carpintería del nivel: contorno y su caja (a máx × b máx), que es lo que se carga a mano como B y L
     const car = carpinteriaDeNivel(p, iN);
-    // las otras piezas de la carpintería del piso (lo común a las dos losas partido en dos o más)
-    (p.niveles[iN]?.carpinteriaPiezas ?? []).forEach(v => { const pc = puntosSilueta(v); svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria carpinteria-pieza' })); });
     if (car) {
       const pc = puntosSilueta(car.v);
       svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' }));

@@ -12,10 +12,10 @@
  * Los niveles se agrupan: «del 3º al 12º» en vez de un aviso por piso.
  */
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
-import { comunLosas, piezasCarpinteria, tramoEn } from './carpinteria';
+import { comunLosas, tramoEn } from './carpinteria';
 import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
-export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'carpinteria-vacio' | 'bl-caja' | 'sin-pieza';
+export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
 export interface AvisoDiseno {
   tipo: TipoAviso;
   /** texto para el usuario */
@@ -122,9 +122,15 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     const com = comunLosas(plantaDeNivel(p, i).silueta, plantaDeNivel(p, ordenZ[k + 1].i).silueta).piezas.map(v => puntosSilueta(v, 8));
     // puntos cada 25 cm por todo el contorno (no alcanza con los vértices: un lado puede cruzar el vacío)
     const densos = (v: Punto[]) => v.flatMap((a, j) => { const b = v[(j + 1) % v.length], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.25)); return Array.from({ length: m }, (_, t) => ({ x: a.x + (b.x - a.x) * t / m, y: a.y + (b.y - a.y) * t / m })); });
-    const d = Math.max(0, ...piezasCarpinteria(n).flatMap(v => densos(puntosSilueta(v, 8))).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
+    const d = Math.max(0, ...(n.carpinteria && n.carpinteria.length >= 3 ? [n.carpinteria] : []).flatMap(v => densos(puntosSilueta(v, 8))).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
     if (d > TOL) { vacio.push(n.cota); vacioMax = Math.max(vacioMax, d); }
   });
+  // lo común partido en piezas: la carpintería es la más grande y el resto queda sin carpintería
+  const partida = p.niveles.filter(n => n.carpinteriaPartida && !n.carpManual);
+  if (partida.length) {
+    const area = Math.max(...partida.map(n => n.carpinteriaPartida!.area));
+    out.push({ tipo: 'carpinteria-partida', cotas: partida.map(n => n.cota), texto: `Lo común a la losa y la de arriba se parte en piezas separadas ${rangoNiveles(p, partida.map(n => n.cota))}: la carpintería va por la pieza más grande y lo demás queda sin carpintería (hasta ${f2(area)} m²).`, arreglo: 'Revisá las losas de esos pisos (que se superpongan en una sola pieza) o soltá la carpintería del piso y dibujala a mano.' });
+  }
   if (vacio.length) out.push({ tipo: 'carpinteria-vacio', cotas: vacio, texto: `La carpintería editada a mano pasa sobre un vacío ${rangoNiveles(p, vacio)} (hasta ${f2(vacioMax)} m fuera de lo común a la losa de abajo y la de arriba).`, arreglo: 'Volvé a atarla al tramo (Losa → Carpintería → «Volver a atar»), metela a mano, o marcala como voladizo a propósito.' });
   if (carp.cotas.length) out.push({ tipo: 'carpinteria-fuera', cotas: carp.cotas, texto: `La carpintería sale de la losa ${rangoNiveles(p, carp.cotas)} (hasta ${f2(carp.max)} m).`, arreglo: 'Usá «Carpintería que sigue a la losa» (botón «Losa» → Carpintería) o metela a mano: la fachada apoya en el borde de la losa.' });
   bl.forEach((cotas, clave) => {

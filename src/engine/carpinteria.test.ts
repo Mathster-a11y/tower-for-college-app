@@ -5,7 +5,7 @@ import { cajaSilueta, carpinteriaDeNivel, rectangulo } from './silueta';
 import { avisosDiseno } from './avisos';
 
 describe('carpintería por tramos', () => {
-  it('por losa con lo común partido en dos: dos carpinterías en el piso, ninguna sobre el vacío', () => {
+  it('por piso con lo común partido en dos: la carpintería va por la pieza más grande y se avisa', () => {
     const p = ejemploGuia();
     const U = [[0, 0], [24, 0], [24, 24], [16, 24], [16, 8], [8, 8], [8, 24], [0, 24]].map(([x, y]) => ({ x: x - 12, y: y - 12 }));
     const L = [[2, 10], [22, 10], [22, 22], [18, 22], [18, 16], [2, 16]].map(([x, y]) => ({ x: x - 12, y: y - 12 }));
@@ -14,17 +14,17 @@ describe('carpintería por tramos', () => {
     p.carpinteriaTramos = [{ desde: 0, modo: 'losa', retiro: 0.2 }];
     aplicarCarpinteriaTramos(p);
     const n14 = p.niveles[i15 + 1];                                   // entre la U (abajo) y la L (arriba)
-    expect(n14.carpinteriaPiezas?.length).toBe(1);
-    [n14.carpinteria!, ...n14.carpinteriaPiezas!].flat().forEach(q => expect(q.x <= -4 + 1e-6 || q.x >= 4 - 1e-6).toBe(true));
-    // el piso de abajo (U sobre U): una sola
-    expect(p.niveles[i15 + 2].carpinteriaPiezas).toBeUndefined();
-    // la fachada: una banda por pieza en ese piso
-    const z14 = n14.cota;
-    expect(bandasFachada(p).filter(b => b.z0 === z14).length).toBe(2);
+    // la pieza más grande (la de la derecha, 60 m²): ningún punto sobre el hueco de la U
+    n14.carpinteria!.forEach(q => expect(q.x).toBeGreaterThanOrEqual(4 - 1e-6));
+    expect(n14.carpinteriaPartida).toEqual({ piezas: 2, area: +(5.6 * 5.6).toFixed(2) });
+    expect(avisosDiseno(p).find(a => a.tipo === 'carpinteria-partida')?.texto).toMatch(/pieza más grande/);
+    // el piso de abajo (U sobre U): una sola pieza, sin aviso para él
+    expect(p.niveles[i15 + 2].carpinteriaPartida).toBeUndefined();
+    expect(bandasFachada(p).filter(b => b.z0 === n14.cota).length).toBe(1);
     // a mano: los tramos no la tocan
     n14.carpManual = true; n14.carpinteria = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }];
     aplicarCarpinteriaTramos(p);
-    expect(n14.carpinteria.length).toBe(3); expect(n14.carpinteriaPiezas).toBeUndefined();
+    expect(n14.carpinteria.length).toBe(3); expect(n14.carpinteriaPartida).toBeUndefined();
     // a mano con la L entera (pasa sobre el hueco de la U): aviso; marcada como voladizo a propósito: sin aviso
     n14.carpinteria = L.map(q => ({ ...q }));
     expect(avisosDiseno(p).find(a => a.tipo === 'carpinteria-vacio')?.texto).toMatch(/vacío en (el )?14º/);
