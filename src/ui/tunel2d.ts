@@ -20,7 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
-import { llaveEnLienzo, type Llave } from './llaveColor';
+import { llaveEnLienzo, simbolosEnLienzo, type Llave, type Simbolo } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { armarEscenario, cajaDe, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
@@ -63,7 +63,7 @@ const cfg = {
   /** el estilo de las flechas que se usa al volver a prenderlas */
   estiloFlechas: 'fijas' as 'fijas' | 'proporcionales',
   /** la estela del humo, los puntos de velocidad alta y la llave de colores */
-  estelas: true, altos: true, llave: true,
+  estelas: true, altos: true, llave: true, simbolos: true,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
@@ -362,10 +362,27 @@ function dibujar() {
   if (SALVAGUARDAS) marcarAltos(g, c, s, cfg.altos);
   if (sondas.length) marcarSondas(g, c, s);
   if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
+  if (cfg.simbolos) simbolosEnLienzo(g, 'Símbolos del dibujo', simbolos2d(c, s * zoom.z), cv.width - 8, cv.height - 8, css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   if (!cfg.llave) return;
   const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   const lf = llaveFlechas();
   if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+}
+
+/** qué quiere decir cada marca del túnel 2D que está a la vista (pxCelda: píxeles por celda, con el zoom) */
+function simbolos2d(c: Corrida, pxCelda: number): Simbolo[] {
+  const r: Simbolo[] = [], metros = (px: number) => px / pxCelda / c.geo.escala;
+  if (cfg.flechas !== 'no') {
+    const cada = `una cada ≈ ${fmt(metros(30), metros(30) < 10 ? 1 : 0)} m`;
+    if (cfg.flechas === 'fijas') r.push({ forma: 'flecha', color: esVelocidad(cfg.vista) ? undefined : '#9a5aa8', texto: 'Flecha: hacia dónde va el aire en ese punto',
+      nota: esVelocidad(cfg.vista) ? `todas del mismo largo; la velocidad la da el fondo · ${cada}` : `todas del mismo largo; el color da la velocidad · ${cada}` });
+    else { r.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en ese punto', nota: `más larga, más rápido (una separación = 1,6 V) · ${cada}` }); r.push({ forma: 'flechaCorta', texto: 'Flecha corta: aire lento' }); }
+  }
+  if (cfg.isolineas && c.isos.length) { r.push({ forma: 'linea', texto: 'Línea fina: la velocidad media vale 1,2 V' }); r.push({ forma: 'lineaGruesa', texto: 'Línea gruesa: la velocidad media vale 1,4 V' }); }
+  if (SALVAGUARDAS && cfg.altos && c.altos.length) r.push({ forma: 'anillo', texto: 'Anillo numerado: velocidad alta', nota: 'media en ≈ 1 m², cerca de la torre' });
+  if (cfg.humo) r.push({ forma: 'humo', texto: 'Puntos: humo que lleva el viento' });
+  if (sondas.length) r.push({ forma: 'sonda', color: colSonda(0), texto: 'Cuadrado con letra: anemómetro', nota: 'su gráfico va debajo del túnel' });
+  return r;
 }
 
 /** la llave de las flechas, si hace falta una aparte (con el color de fondo de velocidad, la del fondo sirve) */
@@ -705,7 +722,7 @@ function armarCapas(el: H) {
   estilo.addEventListener('change', () => { cfg.estiloFlechas = estilo.value as 'fijas' | 'proporcionales'; if (cfg.flechas !== 'no') cfg.flechas = cfg.estiloFlechas; dibujar(); estado.avisarPanel(); });
   if (cfg.flechas === 'no') estilo.setAttribute('disabled', '');
   const todo = (x: boolean) => {
-    cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.isolineas = x; cfg.humo = x; cfg.estelas = x; cfg.cpContorno = x; cfg.altos = x; cfg.llave = x; verRecuadroArriba = x;
+    cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.isolineas = x; cfg.humo = x; cfg.estelas = x; cfg.cpContorno = x; cfg.altos = x; cfg.llave = x; cfg.simbolos = x; verRecuadroArriba = x;
     dibujar(); estado.avisarPanel();
   };
   const bTodo = h('button', { type: 'button', class: 'mini' }, 'Todo'), bNada = h('button', { type: 'button', class: 'mini' }, 'Nada');
@@ -719,6 +736,7 @@ function armarCapas(el: H) {
     capa('Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)', cfg.cpContorno, x => { cfg.cpContorno = x; }),
     ...(SALVAGUARDAS ? [capa('Puntos de velocidad alta (anillos numerados)', cfg.altos, x => { cfg.altos = x; })] : []),
     capa('Llave de colores sobre el dibujo', cfg.llave, x => { cfg.llave = x; }),
+    capa('Símbolos del dibujo (qué es cada flecha, línea y marca)', cfg.simbolos, x => { cfg.simbolos = x; }),
     ...(cfg.ventana ? [capa('Ventana de detalle también arriba, sobre el túnel', verRecuadroArriba, x => { verRecuadroArriba = x; })] : []),
     h('p', { class: 'nota chica' }, 'El color de fondo (giro, velocidad o presión) se elige arriba, en «Color». Prender o apagar capas no vuelve a simular.'));
 }

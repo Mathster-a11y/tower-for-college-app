@@ -16,7 +16,7 @@ import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
-import { llaveHtml, type Llave } from './llaveColor';
+import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
@@ -43,7 +43,7 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
   /** el estilo de las flechas al volver a prenderlas, los puntos de velocidad alta y las llaves de colores */
-  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', altos: true, llave: true };
+  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', altos: true, llave: true, simbolos: true };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -370,7 +370,7 @@ let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
 function armarLlaves3d() {
   if (!llaves3d) return;
-  if (!cfg.llave) { llaves3d.replaceChildren(); return; }
+  if (!cfg.llave && !cfg.simbolos) { llaves3d.replaceChildren(); return; }
   const fondo = '#ffffff', az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
   const caras: Llave = { titulo: 'Caras de la torre: Cp promedio', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] };
   let corte: Llave | null = null;
@@ -385,7 +385,16 @@ function armarLlaves3d() {
   if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: 'Flechas: el color dice la velocidad', colores: coloresTermico(), marcas: [[0, 'quieta'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
   else if (conCortes && cfg.flechas === 'proporcionales') flechas = { titulo: 'Flechas: el largo dice la velocidad', colores: ['#f4f4f4', '#1d1d24'], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
   const lf = flechas ? llaveHtml(flechas) : null; lf?.classList.add('derecha');
-  llaves3d.replaceChildren(llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(lf ? [lf] : []));
+  // qué quiere decir cada marca: las flechas, las líneas de corriente y los anillos
+  const sim: Simbolo[] = [];
+  if (conCortes && cfg.flechas === 'fijas') sim.push({ forma: 'flecha', color: cfg.vereda || cfg.color === 'cp' ? '#9a5aa8' : undefined, texto: 'Flecha: hacia dónde va el aire en el corte',
+    nota: cfg.vereda || cfg.color === 'cp' ? 'todas del mismo largo; el color da la velocidad' : 'todas del mismo largo; la velocidad la da el color del corte' });
+  else if (conCortes && cfg.flechas === 'proporcionales') sim.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en el corte', nota: 'más larga, más rápido (una separación = 1,6 V)' });
+  if (conCortes && cfg.flechas !== 'no') sim.push({ forma: 'flechaCorta', texto: 'Solo se ve lo que va por el plano del corte', nota: 'el aire que lo atraviesa no aparece en la flecha' });
+  if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire' });
+  if (SALVAGUARDAS && cfg.altos && cfg.horizontal && !(cfg.vereda && cfg.lawson)) sim.push({ forma: 'anillo', texto: 'Anillo: velocidad alta en el corte horizontal' });
+  const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
+  llaves3d.replaceChildren(...(cfg.llave ? [llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
 }
 
 // ------------------------------------------------------------------------------------------------ centro y panel
@@ -490,7 +499,7 @@ export function panelTunel3d(c: H) {
       const l = chk(rot, val, x => { al(x); if (corrida) corrida.ultimasLineas = 0; estado.avisarPanel(); });
       return extra ? h('div', { class: 'capa-con-opcion' }, l, extra) : l;
     };
-    const todo = (x: boolean) => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.lineas = x; cfg.horizontal = x; cfg.vertical = x; cfg.altos = x; cfg.llave = x; if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); estado.avisarPanel(); };
+    const todo = (x: boolean) => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.lineas = x; cfg.horizontal = x; cfg.vertical = x; cfg.altos = x; cfg.llave = x; cfg.simbolos = x; if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); estado.avisarPanel(); };
     const bTodo = h('button', { type: 'button', class: 'mini' }, 'Todo'), bNada = h('button', { type: 'button', class: 'mini' }, 'Nada');
     bTodo.addEventListener('click', () => todo(true)); bNada.addEventListener('click', () => todo(false));
     qd.append(h('div', { class: 'fila-acciones' }, bTodo, bNada),
@@ -499,6 +508,7 @@ export function panelTunel3d(c: H) {
       capa('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; }),
       ...(SALVAGUARDAS ? [capa('Puntos de velocidad alta en el corte horizontal', cfg.altos, x => { cfg.altos = x; })] : []),
       capa('Llaves de colores sobre la vista', cfg.llave, x => { cfg.llave = x; }),
+      capa('Símbolos del dibujo (qué es cada flecha, línea y marca)', cfg.simbolos, x => { cfg.simbolos = x; }),
       h('p', { class: 'nota chica' }, 'Prender o apagar capas no vuelve a simular.'));
   }
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
