@@ -7,7 +7,10 @@
  *  - Elegir una barra: sus esfuerzos, su sección, sus uniones o sacarla (vale para las cuatro caras: el cálculo usa una
  *    cara tipo por viento).
  *  - Pintar secciones: se elige un tubo del catálogo y se tocan las barras.
- *  - Agregar barras: se tocan dos nudos (o puntos de piso) de una cara.
+ *  - Armar barra por barra: con la ficha «L · Libre» (o una zona libre) la cara arranca vacía y cada columna, diagonal
+ *    y viga se dibuja tocando puntos de una grilla en la cara (divisiones del ancho, pisos y medios pisos), de corrido
+ *    como una polilínea. Se borra tocando, se espeja y se repite hacia arriba. Mientras la estructura todavía se mueve
+ *    (mecanismo), se sigue viendo y se marcan los nudos sueltos.
  *  - Colores: por clase de barra (diseño) o por esfuerzo (tracción en rojo, compresión en azul, como en toda la app).
  */
 import * as THREE from 'three';
@@ -15,11 +18,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, fmt } from './estado';
 import { h } from './comp';
-import { datosExo, flechaExo } from './exo';
-import { CATALOGO_HORMIGON, CATALOGO_TUBOS, pesoExo, TIPOS_EXO, zonasDe, type ClaseBarra, type ExoDef, type Seccion, type TipoExo, type ZonaExo } from '../engine/exo';
+import { datosExo, flechaExo, geometriaExo } from './exo';
+import { CATALOGO_HORMIGON, CATALOGO_TUBOS, pesoExo, TIPOS_EXO, zonasDe, type BarraNueva, type ClaseBarra, type ExoDef, type Seccion, type TipoExo, type ZonaExo } from '../engine/exo';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
-type Herramienta = 'elegir' | 'pintar' | 'zona' | ClaseBarra;
+type Herramienta = 'elegir' | 'borrar' | 'pintar' | 'zona' | ClaseBarra;
+/** barra para dibujar: con esfuerzos si la cara se pudo calcular */
+interface BarraVista { id: string; clase: ClaseBarra; a: { s: number; z: number }; b: { s: number; z: number }; sec: Seccion; fraccion?: number; N: number }
 type ModoColor = 'clase' | 'esfuerzo' | 'verifica';
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
@@ -30,6 +35,8 @@ export const PLANTILLAS: { nombre: string; texto: string; tipo: TipoExo; modulo:
   { nombre: 'Base en X y chevrones arriba', texto: 'Tubo en X en el tercio de abajo y, arriba, chevrones que cuelgan las esquinas del mástil.', tipo: 'D', modulo: 4, zonas: [{ f: 0, tipo: 'D', modulo: 3 }, { f: 0.33, tipo: 'E', modulo: 6 }] },
   { nombre: 'Mega-marcos con cinturones', texto: 'Pórticos de esquina abajo y dos reticulados cinturón en la mitad de arriba.', tipo: 'B', modulo: 4, zonas: [{ f: 0, tipo: 'B', modulo: 4 }, { f: 0.5, tipo: 'C', modulo: 3 }] },
 ];
+
+const mismo = (p: [number, number], q: [number, number]) => Math.abs(p[0] - q[0]) < 1e-5 && Math.abs(p[1] - q[1]) < 1e-4;
 
 interface Elegida { id: string; dir: 'A' | 'B' }
 
@@ -42,6 +49,12 @@ class Disenador {
   private herramienta: Herramienta = 'elegir'; private color: ModoColor = 'clase';
   private sel: Elegida | null = null; private nudoA: { dir: 'A' | 'B'; t: number; s: number; z: number } | null = null;
   private pincel: Seccion | null = null; private tipoZona: TipoExo = 'A';
+  /** grilla de la cara para dibujar: divisiones del ancho y medios pisos */
+  private divisiones = 2; private medios = false;
+  /** repetir hacia arriba: desde qué nivel (índice de zs), cuántos pisos tiene el módulo dibujado y cuántas veces */
+  private rep = { desde: 0, pisos: 4, veces: 3 };
+  /** nudos sueltos (con una sola barra) de la última cara armada */
+  private sueltos = 0; private mecanismo = false;
   private encuadre = '';
   private pickables: THREE.Object3D[] = [];
 
@@ -51,7 +64,7 @@ class Disenador {
     this.lienzo = h('div', { class: 'exo3d-lienzo' });
     this.lateral = h('div', { class: 'exo3d-lateral' });
     this.kpis = h('div', { class: 'exo3d-kpis' });
-    this.ayuda = h('p', { class: 'nota chica exo3d-ayuda' });
+    this.ayuda = h('p', { class: 'exo3d-txt exo3d-ayuda' });
     this.el.append(this.barraH, this.kpis, h('div', { class: 'exo3d-cuerpo' }, this.lienzo, this.lateral), this.ayuda);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -72,7 +85,12 @@ class Disenador {
       if (!abajo || Math.hypot(ev.clientX - abajo.x, ev.clientY - abajo.y) > 5) { abajo = null; return; }
       abajo = null; this.tocar(ev);
     });
-    window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && this.el.isConnected) { this.nudoA = null; this.sel = null; this.herramienta = 'elegir'; this.actualizar(); } });
+    // Esc: primero corta la polilínea, después suelta la barra elegida y recién ahí vuelve a «Elegir»
+    window.addEventListener('keydown', ev => {
+      if (ev.key !== 'Escape' || !this.el.isConnected || (ev.target as HTMLElement).closest?.('input, select, textarea')) return;
+      if (this.nudoA) this.nudoA = null; else if (this.sel) this.sel = null; else this.herramienta = 'elegir';
+      this.actualizar();
+    });
   }
 
   private tamano() {
@@ -101,8 +119,9 @@ class Disenador {
     switch (this.herramienta) {
       case 'elegir': return 'Tocá una barra para ver sus esfuerzos y cambiarla (sección, uniones o sacarla). Arrastrá para girar, rueda para el zoom, botón derecho para correr. Esc suelta.';
       case 'pintar': return this.pincel ? `Pintar: tocá barras y pasan a ${fmt(this.pincel.b * 1000, 0)} × ${fmt(this.pincel.e * 1000, 1)} mm (en las cuatro caras).` : 'Pintar: elegí primero un tubo en la lista de al lado.';
+      case 'borrar': return 'Borrar: tocá una barra. Las dibujadas a mano se borran; las de la ficha se sacan (se vuelven a poner con «Como estaba»).';
       case 'zona': return `Zona nueva: tocá una barra o un nudo a la altura donde querés que empiece «${TIPOS_EXO[this.tipoZona].nombre}» (se corta en el nivel más cercano).`;
-      default: return this.nudoA ? `Tocá el segundo nudo de la ${this.herramienta}, en la misma cara (o el mismo para soltarlo).` : `Agregar ${this.herramienta}: tocá el primer nudo (los puntos de la cara). Vale para las cuatro caras.`;
+      default: return this.nudoA ? `Seguí tocando puntos de la misma cara: cada toque agrega una ${this.herramienta} y sigue desde ahí. Tocá el mismo punto o Esc para cortar.` : `Dibujar ${this.herramienta}: tocá el primer punto de la grilla de una cara. Lo dibujado vale para las cuatro caras.`;
     }
   }
 
@@ -114,9 +133,10 @@ class Disenador {
     };
     const herr = seg('Herramienta', [
       ['elegir', 'Elegir', 'Tocá una barra para ver y cambiar sus datos'],
+      ['borrar', 'Borrar', 'Tocá una barra para borrarla'],
       ['pintar', 'Pintar sección', 'Elegí un tubo y tocá barras'],
       ['zona', 'Cortar zona', 'Tocá la torre a la altura donde empieza otra tipología'],
-      ['diagonal', '+ diagonal', 'Tocá dos nudos de una cara'], ['viga', '+ viga', 'Tocá dos nudos de una cara'], ['columna', '+ columna', 'Tocá dos nudos de una cara'],
+      ['columna', '+ columna', 'Dibujar columnas de corrido tocando puntos de una cara'], ['diagonal', '+ diagonal', 'Dibujar diagonales de corrido'], ['viga', '+ viga', 'Dibujar vigas de corrido'],
     ], this.herramienta, v => { this.herramienta = v as Herramienta; this.nudoA = null; this.actualizar(); });
     const col = seg('Colores', [
       ['clase', 'Por clase', 'Columnas, diagonales y vigas con su color'],
@@ -129,6 +149,14 @@ class Disenador {
       (Object.keys(TIPOS_EXO) as TipoExo[]).forEach(t => s.append(new Option(`${t} · ${TIPOS_EXO[t].nombre}`, t, false, t === this.tipoZona)));
       s.addEventListener('change', () => { this.tipoZona = s.value as TipoExo; this.ayuda.textContent = this.textoAyuda(); });
       extra.push(s);
+    }
+    if (this.herramienta === 'columna' || this.herramienta === 'diagonal' || this.herramienta === 'viga') {
+      const dv = h('select', { 'aria-label': 'Divisiones del ancho de la cara', title: 'puntos de la grilla a lo ancho de la cara' }) as HTMLSelectElement;
+      [1, 2, 3, 4, 6, 8].forEach(n => dv.append(new Option(`${n === 1 ? 'solo bordes' : `ancho en ${n}`}`, String(n), false, n === this.divisiones)));
+      dv.addEventListener('change', () => { this.divisiones = +dv.value; this.actualizar(); });
+      const md = h('input', { type: 'checkbox' }) as HTMLInputElement; md.checked = this.medios;
+      md.addEventListener('change', () => { this.medios = md.checked; this.actualizar(); });
+      extra.push(h('label', { class: 'campo-linea' }, 'Grilla ', dv), h('label', { class: 'campo-linea', title: 'puntos también a media altura de cada piso (nudos entre losas)' }, md, ' medios pisos'));
     }
     const enc = h('button', { type: 'button', title: 'Volver a encuadrar la torre' }, 'Encuadrar');
     enc.addEventListener('click', () => { this.encuadre = ''; this.actualizar(); });
@@ -159,68 +187,91 @@ class Disenador {
       losa.rotation.x = -Math.PI / 2; losa.position.y = n.cota;
       this.grupo.add(losa);
     });
-    // barras de las cuatro caras
+    // barras de las cuatro caras: con sus esfuerzos si la cara se calcula; si todavía es un mecanismo (se está armando
+    // barra por barra), la geometría sola, en gris, con los nudos sueltos marcados
     const cCol = new THREE.Color(css('--ink', '#1f2328')), cDia = new THREE.Color(css('--num', '#a55500')), cVig = new THREE.Color(css('--dim', '#8a949e'));
     const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
     const cSel = new THREE.Color(css('--elegido', '#e8a317')), cMal = new THREE.Color(css('--revisar', '#b26a00'));
     const radio = { columna: 0.32, diagonal: 0.22, viga: 0.25 } as const;
     const eje = new THREE.Vector3(0, 1, 0);
-    const nudosVistos = new Set<string>();
-    const matNudo = new THREE.MeshBasicMaterial({ color: cSel });
-    const agregando = this.herramienta === 'diagonal' || this.herramienta === 'viga' || this.herramienta === 'columna' || this.herramienta === 'zona';
+    const dibujando = this.herramienta === 'diagonal' || this.herramienta === 'viga' || this.herramienta === 'columna';
+    const conPuntos = dibujando || this.herramienta === 'zona';
+    this.sueltos = 0; this.mecanismo = false;
     (['A', 'B'] as const).forEach(dir => {
-      const d = datosExo(dir);
-      if (!d) return;
+      const d = datosExo(dir), g = d ? null : geometriaExo(dir);
+      if (!d && !g) return;
+      if (!d) this.mecanismo = true;
+      const zs = d ? d.r.zs : g!.zs, ancho = d ? d.ancho : g!.ancho, anchos = d ? d.anchos : g!.anchos, ts = d ? d.ts : g!.ts, t0 = d ? d.tCaras[1] : g!.t;
+      const barras: BarraVista[] = d ? d.r.caras[0].esfuerzos.map(e => ({ id: e.id, clase: e.clase, a: e.a, b: e.b, sec: e.sec, fraccion: e.fraccion, N: e.N }))
+        : g!.cara.barras.map(x => ({ id: x.id, clase: x.clase, a: g!.cara.nudos[x.a], b: g!.cara.nudos[x.b], sec: x.sec, fraccion: x.fraccion, N: 0 }));
+      // nudos sueltos: con una sola barra y fuera de la base (no hay con qué sostenerlos)
+      const cuenta = new Map<string, { s: number; z: number; n: number }>();
+      const clave = (q: { s: number; z: number }) => `${q.s.toFixed(4)}|${q.z.toFixed(4)}`;
+      barras.forEach(x => [x.a, x.b].forEach(q => { const c = cuenta.get(clave(q)) ?? { s: q.s, z: q.z, n: 0 }; c.n++; cuenta.set(clave(q), c); }));
+      // (la punta de una columna rígida no es un problema: solo se marcan si la cara es un mecanismo, o si el nudo queda
+      //  entre losas, donde nada lo sostiene)
+      const enLosa = (z: number) => zs.some(zz => Math.abs(zz - z) < 1e-6);
+      const sueltos = [...cuenta.values()].filter(q => q.n === 1 && q.z > zs[0] + 1e-6 && (!d || !enLosa(q.z)));
+      if (dir === estado.dir || this.sueltos === 0) this.sueltos = Math.max(this.sueltos, sueltos.length);
       const activa = dir === estado.dir;
-      const cara = d.r.caras[0];
-      const Nmax = Math.max(...cara.esfuerzos.map(e => Math.abs(e.N)), 1e-9);
-      const malas = new Set(d.r.controles.filter(x => x.estado !== 'verifica').map(x => x.id));
-      const aPlanta = (s: number, t: number) => (dir === 'A' ? { x: t, y: s } : { x: s, y: t });
+      const Nmax = Math.max(...barras.map(e => Math.abs(e.N)), 1e-9);
+      const malas = new Set(d ? d.r.controles.filter(x => x.estado !== 'verifica').map(x => x.id) : []);
+      const medio = (z: number) => { const W = (k: number) => (anchos?.[k] ?? ancho) / 2, k = zs.findIndex(zz => zz >= z - 1e-9); return k <= 0 ? W(Math.max(0, k)) : W(k - 1) + (W(k) - W(k - 1)) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1)); };
+      const aPlanta = (sv: number, t: number) => (dir === 'A' ? { x: t, y: sv } : { x: sv, y: t });
       const tEn = (signo: number, z: number) => {
-        if (!d.ts) return signo * d.tCaras[1];
-        const zs = d.r.zs, k = zs.findIndex(zz => zz >= z - 1e-9);
-        const v = k <= 0 ? d.ts[Math.max(0, k)] : d.ts[k - 1] + (d.ts[k] - d.ts[k - 1]) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
+        if (!ts) return signo * t0;
+        const k = zs.findIndex(zz => zz >= z - 1e-9);
+        const v = k <= 0 ? ts[Math.max(0, k)] : ts[k - 1] + (ts[k] - ts[k - 1]) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
         return signo * v;
       };
-      const a3 = (s: number, z: number, signo: number) => { const q = aPlanta(s, tEn(signo, z)); return new THREE.Vector3(q.x, z, -q.y); };
+      const a3 = (sv: number, z: number, signo: number) => { const q = aPlanta(sv, tEn(signo, z)); return new THREE.Vector3(q.x, z, -q.y); };
       for (const signo of [-1, 1]) {
-        cara.esfuerzos.forEach(e => {
+        barras.forEach(e => {
           if ((e.fraccion ?? 1) !== 1) return;              // alas: son barras de las otras caras
           const A = a3(e.a.s, e.a.z, signo), B = a3(e.b.s, e.b.z, signo), L = A.distanceTo(B);
           if (L < 1e-6) return;
           const elegida = this.sel?.id === e.id;
           let col: THREE.Color;
           if (elegida) col = cSel;
+          else if (!d) col = e.clase === 'columna' ? cCol : e.clase === 'diagonal' ? cDia : cVig;
           else if (this.color === 'esfuerzo') col = activa ? acero.clone().lerp(e.N >= 0 ? cT : cC, 0.35 + 0.65 * Math.min(1, Math.abs(e.N) / Nmax)) : acero;
           else if (this.color === 'verifica') col = malas.has(e.id) ? cMal : acero.clone().lerp(new THREE.Color(0xffffff), 0.45);
           else col = e.clase === 'columna' ? cCol : e.clase === 'diagonal' ? cDia : cVig;
           const r = radio[e.clase] * (elegida ? 1.6 : 1) * Math.max(0.6, Math.min(2.2, e.sec.b / 0.4));
-          const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 8), new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.25, transparent: this.color === 'esfuerzo' && !activa, opacity: this.color === 'esfuerzo' && !activa ? 0.5 : 1 }));
+          const transl = this.color === 'esfuerzo' && !activa && !!d;
+          const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 8), new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.25, transparent: transl, opacity: transl ? 0.5 : 1 }));
           m.position.copy(A.clone().add(B).multiplyScalar(0.5));
           m.quaternion.setFromUnitVectors(eje, B.clone().sub(A).normalize());
           m.userData = { barra: e.id, dir };
           this.grupo.add(m); this.pickables.push(m);
         });
-        // nudos (y puntos de piso en los bordes y en el medio) para agregar barras o cortar zonas
-        if (agregando) {
+        // nudos sueltos: más grandes, en el color de «revisar»
+        sueltos.forEach(q => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 10), new THREE.MeshBasicMaterial({ color: cMal })); m.position.copy(a3(q.s, q.z, signo)); this.grupo.add(m); });
+        // grilla para dibujar: los nudos de la cara más los puntos de cada piso (y de cada medio piso) en las divisiones del ancho
+        if (conPuntos) {
           const pts: { s: number; z: number }[] = [];
-          cara.esfuerzos.forEach(e => { pts.push(e.a, e.b); });
-          d.r.zs.forEach((z, k) => { const w = (d.anchos?.[k] ?? d.ancho) / 2; pts.push({ s: -w, z }, { s: 0, z }, { s: w, z }); });
-          pts.forEach(q => {
-            const clave = `${dir}${signo}|${q.s.toFixed(3)}|${q.z.toFixed(3)}`;
-            if (nudosVistos.has(clave)) return; nudosVistos.add(clave);
-            const esA = this.nudoA && this.nudoA.dir === dir && this.nudoA.t === signo && Math.abs(this.nudoA.s - q.s) < 1e-6 && Math.abs(this.nudoA.z - q.z) < 1e-6;
-            const m = new THREE.Mesh(new THREE.SphereGeometry(esA ? 0.9 : 0.5, 10, 8), esA ? new THREE.MeshBasicMaterial({ color: cT.clone().lerp(cSel, 1) }) : matNudo);
-            m.position.copy(a3(q.s, q.z, signo));
-            m.userData = { nudo: { dir, t: signo, s: q.s, z: q.z } };
-            this.grupo.add(m); this.pickables.push(m);
-          });
+          barras.forEach(e => { if ((e.fraccion ?? 1) === 1) pts.push(e.a, e.b); });
+          const cotas = this.medios ? zs.flatMap((z, k) => (k + 1 < zs.length ? [z, (z + zs[k + 1]) / 2] : [z])) : zs;
+          cotas.forEach(z => { const w = medio(z); for (let i = 0; i <= this.divisiones; i++) pts.push({ s: -w + (2 * w * i) / this.divisiones, z }); if (this.divisiones % 2) pts.push({ s: 0, z }); });
+          const vistos = new Set<string>(), lista: { s: number; z: number }[] = [];
+          pts.forEach(q => { const k = clave(q); if (!vistos.has(k)) { vistos.add(k); lista.push(q); } });
+          const inst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 10, 8), new THREE.MeshBasicMaterial({ color: cSel }), lista.length);
+          const mt = new THREE.Matrix4();
+          lista.forEach((q, i) => { const v = a3(q.s, q.z, signo); mt.makeTranslation(v.x, v.y, v.z); inst.setMatrixAt(i, mt); });
+          inst.userData = { puntos: lista.map(q => ({ dir, t: signo, s: q.s, z: q.z })) };
+          this.grupo.add(inst); this.pickables.push(inst);
+          // el punto de arranque de la polilínea, grande
+          if (this.nudoA && this.nudoA.dir === dir && this.nudoA.t === signo) {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.95, 14, 10), new THREE.MeshBasicMaterial({ color: cSel }));
+            m.position.copy(a3(this.nudoA.s, this.nudoA.z, signo)); this.grupo.add(m);
+          }
         }
       }
     });
     // zonas: un plano finito en cada corte y el nombre al costado
-    const d0 = datosExo(estado.dir) ?? datosExo('A');
-    if (d0) {
+    const zs0 = this.cotas();
+    if (zs0.length) {
+      const d0 = { r: { zs: zs0 } };
       const zonas = zonasDe(this.def, d0.r.zs);
       const cZ = new THREE.Color(css('--corte', '#7b4fd1'));
       zonas.forEach((zn, i) => {
@@ -244,16 +295,28 @@ class Disenador {
     }
   }
 
+  /** cotas de los pisos de la cara (sobre PB), calculada o no */
+  private cotas(): number[] { return (datosExo(estado.dir)?.r.zs ?? geometriaExo(estado.dir)?.zs ?? geometriaExo('A')?.zs ?? []); }
+  /** medio ancho de la cara del viento dir en la cota z */
+  private medioAncho(dir: 'A' | 'B', z: number): number {
+    const g = geometriaExo(dir);
+    if (!g) return 1;
+    const W = (k: number) => (g.anchos?.[k] ?? g.ancho) / 2, k = g.zs.findIndex(zz => zz >= z - 1e-9);
+    return k <= 0 ? W(Math.max(0, k)) : W(k - 1) + (W(k) - W(k - 1)) * ((z - g.zs[k - 1]) / (g.zs[k] - g.zs[k - 1] || 1));
+  }
+
   private tocar(ev: PointerEvent) {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), this.camara);
     const hit = ray.intersectObjects(this.pickables, false);
-    // con las herramientas de nudos, los nudos ganan aunque haya una barra delante
-    const nudo = hit.find(x => x.object.userData.nudo)?.object.userData.nudo as { dir: 'A' | 'B'; t: number; s: number; z: number } | undefined;
+    // con las herramientas de dibujo, los puntos de la grilla ganan aunque haya una barra delante
+    const hp = hit.find(x => x.object.userData.puntos && x.instanceId !== undefined);
+    const nudo = hp ? (hp.object.userData.puntos as { dir: 'A' | 'B'; t: number; s: number; z: number }[])[hp.instanceId!] : undefined;
     const barra = hit.find(x => x.object.userData.barra)?.object.userData as { barra: string; dir: 'A' | 'B' } | undefined;
     const h0 = this.herramienta;
     if (h0 === 'elegir') { this.sel = barra ? { id: barra.barra, dir: barra.dir } : null; this.actualizar(); return; }
+    if (h0 === 'borrar') { if (barra) this.borrarBarra(barra.barra); return; }
     if (h0 === 'pintar') {
       if (!barra || !this.pincel) return;
       const sec = this.pincel;
@@ -266,28 +329,42 @@ class Disenador {
       this.agregarZona(z);
       return;
     }
-    // agregar barra
+    // dibujar de corrido: cada punto nuevo agrega una barra desde el anterior y sigue desde ahí
     if (!nudo) return;
-    if (!this.nudoA) { this.nudoA = nudo; this.actualizar(); return; }
-    const a = this.nudoA; this.nudoA = null;
-    if (a.dir !== nudo.dir || a.t !== nudo.t || (Math.abs(a.s - nudo.s) < 1e-6 && Math.abs(a.z - nudo.z) < 1e-6)) { this.actualizar(); return; }
+    if (!this.nudoA || this.nudoA.dir !== nudo.dir || this.nudoA.t !== nudo.t) { this.nudoA = nudo; this.actualizar(); return; }
+    const a = this.nudoA;
+    if (Math.abs(a.s - nudo.s) < 1e-6 && Math.abs(a.z - nudo.z) < 1e-6) { this.nudoA = null; this.actualizar(); return; }
     const clase = h0;
     // la posición en la cara va como fracción del medio ancho: así cae en el mismo lugar en las cuatro caras
-    const dd = datosExo(a.dir);
-    if (!dd) return;
-    const medio = (z: number) => {
-      const zs = dd.r.zs, W = (k: number) => (dd.anchos?.[k] ?? dd.ancho) / 2, k = zs.findIndex(zz => zz >= z - 1e-9);
-      return k <= 0 ? W(Math.max(0, k)) : W(k - 1) + (W(k) - W(k - 1)) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
-    };
-    const fr = (q: { s: number; z: number }): [number, number] => [+(q.s / medio(q.z)).toFixed(6), +q.z.toFixed(4)];
-    this.cambiar(d => { d.nuevas = [...(d.nuevas ?? []), { clase, a: fr(a), b: fr(nudo), enFraccion: true }]; });
+    const fr = (q: { s: number; z: number }): [number, number] => [+(q.s / this.medioAncho(a.dir, q.z)).toFixed(6), +q.z.toFixed(4)];
+    const nb: BarraNueva = { clase, a: fr(a), b: fr(nudo), enFraccion: true };
+    this.nudoA = nudo;
+    const igual = (x: BarraNueva) => x.clase === nb.clase && ((mismo(x.a, nb.a) && mismo(x.b, nb.b)) || (mismo(x.a, nb.b) && mismo(x.b, nb.a)));
+    if ((this.def.nuevas ?? []).some(igual)) { this.actualizar(); return; }
+    this.cambiar(d => { d.nuevas = [...(d.nuevas ?? []), nb]; });
+  }
+
+  /** borra una barra: si es de las dibujadas (N…), sale de la lista (y los cambios de las siguientes se corren); si es de la ficha, se saca */
+  private borrarBarra(id: string) {
+    if (this.sel?.id === id) this.sel = null;
+    if (/^N\d+$/.test(id)) {
+      const i = +id.slice(1) - 1;
+      this.cambiar(d => {
+        d.nuevas = (d.nuevas ?? []).filter((_, j) => j !== i);
+        if (!d.nuevas.length) delete d.nuevas;
+        if (d.barras) {
+          const nb: NonNullable<ExoDef['barras']> = {};
+          Object.entries(d.barras).forEach(([k, v]) => { const m = /^N(\d+)$/.exec(k); if (!m) nb[k] = v; else if (+m[1] - 1 !== i) nb[+m[1] - 1 > i ? `N${+m[1] - 1}` : k] = v; });
+          d.barras = nb; if (!Object.keys(nb).length) delete d.barras;
+        }
+      });
+    } else this.cambiar(d => { d.barras = { ...(d.barras ?? {}), [id]: { ...(d.barras?.[id] ?? {}), quitar: true } }; });
   }
 
   /** zona nueva desde la cota z (el nivel más cercano); si no había zonas, la de abajo es la ficha */
   private agregarZona(z: number) {
-    const d0 = datosExo(estado.dir) ?? datosExo('A');
-    if (!d0) return;
-    const zs = d0.r.zs;
+    const zs = this.cotas();
+    if (!zs.length) return;
     let k = 0; zs.forEach((zz, i) => { if (Math.abs(zz - z) < Math.abs(zs[k] - z)) k = i; });
     if (k === 0 || k === zs.length - 1) { estado.avisarPanel(); return; }
     const cota = zs[k], tipo = this.tipoZona, def = this.def;
@@ -306,7 +383,12 @@ class Disenador {
     // barra elegida
     if (this.sel) {
       const d = datosExo(this.sel.dir), e = d?.r.caras[0].esfuerzos.find(x => x.id === this.sel!.id);
-      if (!d || !e) this.sel = null;
+      if ((!d || !e) && this.mecanismo) {
+        // todavía no se calcula: se puede borrar igual
+        const id = this.sel.id, borrar = h('button', { type: 'button', class: 'peligro' }, 'Borrar');
+        borrar.addEventListener('click', () => this.borrarBarra(id));
+        partes.push(h('section', { class: 'exo3d-caja' }, h('b', {}, `Barra ${id}`), h('p', { class: 'exo3d-txt' }, 'Sin esfuerzos: la estructura todavía se mueve.'), borrar));
+      } else if (!d || !e) this.sel = null;
       else {
         const ctl = d.r.controles.find(x => x.id === e.id);
         const cam = def.barras?.[e.id] ?? {};
@@ -332,11 +414,11 @@ class Disenador {
         partes.push(h('section', { class: 'exo3d-caja' },
           h('b', {}, `Barra ${e.id} · ${e.clase}`),
           h('div', { class: N >= 0 ? 'exo3d-n traccion' : 'exo3d-n compresion' }, `N = ${fmt(Math.abs(N), 1)} t ${N >= 0 ? 'tracción' : 'compresión'} (viento ${this.sel.dir})`),
-          h('div', { class: 'nota chica' }, `L = ${fmt(e.L, 2)} m · tubo ${fmt(e.sec.b * 1000, 0)} × ${fmt(e.sec.e * 1000, 1)} mm${ctl ? ` · σ = ${fmt(ctl.sigma, 0)} t/m² · ${ctl.estado}` : ''}`),
+          h('div', { class: 'exo3d-txt' }, `L = ${fmt(e.L, 2)} m · tubo ${fmt(e.sec.b * 1000, 0)} × ${fmt(e.sec.e * 1000, 1)} mm${ctl ? ` · σ = ${fmt(ctl.sigma, 0)} t/m² · ${ctl.estado}` : ''}`),
           h('label', { class: 'campo-linea' }, 'Sección ', s),
           union('Unión en a', e.relA, v => poner(c => { c.relA = v; })), union('Unión en b', e.relB, v => poner(c => { c.relB = v; })),
           h('div', { class: 'fila-acciones' }, nueva ? borrarNueva : sacar, ...(Object.keys(cam).length ? [volver] : [])),
-          h('p', { class: 'nota chica' }, 'Vale para esta barra en las cuatro caras (el cálculo usa una cara tipo por viento).')));
+          h('p', { class: 'exo3d-txt' }, 'Vale para esta barra en las cuatro caras (el cálculo usa una cara tipo por viento).')));
       }
     }
     // pincel
@@ -350,13 +432,14 @@ class Disenador {
       });
       partes.push(h('section', { class: 'exo3d-caja' }, h('b', {}, 'Tubo para pintar'), lista));
     }
+    // dibujo a mano: arranques rápidos, espejar y repetir hacia arriba
+    partes.push(this.cajaDibujo());
     // zonas
-    const d0 = datosExo(estado.dir) ?? datosExo('A');
-    const zsN = d0?.r.zs ?? [];
+    const zsN = this.cotas();
     const nombreZ = (z: number) => p.niveles.find(n => Math.abs(n.cota - z) < 1e-6)?.nombre ?? `${fmt(z, 1)} m`;
     const cajaZ = h('section', { class: 'exo3d-caja' }, h('b', {}, 'Zonas en altura'));
     if (!def.zonas?.length) {
-      cajaZ.append(h('p', { class: 'nota chica' }, `Toda la torre: ${def.tipo} · ${TIPOS_EXO[def.tipo].nombre}, módulo ${def.modulo}. Con «Cortar zona» (o una plantilla) cambiás de tipología en altura.`));
+      cajaZ.append(h('p', { class: 'exo3d-txt' }, `Toda la torre: ${def.tipo} · ${TIPOS_EXO[def.tipo].nombre}, módulo ${def.modulo}. Con «Cortar zona» (o una plantilla) cambiás de tipología en altura.`));
     } else {
       zonasDe(def, zsN).forEach((zn, i) => {
         const fila = h('div', { class: 'exo3d-zona-fila' });
@@ -381,7 +464,7 @@ class Disenador {
         fila.append(h('span', { class: 'exo3d-desde' }, `${i === 0 ? 'desde PB' : `desde ${nombreZ(zn.desde)}`}`), tipo, h('label', {}, 'mód. ', mod), ...(zn.tipo === 'A' ? [h('label', {}, 'vanos ', van)] : []), ...(i > 0 || zonasDe(def, zsN).length > 1 ? [quitar] : []));
         cajaZ.append(fila);
       });
-      cajaZ.append(h('p', { class: 'nota chica' }, 'Entre zonas va una viga de transición que ata los dos dibujos. Cambiar una zona borra los cambios barra por barra (cambian los números de las barras).'));
+      cajaZ.append(h('p', { class: 'exo3d-txt' }, 'Entre zonas va una viga de transición que ata los dos dibujos. Cambiar una zona borra los cambios barra por barra (cambian los números de las barras).'));
     }
     partes.push(cajaZ);
     // plantillas
@@ -398,7 +481,7 @@ class Disenador {
           delete d.barras; delete d.nuevas; delete d.cortes;
         });
       });
-      cajaP.append(b, h('p', { class: 'nota chica' }, pl.texto));
+      cajaP.append(b, h('p', { class: 'exo3d-txt' }, pl.texto));
     });
     partes.push(cajaP);
     const nN = def.nuevas?.length ?? 0, nB = Object.keys(def.barras ?? {}).length;
@@ -408,6 +491,55 @@ class Disenador {
       partes.push(limpiar);
     }
     this.lateral.replaceChildren(...partes);
+  }
+
+  private cajaDibujo(): HTMLElement {
+    const def = this.def, zs = this.cotas(), n = zs.length - 1;
+    const p = estado.proyecto;
+    const nombreZ = (z: number) => p.niveles.find(x => Math.abs(x.cota - z) < 1e-6)?.nombre ?? `${fmt(z, 1)} m`;
+    const caja = h('section', { class: 'exo3d-caja' }, h('b', {}, 'Armar barra por barra'));
+    const nN = def.nuevas?.length ?? 0;
+    caja.append(h('p', { class: 'exo3d-txt' }, nN ? `${nN} ${nN === 1 ? 'barra dibujada' : 'barras dibujadas'} a mano.` : 'Elegí «+ columna», «+ diagonal» o «+ viga» y tocá puntos de una cara: se dibuja de corrido. Con la ficha «L · Libre» la cara arranca vacía.'));
+    const agregar = (bs: BarraNueva[]) => this.cambiar(d => {
+      const lista = [...(d.nuevas ?? [])];
+      bs.forEach(nb => { if (!lista.some(x => x.clase === nb.clase && ((mismo(x.a, nb.a) && mismo(x.b, nb.b)) || (mismo(x.a, nb.b) && mismo(x.b, nb.a))))) lista.push(nb); });
+      d.nuevas = lista;
+    });
+    const boton = (t: string, ti: string, f: () => void) => { const b = h('button', { type: 'button', title: ti }, t); b.addEventListener('click', f); return b; };
+    if (def.tipo !== 'L' || def.zonas?.length) caja.append(boton('Empezar de cero (ficha libre)', 'Saca la ficha y las zonas: la cara queda vacía para dibujarla entera', () => { this.sel = null; this.cambiar(d => { d.tipo = 'L'; delete d.zonas; delete d.barras; delete d.nuevas; delete d.cortes; }); }));
+    const r4 = (z: number) => +z.toFixed(4);
+    caja.append(
+      boton('Columnas de esquina', 'Columnas en los dos bordes de cada cara, piso por piso, de PB a la azotea', () => agregar(zs.slice(0, -1).flatMap((z, k) => [-1, 1].map(s0 => ({ clase: 'columna' as const, a: [s0, r4(z)] as [number, number], b: [s0, r4(zs[k + 1])] as [number, number], enFraccion: true }))))),
+      boton('Vigas en todos los pisos', 'Una viga de borde a borde en cada losa (atan las columnas)', () => agregar(zs.slice(1).map(z => ({ clase: 'viga' as const, a: [-1, r4(z)] as [number, number], b: [1, r4(z)] as [number, number], enFraccion: true })))),
+    );
+    if (nN) {
+      caja.append(boton('Espejar lo dibujado', 'Copia cada barra dibujada del otro lado del eje de la cara (las que ya están no se repiten)', () => agregar((def.nuevas ?? []).map(x => ({ ...x, a: [-x.a[0], x.a[1]] as [number, number], b: [-x.b[0], x.b[1]] as [number, number] })))));
+      // repetir hacia arriba un módulo dibujado
+      const k0 = Math.min(Math.max(0, this.rep.desde), Math.max(0, n - 1));
+      const sDesde = h('select', { 'aria-label': 'Desde qué nivel' }) as HTMLSelectElement;
+      zs.slice(0, -1).forEach((z, k) => sDesde.append(new Option(k === 0 ? 'PB' : nombreZ(z), String(k), false, k === k0)));
+      sDesde.addEventListener('change', () => { this.rep.desde = +sDesde.value; });
+      const num = (v: number, f: (x: number) => void, et: string) => { const i = h('input', { type: 'number', min: '1', step: '1', value: String(v), class: 'campo-vertice', 'aria-label': et }) as HTMLInputElement; i.addEventListener('change', () => { const x = Math.round(+i.value); if (x >= 1) f(x); }); return i; };
+      const repetir = boton('Repetir hacia arriba', 'Copia las barras dibujadas que caen enteras en el módulo elegido, corridas de a un módulo, las veces pedidas (sin pasar la azotea)', () => {
+        const { desde, pisos, veces } = { ...this.rep, desde: k0 };
+        // posición en pisos de una cota (entero = sobre una losa; con decimales = entre losas)
+        const idx = (z: number) => { const k = zs.findIndex(zz => zz >= z - 1e-6); if (k <= 0) return 0; return k - 1 + (z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1); };
+        const cota = (x: number) => { const k = Math.floor(x + 1e-9), f = x - k; return k >= n ? zs[n] : zs[k] + f * (zs[k + 1] - zs[k]); };
+        const dentro = (x: BarraNueva) => [x.a[1], x.b[1]].every(z => { const i = idx(z); return i >= desde - 1e-6 && i <= desde + pisos + 1e-6; });
+        const base = (def.nuevas ?? []).filter(dentro), out: BarraNueva[] = [];
+        for (let j = 1; j <= veces; j++) base.forEach(x => {
+          const ia = idx(x.a[1]) + j * pisos, ib = idx(x.b[1]) + j * pisos;
+          if (Math.max(ia, ib) > n + 1e-6) return;
+          out.push({ ...x, a: [x.a[0], r4(cota(ia))], b: [x.b[0], r4(cota(ib))] });
+        });
+        if (!out.length) { this.ayuda.textContent = 'No hay barras dibujadas enteras dentro de ese módulo (o la copia pasaría la azotea).'; return; }
+        agregar(out);
+      });
+      caja.append(h('div', { class: 'exo3d-zona-fila' }, h('span', { class: 'exo3d-desde' }, 'Repetir un módulo dibujado'), h('label', {}, 'desde ', sDesde),
+        h('label', {}, 'alto ', num(this.rep.pisos, x => { this.rep.pisos = x; }, 'Pisos del módulo'), ' pisos'), h('label', {}, num(this.rep.veces, x => { this.rep.veces = x; }, 'Cuántas veces'), ' veces'), repetir));
+      caja.append(boton('Borrar todo lo dibujado', 'Saca todas las barras dibujadas a mano (se puede deshacer)', () => { this.sel = null; this.cambiar(d => { delete d.nuevas; if (d.barras) { Object.keys(d.barras).forEach(k => { if (/^N\d+$/.test(k)) delete d.barras![k]; }); if (!Object.keys(d.barras).length) delete d.barras; } }); }));
+    }
+    return caja;
   }
 
   private armarKpis() {
@@ -423,7 +555,10 @@ class Disenador {
       void n;
     }
     if (dA && dB) out.push(kpi('Acero (cuatro caras)', `${fmt(pesoExo(this.def, [dA.entrada, dB.entrada]), 0)} t`));
-    if (!dA && !dB) out.push(h('p', { class: 'error' }, 'No se pudo calcular el exoesqueleto (¿quedó un mecanismo? Ctrl+Z vuelve atrás).'));
+    if (this.mecanismo || this.sueltos) out.push(h('p', { class: 'exo3d-aviso' }, this.sueltos
+      ? `La estructura todavía se mueve: ${this.sueltos === 1 ? 'hay un nudo suelto' : `hay ${this.sueltos} nudos sueltos`} (en ámbar), con una sola barra. Uní cada uno con otra barra o borrala.`
+      : 'La estructura todavía se mueve (es un mecanismo): falta triangular algún paño con una diagonal, o hacer rígidas las uniones de columnas y vigas. Mientras tanto, todo el viento lo toman los tabiques.'));
+    else if (!dA && !dB) out.push(h('p', { class: 'error' }, 'No se pudo calcular el exoesqueleto (Ctrl+Z vuelve atrás).'));
     this.kpis.replaceChildren(...out);
   }
 }

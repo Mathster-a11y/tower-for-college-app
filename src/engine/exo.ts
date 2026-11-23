@@ -18,13 +18,14 @@
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'L';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
   C: { nombre: 'Mega-columnas y cinturones', texto: 'Columnas en las esquinas atadas por reticulados cinturón (muy rígidos) en dos niveles.' },
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
   E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
+  L: { nombre: 'Libre (barra por barra)', texto: 'Sin dibujo armado: cada columna, diagonal y viga se dibuja a mano entre nudos de la cara (en «Diseño 3D»). Sirve sola o como una zona entre otras.' },
 };
 
 /** sección de una barra: tubo cuadrado b × e (m) */
@@ -209,8 +210,11 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
    * sus bordes: así una zona de diagrid arriba de una de cruces arranca de las mismas esquinas.
    */
   let nF = 0;
+  /** nudos propios de las alas (mástil de la cara perpendicular), que no se comparten con las barras dibujadas */
+  const nudosAla = new Set<number>();
   const zonal = !!def.zonas?.length;
   const patron = (tipo: TipoExo, kI: number, kF: number, m: number, vanos: number | undefined, pisoIni: number, cortes: number[]) => {
+    if (tipo === 'L') return;                           // libre: solo las barras dibujadas a mano
     // niveles con nudos del exo (los bordes de cada módulo)
     const k0 = tipo === 'E' ? Math.min(kF - 1, Math.max(kI, kI + Math.round(pisoIni))) : kI;
     const mods: number[] = [];
@@ -301,7 +305,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
         if (atadas.has(k)) return nudo(s, k);
         const sa = s * (1 + 1e-7);
         let q = nudos.find(x => x.piso === k && Math.abs(x.s - sa) < 1e-12);
-        if (!q) { q = { id: nudos.length, s: sa, z: zs[k], piso: k }; nudos.push(q); }
+        if (!q) { q = { id: nudos.length, s: sa, z: zs[k], piso: k }; nudos.push(q); nudosAla.add(q.id); }
         return q.id;
       };
       for (const lado of [S0, S1]) for (let k = kI; k < kF; k++) {
@@ -349,7 +353,14 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   });
   // barras agregadas a mano (entre nudos que ya existen o en un piso)
   (def.nuevas ?? []).forEach((nb, i) => {
-    const sDe = (q: [number, number]) => (nb.enFraccion ? +(q[0] * anchoEnZ(q[1]) / 2).toFixed(9) : q[0]);
+    // en fracción del ancho: se lleva a metros y se pega al nudo que ya esté ahí (a menos de 0,1 mm), así una barra
+    // dibujada sobre un nudo de la ficha se une a él aunque la fracción esté redondeada
+    const sDe = (q: [number, number]) => {
+      if (!nb.enFraccion) return q[0];
+      const sv = (q[0] * anchoEnZ(q[1])) / 2;
+      const cerca = nudos.filter(x => !nudosAla.has(x.id) && Math.abs(x.z - q[1]) < 1e-6 && Math.abs(x.s - sv) < 1e-4).sort((x, y) => Math.abs(x.s - sv) - Math.abs(y.s - sv))[0];
+      return cerca ? cerca.s : +sv.toFixed(9);
+    };
     const a = nudoEn(sDe(nb.a), nb.a[1]), b = nudoEn(sDe(nb.b), nb.b[1]);
     if (a === b) return;
     const sec = nb.sec ?? (nb.clase === 'columna' ? def.columna : nb.clase === 'diagonal' ? def.diagonal : def.viga), p = propsSeccion(sec);

@@ -1733,3 +1733,6 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 @media (max-width: 900px) { .exo3d-cuerpo { grid-template-columns: 1fr; } .exo3d-lateral { max-height: none; } }
 .formulario > .nota-ancha { grid-column: 1 / -1; }
 .exo3d-lateral > button, .exo3d-caja > button { white-space: normal; text-align: left; }
+.exo3d-aviso { flex: 1 1 100%; margin: 0; padding: 6px 8px; border-left: 3px solid var(--revisar); background: var(--panel); font-size: 0.9em; }
+.exo3d-txt { margin: 0; font-size: 0.85em; color: var(--ink2); line-height: 1.35; }
+.exo3d-ayuda { padding: 4px 2px; }

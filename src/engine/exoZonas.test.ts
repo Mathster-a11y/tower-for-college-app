@@ -43,4 +43,24 @@ describe('exoesqueleto por zonas en altura', () => {
       expect(() => calcularExo({ ...def, pesoPropio: false }, zs, W, () => 3.4e6 * 20, ancho, [-10, 10], 3.4e6)).not.toThrow();
     }
   });
+  it('libre: vacía, todo a los tabiques; armada barra por barra (columnas, vigas y diagonales) toma viento', () => {
+    const vacia = calc({ ...EXO_POR_DEFECTO, tipo: 'L' });
+    expect(vacia.fraccionExo).toBeCloseTo(0, 6);
+    const nuevas: NonNullable<ExoDef['nuevas']> = [];
+    zs.slice(0, -1).forEach((z, k) => {
+      [-1, 1].forEach(s => nuevas.push({ clase: 'columna', a: [s, z], b: [s, zs[k + 1]], enFraccion: true }));
+      nuevas.push({ clase: 'viga', a: [-1, zs[k + 1]], b: [1, zs[k + 1]], enFraccion: true });
+      nuevas.push({ clase: 'diagonal', a: [-1, z], b: [1, zs[k + 1]], enFraccion: true });
+    });
+    const r = calc({ ...EXO_POR_DEFECTO, tipo: 'L', nuevas });
+    expect(r.fraccionExo).toBeGreaterThan(0.1);
+    r.Ftab.forEach((f, i) => expect(f + r.Fexo[i]).toBeCloseTo(W[i], 5));
+  });
+  it('una barra dibujada en una fracción redondeada se pega al nudo de la ficha que está ahí', () => {
+    // diagrid de 3 vanos: nudos en s = ±3 a media altura del módulo (z = 6); −3/9 redondeado a 6 decimales
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'A', modulo: 4, vanos: 3, nuevas: [{ clase: 'viga', a: [-0.333333, 6], b: [0.333333, 6], enFraccion: true }] };
+    const c = armarCara(def, 18, zs), n = c.barras.find(b => b.id === 'N1')!;
+    expect(c.nudos[n.a].s).toBe(-3);
+    expect(c.barras.filter(b => b.a === n.a || b.b === n.a).length).toBeGreaterThan(1);
+  });
 });
