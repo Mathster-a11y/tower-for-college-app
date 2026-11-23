@@ -1781,3 +1781,11 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .planta .previa-losa polygon { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; pointer-events: none; }
 .planta .previa-losa text { font-size: 11.5px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; pointer-events: none; }
 .losa-cero .error-losa.mal { color: var(--revisar); font-weight: 600; }
+
+/* pantallas táctiles: los tiradores de las cartas, más grandes para el dedo */
+@media (pointer: coarse) {
+  .asa-tamano { width: 28px; height: 28px; margin: 2px -8px -6px auto; }
+  .asa-tamano::before { inset: 6px; }
+  .asa-mover:not(.en-linea) { height: 22px; width: 72px; }
+  .asa-mover:not(.en-linea)::before { top: 9px; }
+}

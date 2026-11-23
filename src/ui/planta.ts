@@ -1762,13 +1762,14 @@ export function montarPlanta(cont: HTMLElement) {
   let wUtilVista = 0, firmaReservas = '0|0';
   /**
    * cuánto tapan las cartas abiertas a cada costado de la planta (px): las del dock y las sueltas que no se movieron a
-   * mano. Las de la izquierda corren el encuadre a la derecha y al revés; cada costado, a lo sumo el 40 % del ancho.
+   * mano. Las que aparecen solas al elegir algo (medidas del muro, precisión) no cuentan: si no, la planta saltaría al
+   * tocar un muro y el muro se iría de abajo del cursor. Las de la izquierda corren el encuadre a la derecha y al revés; cada costado, a lo sumo el 40 % del ancho.
    */
   function reservasCartas(w: number): { izq: number; der: number } {
     const R = svg.getBoundingClientRect();
     if (!R.width) return { izq: 0, der: 0 };
     const cartas = [...cont.querySelectorAll<HTMLElement>(':scope > .calco-panel, :scope > .contorno-panel, :scope > .dock-planta')]
-      .filter(e => !e.hidden && !e.classList.contains('movido') && getComputedStyle(e).position === 'absolute' && (!e.classList.contains('dock-planta') || !!e.querySelector(':scope > .calco-panel:not([hidden])')));
+      .filter(e => !e.hidden && !e.classList.contains('movido') && !e.classList.contains('med-panel') && !e.classList.contains('prec-panel') && getComputedStyle(e).position === 'absolute' && (!e.classList.contains('dock-planta') || !!e.querySelector(':scope > .calco-panel:not([hidden])')));
     let izq = 0, der = 0;
     cartas.forEach(e => {
       const r = e.getBoundingClientRect();
@@ -2045,7 +2046,7 @@ export function montarPlanta(cont: HTMLElement) {
       const esta = presenteEn(m, zN, zFund, zTop);
       const grupoSel = (!!m.grupo && p.muros.find(x => x.id === estado.seleccion)?.grupo === m.grupo) || (!!estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel));
       const fueraCtx = !dentroDe(p, m, estado.contexto), bloq = muroBloqueado(p, m);
-      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
+      const grupo = el('g', { 'data-muro': m.id, class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
       if (limpias.has(m.id)) limpias.get(m.id)!.forEach(pg => forma.appendChild(el('polygon', { points: ptsPg(pg), fill: COLORES[papel], class: 'limpio' })));
       else if (t === 'perfil') {
@@ -2422,7 +2423,7 @@ export function montarPlanta(cont: HTMLElement) {
     acercarEn(Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015)), ev.clientX - r.left, ev.clientY - r.top);
   }, { passive: false });
   const punteros = new Map<number, { x: number; y: number }>();
-  let pan: { sx: number; sy: number; c: { x: number; y: number } } | null = null;
+  let pan: { sx: number; sy: number; c: { x: number; y: number }; toque?: boolean } | null = null;
   let pellizco: { d: number; z: number; mx: number; my: number; c: { x: number; y: number } } | null = null;
   const local = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
   const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .manija-vertice, .editando, .areas-inf text');
@@ -2459,7 +2460,7 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo !== 'silueta' || !trazo || ev.button !== 0) return;
     ev.stopImmediatePropagation(); ev.preventDefault();
     const q = puntoTrazo(ev);
-    if (trazo.length >= 3) { const a = trazo[0], d = Math.hypot((q.x - a.x) * escala, (q.y - a.y) * escala); if (d < 12) { void cerrarTrazo(); return; } }
+    if (trazo.length >= 3) { const a = trazo[0], d = Math.hypot((q.x - a.x) * escala, (q.y - a.y) * escala); if (d < (ev.pointerType === 'touch' ? 22 : 12)) { void cerrarTrazo(); return; } }
     const u = trazo[trazo.length - 1];
     if (u && Math.hypot(u.x - q.x, u.y - q.y) < 1e-6) return;
     trazo.push(q); pedirDibujo();
@@ -2518,7 +2519,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (ev.button === 1 || (ev.button === 0 && modo === 'mover' && esFondo(ev.target))) {
       ev.preventDefault();
-      pan = { sx: ev.clientX, sy: ev.clientY, c: { ...centroVista } };
+      pan = { sx: ev.clientX, sy: ev.clientY, c: { ...centroVista }, toque: ev.button === 0 && !ev.shiftKey };
       try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
       if (ev.button === 1) ev.stopImmediatePropagation();
     }
@@ -2544,7 +2545,14 @@ export function montarPlanta(cont: HTMLElement) {
       pedirDibujo();
     }
   }, true);
-  const finPuntero = (ev: PointerEvent) => { punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null; };
+  const finPuntero = (ev: PointerEvent) => {
+    // un toque en el fondo (sin arrastrar) suelta lo elegido: con el lápiz o el dedo no hay tecla Esc
+    if (pan?.toque && ev.type === 'pointerup' && punteros.size === 1 && modo === 'mover' && Math.hypot(ev.clientX - pan.sx, ev.clientY - pan.sy) < (ev.pointerType === 'mouse' ? 3 : 8)
+      && (estado.seleccion || estado.grupoSel || estado.multi.m.length || estado.multi.g.length)) {
+      estado.multi = { m: [], g: [] }; estado.grupoSel = null; estado.seleccion = null; estado.avisarPanel(); pedirDibujo();
+    }
+    punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null;
+  };
   svg.addEventListener('pointerup', finPuntero, true);
   svg.addEventListener('pointercancel', finPuntero, true);
   // botones de la vista
@@ -2756,6 +2764,9 @@ export function montarPlanta(cont: HTMLElement) {
       toqueDibujo = null; inicio = null; dibujar(); return;                // doble toque: termina el muro encadenado
     }
     toqueDibujo = { t: ahora, x: ev.clientX, y: ev.clientY };
+    // con el lápiz o el dedo, volver a tocar el último punto (a menos de 12 px) termina el encadenado: no hace un muro
+    // de pocos centímetros por el pulso
+    if (ev.pointerType !== 'mouse' && inicio) { const l = local(ev); if (Math.hypot(l.x - (ox + inicio.x * escala), l.y - (oy - inicio.y * escala)) < (ev.pointerType === 'touch' ? 20 : 12)) { inicio = null; dibujar(); mensaje('Muro terminado.'); return; } }
     const q = pegar(ev);
     if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; dibujar(); return; }
     muroHasta(q);

@@ -192,10 +192,10 @@ export function montarEditorContorno(api: ApiPlanta) {
   const punteroEn = (ev: PointerEvent) => api.pegar(ev).p;
   svg.addEventListener('pointerdown', ev => {
     if (!id || !P || ev.button !== 0) return;
-    // la manija tocada; si encima había otro dibujo (un rótulo, la flecha del viento), la más cercana a menos de 12 px
+    // la manija tocada; si encima había otro dibujo (un rótulo, la flecha del viento), la más cercana a menos de 12 px (22 con el dedo)
     let h = (ev.target as Element).closest?.('[data-h]') as SVGElement | null;
     if (!h) {
-      let dmin = 12;
+      let dmin = ev.pointerType === 'touch' ? 22 : 12;            // el dedo es menos preciso que el mouse o el lápiz
       svg.querySelectorAll<SVGElement>('.capa-contorno [data-h]').forEach(e => { const r = e.getBoundingClientRect(), d = Math.hypot(ev.clientX - (r.left + r.right) / 2, ev.clientY - (r.top + r.bottom) / 2); if (d < dmin) { dmin = d; h = e; } });
     }
     ev.preventDefault(); ev.stopPropagation();
