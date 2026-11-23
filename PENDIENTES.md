@@ -184,6 +184,9 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] P6 (parcial) · 3D sin placa: el D3Q19 en un worker del procesador (≈ 3,5 M celdas/s, grilla 80 × 40 × 32: una pasada del aire por minuto). Falta: repartir en varios núcleos o WebAssembly
 - [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
 - [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
+- [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
+- [ ] Contexto urbano en la app: sección «Contexto» con escenarios armados, edificios propios y DXF/PDF; 2D (cada corte con los que llegan) y 3D; aislada contra con contexto y factor de interferencia por piso
+- [ ] Velocidad de la red: flechas, puntos de velocidad alta y guardia de estabilidad hechos; faltan isolíneas, partículas con estela, anemómetros virtuales, vista promedio/ráfagas y comparación lado a lado
 - [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
 - [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso
 - [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2. Las cinco formas, medidas de nuevo: vivas 2,29, curva 1,67, redondeadas 1,90, sustraídas 1,92, chaflán 2,06
