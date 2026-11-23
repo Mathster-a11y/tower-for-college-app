@@ -25,6 +25,11 @@ describe('carpintería por tramos', () => {
     n14.carpManual = true; n14.carpinteria = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }];
     aplicarCarpinteriaTramos(p);
     expect(n14.carpinteria.length).toBe(3); expect(n14.carpinteriaPiezas).toBeUndefined();
+    // a mano con la L entera (pasa sobre el hueco de la U): aviso; marcada como voladizo a propósito: sin aviso
+    n14.carpinteria = L.map(q => ({ ...q }));
+    expect(avisosDiseno(p).find(a => a.tipo === 'carpinteria-vacio')?.texto).toMatch(/vacío en (el )?14º/);
+    n14.carpVoladizo = true;
+    expect(avisosDiseno(p).filter(a => a.tipo === 'carpinteria-vacio')).toEqual([]);
   });
   it('lo común a dos losas: la de adentro si una contiene a la otra; recorte exacto con una convexa', () => {
     expect(comunLosas(rectangulo(20, 16), rectangulo(10, 8))).toEqual({ v: rectangulo(10, 8), piezas: [rectangulo(10, 8)], exacto: true });

@@ -120,7 +120,9 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
   ordenZ.forEach(({ n, i }, k) => {
     if (!n.carpManual || n.carpVoladizo || tramoEn(p, n.cota)?.modo !== 'losa' || !ordenZ[k + 1]) return;
     const com = comunLosas(plantaDeNivel(p, i).silueta, plantaDeNivel(p, ordenZ[k + 1].i).silueta).piezas.map(v => puntosSilueta(v, 8));
-    const d = Math.max(0, ...piezasCarpinteria(n).flatMap(v => puntosSilueta(v, 8)).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
+    // puntos cada 25 cm por todo el contorno (no alcanza con los vértices: un lado puede cruzar el vacío)
+    const densos = (v: Punto[]) => v.flatMap((a, j) => { const b = v[(j + 1) % v.length], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.25)); return Array.from({ length: m }, (_, t) => ({ x: a.x + (b.x - a.x) * t / m, y: a.y + (b.y - a.y) * t / m })); });
+    const d = Math.max(0, ...piezasCarpinteria(n).flatMap(v => densos(puntosSilueta(v, 8))).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
     if (d > TOL) { vacio.push(n.cota); vacioMax = Math.max(vacioMax, d); }
   });
   if (vacio.length) out.push({ tipo: 'carpinteria-vacio', cotas: vacio, texto: `La carpintería editada a mano pasa sobre un vacío ${rangoNiveles(p, vacio)} (hasta ${f2(vacioMax)} m fuera de lo común a la losa de abajo y la de arriba).`, arreglo: 'Volvé a atarla al tramo (Losa → Carpintería → «Volver a atar»), metela a mano, o marcala como voladizo a propósito.' });
