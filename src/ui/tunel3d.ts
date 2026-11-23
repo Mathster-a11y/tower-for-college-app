@@ -41,7 +41,9 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** contexto urbano: simular con los edificios vecinos del proyecto */
   contexto: true,
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
-  flechas: 'fijas' as ModoFlechas };
+  flechas: 'fijas' as ModoFlechas,
+  /** el estilo de las flechas al volver a prenderlas, los puntos de velocidad alta y las llaves de colores */
+  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', altos: true, llave: true };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -278,7 +280,7 @@ function actualizarCampo() {
   const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
   if (cfg.horizontal || cfg.vereda) {
     const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; },
-      SALVAGUARDAS && !(cfg.vereda && cfg.lawson) ? altosDelCorte(c, zc) : []);
+      SALVAGUARDAS && cfg.altos && !(cfg.vereda && cfg.lawson) ? altosDelCorte(c, zc) : []);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = (zc - 0.5) / g.escala; v.esc.add(m); v.planoH = m;
   }
@@ -368,6 +370,7 @@ let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
 function armarLlaves3d() {
   if (!llaves3d) return;
+  if (!cfg.llave) { llaves3d.replaceChildren(); return; }
   const fondo = '#ffffff', az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
   const caras: Llave = { titulo: 'Caras de la torre: Cp promedio', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] };
   let corte: Llave | null = null;
@@ -452,7 +455,6 @@ export function panelTunel3d(c: H) {
     sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
     sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
-    sel('Flechas en los cortes', [['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad'], ['no', 'sin flechas']], cfg.flechas, x => { cfg.flechas = x as ModoFlechas; }),
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),
     rango('Posición del corte vertical', cfg.yRel, x => { cfg.yRel = x; }),
   ),
@@ -461,8 +463,6 @@ export function panelTunel3d(c: H) {
     l.querySelector('input')!.addEventListener('change', e => { cfg.contexto = (e.target as HTMLInputElement).checked; estado.avisarPanel(); });
     return l;
   })()] : []),
-  chk('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), chk('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
-  chk('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; if (corrida) corrida.ultimasLineas = 0; }),
   chk('Viento en la vereda (1,5 m)', cfg.vereda, x => { cfg.vereda = x; }),
   chk('Vereda con el confort del peatón (Lawson)', cfg.lawson, x => { cfg.lawson = x; }), (() => {
     const i = h('input', { type: 'text', inputmode: 'decimal', value: String(cfg.vientoMedio).replace('.', ','), class: 'n' }) as HTMLInputElement;
@@ -478,6 +478,28 @@ export function panelTunel3d(c: H) {
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     });
     d.append(h('div', { class: 'fila-acciones' }, stl), h('p', { class: 'nota chica' }, 'Un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba: para imprimir en 3D o llevar la forma a un programa de CAD o a otro simulador de viento.'));
+  }
+  // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
+  const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
+  {
+    const estilo = h('select', { 'aria-label': 'Estilo de las flechas' }) as HTMLSelectElement;
+    ([['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad']] as const).forEach(([v, t]) => estilo.append(new Option(t, v, false, v === cfg.estiloFlechas)));
+    estilo.addEventListener('change', () => { cfg.estiloFlechas = estilo.value as 'fijas' | 'proporcionales'; if (cfg.flechas !== 'no') cfg.flechas = cfg.estiloFlechas; actualizarCampo(); });
+    if (cfg.flechas === 'no') estilo.setAttribute('disabled', '');
+    const capa = (rot: string, val: boolean, al: (x: boolean) => void, extra?: H) => {
+      const l = chk(rot, val, x => { al(x); if (corrida) corrida.ultimasLineas = 0; estado.avisarPanel(); });
+      return extra ? h('div', { class: 'capa-con-opcion' }, l, extra) : l;
+    };
+    const todo = (x: boolean) => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.lineas = x; cfg.horizontal = x; cfg.vertical = x; cfg.altos = x; cfg.llave = x; if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); estado.avisarPanel(); };
+    const bTodo = h('button', { type: 'button', class: 'mini' }, 'Todo'), bNada = h('button', { type: 'button', class: 'mini' }, 'Nada');
+    bTodo.addEventListener('click', () => todo(true)); bNada.addEventListener('click', () => todo(false));
+    qd.append(h('div', { class: 'fila-acciones' }, bTodo, bNada),
+      capa('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), capa('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
+      capa('Flechas de la velocidad en los cortes', cfg.flechas !== 'no', x => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; }, estilo),
+      capa('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; }),
+      ...(SALVAGUARDAS ? [capa('Puntos de velocidad alta en el corte horizontal', cfg.altos, x => { cfg.altos = x; })] : []),
+      capa('Llaves de colores sobre la vista', cfg.llave, x => { cfg.llave = x; }),
+      h('p', { class: 'nota chica' }, 'Prender o apagar capas no vuelve a simular.'));
   }
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);

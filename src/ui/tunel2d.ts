@@ -58,6 +58,10 @@ const cfg = {
   isolineas: true,
   /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
+  /** el estilo de las flechas que se usa al volver a prenderlas */
+  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales',
+  /** la estela del humo, los puntos de velocidad alta y la llave de colores */
+  estelas: true, altos: true, llave: true,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
@@ -315,7 +319,7 @@ function dibujar() {
     // las partículas con su estela: un tramo por cada cuadro anterior, más transparente cuanto más viejo
     const hm = c.humo, col = c.cola, tinta = css('--ink2', '#556');
     g.strokeStyle = tinta; g.lineWidth = 1.4 / zoom.z; g.lineCap = 'round';
-    for (let a = 0; a + 1 < col.length; a++) {
+    for (let a = 0; cfg.estelas && a + 1 < col.length; a++) {
       const p0 = col[a], p1 = col[a + 1];
       g.globalAlpha = 0.1 + (0.45 * (a + 1)) / col.length;
       g.beginPath();
@@ -332,8 +336,9 @@ function dibujar() {
   }
   // lo que no se mueve con el zoom: los puntos de velocidad alta, el recuadro de la ventana arriba, la llave de colores
   g.setTransform(1, 0, 0, 1, 0, 0);
-  if (SALVAGUARDAS) marcarAltos(g, c, s);
+  if (SALVAGUARDAS) marcarAltos(g, c, s, cfg.altos);
   if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
+  if (!cfg.llave) return;
   const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   const lf = llaveFlechas();
   if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
@@ -400,13 +405,13 @@ function dibujarIsolineas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
 }
 
 /** los puntos de velocidad alta en el túnel: un anillo y la velocidad media (en veces la de entrada) */
-function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number) {
+function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number, conAnillos = true) {
   const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
   g.save(); g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'middle';
   // el rótulo: el número (y el valor si hay lugar: de cerca o con pocos puntos); si se pisa con otro, se corre
   const puestos: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const conValor = zoom.z >= 2 || c.altos.length <= 2;
-  c.altos.forEach((p, i) => {
+  (conAnillos ? c.altos : []).forEach((p, i) => {
     const x = (p.x * s - zoom.ox) * zoom.z, y = ((ny - p.y) * s - zoom.oy) * zoom.z;
     if (x < -20 || y < -20 || x > (lienzo?.width ?? 0) + 20 || y > (lienzo?.height ?? 0) + 20) return;
     for (const [col, w] of [[fondo, 4], [tinta, 1.6]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI); g.stroke(); }
@@ -539,7 +544,7 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   if (copiaDet.width !== cv.width || copiaDet.height !== cv.height) { copiaDet.width = cv.width; copiaDet.height = cv.height; }
   copiaDet.getContext('2d')!.drawImage(cv, 0, 0);
   dibujarFlechas(g, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 28, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
-  llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(170, cv.width * 0.4), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  if (cfg.llave) llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(170, cv.width * 0.4), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   actualizarLecturaDetalle(c);
 }
 
@@ -577,6 +582,39 @@ function actualizarLecturaDetalle(c: Corrida) {
     ...(isFinite(cpMin) ? [kpi('Succión más fuerte en la pared', `Cp ${fmt(cpMin, 2)}`, 'promedio en el tiempo')] : [])),
     h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros${lado > 1 ? `, y cada valor promediado en un cuadrado de ${fmt(lado / (c.geo.escala * det.geo.r), 1)} m de lado (el de una celda crece al afinar la grilla)` : ''}. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`),
     ...(viva ? [h('p', { class: 'nota chica' }, 'La velocidad más alta está junto a una esquina viva: ahí la velocidad teórica es infinita y el pico de la simulación depende de la grilla. Redondear o chaflanar la esquina lo baja de verdad.')] : []));
+}
+
+/**
+ * «Qué se dibuja»: cada capa del túnel se prende y se apaga sin volver a simular (flechas, isolíneas, humo y su estela,
+ * Cp en el contorno, puntos de velocidad alta, llave de colores, ventana de detalle arriba)
+ */
+function armarCapas(el: H) {
+  const capa = (rot: string, val: boolean, al: (x: boolean) => void, extra?: H) => {
+    const l = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(val ? { checked: '' } : {}) }), ` ${rot}`);
+    l.querySelector('input')!.addEventListener('change', e => { al((e.target as HTMLInputElement).checked); dibujar(); estado.avisarPanel(); });
+    return extra ? h('div', { class: 'capa-con-opcion' }, l, extra) : l;
+  };
+  const estilo = h('select', { 'aria-label': 'Estilo de las flechas' }) as HTMLSelectElement;
+  ([['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad']] as const).forEach(([v, t]) => estilo.append(new Option(t, v, false, v === cfg.estiloFlechas)));
+  estilo.addEventListener('change', () => { cfg.estiloFlechas = estilo.value as 'fijas' | 'proporcionales'; if (cfg.flechas !== 'no') cfg.flechas = cfg.estiloFlechas; dibujar(); estado.avisarPanel(); });
+  if (cfg.flechas === 'no') estilo.setAttribute('disabled', '');
+  const todo = (x: boolean) => {
+    cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.isolineas = x; cfg.humo = x; cfg.estelas = x; cfg.cpContorno = x; cfg.altos = x; cfg.llave = x; verRecuadroArriba = x;
+    dibujar(); estado.avisarPanel();
+  };
+  const bTodo = h('button', { type: 'button', class: 'mini' }, 'Todo'), bNada = h('button', { type: 'button', class: 'mini' }, 'Nada');
+  bTodo.addEventListener('click', () => todo(true)); bNada.addEventListener('click', () => todo(false));
+  el.append(
+    h('div', { class: 'fila-acciones' }, h('span', { class: 'nota chica' }, 'Encima del color de fondo:'), bTodo, bNada),
+    capa('Flechas de la velocidad', cfg.flechas !== 'no', x => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; }, estilo),
+    capa('Isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada)', cfg.isolineas, x => { cfg.isolineas = x; }),
+    capa('Humo (partículas que lleva el viento)', cfg.humo, x => { cfg.humo = x; }),
+    ...(cfg.humo ? [h('div', { class: 'capa-sub' }, capa('con estela', cfg.estelas, x => { cfg.estelas = x; }))] : []),
+    capa('Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)', cfg.cpContorno, x => { cfg.cpContorno = x; }),
+    ...(SALVAGUARDAS ? [capa('Puntos de velocidad alta (anillos numerados)', cfg.altos, x => { cfg.altos = x; })] : []),
+    capa('Llave de colores sobre el dibujo', cfg.llave, x => { cfg.llave = x; }),
+    ...(cfg.ventana ? [capa('Ventana de detalle también arriba, sobre el túnel', verRecuadroArriba, x => { verRecuadroArriba = x; })] : []),
+    h('p', { class: 'nota chica' }, 'El color de fondo (giro, velocidad o presión) se elige arriba, en «Color». Prender o apagar capas no vuelve a simular.'));
 }
 
 /** la torre (la planta del corte elegido) y su altura sobre PB, para armar escenarios y dibujar el plano chico */
@@ -896,16 +934,10 @@ export function panelTunel(c: H) {
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
     cfg.segunda !== 'no' ? sel('Separación (anchos)', ['0.5', '1', '2', '3', '4'].map(v => [v, v.replace('.', ',')] as [string, string]), String(cfg.distancia), x => { cfg.distancia = +x; }) : h('span', {}),
     sel('Color', [['vorticidad', 'giro del aire (remolinos)'], ['velocidad', 'velocidad'], ['presion', 'presión (Cp)']], cfg.vista, x => { cfg.vista = x; }),
-    sel('Flechas de la velocidad', [['fijas', 'del mismo largo (el color dice la velocidad)'], ['proporcionales', 'el largo dice la velocidad'], ['no', 'sin flechas']], cfg.flechas, x => { cfg.flechas = x; }),
   ));
-  const humo = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.humo ? { checked: '' } : {}) }), ' Humo (partículas que lleva el viento)');
-  humo.querySelector('input')!.addEventListener('change', e => { cfg.humo = (e.target as HTMLInputElement).checked; dibujar(); });
-  const cpc = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.cpContorno ? { checked: '' } : {}) }), ' Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)');
-  cpc.querySelector('input')!.addEventListener('change', e => { cfg.cpContorno = (e.target as HTMLInputElement).checked; dibujar(); });
-  d.append(cpc);
-  const iso = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.isolineas ? { checked: '' } : {}) }), ' Isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada: dónde se acelera el aire)');
-  iso.querySelector('input')!.addEventListener('change', e => { cfg.isolineas = (e.target as HTMLInputElement).checked; dibujar(); });
-  d.append(humo, iso, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
+  d.append(h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y lo que se dibuja (abajo), no.'));
+  const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
+  armarCapas(qd);
   const cu = seccion('Contexto urbano (torres vecinas)').cuerpo; c.append(cu.parentElement!);
   panelContexto(cu);
   const vd = seccion('Ventana de detalle').cuerpo; c.append(vd.parentElement!);
