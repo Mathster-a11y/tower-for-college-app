@@ -49,7 +49,7 @@ it.skipIf(!process.env.DIAG)(`contexto ${process.env.CASO}`, () => {
   });
   const q = distanciasPared(nx, ny, solido, contornos);
   const qUsar = process.env.PAREDES === '0' ? undefined : q;
-  const geo: Geometria2D = { nx, ny, solido, escala, anchoM: B, D, celdasTorre: 0, caja, contornos, q };
+  const geo: Geometria2D = { nx, ny, solido, escala, anchoM: B, D, celdasTorre: 0, caja, contornos, q, nTorre: 1, cuerpo };
   const m = new Lbm2D({ nx, ny, nu: (U0 * D) / Re, u0: U0, cs, solido, q: qUsar, colision: 'trt', cuerpo, paredesLineales: process.env.CUAD !== '1' });
   const perim = new PromedioPerimetro(perimetro(geo), U0);
   const arranque = Math.round(900 / U0), medidos = Math.round(2400 / U0), Fx: number[] = [], Fy: number[] = [];
