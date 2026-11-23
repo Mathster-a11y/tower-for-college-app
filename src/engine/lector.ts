@@ -197,6 +197,22 @@ export function leerProyecto(x: unknown): Lectura {
     }
   }
 
+  // --- contexto urbano (solo para los simuladores): lo que no sirve se saca, con aviso; nunca impide abrir el proyecto
+  if (!nulo(q.contexto)) {
+    const cx = q.contexto as Record<string, unknown>;
+    if (!esObj(cx) || !Array.isArray(cx.edificios)) { delete q.contexto; avisos.push('El contexto urbano estaba dañado: se sacó.'); }
+    else {
+      const antes = cx.edificios.length;
+      cx.edificios = (cx.edificios as unknown[]).filter(e => esObj(e) && num(e.altura) && (e.altura as number) > 0 && Array.isArray(e.v) && (e.v as unknown[]).length >= 3
+        && (e.v as unknown[]).every(p => esObj(p) && num(p.x) && num(p.y))).map((e, i) => {
+        const o = e as Record<string, unknown>;
+        return { id: typeof o.id === 'string' && o.id ? o.id : `E${i + 1}`, nombre: typeof o.nombre === 'string' ? o.nombre : '', v: o.v, altura: o.altura };
+      });
+      const fuera = antes - (cx.edificios as unknown[]).length;
+      if (fuera) avisos.push(`${fuera === 1 ? 'Un edificio vecino' : `${fuera} edificios vecinos`} del contexto urbano no tenía${fuera === 1 ? '' : 'n'} contorno o altura válidos: se sacó.`);
+    }
+  }
+
   if (errores.length) return { ok: false, errores };
 
   // --- 3. referencias: lo que apunta a algo que no existe se suelta (no cambia el cálculo) y se avisa

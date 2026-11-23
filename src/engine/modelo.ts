@@ -310,7 +310,14 @@ export interface Proyecto {
   cirsoc101?: import('./cargas/cirsoc101').DatosCirsoc101 | null;
   /** datos del hormigón para la verificación CIRSOC 201 (recubrimiento, exposición) y el límite de deriva; vacío = por defecto */
   cirsoc201?: import('./metodos/cirsoc').DatosCirsoc201 | null;
+  /**
+   * contexto urbano: los edificios vecinos, para los simuladores de viento (túnel 2D y 3D). No entra en ningún método
+   * de cálculo ni en el Excel. Vacío = la torre aislada
+   */
+  contexto?: { edificios: EdificioVecino[] } | null;
 }
+/** edificio vecino: su contorno en planta (m, en las coordenadas de la planta del proyecto) y su altura sobre PB (m) */
+export interface EdificioVecino { id: string; nombre: string; v: { x: number; y: number }[]; altura: number }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }
 /** el hueco está en la losa del nivel de cota z */

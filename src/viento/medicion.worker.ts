@@ -8,6 +8,8 @@ import { medir, type Mediciones } from './mediciones';
 export interface PedidoMedicion {
   nx: number; ny: number; solido: Uint8Array; nu: number; u0: number; cs: number; D: number;
   q?: Float32Array; colision?: 'bgk' | 'trt';
+  /** con contexto urbano: las celdas de la torre (la fuerza se mide solo sobre ella) */
+  cuerpo?: Uint8Array;
   /** pasos totales y desde cuál se mide (se descarta el arranque) */
   pasos: number; desde: number;
 }
@@ -17,7 +19,7 @@ export type RespuestaMedicion =
 
 self.onmessage = (e: MessageEvent<PedidoMedicion>) => {
   const o = e.data;
-  const sim = new Lbm2D({ nx: o.nx, ny: o.ny, nu: o.nu, u0: o.u0, cs: o.cs, solido: o.solido, q: o.q, colision: o.colision });
+  const sim = new Lbm2D({ nx: o.nx, ny: o.ny, nu: o.nu, u0: o.u0, cs: o.cs, solido: o.solido, q: o.q, colision: o.colision, cuerpo: o.cuerpo });
   const Fx: number[] = [], Fy: number[] = [];
   let ultimo = 0;
   for (let k = 0; k < o.pasos && !sim.roto; k++) {

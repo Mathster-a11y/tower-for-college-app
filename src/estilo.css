@@ -1709,3 +1709,8 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .altos ol { margin: 4px 0 2px 18px; padding: 0; }
 .altos li { margin: 1px 0; }
 .zoom-tunel .zoom-chk { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 85%, transparent); padding: 1px 6px; border-radius: 4px; display: inline-flex; gap: 4px; align-items: center; }
+/* contexto urbano del túnel 2D */
+.tabla-contexto td, .tabla-contexto th { padding: 3px 5px; font-size: 12px; }
+.tabla-contexto input { padding: 2px 4px; font-size: 12px; }
+.plano-contexto-fig { margin: 6px 0; }
+.plano-contexto { background: var(--lienzo); border: 1px solid var(--edge); border-radius: 6px; max-width: 100%; height: auto; }

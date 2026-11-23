@@ -8,7 +8,7 @@
  * azotea ni el del pie, por eso su Cd es mayor que el de una torre real de altura finita. Sirve para comparar plantas
  * y pisos entre sí, no como carga de diseño.
  */
-import type { Proyecto } from '../engine/modelo';
+import type { EdificioVecino, Proyecto } from '../engine/modelo';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { KN_POR_T, type Direccion102 } from '../engine/cargas/cirsoc102';
 import type { P } from './geometria2d';
@@ -20,10 +20,15 @@ export interface GrupoPlanta {
   pol: P[]; de: 'carpintería' | 'losa';
   /** los niveles (de arriba hacia abajo) que tienen esta planta */
   niveles: { i: number; nombre: string; cota: number }[];
+  /** contexto urbano: los contornos de los vecinos que llegan a esos niveles (vacío: la torre aislada) */
+  vecinos: P[][];
 }
 
-/** las plantas distintas de los niveles sobre PB (los iguales se juntan: se simulan una sola vez) */
-export function plantasDistintas(p: Proyecto): GrupoPlanta[] {
+/**
+ * las plantas distintas de los niveles sobre PB (los iguales se juntan: se simulan una sola vez). Con contexto urbano,
+ * dos niveles con la misma planta pero distintos vecinos (un edificio bajo llega a uno y no al otro) van separados
+ */
+export function plantasDistintas(p: Proyecto, vecinos: EdificioVecino[] = []): GrupoPlanta[] {
   const iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const zPB = p.niveles[iPB]?.cota ?? 0;
   const grupos = new Map<string, GrupoPlanta>();
@@ -32,8 +37,9 @@ export function plantasDistintas(p: Proyecto): GrupoPlanta[] {
     const c = contornoAlViento(p, i);
     const pol = puntosSilueta(c.v, 12).map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4) }));
     if (pol.length < 3) return;
-    const clave = JSON.stringify(pol);
-    const g = grupos.get(clave) ?? { clave, pol, de: c.de, niveles: [] };
+    const llegan = vecinos.filter(e => e.altura > n.cota - zPB && e.v.length >= 3);
+    const clave = JSON.stringify(pol) + (llegan.length ? '|' + llegan.map(e => e.id).join(',') : '');
+    const g = grupos.get(clave) ?? { clave, pol, de: c.de, niveles: [], vecinos: llegan.map(e => e.v) };
     g.niveles.push({ i, nombre: n.nombre, cota: n.cota - zPB });
     grupos.set(clave, g);
   });

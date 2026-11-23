@@ -23,6 +23,8 @@ import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
+import { armarEscenario, cajaDe, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
+import type { EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
@@ -45,6 +47,10 @@ const cfg = {
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
   /** túnel «lento»: la entrada a 0,06 en vez de 0,1 de la red (más estable, más pasos por pasada) */
   lento: false,
+  /** contexto urbano: simular con los edificios vecinos del proyecto (los que llegan a la altura del corte) */
+  contexto: true,
+  /** el armador de escenarios: tipo, ancho de las calles (m) y alto de los vecinos (en veces la torre) */
+  escenario: 'fila' as Escenario, separacion: 20, altoRel: 1,
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
   /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
@@ -95,7 +101,7 @@ function nivelElegido() {
 }
 
 function claveCorrida(): string {
-  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia, cfg.lento]);
+  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia, cfg.lento, cfg.contexto]);
 }
 
 function iniciar() {
@@ -113,11 +119,14 @@ function iniciar() {
     pol = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   }
   const D = RES[cfg.res].D, re = RE[cfg.re];
-  U0 = cfg.lento ? 0.06 : 0.1;
+  // contexto urbano: los vecinos que llegan a la altura del corte (a mitad del piso, sobre PB)
+  const ctx = cfg.contexto ? vecinosEnCorte(edificiosVecinos(), alturaCorte(ne.i)) : [];
+  // con vecinos el aire se acelera en las calles: el túnel lento siempre (con el normal se rompe con facilidad)
+  U0 = cfg.lento || ctx.length ? 0.06 : 0.1;
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
   if (cfg.ochava > 0) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
-  const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia } });
+  const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia }, contexto: ctx });
   const nu = (U0 * geo.D) / re.Re;
   // el worker va adentro del script (también en el archivo único, que se abre con doble clic: ahí no se pueden cargar
   // workers desde el disco)
@@ -128,7 +137,7 @@ function iniciar() {
     sumaV: new Float64Array(geo.nx * geo.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [] };
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
   const exactas = cfg.paredes === 'exactas';
-  worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk' } satisfies MensajeTunel);
+  worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk', cuerpo: geo.cuerpo } satisfies MensajeTunel);
   det = null;
   if (cfg.ventana) ponerVentana(cfg.ventana);
 }
@@ -265,9 +274,11 @@ function dibujar() {
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.putImageData(imgPant, 0, 0);
   g.setTransform(zoom.z, 0, 0, zoom.z, -zoom.ox * zoom.z, -zoom.oy * zoom.z);
-  // la torre con su contorno exacto, encima (borde liso)
-  g.fillStyle = css('--ink', '#223344');
-  for (const p of c.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); }
+  // la torre con su contorno exacto, encima (borde liso); los vecinos del contexto, en gris
+  c.geo.contornos.forEach((p, k) => {
+    g.fillStyle = k < c.geo.nTorre ? css('--ink', '#223344') : GRIS_VECINO;
+    g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill();
+  });
   // las flechas de la velocidad, en una grilla pareja de la pantalla (no se amontonan con el zoom)
   g.setTransform(1, 0, 0, 1, 0, 0);
   dibujarFlechas(g, vis, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 30, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
@@ -339,12 +350,18 @@ function vigilar(c: Corrida, r: CuadroTunel) {
 function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number) {
   const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
   g.save(); g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'middle';
+  // el rótulo: el número (y el valor si hay lugar: de cerca o con pocos puntos); si se pisa con otro, se corre
+  const puestos: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  const conValor = zoom.z >= 2 || c.altos.length <= 2;
   c.altos.forEach((p, i) => {
     const x = (p.x * s - zoom.ox) * zoom.z, y = ((ny - p.y) * s - zoom.oy) * zoom.z;
     if (x < -20 || y < -20 || x > (lienzo?.width ?? 0) + 20 || y > (lienzo?.height ?? 0) + 20) return;
     for (const [col, w] of [[fondo, 4], [tinta, 1.6]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI); g.stroke(); }
-    const t = `${i + 1} · ${fmt(p.valor, 2)} V`;
-    g.lineWidth = 3.5; g.strokeStyle = fondo; g.strokeText(t, x + 13, y); g.fillStyle = tinta; g.fillText(t, x + 13, y);
+    const t = conValor ? `${i + 1} · ${fmt(p.valor, 2)} V` : `${i + 1}`, w = g.measureText(t).width;
+    let tx = x + 13, ty = y;
+    for (let k = 0; k < 8 && puestos.some(r => tx < r.x1 && tx + w > r.x0 && ty - 7 < r.y1 && ty + 7 > r.y0); k++) ty += 15;
+    puestos.push({ x0: tx, y0: ty - 7, x1: tx + w, y1: ty + 7 });
+    g.lineWidth = 3.5; g.strokeStyle = fondo; g.strokeText(t, tx, ty); g.fillStyle = tinta; g.fillText(t, tx, ty);
   });
   // si se rompió: un cartel en el túnel en vez de una imagen sin sentido
   if (c.roto) {
@@ -357,15 +374,26 @@ function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number) {
   g.restore();
 }
 
+/** los vecinos del contexto urbano: un gris neutro (ni rojo ni azul) */
+const GRIS_VECINO = '#8f9198';
+const edificiosVecinos = (): EdificioVecino[] => estado.proyecto.contexto?.edificios ?? [];
+/** la altura del corte del nivel i, sobre PB: a mitad del piso que empieza en ese nivel */
+function alturaCorte(i: number) {
+  const p = estado.proyecto, iPB = p.niveles.reduce((k, n, j) => (n.cota >= 0 ? j : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
+  const n = p.niveles[i], arriba = p.niveles[i - 1];
+  return n.cota - zPB + (arriba ? Math.min(1.5, (arriba.cota - n.cota) / 2) : 1.5);
+}
+
 /** la llave de colores de la vista elegida (la misma en el túnel y en la ventana) */
 function llaveVista(D: number): Llave {
   const fondo = css('--lienzo', '#ffffff'), sol = css('--ink', '#223344');
-  const torre = { color: sol, texto: 'torre' };
+  const torre = { color: sol, texto: 'torre' }, conVecinos = !!corrida && corrida.geo.contornos.length > corrida.geo.nTorre && cfg.segunda === 'no';
+  const vec = conVecinos ? [{ color: GRIS_VECINO, texto: 'vecinos' }] : [];
   const cp = cfg.cpContorno ? [{ color: css('--compresion', '#378add'), texto: 'empuja', forma: 'punto' as const }, { color: css('--traccion', '#e24b4a'), texto: 'succiona (Cp en el contorno)', forma: 'punto' as const }] : [];
-  if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...cp] };
-  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.25, '0,4 V'], [0.5, '0,8 V'], [0.75, '1,2 V'], [1, '≥ 1,6 V']], extras: [torre, ...cp] };
+  if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...vec, ...cp] };
+  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.25, '0,4 V'], [0.5, '0,8 V'], [0.75, '1,2 V'], [1, '≥ 1,6 V']], extras: [torre, ...vec, ...cp] };
   void D;
-  return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...cp.length ? [cp[0], cp[1]] : []] };
+  return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...vec, ...cp.length ? [cp[0], cp[1]] : []] };
 }
 
 /** que el zoom no deje ver afuera del túnel */
@@ -448,7 +476,10 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   // la torre con su contorno exacto, encima
   g.save(); g.beginPath(); g.rect(0, 0, cv.width, cv.height); g.clip();
   g.fillStyle = css('--ink', '#223344'); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
-  for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); g.stroke(); }
+  det.geo.contornos.forEach((p, k) => {
+    g.fillStyle = k < c.geo.nTorre ? css('--ink', '#223344') : GRIS_VECINO;
+    g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); g.stroke();
+  });
   g.restore();
   // una copia sin la llave ni las flechas, para el recuadro de arriba (ahí la llave quedaría ilegible)
   if (!copiaDet) copiaDet = document.createElement('canvas');
@@ -493,6 +524,120 @@ function actualizarLecturaDetalle(c: Corrida) {
     ...(isFinite(cpMin) ? [kpi('Succión más fuerte en la pared', `Cp ${fmt(cpMin, 2)}`, 'promedio en el tiempo')] : [])),
     h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros${lado > 1 ? `, y cada valor promediado en un cuadrado de ${fmt(lado / (c.geo.escala * det.geo.r), 1)} m de lado (el de una celda crece al afinar la grilla)` : ''}. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`),
     ...(viva ? [h('p', { class: 'nota chica' }, 'La velocidad más alta está junto a una esquina viva: ahí la velocidad teórica es infinita y el pico de la simulación depende de la grilla. Redondear o chaflanar la esquina lo baja de verdad.')] : []));
+}
+
+/** la torre (la planta del corte elegido) y su altura sobre PB, para armar escenarios y dibujar el plano chico */
+function torreParaContexto() {
+  const p = estado.proyecto, ne = nivelElegido();
+  const pol = ne ? puntosSilueta(contornoAlViento(p, ne.i).v, 12).map(q => ({ x: q.x, y: q.y })) : [];
+  const iPB = p.niveles.reduce((k, n, j) => (n.cota >= 0 ? j : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
+  return { pol, H: Math.max(...p.niveles.map(n => n.cota)) - zPB, z: ne ? alturaCorte(ne.i) : 0 };
+}
+
+/** el contexto urbano: usarlo o no, escenarios armados, la lista de vecinos, agregar, importar y exportar */
+function panelContexto(el: H) {
+  const eds = edificiosVecinos(), t = torreParaContexto(), enCorte = vecinosEnCorte(eds, t.z).length;
+  const poner = (nuevos: EdificioVecino[] | null, msj: string) => {
+    estado.cambiar(p => { if (nuevos && nuevos.length) p.contexto = { edificios: nuevos }; else delete p.contexto; });
+    mensajeTunel(msj); estado.avisarPanel();
+  };
+  el.append(h('p', { class: 'nota' }, 'Los edificios de alrededor de la torre: tapan el viento, lo encajonan en las calles o le mandan su estela. Se guardan con el proyecto y solo los usan los túneles de viento: no cambian ningún cálculo ni el Excel. En cada corte entran los que llegan a esa altura.'));
+  if (eds.length) {
+    const chk = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.contexto ? { checked: '' } : {}) }), ` Simular con los vecinos (${eds.length}; en el corte de ${fmt(t.z, 1)} m entran ${enCorte})`);
+    chk.querySelector('input')!.addEventListener('change', e => { cfg.contexto = (e.target as HTMLInputElement).checked; estado.avisarPanel(); });
+    el.append(chk, planoContexto(t.pol, eds, t.z));
+    if (cfg.contexto && enCorte) el.append(h('p', { class: 'nota chica' }, 'Con vecinos el canal es más grande y usa la velocidad lenta (en las calles el aire se acelera): tarda más. La fuerza (Cd, Cl) se mide solo sobre la torre.'));
+    const pisan = eds.filter(e => pisaLaTorre(e, cajaDe(t.pol)));
+    if (pisan.length) el.append(h('p', { class: 'aviso-linea' }, `${pisan.map(e => e.id).join(', ')} se pisa${pisan.length > 1 ? 'n' : ''} con la torre: movelo${pisan.length > 1 ? 's' : ''} o borralo${pisan.length > 1 ? 's' : ''}.`));
+    // la lista: altura editable y borrar
+    const filas = eds.map((e, k) => {
+      const alt = h('input', { type: 'text', inputmode: 'decimal', value: fmt(e.altura, 1), class: 'n', style: 'width: 56px' }) as HTMLInputElement;
+      alt.addEventListener('change', () => { const x = parseFloat(alt.value.replace(',', '.')); if (x > 0) poner(eds.map((q, j) => (j === k ? { ...q, altura: x } : q)), `${e.id}: ${fmt(x, 1)} m de alto.`); else alt.value = fmt(e.altura, 1); });
+      const borrar = h('button', { type: 'button', class: 'mini', title: `Borrar ${e.id}`, 'aria-label': `Borrar ${e.id}` }, '✕');
+      borrar.addEventListener('click', () => poner(eds.filter((_, j) => j !== k), `${e.id} borrado. Ctrl+Z deshace.`));
+      const c0 = cajaDe(e.v);
+      return h('tr', {}, h('td', {}, h('b', {}, e.id)), h('td', {}, e.nombre || '—'), h('td', { class: 'n' }, `${fmt(c0.x1 - c0.x0, 0)} × ${fmt(c0.y1 - c0.y0, 0)}`), h('td', {}, alt, ' m'), h('td', {}, borrar));
+    });
+    el.append(h('table', { class: 'tabla tabla-contexto' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Edificio'), h('th', { class: 'n' }, 'Planta (m)'), h('th', {}, 'Alto'), h('th', {}, ''))), h('tbody', {}, ...filas)));
+  }
+  // armar un escenario
+  const sel = h('select', {}) as HTMLSelectElement;
+  (Object.entries(ESCENARIOS) as [Escenario, string][]).forEach(([v, tx]) => sel.append(new Option(tx, v, false, v === cfg.escenario)));
+  sel.addEventListener('change', () => { cfg.escenario = sel.value as Escenario; });
+  const num = (rot: string, v: number, al: (x: number) => void, positivo = true) => {
+    const i = h('input', { type: 'text', inputmode: 'decimal', value: fmt(v, 1), class: 'n' }) as HTMLInputElement;
+    i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.').replace('−', '-')); if (isFinite(x) && (!positivo || x > 0)) al(x); else i.value = fmt(v, 1); });
+    return h('label', { class: 'campo' }, h('span', {}, rot), i);
+  };
+  const armar = h('button', { type: 'button', class: 'boton' }, eds.length ? 'Armar (reemplaza los vecinos)' : 'Armar el escenario');
+  armar.addEventListener('click', () => {
+    if (t.pol.length < 3) return;
+    const nuevos = armarEscenario(cfg.escenario, cajaDe(t.pol), t.H, estado.dir, cfg.separacion, cfg.altoRel);
+    cfg.contexto = true;
+    poner(nuevos, `Contexto: ${ESCENARIOS[cfg.escenario]} (${nuevos.length} edificios), armado para el viento ${estado.dir}. Ctrl+Z deshace.`);
+  });
+  el.append(h('b', { class: 'col-sub' }, 'Armar un escenario'),
+    h('label', { class: 'campo' }, h('span', {}, 'Escenario'), sel),
+    h('div', { class: 'grilla2' }, num('Ancho de las calles (m)', cfg.separacion, x => { cfg.separacion = x; }), num('Alto de los vecinos (× la torre)', cfg.altoRel, x => { cfg.altoRel = x; })),
+    h('div', { class: 'fila-acciones' }, armar),
+    h('p', { class: 'nota chica' }, `Se arma alrededor de la torre en el sentido del viento ${estado.dir} (con el otro viento, armalo de nuevo). Las torres vecinas tienen la planta de la torre; el ejemplo del documento se escala al ancho de la torre.`));
+  // agregar un rectángulo
+  const nv = { cx: 0, cy: 0, ancho: 20, largo: 20, altura: Math.round(t.H) || 60 };
+  const agregar = h('button', { type: 'button', class: 'boton' }, '+ Agregar');
+  agregar.addEventListener('click', () => {
+    const id = `E${eds.length + 1}`, v = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => ({ x: nv.cx + (a * nv.ancho) / 2, y: nv.cy + (b * nv.largo) / 2 }));
+    poner([...eds, { id, nombre: 'Edificio', v, altura: nv.altura }], `${id} agregado.`);
+  });
+  el.append(h('b', { class: 'col-sub' }, 'Agregar un edificio (rectángulo)'),
+    h('div', { class: 'grilla2' }, num('Centro x (m)', nv.cx, x => { nv.cx = x; }, false), num('Centro y (m)', nv.cy, x => { nv.cy = x; }, false), num('Ancho en x (m)', nv.ancho, x => { nv.ancho = x; }), num('Largo en y (m)', nv.largo, x => { nv.largo = x; }), num('Alto (m)', nv.altura, x => { nv.altura = x; })),
+    h('p', { class: 'nota chica' }, 'En las coordenadas de la planta del proyecto (el centro de la torre suele estar cerca de 0, 0). Para un centro negativo, escribí el número con el signo menos.'),
+    h('div', { class: 'fila-acciones' }, agregar));
+  // importar / exportar / quitar
+  const exp = h('button', { type: 'button', class: 'boton' }, '⤓ Exportar');
+  exp.addEventListener('click', () => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, edificios: eds }, null, 1)], { type: 'application/json' }));
+    a.download = 'contexto_urbano.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+  if (!eds.length) exp.setAttribute('disabled', '');
+  const inp = h('input', { type: 'file', accept: '.json', hidden: '' }) as HTMLInputElement;
+  inp.addEventListener('change', async () => {
+    const f = inp.files?.[0]; if (!f) return;
+    try { const n = leerContexto(JSON.parse(await f.text())); if (!n.length) throw new Error(); cfg.contexto = true; poner(n, `Contexto importado: ${n.length} edificios.`); }
+    catch { mensajeTunel('El archivo no tiene edificios: tiene que ser un contexto exportado por la app o uno como docs/contexto_urbano/contexto_ejemplo.json.'); }
+  });
+  const imp = h('label', { class: 'boton' }, '⤒ Importar…', inp);
+  const quitar = h('button', { type: 'button', class: 'boton' }, 'Quitar todos');
+  quitar.addEventListener('click', () => poner(null, 'Contexto quitado: la torre vuelve a estar aislada. Ctrl+Z deshace.'));
+  if (!eds.length) quitar.setAttribute('disabled', '');
+  el.append(h('div', { class: 'fila-acciones' }, imp, exp, quitar));
+}
+
+/** lee un contexto: el que exporta la app ({ edificios: [{ v, altura }] }) o el del documento ({ vecinos: [{ cx, cy, ancho, largo, altura }] }) */
+function leerContexto(x: unknown): EdificioVecino[] {
+  const o = x as { edificios?: EdificioVecino[]; vecinos?: { id?: string; nombre?: string; cx: number; cy: number; ancho: number; largo: number; altura: number }[] };
+  const ok = (n: unknown) => typeof n === 'number' && isFinite(n);
+  if (Array.isArray(o.edificios)) return o.edificios.filter(e => ok(e.altura) && e.altura > 0 && Array.isArray(e.v) && e.v.length >= 3 && e.v.every(q => ok(q.x) && ok(q.y))).map((e, i) => ({ id: String(e.id || `E${i + 1}`), nombre: String(e.nombre ?? ''), v: e.v.map(q => ({ x: q.x, y: q.y })), altura: e.altura }));
+  if (Array.isArray(o.vecinos)) return o.vecinos.filter(v => [v.cx, v.cy, v.ancho, v.largo, v.altura].every(ok) && v.ancho > 0 && v.largo > 0 && v.altura > 0).map((v, i) => ({
+    id: String(v.id || `E${i + 1}`), nombre: String(v.nombre ?? ''), altura: v.altura,
+    v: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => ({ x: v.cx + (a * v.ancho) / 2, y: v.cy + (b * v.largo) / 2 })) }));
+  return [];
+}
+
+/** el plano chico: la torre, los vecinos (los que llegan al corte, más oscuros) y la dirección del viento */
+function planoContexto(torre: { x: number; y: number }[], eds: EdificioVecino[], z: number): Element {
+  const todos = [...torre, ...eds.flatMap(e => e.v)], c = cajaDe(todos.length ? todos : [{ x: 0, y: 0 }]);
+  const W = 260, Hh = 190, m = 10, k = Math.min((W - 2 * m) / (c.x1 - c.x0 || 1), (Hh - 2 * m) / (c.y1 - c.y0 || 1));
+  const X = (x: number) => m + (x - c.x0) * k, Y = (y: number) => Hh - m - (y - c.y0) * k;
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, width: W, height: Hh, class: 'plano-contexto', role: 'img', 'aria-label': 'Plano del contexto urbano' });
+  const pol = (pts: { x: number; y: number }[], fill: string) => svg.append(svgEl('polygon', { points: pts.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), fill, stroke: '#555', 'stroke-width': 0.6 }));
+  eds.forEach(e => { pol(e.v, e.altura > z ? GRIS_VECINO : '#cfcbc1'); const cc = cajaDe(e.v); svg.append(svgEl('text', { x: X((cc.x0 + cc.x1) / 2), y: Y((cc.y0 + cc.y1) / 2) + 3, 'text-anchor': 'middle', 'font-size': 9, fill: '#1d1d24' }, e.id)); });
+  if (torre.length >= 3) pol(torre, css('--ink', '#223344'));
+  // el viento: A hacia +y, B hacia +x
+  const [x1, y1, x2, y2] = estado.dir === 'A' ? [W - 16, Hh - 14, W - 16, Hh - 44] : [W - 50, Hh - 14, W - 20, Hh - 14];
+  svg.append(svgEl('line', { x1, y1, x2, y2, stroke: css('--ink', '#223344'), 'stroke-width': 2, 'marker-end': 'url(#flechaCtx)' }));
+  const defs = svgEl('defs', {}), mk = svgEl('marker', { id: 'flechaCtx', viewBox: '0 0 10 10', refX: 8, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' });
+  mk.append(svgEl('path', { d: 'M0 0 L10 5 L0 10 z', fill: css('--ink', '#223344') })); defs.append(mk); svg.prepend(defs);
+  return h('figure', { class: 'diagrama plano-contexto-fig' }, svg, h('figcaption', {}, `Viento ${estado.dir}. Gris oscuro: llegan al corte de ${fmt(z, 1)} m; gris claro: más bajos.`));
 }
 
 /** el tamaño del recuadro en metros, con la definición que le toca, y botones para achicarlo o agrandarlo en su lugar */
@@ -664,6 +809,8 @@ export function panelTunel(c: H) {
   cpc.querySelector('input')!.addEventListener('change', e => { cfg.cpContorno = (e.target as HTMLInputElement).checked; dibujar(); });
   d.append(cpc);
   d.append(humo, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
+  const cu = seccion('Contexto urbano (torres vecinas)').cuerpo; c.append(cu.parentElement!);
+  panelContexto(cu);
   const vd = seccion('Ventana de detalle').cuerpo; c.append(vd.parentElement!);
   {
     const rotulo = () => (marcando ? 'Arrastrá sobre el túnel… (Esc cancela)' : '▭ Marcar un recuadro en el túnel');
@@ -704,7 +851,7 @@ function armarAnotadas() {
     if (!c || !md || !isFinite(md.Cd)) { anotar.textContent = 'Todavía midiendo: esperá unas pasadas'; return; }
     let n1 = NaN; try { n1 = vientoCirsoc()[estado.dir].n1; } catch { /* sin datos */ }
     const St = md.St ?? null;
-    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re} · paredes ${cfg.paredes} · canal ${cfg.canal}`;
+    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re} · paredes ${cfg.paredes} · canal ${cfg.canal}${c.geo.contornos.length > c.geo.nTorre && cfg.segunda === 'no' ? ` · con ${c.geo.contornos.length - c.geo.nTorre} vecinos` : ' · aislada'}`;
     anotadas.push({ forma, Cd: md.Cd, Cl: md.ClRms, St, Vcr: St ? velocidadCritica(n1, c.geo.anchoM, St) : NaN });
     armarAnotadas();
   });
@@ -735,19 +882,21 @@ const PASADAS: Record<string, { n: number; texto: string }> = { rapida: { n: 60,
 interface CorridaPisos { clave: string; grupos: GrupoPlanta[]; res: Map<string, ResultadoPlanta>; avance: Map<string, number>; workers: Worker[]; pendientes: GrupoPlanta[]; t0: number; fin: number }
 let pisos: CorridaPisos | null = null;
 let pasadasPisos = 'normal';
-const clavePisos = () => JSON.stringify([estado.revision, estado.dir, cfg.angulo, cfg.re, cfg.res, cfg.paredes, cfg.canal, pasadasPisos]);
+const clavePisos = () => JSON.stringify([estado.revision, estado.dir, cfg.angulo, cfg.re, cfg.res, cfg.paredes, cfg.canal, pasadasPisos, cfg.contexto]);
 /** la geometría y el pedido de una planta, con la configuración del túnel */
 function pedidoPlanta(g: GrupoPlanta): { pedido: PedidoMedicion; anchoM: number } {
   const D = RES[cfg.res].D, re = RE[cfg.re];
-  const geo = geometria2D({ poligonos: [g.pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4 });
-  const exactas = cfg.paredes === 'exactas', pasos = Math.round((PASADAS[pasadasPisos].n * geo.D) / U0);
-  return { anchoM: geo.anchoM, pedido: { nx: geo.nx, ny: geo.ny, solido: geo.solido, nu: (U0 * geo.D) / re.Re, u0: U0, cs: re.cs, D: geo.D, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk', pasos, desde: Math.min(pasos - 1000, Math.round((0.6 * geo.nx) / U0)) } };
+  const geo = geometria2D({ poligonos: [g.pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, contexto: g.vecinos });
+  // con vecinos, el túnel lento (en las calles el aire se acelera)
+  const u0 = cfg.lento || g.vecinos.length ? 0.06 : 0.1;
+  const exactas = cfg.paredes === 'exactas', pasos = Math.round((PASADAS[pasadasPisos].n * geo.D) / u0);
+  return { anchoM: geo.anchoM, pedido: { nx: geo.nx, ny: geo.ny, solido: geo.solido, nu: (u0 * geo.D) / re.Re, u0, cs: re.cs, D: geo.D, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk', pasos, desde: Math.min(pasos - 1000, Math.round((0.6 * geo.nx) / u0)), cuerpo: geo.cuerpo } };
 }
 function detenerPisos() { pisos?.workers.forEach(w => w.terminate()); if (pisos) pisos.workers = []; }
 function empezarPisos() {
   detenerPisos();
   correr(false);                                                    // el túnel de la vista se pausa: cada núcleo, una planta
-  const grupos = plantasDistintas(estado.proyecto);
+  const grupos = plantasDistintas(estado.proyecto, cfg.contexto ? edificiosVecinos() : []);
   pisos = { clave: clavePisos(), grupos, res: new Map(), avance: new Map(), workers: [], pendientes: [...grupos], t0: performance.now(), fin: 0 };
   const n = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1));
   for (let k = 0; k < n; k++) siguientePlanta();
@@ -782,7 +931,7 @@ function actualizarAvancePisos() {
 /** el panel: cuántas plantas, cuánto tarda (estimado), el botón y el avance de cada una */
 function armarPanelPisos(el: H) {
   panelPisos = el;
-  const grupos = plantasDistintas(estado.proyecto), c = pisos && pisos.clave === clavePisos() ? pisos : null;
+  const grupos = plantasDistintas(estado.proyecto, cfg.contexto ? edificiosVecinos() : []), c = pisos && pisos.clave === clavePisos() ? pisos : null;
   const nNiv = grupos.reduce((s, g) => s + g.niveles.length, 0);
   // tiempo estimado: ≈ 15 millones de celdas por segundo por núcleo en JavaScript
   const est = grupos.length ? (() => { const { pedido } = pedidoPlanta(grupos[0]); const nW = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1)); return (Math.ceil(grupos.length / nW) * pedido.nx * pedido.ny * pedido.pasos) / 15e6; })() : 0;
@@ -796,7 +945,7 @@ function armarPanelPisos(el: H) {
     const r = c?.res.get(g.clave), barra = h('span', { class: 'pp-barra', 'data-planta': g.clave }, h('i', {}));
     (barra.firstElementChild as HTMLElement).style.width = `${Math.round((c?.avance.get(g.clave) ?? 0) * 100)}%`;
     const desde = g.niveles[0].nombre, hasta = g.niveles[g.niveles.length - 1].nombre;
-    return h('div', { class: 'pp-fila' }, h('span', {}, `Planta ${k + 1} · ${g.de} · ${g.niveles.length > 1 ? `${desde} a ${hasta}` : desde} (${g.niveles.length} ${g.niveles.length > 1 ? 'niveles' : 'nivel'})`),
+    return h('div', { class: 'pp-fila' }, h('span', {}, `Planta ${k + 1} · ${g.de} · ${g.niveles.length > 1 ? `${desde} a ${hasta}` : desde} (${g.niveles.length} ${g.niveles.length > 1 ? 'niveles' : 'nivel'})${g.vecinos.length ? ` · ${g.vecinos.length} vecinos` : ''}`),
       r ? h('span', { class: 'nota chica' }, `Cd ${fmt(r.Cd, 2)} · Cl ±${fmt(r.ClRms, 2)} · St ${r.St ? fmt(r.St, 3) : '—'}${r.roto ? ' · inestable' : ''}`) : barra);
   });
   el.replaceChildren(
@@ -858,7 +1007,7 @@ async function terminarGrabacion() {
   const blob = await empaquetar(JSZip, gr.g, {
     titulo: `${estado.proyecto.nombre || 'Torre'} · ${c.nivel} · viento ${estado.dir}`, nivel: c.nivel, cota: c.cota, dir: estado.dir,
     config: { angulo: cfg.angulo, re: cfg.re, res: cfg.res, paredes: cfg.paredes, canal: cfg.canal, forma: cfg.forma, ochava: cfg.ochava },
-    D: c.geo.D / f, anchoM: c.geo.anchoM, escala: c.geo.escala / f, contornos: c.geo.contornos.map(p => p.map(q => ({ x: q.x / f, y: q.y / f }))),
+    D: c.geo.D / f, anchoM: c.geo.anchoM, escala: c.geo.escala / f, contornos: c.geo.contornos.map(p => p.map(q => ({ x: q.x / f, y: q.y / f }))), nTorre: c.geo.nTorre,
     caja: { x0: Math.floor(c.geo.caja.x0 / f), x1: Math.floor(c.geo.caja.x1 / f), y0: Math.floor(c.geo.caja.y0 / f), y1: Math.floor(c.geo.caja.y1 / f) },
     u0: U0, med: c.med ? { Cd: c.med.Cd, ClRms: c.med.ClRms, St: c.med.St } : null,
   });
@@ -910,7 +1059,7 @@ function empezarRepro(g: GrabacionAbierta) {
   corrida?.worker.terminate();
   const m = g.meta;
   U0 = m.u0;                                                          // la escala de colores con la velocidad con la que se grabó
-  const geo: Geometria2D = { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0) };
+  const geo: Geometria2D = { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0), nTorre: m.nTorre ?? m.contornos.length };
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * m.nx; humo[2 * k + 1] = Math.random() * m.ny; }
   // la corrida «en pantalla» pasa a ser la grabación: dibujar() y las mediciones la muestran igual que en vivo
