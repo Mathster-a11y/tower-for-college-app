@@ -23,7 +23,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 
 ### Diseño y cálculo
 14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)
-15. Revisar la matemática de «Flex comp PB paralelos» en el desglose por hoja
+15. Revisar la matemática de «Flex comp PB paralelos» en el desglose por hoja · ~~revisión y explicación~~ (23/11, `docs/flexocompresion_planilla/`); falta: a) sumar la hoja al desglose, b) rótulos de O y P en Controles, c) mostrar #DIV/0!; y las preguntas nuevas a la cátedra (W de las asimétricas, rotación que resta, viento B)
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
