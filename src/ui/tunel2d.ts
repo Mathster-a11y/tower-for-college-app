@@ -26,7 +26,7 @@ import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, mu
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { agregarRetiro, armarEscenario, cajaDe, tramosEdificio, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
-import type { EdificioVecino } from '../engine/modelo';
+import { muroEn, presenteEn, rectangulos, tipoDe, type EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion' | 'media' | 'rafagas';
@@ -43,7 +43,7 @@ let U0 = 0.1;
 
 /** lo que eligió el alumno (vive mientras la página está abierta; no se guarda en el proyecto) */
 const cfg = {
-  nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0, forma: 'dibujada' as 'dibujada' | 'vivas',
+  nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0, forma: 'dibujada' as 'dibujada' | 'vivas' | 'muros',
   /** paredes exactas (rebote interpolado + TRT) o en escalera (como antes, para comparar) */
   paredes: 'exactas' as 'exactas' | 'escalera',
   /** canal ancho (12 anchos de alto: bloquea ≈ 8 %) o angosto (7 anchos: ≈ 14 %, más rápido) */
@@ -129,6 +129,29 @@ function claveCorrida(): string {
   return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia, cfg.lento, cfg.contexto]);
 }
 
+/**
+ * los muros que pasan por el nivel i, como polígonos de la planta (rectángulos; los tubos circulares, círculos).
+ * Un tabique de 20 cm es más fino que una celda del túnel (≈ 0,5 m): la grilla no lo vería. Los que no llegan se engruesan hasta 1,2 celdas (al arrastre de una placa casi no le importa su espesor); «engrosado» dice hasta cuánto
+ */
+let engrosado = 0;
+/** celdas por ancho, como mínimo, con «solo los muros» */
+const D_MUROS = 40;
+function murosDelNivel(i: number, D: number): { x: number; y: number }[][] {
+  const p = estado.proyecto, zTop = p.niveles[0]?.cota ?? 0, zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, z = p.niveles[i].cota;
+  const ms = p.muros.filter(m => presenteEn(m, z, zFund, zTop)).map(m => muroEn(m, z));
+  const rs = ms.filter(m => tipoDe(m) !== 'tubo-circ').flatMap(m => rectangulos(m)).filter(r => r.ax > 1e-3 && r.ay > 1e-3);
+  const circ = ms.filter(m => tipoDe(m) === 'tubo-circ');
+  const xs = [...rs.flatMap(r => [r.x - r.ax / 2, r.x + r.ax / 2]), ...circ.flatMap(m => [m.x - m.largo / 2, m.x + m.largo / 2])];
+  const ys = [...rs.flatMap(r => [r.y - r.ay / 2, r.y + r.ay / 2]), ...circ.flatMap(m => [m.y - m.largo / 2, m.y + m.largo / 2])];
+  if (!xs.length) return [];
+  // el ancho que enfrenta el viento (A sopla en y: el ancho es en x) y lo que mide una celda
+  const ancho = estado.dir === 'A' ? Math.max(...xs) - Math.min(...xs) : Math.max(...ys) - Math.min(...ys), emin = (1.2 * ancho) / D;
+  engrosado = rs.some(r => Math.min(r.ax, r.ay) < emin) ? emin : 0;
+  return [
+    ...rs.map(r => { const ax = Math.max(r.ax, emin), ay = Math.max(r.ay, emin); return [{ x: r.x - ax / 2, y: r.y - ay / 2 }, { x: r.x + ax / 2, y: r.y - ay / 2 }, { x: r.x + ax / 2, y: r.y + ay / 2 }, { x: r.x - ax / 2, y: r.y + ay / 2 }]; }),
+    ...circ.map(m => Array.from({ length: 24 }, (_, k) => ({ x: m.x + (m.largo / 2) * Math.cos((2 * Math.PI * k) / 24), y: m.y + (m.largo / 2) * Math.sin((2 * Math.PI * k) / 24) }))),
+  ];
+}
 function iniciar() {
   if (repro) { if (repro.reloj !== null) clearInterval(repro.reloj); repro = null; }   // empezar de nuevo sale de la reproducción
   if (grab) grab = null;
@@ -143,15 +166,20 @@ function iniciar() {
     const xs = pol.map(q => q.x), ys = pol.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     pol = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   }
-  const D = RES[cfg.res].D, re = RE[cfg.re];
+  // solo los muros: al menos 40 celdas por ancho (los tabiques son finos; más lento)
+  const D = cfg.forma === 'muros' ? Math.max(RES[cfg.res].D, D_MUROS) : RES[cfg.res].D, re = RE[cfg.re];
   // contexto urbano: los vecinos que llegan a la altura del corte (a mitad del piso, sobre PB)
   const ctx = cfg.contexto ? vecinosEnCorte(edificiosVecinos(), alturaCorte(ne.i)) : [];
   // con vecinos el aire se acelera en las calles: el túnel lento siempre (con el normal se rompe con facilidad)
   U0 = cfg.lento || ctx.length ? 0.06 : 0.1;
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
-  if (cfg.ochava > 0) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
-  const geo = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia }, contexto: ctx });
+  if (cfg.ochava > 0 && cfg.forma !== 'muros') pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
+  // solo los muros: cada muro del nivel es un obstáculo (sin la fachada: una PB libre o la estructura en obra)
+  engrosado = 0;
+  const pols = cfg.forma === 'muros' ? murosDelNivel(ne.i, D) : [pol];
+  if (!pols.length) { mensajeTunel(`En ${ne.n.nombre} no hay muros: elegí otro corte o la planta dibujada.`); return; }
+  const geo = geometria2D({ poligonos: pols, dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia }, contexto: ctx });
   const nu = (U0 * geo.D) / re.Re;
   // el worker va adentro del script (también en el archivo único, que se abre con doble clic: ahí no se pueden cargar
   // workers desde el disco)
@@ -1029,6 +1057,7 @@ export function centroTunel(c: H, tam: Tam) {
   const reRed = (U0 * cr.geo.D) / cr.nu, reReal = ((vientoDisenoEn(zCorte()) ?? 40) * cr.geo.anchoM) / 1.5e-5;
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
+    ...(cfg.forma === 'muros' ? [h('p', { class: 'nota' }, `Solo los muros: cada muro del corte es un obstáculo y el aire pasa entre ellos (una planta baja libre o la estructura en obra).${engrosado ? ` Los muros más finos que ${fmt(engrosado * 100, 0)} cm se simulan de ${fmt(engrosado * 100, 0)} cm: una celda del túnel mide ${fmt(engrosado / 1.2, 2)} m y la grilla no vería un tabique más fino. Por eso este modo usa al menos ${D_MUROS} celdas por ancho y es unas 4 veces más lento.` : ''}`)] : []),
     ...(() => {
       // qué contorno está en el túnel: la carpintería (propia o heredada) o la losa, y si hay carpintería en otro piso
       const ne = nivelElegido(); if (!ne) return [];
@@ -1098,7 +1127,7 @@ export function panelTunel(c: H) {
     sel('Paredes', [['exactas', 'exactas: la curva real (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x; }),
     sel('Canal', [['ancho', 'ancho: 12 anchos (bloquea ≈ 8 %, más preciso)'], ['angosto', 'angosto: 7 anchos (≈ 14 %, más rápido)']], cfg.canal, x => { cfg.canal = x; }),
     sel('Velocidad del túnel', [['normal', 'normal (0,1 de la red)'], ['lento', 'lenta (0,06: más estable, tarda más)']], cfg.lento ? 'lento' : 'normal', x => { cfg.lento = x === 'lento'; }),
-    sel('Planta', [['dibujada', 'como está dibujada'], ['vivas', 'su caja, con esquinas vivas (para comparar)']], cfg.forma, x => { cfg.forma = x; }),
+    sel('Planta', [['dibujada', 'como está dibujada'], ['vivas', 'su caja, con esquinas vivas (para comparar)'], ['muros', 'solo los muros (sin fachada: PB libre o en obra)']], cfg.forma, x => { cfg.forma = x; }),
     sel('Ochavas', ['0', '5', '10', '15'].map(v => [v, v === '0' ? 'sin ochavas (esquinas vivas)' : `${v} % del ancho`] as [string, string]), String(cfg.ochava), x => { cfg.ochava = +x; }),
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
     cfg.segunda !== 'no' ? sel('Separación (anchos)', ['0.5', '1', '2', '3', '4'].map(v => [v, v.replace('.', ',')] as [string, string]), String(cfg.distancia), x => { cfg.distancia = +x; }) : h('span', {}),
@@ -1162,7 +1191,7 @@ function armarAnotadas() {
     if (!c || !md || !isFinite(md.Cd)) { anotar.textContent = 'Todavía midiendo: esperá unas pasadas'; return; }
     let n1 = NaN; try { n1 = vientoCirsoc()[estado.dir].n1; } catch { /* sin datos */ }
     const St = md.St ?? null;
-    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re} · paredes ${cfg.paredes} · canal ${cfg.canal}${c.geo.contornos.length > c.geo.nTorre && cfg.segunda === 'no' ? ` · con ${c.geo.contornos.length - c.geo.nTorre} vecinos` : ' · aislada'}`;
+    const forma = `${cfg.forma === 'vivas' ? 'caja, esquinas vivas' : cfg.forma === 'muros' ? 'solo los muros' : 'dibujada'}${cfg.ochava ? ` + ochavas ${cfg.ochava} %` : ''} · ${c.nivel}${cfg.angulo ? ` · ${cfg.angulo}°` : ''} · Re ${RE[cfg.re].Re} · paredes ${cfg.paredes} · canal ${cfg.canal}${c.geo.contornos.length > c.geo.nTorre && cfg.segunda === 'no' ? ` · con ${c.geo.contornos.length - c.geo.nTorre} vecinos` : ' · aislada'}`;
     anotadas.push({ forma, Cd: md.Cd, Cl: md.ClRms, St, Vcr: St ? velocidadCritica(n1, c.geo.anchoM, St) : NaN });
     armarAnotadas();
   });
