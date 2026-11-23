@@ -9,6 +9,7 @@ import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
+import { NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
@@ -693,16 +694,38 @@ export function montarPlanta(cont: HTMLElement) {
     if (editaCarp) {
       const car = carpinteriaDeNivel(p, iNivel);
       const f2 = (x: number) => x.toFixed(2).replace('.', ',');
-      // carpintería que sigue a la losa: todas las carpinterías = su losa metida d metros (se recalculan solas)
-      const ret = p.carpinteriaRetiro;
+      // carpintería por tramos de altura: sin, por losa (de losa a losa, entre las dos) o continua; se recalcula sola
+      const tramos = tramosCarpinteria(p);
       const segue = document.createElement('div'); segue.className = 'sigue-losa';
-      const ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = ret !== null && ret !== undefined; ck.id = 'carp-sigue';
-      const dIn = document.createElement('input'); dIn.type = 'text'; dIn.inputMode = 'decimal'; dIn.className = 'campo-vertice'; dIn.value = String(ret ?? 0.3).replace('.', ',');
-      const ponerRet = () => { const x = parseFloat(dIn.value.replace(',', '.')); estado.cambiar(pp => { if (ck.checked && isFinite(x) && x >= 0) pp.carpinteriaRetiro = x; else delete pp.carpinteriaRetiro; }); };
-      ck.addEventListener('change', ponerRet); dIn.addEventListener('change', () => { if (ck.checked) ponerRet(); });
-      const lck = document.createElement('label'); lck.className = 'campo-linea'; lck.htmlFor = 'carp-sigue'; lck.append(ck, ' Que siga a la losa, metida ', dIn, ' m');
-      segue.append(lck, Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: ck.checked ? 'Activo: en todos los niveles la carpintería es el borde de la losa hacia adentro; si cambia la losa (a mano, con una forma, un loft o el perfil), la fachada la acompaña.' : 'Así la fachada acompaña a la losa en todos los pisos (también con un loft o un perfil). Si no, se dibuja a mano.' }));
-      if (ck.checked) { panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue, linea(car ? `a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²` : '')); return; }
+      const ponerTramos = (f: (ts: TramoCarpinteria[]) => void) => estado.cambiar(pp => { const ts = tramosCarpinteria(pp).map(t => ({ ...t })); f(ts); delete pp.carpinteriaRetiro; if (ts.length) pp.carpinteriaTramos = ts.sort((x, y) => x.desde - y.desde); else delete pp.carpinteriaTramos; });
+      const nivelesFach = p.niveles.filter(x => x.cota >= -1e-6).sort((x, y) => x.cota - y.cota);
+      if (!tramos.length) {
+        segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por losa» va vertical de losa a losa (siempre entre las dos, sin tapas) y «continua» sigue la superficie.' }),
+          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3 }); }), 'Un tramo «por losa», metido 0,30 m, desde el nivel más bajo'));
+      } else {
+        segue.append(Object.assign(document.createElement('b'), { textContent: 'Carpintería por tramos' }));
+        tramos.forEach((t, k) => {
+          const fila = document.createElement('div'); fila.className = 'tramo-carp';
+          const sd = document.createElement('select'); sd.setAttribute('aria-label', 'Desde qué nivel');
+          nivelesFach.forEach(x => sd.append(new Option(x.nombre, String(x.cota), false, Math.abs(x.cota - t.desde) < 1e-6)));
+          sd.addEventListener('change', () => ponerTramos(ts => { ts[k].desde = +sd.value; }));
+          const sm = document.createElement('select'); sm.setAttribute('aria-label', 'Modo');
+          (Object.keys(NOMBRE_MODO) as ModoCarpinteria[]).forEach(m => sm.append(new Option(NOMBRE_MODO[m], m, false, m === t.modo)));
+          sm.addEventListener('change', () => ponerTramos(ts => { ts[k].modo = sm.value as ModoCarpinteria; }));
+          const rt = document.createElement('input'); rt.type = 'text'; rt.inputMode = 'decimal'; rt.className = 'campo-vertice'; rt.value = String(t.retiro ?? 0).replace('.', ','); rt.setAttribute('aria-label', 'Retiro desde el borde de la losa');
+          rt.addEventListener('change', () => { const x = parseFloat(rt.value.replace(',', '.')); if (isFinite(x) && x >= 0) ponerTramos(ts => { ts[k].retiro = x; }); });
+          const lab = (t2: string, ...h: (string | Node)[]) => { const l = document.createElement('label'); l.className = 'campo-esq'; l.append(t2, ...h); return l; };
+          fila.append(lab('desde ', sd), sm, ...(t.modo === 'sin' ? [] : [lab('metida ', rt, ' m')]), boton('✕', () => ponerTramos(ts => { ts.splice(k, 1); }), 'Sacar este tramo'));
+          segue.append(fila);
+        });
+        const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
+        segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3 }); }), `Otro tramo desde ${sig.nombre}`)] : []),
+          boton('Volver a la carpintería a mano', () => ponerTramos(ts => { ts.length = 0; }), 'Las carpinterías quedan como están ahora y se editan nivel por nivel')),
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por losa: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Continua: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón).' }));
+        const tn = tramoEn(p, n.cota);
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue, linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'));
+        return;
+      }
       panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
         linea(!car ? 'sin carpintería: arrastrá un vértice y se copia la silueta de la losa' : car.propia ? 'propia de este nivel' : 'heredada de otro nivel (de arriba o, si arriba no hay, de abajo; se copia al editarla)'),
         ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
@@ -2075,7 +2098,7 @@ export function montarPlanta(cont: HTMLElement) {
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
       // las losas que genera un loft no se editan a mano (se recalculan solas): sin manijas
-      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && estado.proyecto.carpinteriaRetiro != null) ? [] : vEd).forEach((v, i) => {
+      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && (estado.proyecto.carpinteriaRetiro != null || !!estado.proyecto.carpinteriaTramos?.length)) ? [] : vEd).forEach((v, i) => {
         // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
         const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));

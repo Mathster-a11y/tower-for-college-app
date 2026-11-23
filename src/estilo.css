@@ -1843,3 +1843,5 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .corte-svg .manija-plano { fill: var(--lienzo); stroke: var(--corte); stroke-width: 2; cursor: move; }
 .corte-barra .plano-item { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid var(--corte); border-radius: 6px; color: var(--corte); }
 .corte-barra .plano-item button { padding: 1px 5px; min-height: 0; font-size: 11px; }
+.sigue-losa .tramo-carp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 0; border-top: 1px dashed var(--rule); }
+.sigue-losa .tramo-carp select { max-width: 100%; }

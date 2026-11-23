@@ -16,7 +16,8 @@ import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type Confi
 import { Historial } from './historial';
 import { Guardado } from './guardado';
 import { aplicarLofts } from '../engine/loft';
-import { aplicarCarpinteria, aplicarPerfil } from '../engine/perfil_torre';
+import { aplicarPerfil } from '../engine/perfil_torre';
+import { aplicarCarpinteriaTramos } from '../engine/carpinteria';
 import { aplicarPlanosCorte } from '../engine/planos_corte';
 
 /**
@@ -256,7 +257,7 @@ class Estado {
     if (this.proyecto.perfilTorre) aplicarPerfil(this.proyecto);
     if (this.proyecto.lofts?.length) aplicarLofts(this.proyecto);
     if (this.proyecto.planosCorte?.length) aplicarPlanosCorte(this.proyecto);
-    if (this.proyecto.carpinteriaRetiro !== null && this.proyecto.carpinteriaRetiro !== undefined) aplicarCarpinteria(this.proyecto);
+    if (this.proyecto.carpinteriaTramos?.length || (this.proyecto.carpinteriaRetiro !== null && this.proyecto.carpinteriaRetiro !== undefined)) aplicarCarpinteriaTramos(this.proyecto);
     // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
     const pa = this.proyecto;
     if (pa.areasAuto !== undefined && pa.areasAuto !== null) {

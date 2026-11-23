@@ -97,6 +97,9 @@ export function ajustarContorno(v: Vertice[], factor: number, centrar: boolean):
 
 /** contorno de la carpintería que rige en el nivel i (heredado del nivel de arriba) y su caja (a máx, b máx) */
 export function carpinteriaDeNivel(p: Proyecto, i: number): { v: Vertice[]; a: number; b: number; propia: boolean } | null {
+  // en un tramo «sin carpintería» no hay fachada (no se hereda la de arriba)
+  const z = p.niveles[i]?.cota, ts = p.carpinteriaTramos;
+  if (z !== undefined && ts?.length) { const t = [...ts].filter(x => x.desde <= z + 1e-6).sort((a, b) => b.desde - a.desde)[0]; if (t?.modo === 'sin') return null; }
   const arriba = p.niveles.slice(0, i + 1);
   const tiene = (n: Nivel | undefined) => !!(n?.carpinteria && n.carpinteria.length >= 3);
   // la del nivel o la del de arriba más cercano; si arriba no hay ninguna, la del de abajo más cercano (dibujada solo en
