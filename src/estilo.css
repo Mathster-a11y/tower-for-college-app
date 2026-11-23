@@ -1898,3 +1898,24 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 /* carpintería: color propio (no es tracción ni compresión: nunca rojo ni azul) */
 .planta .carpinteria.carpinteria-pieza { stroke-dasharray: none; }
 .silueta-panel .estado-carp { display: block; margin-top: 4px; padding: 4px 6px; border-radius: 6px; background: color-mix(in srgb, var(--carpinteria) 8%, transparent); color: var(--ink2); font-size: 11.5px; }
+/* barra de la planta en grupos con nombre */
+.herr-planta .grupo-rot { align-self: center; padding: 0 5px 0 9px; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; }
+.herr-planta .grupo-rot + button { border-left: 1px solid var(--field-edge); }
+/* tira de pasos: el recorrido de diseño de la torre, arriba de la barra de herramientas */
+.pasos-torre { position: absolute; top: 8px; left: 10px; right: 10px; z-index: 3; display: grid; gap: 5px; padding: 6px 8px; border: 1px solid var(--hair); border-radius: 10px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.pasos-torre.plegada { right: auto; padding: 0; border: 0; background: none; box-shadow: none; }
+.pasos-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.pasos-torre .paso { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; min-height: 26px; border: 1px solid var(--edge); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 11.5px; white-space: nowrap; }
+.pasos-torre .paso .n { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 600; background: var(--hair); color: var(--ink2); }
+.pasos-torre .paso.hecho .n { background: var(--ok); color: #fff; }
+.pasos-torre .paso.act { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); font-weight: 600; }
+.pasos-torre .paso.act .n { background: var(--accent); color: #fff; }
+.pasos-flecha { color: var(--ink2); font-size: 12px; }
+.pasos-plegar { margin-left: auto; font-size: 11.5px; padding: 2px 8px; min-height: 24px; border-radius: 999px; }
+.pasos-det { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.pasos-det .pasos-ayuda { flex: 1 1 260px; min-width: 0; color: var(--ink2); font-size: 11.5px; }
+.pasos-det button { font-size: 11.5px; padding: 3px 8px; min-height: 26px; border-radius: 999px; }
+@media (pointer: coarse) { .pasos-torre .paso, .pasos-det button, .pasos-plegar { min-height: 36px; } }
+.b-calculo { font-size: 11.5px; }
+.herr-planta.compacta .grupo-rot { font-size: 0; padding: 0 3px; }
+.herr-planta.compacta .grupo-rot::before { content: ""; display: block; width: 1px; height: 16px; background: var(--rule); }

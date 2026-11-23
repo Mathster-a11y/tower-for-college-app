@@ -101,9 +101,14 @@ function dibujarPanel() {
   requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
 }
+/** las opciones de cálculo en la etapa de diseño: plegadas por defecto (se recuerda en este navegador) */
+let calcAbierto = (() => { try { return localStorage.getItem('torre3d.calculoAbierto') === '1'; } catch { return false; } })();
+const guardarCalcAbierto = () => { try { localStorage.setItem('torre3d.calculoAbierto', calcAbierto ? '1' : '0'); } catch { /* */ } };
 function dibujarTira(e: Etapa) {
   const t = $('tira-centro');
   t.replaceChildren(h('span', { class: 'nombre' }, e.nombreCentro()), h('span', { class: 'espacio' }));
+  // las opciones de cálculo; en la etapa de diseño quedan plegadas en «Cálculo ▾» (se diseña sin pensar en el método)
+  const calc: HTMLElement[] = [];
   // método de cálculo (uno solo, guardado en el proyecto) y sus opciones: versión de la planilla y armado de piezas
   const cfg = estado.config;
   const segMet = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Método de cálculo', 'data-globo': `Método de cálculo|Cada método sigue sus reglas y se guarda con el proyecto (el archivo da lo mismo en cualquier computadora). ${METODOS[cfg.metodo].nombre}: ${METODOS[cfg.metodo].reglas}` });
@@ -114,7 +119,7 @@ function dibujarTira(e: Etapa) {
     b.addEventListener('click', () => { if (m.disponible && cfg.metodo !== k) estado.cambiarCalculo({ metodo: k }); });
     segMet.append(b);
   });
-  t.append(h('span', { class: 'nota chica' }, 'Método'), segMet);
+  calc.push(h('span', { class: 'nota chica' }, 'Método'), segMet);
   if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
     ([['actual', 'Anterior'], ['nuevo', '2025 (cátedra)']] as const).forEach(([k, txt]) => {
@@ -122,7 +127,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
       segV.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Planilla'), segV);
+    calc.push(h('span', { class: 'nota chica' }, 'Planilla'), segV);
   }
   if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
@@ -131,7 +136,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.verificacion !== k) estado.cambiarCalculo({ verificacion: k }); });
       segN.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Verificación'), segN);
+    calc.push(h('span', { class: 'nota chica' }, 'Verificación'), segN);
   }
   if (cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
@@ -140,7 +145,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.teoria !== k) estado.cambiarCalculo({ teoria: k }); });
       segT.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Piezas'), segT);
+    calc.push(h('span', { class: 'nota chica' }, 'Piezas'), segT);
   }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
@@ -149,7 +154,16 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.armado !== k) estado.cambiarCalculo({ armado: k }); });
       segA.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Armado'), segA);
+    calc.push(h('span', { class: 'nota chica' }, 'Armado'), segA);
+  }
+  if (e.id === 'diseno' && !calcAbierto) {
+    const res = [METODOS[cfg.metodo]?.corto, cfg.metodo === 'planilla' || cfg.metodo === 'combinado' ? (cfg.version === 'nuevo' ? '2025' : 'Anterior') : null, cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado' ? (cfg.armado === 'app' ? 'Armado App' : 'Cátedra') : null].filter(Boolean).join(' · ');
+    const bc = h('button', { type: 'button', class: 'chico b-calculo', 'aria-expanded': 'false', 'data-globo': 'Opciones de cálculo|Método, versión de la planilla y armado de piezas. Mientras se diseña no hace falta tocarlas: quedan como las dejó el docente o el proyecto.' }, `Cálculo: ${res} ▾`);
+    bc.addEventListener('click', () => { calcAbierto = true; guardarCalcAbierto(); dibujarTira(e); });
+    t.append(bc);
+  } else {
+    t.append(...calc);
+    if (e.id === 'diseno') { const bx = h('button', { type: 'button', class: 'chico b-calculo', 'aria-expanded': 'true' }, 'Plegar ▴'); bx.addEventListener('click', () => { calcAbierto = false; guardarCalcAbierto(); dibujarTira(e); }); t.append(bx); }
   }
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Dirección del viento', 'data-globo': 'Viento A y B|El viento A empuja la cara mayor (ancho B) y lo toman los tabiques paralelos (hoja «J Tabiques paralelos»). El viento B empuja la cara menor y lo toman los ortogonales.' });
   (['A', 'B'] as const).forEach(dd => {

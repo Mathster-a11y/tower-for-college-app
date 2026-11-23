@@ -82,13 +82,13 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     anota(tipo, 'terminar el encadenado', (await est(e => e.proyecto.muros.length)) === n1, `muros ${await est(e => e.proyecto.muros.length)}`);
     await pg.keyboard.press('Escape'); await espera(200);
     await boton(tipo, '.herr-planta button:text-is("Mover")');
-    // 6 · menú ⋯ abre y cierra
-    await boton(tipo, '.herr-planta button:text-is("⋯")');
+    // 6 · menú Ayudas abre y cierra
+    await boton(tipo, '.herr-planta button:text-is("Ayudas ▾")');
     const abre = await pg.locator('.menu-mas-lista:not([hidden])').count();
-    if (process.env.DEPURAR) console.log('menú', JSON.stringify(await pg.evaluate(() => { const b = [...document.querySelectorAll('.herr-planta button')].find(x => x.textContent === '⋯'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return [Math.round(r.x), Math.round(r.y), e.tagName + '.' + e.className + ':' + e.textContent.slice(0, 12)]; })));
+    if (process.env.DEPURAR) console.log('menú', JSON.stringify(await pg.evaluate(() => { const b = [...document.querySelectorAll('.herr-planta button')].find(x => x.textContent === 'Ayudas ▾'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return [Math.round(r.x), Math.round(r.y), e.tagName + '.' + e.className + ':' + e.textContent.slice(0, 12)]; })));
     await toque(tipo, [sv[2].x + sv[2].width * 0.5, sv[2].y + sv[2].height * 0.9]);
     const cierra = await pg.locator('.menu-mas-lista:not([hidden])').count();
-    anota(tipo, 'menú ⋯ abre y se cierra afuera', abre === 1 && cierra === 0, `${abre}/${cierra}`);
+    anota(tipo, 'menú Ayudas abre y se cierra afuera', abre === 1 && cierra === 0, `${abre}/${cierra}`);
     // 7 · carta: mover con el asa y cambiar el tamaño
     await boton(tipo, '.herr-planta button:text-is("Colocar")'); await espera(400);
     const asa = await caja('.dock-planta > .asa-mover');

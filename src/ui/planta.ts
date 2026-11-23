@@ -362,7 +362,9 @@ export function montarPlanta(cont: HTMLElement) {
     bAvisos.classList.toggle('hay', avisos.length > 0);
     bAvisos.setAttribute('aria-label', avisos.length ? `${avisos.length} avisos de diseño` : 'Sin avisos de diseño');
     if (avAbierto) armarAvisos();
+    if (typeof refrescarPasosSiHay === 'function') refrescarPasosSiHay();
   }
+  function refrescarPasosSiHay() { try { refrescarPasos(); } catch { /* la tira todavía no está armada */ } }
   function armarAvisos() {
     panelAv.hidden = !avAbierto; bAvisos.setAttribute('aria-pressed', String(avAbierto));
     if (!avAbierto) return;
@@ -387,7 +389,7 @@ export function montarPlanta(cont: HTMLElement) {
       panelAv.append(d);
     });
   }
-  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); indicar(INDIC[m]); };
+  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); pintarLosaCarp(m); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); indicar(INDIC[m]); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
   bArmar.addEventListener('click', () => {
@@ -604,7 +606,13 @@ export function montarPlanta(cont: HTMLElement) {
   const bSil = document.createElement('button');
   bSil.type = 'button'; bSil.textContent = 'Losa';
   bSil.title = 'Losa y carpintería de este piso: formas de arranque, dibujarla a mano, balcones, loft y herramientas de CAD. Se edita el contorno de la losa o de la carpintería de este piso: arrastrar los vértices, doble clic en un borde para agregar uno, clic derecho en un vértice para borrarlo. También se importa de AutoCAD (DXF).';
-  bSil.addEventListener('click', () => ponerModo(modo === 'silueta' ? 'mover' : 'silueta'));
+  bSil.addEventListener('click', () => { if (modo === 'silueta' && !editaCarp) { ponerModo('mover'); return; } editaCarp = false; vSel = null; if (modo === 'silueta') { pintarLosaCarp(modo); armarPanelSil(); dibujar(); } else ponerModo('silueta'); });
+  // la carpintería, con botón propio: la misma carta, del lado «Carpintería» (tramos, por piso o envolvente, panelería)
+  const bCarp = document.createElement('button');
+  bCarp.type = 'button'; bCarp.textContent = 'Carpintería';
+  bCarp.title = 'Carpintería (el contorno al que le pega el viento): por tramos (sin, por piso o envolvente), plana o curva, panelería; o a mano, piso por piso';
+  bCarp.addEventListener('click', () => { if (modo === 'silueta' && editaCarp) { ponerModo('mover'); return; } editaCarp = true; vSel = null; if (modo === 'silueta') { pintarLosaCarp(modo); armarPanelSil(); dibujar(); } else ponerModo('silueta'); });
+  function pintarLosaCarp(m: string) { bSil.setAttribute('aria-pressed', String(m === 'silueta' && !editaCarp)); bCarp.setAttribute('aria-pressed', String(m === 'silueta' && editaCarp)); }
   const panelSil = document.createElement('div');
   panelSil.className = 'calco-panel silueta-panel';
   panelSil.hidden = true;
@@ -662,7 +670,7 @@ export function montarPlanta(cont: HTMLElement) {
       estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) { soltarCarp(nv); nv.carpinteria = c; } else nv.silueta = c; });
     });
     const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
-    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
+    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; pintarLosaCarp(modo); armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
     // vértices: agregar, borrar y escribir coordenadas (en una tablet, el doble clic y el clic derecho no andan bien)
     const vs = verticesEd();
     if (vSel !== null && vSel >= vs.length) vSel = null;
@@ -716,8 +724,13 @@ export function montarPlanta(cont: HTMLElement) {
       const ponerTramos = (f: (ts: TramoCarpinteria[]) => void) => estado.cambiar(pp => { const ts = tramosCarpinteria(pp).map(t => ({ ...t })); f(ts); delete pp.carpinteriaRetiro; if (ts.length) pp.carpinteriaTramos = ts.sort((x, y) => x.desde - y.desde); else delete pp.carpinteriaTramos; });
       const nivelesFach = p.niveles.filter(x => x.cota >= -1e-6).sort((x, y) => x.cota - y.cota);
       if (!tramos.length) {
-        segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por piso» va vertical de losa a losa (siempre entre las dos, sin tapas) y «envolvente» sigue la superficie.' }),
-          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3, forma: 'plana' }); }), 'Un tramo «por piso», plano, metido 0,30 m, desde el nivel más bajo'));
+        // el método para toda la torre (un tramo desde el nivel más bajo); los tramos quedan para después, con «+ tramo»
+        const metodo = (modo: 'losa' | 'continua') => () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo, retiro: 0.3, forma: 'plana' }); });
+        const bPiso = boton('Por piso (recomendado)', metodo('losa'), 'Vertical, de la losa de abajo a la de arriba, en lo común a las dos (nunca sobre un vacío); plana, metida 0,30 m. Sigue sola a las losas.');
+        bPiso.className = 'primario';
+        segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: '¿Cómo es la carpintería de la torre?' }),
+          h2(bPiso, boton('Envolvente', metodo('continua'), 'Una piel que pasa por el borde de cada losa y sigue la superficie de la torre; plana, metida 0,30 m.')),
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Las dos siguen solas a las losas (se pueden fijar después). Para mezclar, por ejemplo una base abierta y una corona envolvente, después agregá tramos con «+ tramo». O dibujala a mano, piso por piso, arrastrando los vértices.' }));
       } else {
         segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Carpintería por tramos' }));
         tramos.forEach((t, k) => {
@@ -1783,26 +1796,94 @@ export function montarPlanta(cont: HTMLElement) {
   estado.suscribirSeleccion(() => { col.refrescar(); refrescarTr(); });
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
-  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
+  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas ▾'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
   const bJuntas = document.createElement('button'); bJuntas.type = 'button';
   const pintarJuntas = () => { bJuntas.textContent = estado.juntasLimpias ? 'Juntas: unidas ✓' : 'Juntas: muros separados'; bJuntas.setAttribute('aria-pressed', String(estado.juntasLimpias)); };
   bJuntas.title = 'Unidas: los muros que se encuentran (L, T, X, también en ángulo) se dibujan como una sola pieza, sin la línea de la junta y sin superposición. Separados: cada muro con su rectángulo.';
   bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
   pintarJuntas();
-  listaMas.append(bCalco, bAreas, bJuntas);
+  // «Ayudas»: guías, cotas y grilla (antes en la barra) y lo que se usa menos
+  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
   mas.append(bMas);
   cont.appendChild(listaMas);
-  barra.append(bMover, bLazo, bSil, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
+  // la barra en grupos con nombre: Forma (losa, carpintería, corte), Estructura (muros y piezas) y Ayudas
+  const rotuloGrupo = (t: string) => { const x = document.createElement('span'); x.className = 'grupo-rot'; x.textContent = t; x.setAttribute('aria-hidden', 'true'); return x; };
+  barra.append(bMover, bLazo, rotuloGrupo('Forma'), bSil, bCarp, rotuloGrupo('Estructura'), bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar, mas);
   // corte de la torre: la silueta se ajusta en un corte vertical, con el plano del proyecto calcado debajo
   const corte = montarCorte(cont, mensaje);
   const bCorte = document.createElement('button'); bCorte.type = 'button'; bCorte.textContent = 'Corte';
   bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
   bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
-  barra.insertBefore(bCorte, bDibujar);
+  barra.insertBefore(bCorte, bCarp.nextSibling);
+  // ---------------------------------------------------------------- tira de pasos: el recorrido de diseño de la torre
+  // seis pasos en orden; cada uno abre su herramienta y dice qué sigue. Está hecho lo que ya tiene el proyecto (o lo que
+  // se saltó a propósito); se puede plegar
+  type IdPaso = 'pisos' | 'losa' | 'forma' | 'carp' | 'estructura' | 'verificar';
+  const vistos = new Set<IdPaso>();
+  let pasoAct: IdPaso | null = null;
+  let pasosPlegados = (() => { try { return localStorage.getItem('torre3d.pasos') === '0'; } catch { return false; } })();
+  const pasos = document.createElement('div'); pasos.className = 'pasos-torre'; pasos.setAttribute('role', 'navigation'); pasos.setAttribute('aria-label', 'Pasos para diseñar la torre');
+  const clicEn = (sel: string, texto: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>(sel)].find(x => x.textContent?.includes(texto)); b?.click(); };
+  const PASOS: { id: IdPaso; nombre: string; ayuda: string; hecho: () => boolean; acciones: () => [string, string, () => void][] }[] = [
+    { id: 'pisos', nombre: 'Pisos', ayuda: 'Cuántos pisos tiene la torre y qué altura tiene cada uno (tabla de niveles, a la izquierda).',
+      hecho: () => estado.proyecto.niveles.length >= 3, acciones: () => [['Abrir la tabla de niveles', 'La tabla de niveles: nombre, cota, B y L', () => clicEn('#subpasos button', 'Niveles')]] },
+    { id: 'losa', nombre: 'Losa', ayuda: 'La forma de la planta: una forma de arranque (rectángulo, círculo, en L…) o dibujada a mano.',
+      hecho: () => estado.proyecto.niveles.some(n => n.silueta && n.silueta.length >= 3), acciones: () => [['Abrir Losa', 'La carta de la losa, con «Losa desde cero» arriba', () => { if (!(modo === 'silueta' && !editaCarp)) bSil.click(); }]] },
+    { id: 'forma', nombre: 'Forma en altura', ayuda: '¿La torre cambia de forma al subir? Si es recta, seguí de largo.',
+      hecho: () => { const p = estado.proyecto; return !!p.perfilTorre || !!p.lofts?.length || !!p.planosCorte?.length || vistos.has('forma'); },
+      acciones: () => [
+        ['Recta: seguir', 'La misma planta en toda la altura', () => { vistos.add('forma'); irA(siguiente('forma')); }],
+        ['Perfil (ahusada, barril, retorcida…)', 'El alzado de la torre: cómo se escala, se corre o gira la planta con la altura', () => { pfAbierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Loft entre dos losas', 'Las losas de en medio pasan suave de una forma a otra', () => { lft.abierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Recortar con un plano', 'Un plano inclinado que recorta las losas (en el corte de la torre)', () => bCorte.click()]] },
+    { id: 'carp', nombre: 'Carpintería', ayuda: 'El contorno al que le pega el viento: por piso (de losa a losa) o envolvente, o a mano.',
+      hecho: () => { const p = estado.proyecto; return tramosCarpinteria(p).length > 0 || p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3); },
+      acciones: () => [['Abrir Carpintería', 'La carta de la carpintería: tramos, plana o curva, panelería', () => { if (!(modo === 'silueta' && editaCarp)) bCarp.click(); }]] },
+    { id: 'estructura', nombre: 'Estructura', ayuda: 'Tabiques, núcleos y columnas: dibujalos, insertá piezas tipo o colocalos con la carta; después «Armar» forma las piezas.',
+      hecho: () => estado.proyecto.muros.length > 0,
+      acciones: () => [['Dibujar', 'Muros a mano, encadenados', () => bDibujar.click()], ['Insertar…', 'Piezas tipo: núcleos, tubos, columnas', () => bIns.click()], ...(col.botones[0] ? [['Colocar', 'Colocar con números', () => col.botones[0].click()] as [string, string, () => void]] : []), ['Armar', 'Los muros que se tocan forman piezas', () => bArmar.click()]] },
+    { id: 'verificar', nombre: 'Verificar', ayuda: 'Los avisos de diseño y las etapas de cálculo (viento, fuerzas, estabilidad…, a la izquierda).',
+      hecho: () => estado.proyecto.muros.length > 0 && avisos.length === 0,
+      acciones: () => [[avisos.length ? `Ver los ${avisos.length} avisos` : 'Sin avisos ✓', 'Lo que conviene revisar, con un botón para ir a cada uno', () => { if (!avAbierto) bAvisos.click(); }], ['Ir a Viento', 'La etapa 02: el viento sobre la torre', () => clicEn('.etapas button, nav button, .riel button', 'Viento')]] },
+  ];
+  const siguiente = (desde: IdPaso): IdPaso => { const k = PASOS.findIndex(x => x.id === desde); return (PASOS.slice(k + 1).find(x => !x.hecho()) ?? PASOS[Math.min(k + 1, PASOS.length - 1)]).id; };
+  function irA(id: IdPaso) { pasoAct = id; vistos.add(id); refrescarPasos(); const a = PASOS.find(x => x.id === id)!.acciones(); if (a.length === 1) a[0][2](); }
+  function refrescarPasos() {
+    const actual = pasoAct ?? (PASOS.find(x => !x.hecho()) ?? PASOS[PASOS.length - 1]).id;
+    const nHechos = PASOS.filter(x => x.hecho()).length;
+    pasos.replaceChildren();
+    pasos.classList.toggle('plegada', pasosPlegados);
+    const plegar = document.createElement('button'); plegar.type = 'button'; plegar.className = 'pasos-plegar';
+    plegar.textContent = pasosPlegados ? `Pasos ${nHechos}/6 ▾` : '▴'; plegar.title = pasosPlegados ? 'Mostrar los pasos para diseñar la torre' : 'Plegar los pasos';
+    plegar.setAttribute('aria-expanded', String(!pasosPlegados));
+    plegar.addEventListener('click', () => { pasosPlegados = !pasosPlegados; try { localStorage.setItem('torre3d.pasos', pasosPlegados ? '0' : '1'); } catch { /* */ } refrescarPasos(); acomodar(); });
+    if (pasosPlegados) { pasos.append(plegar); return; }
+    const fila = document.createElement('div'); fila.className = 'pasos-fila';
+    PASOS.forEach((x, k) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'paso';
+      if (x.hecho()) b.classList.add('hecho');
+      if (x.id === actual) { b.classList.add('act'); b.setAttribute('aria-current', 'step'); }
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = x.hecho() && x.id !== actual ? '✓' : String(k + 1);
+      b.append(n, x.nombre); b.title = x.ayuda;
+      b.addEventListener('click', () => irA(x.id));
+      fila.append(b);
+      if (k < PASOS.length - 1) { const f = document.createElement('span'); f.className = 'pasos-flecha'; f.textContent = '›'; f.setAttribute('aria-hidden', 'true'); fila.append(f); }
+    });
+    fila.append(plegar);
+    const p0 = PASOS.find(x => x.id === actual)!, k0 = PASOS.indexOf(p0);
+    const det = document.createElement('div'); det.className = 'pasos-det';
+    const t = document.createElement('span'); t.className = 'pasos-ayuda'; t.textContent = `${k0 + 1} · ${p0.nombre}: ${p0.ayuda}`;
+    det.append(t);
+    p0.acciones().forEach(([nom, ti, f]) => { const a = document.createElement('button'); a.type = 'button'; a.textContent = nom; a.title = ti; a.addEventListener('click', () => { vistos.add(p0.id); f(); refrescarPasos(); }); det.append(a); });
+    if (k0 < PASOS.length - 1) { const sg = document.createElement('button'); sg.type = 'button'; sg.className = 'primario'; const ns = siguiente(p0.id); sg.textContent = `Siguiente: ${PASOS.find(x => x.id === ns)!.nombre} ›`; sg.addEventListener('click', () => { vistos.add(p0.id); irA(ns); }); det.append(sg); }
+    pasos.append(fila, det);
+  }
+  cont.appendChild(pasos);
+  refrescarPasos();
   // «?» (prende las indicaciones cuando están ocultas) abajo, donde va la indicación; los avisos, un chip arriba a la
   // derecha debajo del selector de planta: así la barra de herramientas entra en la planta
   bIndic.className = 'b-indic-flotante'; bAvisos.className = 'chip-avisos';
@@ -2881,6 +2962,11 @@ export function montarPlanta(cont: HTMLElement) {
     if (!R.width) return;
     // la barra de herramientas puede ocupar dos líneas (pantalla angosta o táctil): el selector de planta, el chip de
     // avisos y las cartas del costado bajan para no taparla
+    // si la barra no entra en una línea, los nombres de los grupos se vuelven separadores finos
+    barra.classList.remove('compacta');
+    if (barra.getBoundingClientRect().height > 44) barra.classList.add('compacta');
+    // la barra de herramientas va debajo de la tira de pasos
+    { const pr = pasos.getBoundingClientRect(); barra.style.top = pr.height ? `${Math.round(pr.bottom - R.top + 4)}px` : ''; }
     {
       const bb = barra.getBoundingClientRect(), abajo = bb.bottom - R.top + 6;
       const bajar = (e: HTMLElement, base: number) => { e.style.top = ''; if (!e.classList.contains('movido') && e.getBoundingClientRect().top - R.top < abajo && e.getBoundingClientRect().left < bb.right) e.style.top = `${Math.max(base, abajo)}px`; };
