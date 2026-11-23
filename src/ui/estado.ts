@@ -15,6 +15,7 @@ import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
 import { Historial } from './historial';
 import { Guardado } from './guardado';
+import { aplicarLofts } from '../engine/loft';
 
 /**
  * Hasta noviembre de 2026 el motor y el armado se recordaban en el navegador (no en el proyecto), y el mismo archivo
@@ -246,6 +247,8 @@ class Estado {
         : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
       if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
     }
+    // lofts de losas: las siluetas intermedias siguen a las losas sección
+    if (this.proyecto.lofts?.length) aplicarLofts(this.proyecto);
     // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
     const pa = this.proyecto;
     if (pa.areasAuto !== undefined && pa.areasAuto !== null) {

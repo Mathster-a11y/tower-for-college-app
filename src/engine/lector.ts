@@ -137,11 +137,12 @@ export function leerProyecto(x: unknown): Lectura {
   }
 
   // --- listas opcionales del proyecto
-  for (const k of ['grupos', 'caminos', 'cotas', 'guias', 'huecosLosa'] as const) {
+  for (const k of ['grupos', 'caminos', 'cotas', 'guias', 'huecosLosa', 'lofts'] as const) {
     if (!nulo(q[k]) && !(Array.isArray(q[k]) && (q[k] as unknown[]).every(esObj))) error(`«${k}» está dañado.`);
   }
   if (Array.isArray(q.grupos) && !(q.grupos as Record<string, unknown>[]).every(g => typeof g.id === 'string')) error('Hay un grupo sin identificador.');
   if (Array.isArray(q.huecosLosa) && !(q.huecosLosa as Record<string, unknown>[]).every(h => contornoValido(h.v, 0))) error('Hay un hueco de losa con el contorno dañado.');
+  if (Array.isArray(q.lofts) && !(q.lofts as Record<string, unknown>[]).every(l => typeof l.id === 'string' && Array.isArray(l.cotas) && (l.cotas as unknown[]).length >= 2 && (l.cotas as unknown[]).every(c => typeof c === 'number' && isFinite(c)))) error('Hay un loft de losas dañado (necesita un nombre y al menos dos cotas).');
   for (const k of ['juntas', 'parPerp', 'clasesPieza'] as const) if (!nulo(q[k]) && !esObj(q[k])) error(`«${k}» está dañado.`);
   if (!nulo(q.areasAuto) && !num(q.areasAuto)) error('«areasAuto» tiene que ser una cota o quedar vacío.');
   if (!nulo(q.exo) && !esObj(q.exo)) error('El exoesqueleto está dañado.');

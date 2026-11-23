@@ -7,11 +7,13 @@
  *  - «T3D Muros»: todos los datos de cada muro (los de siempre y los de grupos, piezas tipo, vanos y moldes).
  *  - «T3D Contornos»: vértices de perfiles irregulares, siluetas y carpinterías de los niveles, huecos de losa y caminos.
  *  - «T3D Grupos», «T3D Huecos de losa», «T3D Caminos», «T3D Cotas», «T3D Guías».
+ *  - «T3D Lofts»: los lofts de losas (las cotas de las losas sección, separadas con «;», el tipo y el giro).
  * La hoja «T3D» (el proyecto en JSON) queda como respaldo; si están estas tablas, mandan ellas.
  */
 import type { Cota, GrupoDib, HuecoLosa, Muro, Nivel, Proyecto, RolMolde, TipoElemento } from '../engine/modelo';
 import type { VerticePerfil } from '../engine/perfil';
 import type { Guia } from '../engine/guias';
+import type { Loft } from '../engine/loft';
 import type { MedidasPieza, TipoPieza } from '../engine/piezasTipo';
 import type { Hoja, Valor } from './tablas';
 import { EXO_POR_DEFECTO, type TipoExo } from '../engine/exo';
@@ -20,7 +22,7 @@ import { IDS_METODO, type IdMetodo } from '../engine/metodos/tipos';
 export interface Tabla { nombre: string; filas: Valor[][]; anchos: number[] }
 export const T = {
   proyecto: 'T3D Proyecto', niveles: 'T3D Niveles', muros: 'T3D Muros', contornos: 'T3D Contornos', grupos: 'T3D Grupos',
-  huecos: 'T3D Huecos de losa', caminos: 'T3D Caminos', cotas: 'T3D Cotas', guias: 'T3D Guías',
+  huecos: 'T3D Huecos de losa', caminos: 'T3D Caminos', cotas: 'T3D Cotas', guias: 'T3D Guías', lofts: 'T3D Lofts',
 } as const;
 
 const SI = 'sí';
@@ -157,6 +159,8 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
     ...(p.cotas ?? []).map(c => [c.id, c.tipo, c.d, c.a.x, c.a.y, c.a.ref?.id ?? null, c.a.ref?.k ?? null, c.b.x, c.b.y, c.b.ref?.id ?? null, c.b.ref?.k ?? null] as Valor[])] });
   out.push({ nombre: T.guias, anchos: [8, 9, 9, 9, 11, 9, 8, 11], filas: [['Guía', 'Tipo', 'x (m)', 'y (m)', 'Ángulo (°)', 'Radio (m)', 'Eje', 'De la grilla'],
     ...(p.guias ?? []).map(g => g.t === 'recta' ? [g.id, 'recta', g.p.x, g.p.y, g.ang, null, g.eje ?? null, b2s(g.deEjes)] as Valor[] : [g.id, 'círculo', g.c.x, g.c.y, null, g.r, null, null] as Valor[])] });
+  out.push({ nombre: T.lofts, anchos: [10, 26, 9, 10, 12], filas: [['Loft', 'Losas sección (cotas, m)', 'Tipo', 'Giro (°)', 'Escribe B y L'],
+    ...(p.lofts ?? []).map(l => [l.id, [...l.cotas].sort((a, b) => a - b).join('; '), l.tipo ?? 'recto', l.giro ?? 0, l.bl === false ? 'no' : SI] as Valor[])] });
   return out;
 }
 
@@ -296,6 +300,15 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
   if (huecos.length) p.huecosLosa = huecos; else delete p.huecosLosa;
   const caminos = leerHoja(H(T.caminos)).map(g => ({ id: txt(g('Camino')), nombre: txt(g('Nombre')), cerrado: sino(g('Cerrado')), v: anillo('camino', txt(g('Camino'))) ?? [] }));
   if (caminos.length) p.caminos = caminos; else delete p.caminos;
+  // sin la hoja (un libro o un script de Sheets de antes de los lofts) quedan los de la base, que es el mismo proyecto
+  const lofts: Loft[] = !H(T.lofts) ? base.lofts ?? [] : leerHoja(H(T.lofts)).map(g => {
+    const l: Loft = { id: txt(g('Loft')), cotas: String(g('Losas sección (cotas, m)') ?? '').split(';').map(x => num(x)).filter((x): x is number => x !== null) };
+    if (norm(g('Tipo')).startsWith('s')) l.tipo = 'suave';
+    const gi = num(g('Giro (°)')); if (gi) l.giro = gi;
+    if (norm(g('Escribe B y L')) === 'no') l.bl = false;
+    return l;
+  }).filter(l => l.id && l.cotas.length >= 2);
+  if (lofts.length) p.lofts = lofts; else delete p.lofts;
   const punto = (g: (n: string) => Valor, l: 'A' | 'B') => {
     const q: Cota['a'] = { x: num(g(`${l} x (m)`)) ?? 0, y: num(g(`${l} y (m)`)) ?? 0 };
     if (txt(g(`${l} muro`))) q.ref = { id: txt(g(`${l} muro`)), k: num(g(`${l} punto`)) ?? 0 };

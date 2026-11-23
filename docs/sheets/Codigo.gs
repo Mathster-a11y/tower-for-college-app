@@ -25,7 +25,7 @@
  *  - Si algo se corta a la mitad, la marca «incompleta» queda puesta y la app vuelve a escribir todo.
  * Para cambiar la clave, volvé a ejecutar «configurar» (la anterior deja de servir).
  */
-const HOJAS_EDITABLES = ['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías'];
+const HOJAS_EDITABLES = ['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías', 'T3D Lofts'];
 /** hojas de la planilla de la cátedra donde la app escribe celdas de datos */
 const HOJAS_PLANILLA = ['viento', 'M,NyQ', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'Flex comp PB paralelos'];
 const CELDAS_VIENTO = ['C4', 'D4', 'E4', 'F4', 'G4', 'I4', 'J4', 'K4', 'L4', 'O4'];
