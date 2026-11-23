@@ -8,7 +8,7 @@ import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import { vientoCirsoc } from './cirsoc102';
 import { graficoAltura, tablaValores, type Tam } from './diagramas';
-import { corteYMomento, fuerzasPorPiso, plantasDistintas, type GrupoPlanta, type ResultadoPlanta } from '../viento/porPiso';
+import { corteYMomento, fuerzasPorPiso, interferencia, plantasAisladas, plantasDistintas, type GrupoPlanta, type ResultadoPlanta } from '../viento/porPiso';
 import type { PedidoMedicion, RespuestaMedicion } from '../viento/medicion.worker';
 import MedicionWorker from '../viento/medicion.worker?worker&inline';
 import { celdaRef2D, perimetro, PromedioPerimetro } from '../viento/perimetro';
@@ -1153,7 +1153,7 @@ function armarAnotadas() {
  * del 102-25.
  */
 const PASADAS: Record<string, { n: number; texto: string }> = { rapida: { n: 60, texto: 'rápida (60 pasadas)' }, normal: { n: 120, texto: 'normal (120 pasadas)' }, larga: { n: 200, texto: 'larga (200 pasadas, más estable)' } };
-interface CorridaPisos { clave: string; grupos: GrupoPlanta[]; res: Map<string, ResultadoPlanta>; avance: Map<string, number>; workers: Worker[]; pendientes: GrupoPlanta[]; t0: number; fin: number }
+interface CorridaPisos { clave: string; grupos: GrupoPlanta[]; aisladas: GrupoPlanta[]; res: Map<string, ResultadoPlanta>; avance: Map<string, number>; workers: Worker[]; pendientes: GrupoPlanta[]; t0: number; fin: number }
 let pisos: CorridaPisos | null = null;
 let pasadasPisos = 'normal';
 const clavePisos = () => JSON.stringify([estado.revision, estado.dir, cfg.angulo, cfg.re, cfg.res, cfg.paredes, cfg.canal, pasadasPisos, cfg.contexto]);
@@ -1171,8 +1171,10 @@ function empezarPisos() {
   detenerPisos();
   correr(false);                                                    // el túnel de la vista se pausa: cada núcleo, una planta
   const grupos = plantasDistintas(estado.proyecto, cfg.contexto ? edificiosVecinos() : []);
-  pisos = { clave: clavePisos(), grupos, res: new Map(), avance: new Map(), workers: [], pendientes: [...grupos], t0: performance.now(), fin: 0 };
-  const n = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1));
+  // con vecinos, también cada planta sola: el factor de interferencia por piso (Cd con vecinos / Cd sola)
+  const aisladas = plantasAisladas(estado.proyecto, grupos);
+  pisos = { clave: clavePisos(), grupos, aisladas, res: new Map(), avance: new Map(), workers: [], pendientes: [...grupos, ...aisladas], t0: performance.now(), fin: 0 };
+  const n = Math.max(1, Math.min(grupos.length + aisladas.length, 4, (navigator.hardwareConcurrency || 2) - 1));
   for (let k = 0; k < n; k++) siguientePlanta();
 }
 function siguientePlanta() {
@@ -1206,24 +1208,26 @@ function actualizarAvancePisos() {
 function armarPanelPisos(el: H) {
   panelPisos = el;
   const grupos = plantasDistintas(estado.proyecto, cfg.contexto ? edificiosVecinos() : []), c = pisos && pisos.clave === clavePisos() ? pisos : null;
+  const aisladas = plantasAisladas(estado.proyecto, grupos), todas = [...grupos, ...aisladas];
   const nNiv = grupos.reduce((s, g) => s + g.niveles.length, 0);
   // tiempo estimado: ≈ 15 millones de celdas por segundo por núcleo en JavaScript
-  const est = grupos.length ? (() => { const { pedido } = pedidoPlanta(grupos[0]); const nW = Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1)); return (Math.ceil(grupos.length / nW) * pedido.nx * pedido.ny * pedido.pasos) / 15e6; })() : 0;
+  const nW = Math.max(1, Math.min(todas.length, 4, (navigator.hardwareConcurrency || 2) - 1));
+  const est = todas.length ? (Math.ceil(grupos.length / nW) * (() => { const { pedido } = pedidoPlanta(grupos[0]); return pedido.nx * pedido.ny * pedido.pasos; })() + (aisladas.length ? Math.ceil(aisladas.length / nW) * (() => { const { pedido } = pedidoPlanta(aisladas[0]); return pedido.nx * pedido.ny * pedido.pasos; })() : 0)) / 15e6 : 0;
   const sel = h('select', {}) as HTMLSelectElement;
   Object.entries(PASADAS).forEach(([k, v]) => sel.append(new Option(v.texto, k, false, k === pasadasPisos)));
   sel.addEventListener('change', () => { pasadasPisos = sel.value; estado.avisarPanel(); });
   const corriendo = !!c && !c.fin;
   const b = h('button', { type: 'button', class: `boton${corriendo ? '' : ' primario'}` }, corriendo ? '⏹ Detener' : c?.fin ? '↺ Simular de nuevo' : '▶ Simular la torre piso por piso') as HTMLButtonElement;
   b.addEventListener('click', () => { if (corriendo) { detenerPisos(); pisos = null; } else empezarPisos(); estado.avisarPanel(); });
-  const filas = grupos.map((g, k) => {
+  const filas = todas.map((g, k) => {
     const r = c?.res.get(g.clave), barra = h('span', { class: 'pp-barra', 'data-planta': g.clave }, h('i', {}));
     (barra.firstElementChild as HTMLElement).style.width = `${Math.round((c?.avance.get(g.clave) ?? 0) * 100)}%`;
-    const desde = g.niveles[0].nombre, hasta = g.niveles[g.niveles.length - 1].nombre;
-    return h('div', { class: 'pp-fila' }, h('span', {}, `Planta ${k + 1} · ${g.de} · ${g.niveles.length > 1 ? `${desde} a ${hasta}` : desde} (${g.niveles.length} ${g.niveles.length > 1 ? 'niveles' : 'nivel'})${g.vecinos.length ? ` · ${g.vecinos.length} vecinos` : ''}`),
+    const desde = g.niveles[0].nombre, hasta = g.niveles[g.niveles.length - 1].nombre, sola = k >= grupos.length;
+    return h('div', { class: 'pp-fila' }, h('span', {}, `${sola ? `Sola ${k - grupos.length + 1}` : `Planta ${k + 1}`} · ${g.de} · ${g.niveles.length > 1 ? `${desde} a ${hasta}` : desde} (${g.niveles.length} ${g.niveles.length > 1 ? 'niveles' : 'nivel'})${g.vecinos.length ? ` · ${g.vecinos.length} vecinos` : sola ? ' · sin vecinos, para comparar' : ''}`),
       r ? h('span', { class: 'nota chica' }, `Cd ${fmt(r.Cd, 2)} · Cl ±${fmt(r.ClRms, 2)} · St ${r.St ? fmt(r.St, 3) : '—'}${r.roto ? ' · inestable' : ''}`) : barra);
   });
   el.replaceChildren(
-    h('p', { class: 'nota' }, `${grupos.length} ${grupos.length === 1 ? 'planta distinta' : 'plantas distintas'} en ${nNiv} niveles (los pisos iguales se simulan una vez). Con la configuración del túnel de arriba. Tiempo estimado: ${est < 90 ? `${Math.max(1, Math.round(est))} s` : `${Math.round(est / 60)} min`} en ${Math.max(1, Math.min(grupos.length, 4, (navigator.hardwareConcurrency || 2) - 1))} núcleo(s).`),
+    h('p', { class: 'nota' }, `${grupos.length} ${grupos.length === 1 ? 'planta distinta' : 'plantas distintas'} en ${nNiv} niveles (los pisos iguales se simulan una vez)${aisladas.length ? `, y ${aisladas.length === 1 ? 'la misma planta sola' : `${aisladas.length} plantas solas`}, sin vecinos, para el factor de interferencia` : ''}. Con la configuración del túnel de arriba. Tiempo estimado: ${est < 90 ? `${Math.max(1, Math.round(est))} s` : `${Math.round(est / 60)} min`} en ${nW} núcleo(s).`),
     h('label', { class: 'campo' }, h('span', {}, 'Duración de cada simulación'), sel),
     h('div', { class: 'fila-acciones' }, b), ...filas,
     ...(c?.fin ? [h('p', { class: 'nota chica' }, `Listo en ${fmt((c.fin - c.t0) / 1000, 0)} s. Los resultados están debajo del túnel.`)] : []),
@@ -1238,6 +1242,9 @@ function resultadosPisos(c: H, ancho: number) {
   if (!f.length) return;
   const pts = (x: (k: typeof f[number]) => number) => f.map(k => ({ z: k.z, nivel: k.nivel, x: x(k) }));
   const qs = corteYMomento(f.map(k => ({ z: k.z, F: k.Fsim }))), qr = corteYMomento(f.map(k => ({ z: k.z, F: k.Freg })));
+  // con vecinos: la misma torre sola y el factor de interferencia de cada piso
+  const fSola = r.aisladas.length ? fuerzasPorPiso(v, r.aisladas, r.res) : [];
+  const fi = interferencia(f, fSola);
   c.append(
     h('h3', { class: 'subtit' }, `Torre piso por piso · viento ${estado.dir}`),
     h('p', { class: 'llave' }, `Corte en PB: ${fmt(qs.Q, 1)} t con la simulación y ${fmt(qr.Q, 1)} t con el CIRSOC 102-25 · momento ${fmt(qs.M, 0)} tm y ${fmt(qr.M, 0)} tm.`),
@@ -1248,10 +1255,23 @@ function resultadosPisos(c: H, ancho: number) {
       series: [{ nombre: 'con el Cd simulado', color: 'corte', tipo: 'barras', puntos: pts(k => k.Fsim) }, { nombre: 'CIRSOC 102-25', color: 'carga', punteada: true, tipo: 'linea', puntos: pts(k => k.Freg) }] }, { ancho, alto: 360 }),
     tablaValores(['Nivel', 'z (m)', 'Cd sim.', 'Cl eficaz', 'St', 'Coef. 102-25', 'F sim. (t)', 'F 102-25 (t)'], f.map(k => [k.nivel, k.z, k.Cd, k.ClRms, k.St ?? '—', k.Creg, k.Fsim, k.Freg]), [0, 1, 2, 2, 3, 2, 2, 2]),
   );
+  if (fi.length) {
+    const sola = corteYMomento(fSola.map(k => ({ z: k.z, F: k.Fsim }))), conV = corteYMomento(fi.map(k => ({ z: k.z, F: k.FCon }))), solaV = corteYMomento(fi.map(k => ({ z: k.z, F: k.FSin })));
+    const pf = (x: (k: typeof fi[number]) => number) => fi.map(k => ({ z: k.z, nivel: k.nivel, x: x(k) }));
+    const fmin = fi.reduce((m, k) => (k.factor < m.factor ? k : m)), fmax = fi.reduce((m, k) => (k.factor > m.factor ? k : m));
+    c.append(
+      h('h3', { class: 'subtit' }, `Factor de interferencia por piso · viento ${estado.dir}`),
+      h('p', { class: 'llave' }, `Corte en PB con los vecinos ${fmt(qs.Q, 1)} t y la torre sola ${fmt(sola.Q, 1)} t (${fmt(100 * (qs.Q / sola.Q - 1), 0)} %). En los ${fi.length} niveles comparados: ${fmt(conV.Q, 1)} t contra ${fmt(solaV.Q, 1)} t. El factor va de ${fmt(fmin.factor, 2)} (${fmin.nivel}) a ${fmt(fmax.factor, 2)} (${fmax.nivel}).`),
+      h('p', { class: 'nota' }, 'Factor de interferencia = Cd de la planta con los vecinos / Cd de la misma planta sola, piso por piso, con la misma configuración del túnel. Menos de 1: los vecinos la protegen (la tapan o le bajan la velocidad). Más de 1: la cargan más (canalizan el aire entre edificios o le pegan con la estela de otro). Es el arrastre medio en 2D: no ve el aire que pasa por arriba de los vecinos.'),
+      graficoAltura({ titulo: `Factor de interferencia por piso · viento ${estado.dir}`, eje: 'factor', unidad: '', decimales: 2,
+        series: [{ nombre: 'Cd con vecinos / Cd sola', color: 'corte', tipo: 'linea', puntos: pf(k => k.factor) }, { nombre: '1 (sin efecto)', color: 'tinta', punteada: true, tipo: 'linea', puntos: pf(() => 1) }] }, { ancho, alto: 320 }),
+      tablaValores(['Nivel', 'z (m)', 'Cd con vecinos', 'Cd sola', 'Factor', 'F con vecinos (t)', 'F sola (t)'], fi.map(k => [k.nivel, k.z, k.CdCon, k.CdSin, k.factor, k.FCon, k.FSin]), [0, 1, 2, 2, 2, 2, 2]),
+    );
+  }
   const csv = h('button', { type: 'button', class: 'mini' }, '⤓ Piso por piso (CSV para Excel)');
   csv.addEventListener('click', () => descargarCSV(`piso_por_piso_viento${estado.dir}.csv`,
-    ['Nivel', 'z (m)', 'ancho (m)', 'h influencia (m)', 'Cd simulado', 'Cl eficaz', 'Strouhal', 'coeficiente 102-25', 'F simulada (t)', 'F 102-25 (t)'],
-    f.map(k => [k.nivel, k.z, k.ancho, k.hInf, k.Cd, k.ClRms, k.St, k.Creg, k.Fsim, k.Freg]), 3));
+    ['Nivel', 'z (m)', 'ancho (m)', 'h influencia (m)', 'Cd simulado', 'Cl eficaz', 'Strouhal', 'coeficiente 102-25', 'F simulada (t)', 'F 102-25 (t)', ...(fi.length ? ['Cd sola', 'factor de interferencia', 'F sola (t)'] : [])],
+    f.map(k => { const x = fi.find(y => y.nivel === k.nivel); return [k.nivel, k.z, k.ancho, k.hInf, k.Cd, k.ClRms, k.St, k.Creg, k.Fsim, k.Freg, ...(fi.length ? [x?.CdSin ?? NaN, x?.factor ?? NaN, x?.FSin ?? NaN] : [])]; }), 3));
   c.append(h('div', { class: 'fila-acciones' }, csv));
 }
 
@@ -1327,13 +1347,72 @@ function armarPanelGrabacion(el: H) {
 }
 
 let repro: { g: GrabacionAbierta; k: number; reloj: number | null; video: MediaRecorder | null } | null = null;
+/** la geometría (en celdas de la grilla grabada) de una grabación */
+const geoDeGrabacion = (g: GrabacionAbierta): Geometria2D => {
+  const m = g.meta;
+  return { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0), nTorre: m.nTorre ?? m.contornos.length };
+};
+/**
+ * Comparar dos grabaciones lado a lado: la segunda va en su lienzo, sincronizada por el tiempo (pasadas del aire por el
+ * ancho de la torre), con los mismos colores, flechas y llave que la primera
+ */
+let comparada: { g: GrabacionAbierta; cv: HTMLCanvasElement; geo: Geometria2D; img: ImageData | null } | null = null;
+/** el cuadro de la segunda grabación más cercano en el tiempo a un instante (en pasadas) */
+function cuadroAlTiempo(g: GrabacionAbierta, t: number): number {
+  const m = g.meta; let mejor = 0, d = Infinity;
+  m.pasos.forEach((p, k) => { const dd = Math.abs((p * m.u0) / m.D - t); if (dd < d) { d = dd; mejor = k; } });
+  return mejor;
+}
+/** dibuja la grabación comparada en el instante t (pasadas): campo suave, contornos, flechas y llave */
+function dibujarComparada(t: number) {
+  const cm = comparada;
+  if (!cm || !cm.cv.isConnected) return;
+  const m = cm.g.meta, k = cuadroAlTiempo(cm.g, t), f = cuadroDe(cm.g, k), { nx, ny, solido } = cm.geo, cv = cm.cv;
+  const u0 = m.u0, n = nx * ny, S = new Float32Array(n), aire = new Uint8Array(n), rhoRef = f.rho[celdaRef2D(cm.geo)] || 1;
+  const vista = cfg.vista === 'vorticidad' || cfg.vista === 'presion' ? cfg.vista : 'velocidad';   // la media y las ráfagas: la instantánea
+  for (let q = 0; q < n; q++) {
+    aire[q] = solido[q] ? 0 : 1;
+    if (solido[q]) continue;
+    if (vista === 'vorticidad') S[q] = f.wn[q];
+    else if (vista === 'velocidad') S[q] = Math.min(1, Math.hypot(f.ux[q], f.uy[q]) / u0 / 1.6);
+    else { const cp = (f.rho[q] - rhoRef) / 3 / (0.5 * u0 * u0); S[q] = cp >= 0 ? cp : cp / 1.6; }
+  }
+  const g = cv.getContext('2d')!, s = cv.width / nx;
+  if (!cm.img || cm.img.width !== cv.width || cm.img.height !== cv.height) cm.img = new ImageData(cv.width, cv.height);
+  const vis: VistaPx = { W: cv.width, H: cv.height, x0: 0, dx: 1 / s, y0: ny, dy: 1 / s };
+  const fondo = rgb(css('--lienzo', '#ffffff')), sol = rgb(css('--ink', '#223344'));
+  const colorear = vista === 'velocidad' ? colorTermico : vista === 'vorticidad' ? divergente(fondo, rgb(css('--corte', '#7f77dd')), rgb(css('--carga', '#d85a30'))) : divergente(fondo, rgb(css('--traccion', '#e24b4a')), rgb(css('--compresion', '#378add')));
+  pintarSuave(cm.img.data, vis, nx, ny, S, vista === 'velocidad' ? null : aire, colorear, sol);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.putImageData(cm.img, 0, 0);
+  cm.geo.contornos.forEach((p, i) => {
+    g.fillStyle = i < cm.geo.nTorre ? css('--ink', '#223344') : GRIS_VECINO;
+    g.beginPath(); p.forEach((q, j) => (j ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill();
+  });
+  dibujarFlechas(g, vis, cfg.flechas, muestraVelocidad(f.ux, f.uy, solido, nx, ny, u0), 30, css('--ink', '#223344'), css('--lienzo', '#ffffff'), vista !== 'velocidad');
+  if (cfg.llave) {
+    const l1 = llaveEnLienzo(g, llaveVista(m.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+    const lf = llaveFlechas();
+    if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  }
+  const txt = cv.parentElement?.parentElement?.querySelector<HTMLElement>('.comp-txt');
+  if (txt) txt.textContent = `cuadro ${k + 1} de ${m.cuadros} · ${fmt((m.pasos[k] * m.u0) / m.D, 0)} pasadas`;
+}
+async function abrirComparada(f: File) {
+  try {
+    const { default: JSZip } = await import('jszip');
+    const g = await abrirGrabacion(JSZip, await f.arrayBuffer());
+    const cv = document.createElement('canvas'); cv.className = 'tunel2d';
+    comparada = { g, cv, geo: geoDeGrabacion(g), img: null };
+    estado.avisarPanel();
+  } catch (e) { mensajeTunel(e instanceof Error ? e.message : String(e)); }
+}
 let panelRepro: H | null = null;
 function empezarRepro(g: GrabacionAbierta) {
   if (grab) grab = null;
   corrida?.worker.terminate();
   const m = g.meta;
   U0 = m.u0;                                                          // la escala de colores con la velocidad con la que se grabó
-  const geo: Geometria2D = { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0), nTorre: m.nTorre ?? m.contornos.length };
+  const geo = geoDeGrabacion(g);
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * m.nx; humo[2 * k + 1] = Math.random() * m.ny; }
   // la corrida «en pantalla» pasa a ser la grabación: dibujar() y las mediciones la muestran igual que en vivo
@@ -1360,6 +1439,7 @@ function mostrarCuadro(k: number) {
   if (barra) barra.value = String(kk);
   if (txt) txt.textContent = `cuadro ${kk + 1} de ${m.cuadros} · ${fmt((m.pasos[kk] * m.u0) / m.D, 0)} pasadas`;
   ultimoCp = 0; armarCp();
+  dibujarComparada((m.pasos[kk] * m.u0) / m.D);
 }
 function reproducir(si: boolean) {
   const r = repro;
@@ -1369,7 +1449,7 @@ function reproducir(si: boolean) {
   const b = panelRepro?.querySelector<HTMLButtonElement>('.repro-play');
   if (b) b.textContent = si ? '⏸ Pausa' : '▶ Reproducir';
 }
-function salirRepro() { reproducir(false); repro = null; corrida = null; estado.avisarPanel(); }
+function salirRepro() { reproducir(false); repro = null; corrida = null; comparada = null; estado.avisarPanel(); }
 function grabarVideo() {
   const r = repro, cv = lienzo;
   if (!r || !cv) return;
@@ -1388,17 +1468,34 @@ function grabarVideo() {
   mostrarCuadro(0); rec.start(); reproducir(true);
 }
 function centroRepro(c: H, tam: Tam) {
-  const r = repro!, m = r.g.meta, ancho = Math.max(320, (tam.ancho ?? 900) - 10);
+  const r = repro!, m = r.g.meta, anchoTodo = Math.max(320, (tam.ancho ?? 900) - 10);
+  // comparando: los dos lienzos lado a lado si entran (cada uno de al menos 420 px), si no, uno arriba del otro
+  const par = !!comparada && anchoTodo >= 860, ancho = par ? (anchoTodo - 12) / 2 : anchoTodo;
   if (!lienzo) { lienzo = document.createElement('canvas'); lienzo.className = 'tunel2d'; prepararMarcado(lienzo); }
   lienzo.width = Math.round(ancho); lienzo.height = Math.round((ancho * m.ny) / m.nx);
+  if (comparada) { const mc = comparada.g.meta; comparada.cv.width = Math.round(ancho); comparada.cv.height = Math.round((ancho * mc.ny) / mc.nx); }
   const play = h('button', { type: 'button', class: 'boton primario repro-play' }, r.reloj !== null ? '⏸ Pausa' : '▶ Reproducir');
   play.addEventListener('click', () => reproducir(repro?.reloj === null));
   const barra = h('input', { type: 'range', min: '0', max: String(m.cuadros - 1), value: String(r.k), 'aria-label': 'Cuadro de la grabación' }) as HTMLInputElement;
   barra.addEventListener('input', () => { reproducir(false); mostrarCuadro(+barra.value); });
   const video = h('button', { type: 'button', class: 'boton' }, '⤓ Video (WebM)'); video.addEventListener('click', grabarVideo);
   const salir = h('button', { type: 'button', class: 'boton' }, 'Volver al túnel en vivo'); salir.addEventListener('click', salirRepro);
-  panelRepro = h('div', { class: 'repro' }, h('p', { class: 'llave' }, `Grabación: ${m.titulo} · ${Object.entries(m.config).map(([k, v]) => `${k} ${v}`).join(' · ')}`), h('div', { class: 'fila-acciones' }, play, barra, h('span', { class: 'nota chica repro-txt' }, ''), video, salir));
-  c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, h('div', { class: 'tunel-marco' }, lienzo),
+  // la segunda grabación, para comparar
+  const otra = h('label', { class: 'boton' }, comparada ? 'Cambiar la comparada…' : '⇆ Comparar con otra grabación…');
+  const inpO = h('input', { type: 'file', accept: '.torreviento,.zip', hidden: '' }) as HTMLInputElement;
+  otra.append(inpO);
+  inpO.addEventListener('change', () => { const f = inpO.files?.[0]; inpO.value = ''; if (f) void abrirComparada(f); });
+  const quitar = h('button', { type: 'button', class: 'boton' }, 'Sacar la comparada'); quitar.addEventListener('click', () => { comparada = null; estado.avisarPanel(); });
+  panelRepro = h('div', { class: 'repro' }, h('p', { class: 'llave' }, `Grabación: ${m.titulo} · ${Object.entries(m.config).map(([k, v]) => `${k} ${v}`).join(' · ')}`), h('div', { class: 'fila-acciones' }, play, barra, h('span', { class: 'nota chica repro-txt' }, ''), video, otra, ...(comparada ? [quitar] : []), salir));
+  const medTxt = (mm: typeof m) => (mm.med ? `Cd ${fmt(mm.med.Cd, 2)} · Cl ±${fmt(mm.med.ClRms, 2)} · St ${mm.med.St ? fmt(mm.med.St, 3) : '—'}` : 'sin mediciones');
+  const marcoA = h('div', { class: 'tunel-marco' }, lienzo);
+  const vistaTunel: H = comparada
+    ? h('div', { class: `repro-par${par ? ' lado' : ''}` },
+      h('figure', {}, h('figcaption', {}, h('b', {}, 'A · '), `${m.titulo} · ${medTxt(m)}`), marcoA),
+      h('figure', {}, h('figcaption', {}, h('b', {}, 'B · '), `${comparada.g.meta.titulo} · ${medTxt(comparada.g.meta)} · `, h('span', { class: 'comp-txt' }, '')), h('div', { class: 'tunel-marco' }, comparada.cv)))
+    : marcoA;
+  const avisoComp = comparada && Math.abs(comparada.g.meta.u0 - m.u0) > 1e-9 ? [h('p', { class: 'nota chica' }, 'Las dos grabaciones se hicieron con distinta velocidad de entrada en la red (una con el túnel «lento»): los colores se leen igual porque cada una se escala con la suya.')] : [];
+  c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, vistaTunel, ...avisoComp,
     h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (1,6 veces la de entrada o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
   cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900);
   mostrarCuadro(r.k);

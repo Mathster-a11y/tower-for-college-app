@@ -1723,3 +1723,8 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .capa-con-opcion { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .capa-con-opcion select { max-width: 100%; }
 .capa-sub { margin-left: 24px; }
+/* comparar dos grabaciones del túnel 2D: lado a lado si entran, si no una arriba de la otra */
+.repro-par { display: grid; gap: 12px; grid-template-columns: 1fr; }
+.repro-par.lado { grid-template-columns: 1fr 1fr; }
+.repro-par figure { margin: 0; min-width: 0; }
+.repro-par figcaption { font-size: 12.5px; color: var(--ink2); margin-bottom: 4px; }

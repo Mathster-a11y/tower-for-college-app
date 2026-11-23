@@ -10,8 +10,8 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 1. ~~Anemómetros virtuales en el túnel 2D~~ (23/11)
 2. ~~Vistas «velocidad media» y «ráfagas» en el 2D y en la ventana de detalle~~ (23/11)
 3. ~~Medir de nuevo las cinco formas con paredes lineales y actualizar el diagnóstico~~ (23/11)
-4. Comparar dos grabaciones lado a lado (por ejemplo, aislada y con contexto, o dos esquinas)
-5. Factor de interferencia por piso: torre aislada contra torre con contexto, en la tabla de «Torre piso por piso»
+4. ~~Comparar dos grabaciones lado a lado~~ (23/11: Grabar y reproducir → «⇆ Comparar con otra grabación…», sincronizadas por el tiempo)
+5. ~~Factor de interferencia por piso~~ (23/11: «Torre piso por piso» con vecinos simula también cada planta sola; gráfico, tabla y CSV)
 6. Contexto urbano: edificios con retiros (más de una altura por edificio)
 7. Contexto urbano: calcar el sitio desde un PDF
 8. Cp y fuerza por piso del túnel también como hoja del Excel (hoy van en CSV)
@@ -220,8 +220,8 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
 - [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
 - [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
-- [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Falta: calcar el sitio desde un PDF, edificios con retiros (más de una altura) y el factor de interferencia por piso lado a lado
-- [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media, el humo con estela, los anemómetros virtuales y las vistas de velocidad media y ráfagas; falta la comparación lado a lado de dos grabaciones
+- [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Falta: calcar el sitio desde un PDF, edificios con retiros (más de una altura) y el factor de interferencia por piso (hecho)
+- [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media, el humo con estela, los anemómetros virtuales y las vistas de velocidad media y ráfagas; y la comparación lado a lado de dos grabaciones (hecho)
 - [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
 - [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso
 - [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2. Las cinco formas, medidas de nuevo: vivas 2,29, curva 1,67, redondeadas 1,90, sustraídas 1,92, chaflán 2,06. Con paredes lineales (las de ahora): redondeadas 1,95, chaflán 2,12, las demás iguales

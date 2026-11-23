@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ejemploGuia } from '../src/engine/modelo';
 import { viento102, KN_POR_T } from '../src/engine/cargas/cirsoc102';
-import { corteYMomento, fuerzasPorPiso, plantasDistintas, type ResultadoPlanta } from '../src/viento/porPiso';
+import { corteYMomento, fuerzasPorPiso, interferencia, plantasAisladas, plantasDistintas, type ResultadoPlanta } from '../src/viento/porPiso';
 
 describe('túnel piso por piso', () => {
   it('la torre de la guía: una sola planta para todos los niveles sobre PB', () => {
@@ -32,5 +32,24 @@ describe('túnel piso por piso', () => {
     const qm = corteYMomento(f.map(x => ({ z: x.z, F: x.Fsim })));
     expect(qm.Q).toBeCloseTo(f.reduce((s, x) => s + x.Fsim, 0), 9);
     expect(qm.M).toBeGreaterThan(0);
+  });
+  it('factor de interferencia: un vecino bajo; las plantas aisladas solo para los niveles a los que llega', () => {
+    const p = ejemploGuia(), v = viento102(p).A;
+    const alto = 20;
+    const vec = [{ id: 'v1', nombre: 'bajo', altura: alto, v: [{ x: -40, y: -10 }, { x: -30, y: -10 }, { x: -30, y: 10 }, { x: -40, y: 10 }] }];
+    const con = plantasDistintas(p, vec);
+    expect(con.length).toBe(2);                                       // los niveles hasta 20 m con el vecino y los de arriba sin
+    const ais = plantasAisladas(p, con);
+    expect(ais.length).toBe(1);
+    expect(ais[0].clave.startsWith('aislada:')).toBe(true);
+    expect(plantasAisladas(p, plantasDistintas(p))).toEqual([]);      // sin vecinos: nada que comparar
+    const res = new Map<string, ResultadoPlanta>();
+    for (const g of con) res.set(g.clave, { Cd: g.vecinos.length ? 0.8 : 1.6, ClRms: 0, St: null, anchoM: 20, roto: false });
+    res.set(ais[0].clave, { Cd: 1.6, ClRms: 0, St: null, anchoM: 20, roto: false });
+    const fi = interferencia(fuerzasPorPiso(v, con, res), fuerzasPorPiso(v, ais, res));
+    const bajos = v.niveles.filter(n => n.z < alto).length;
+    expect(fi.length).toBe(ais[0].niveles.length);
+    expect(fi.filter(f => Math.abs(f.factor - 0.5) < 1e-9).length).toBe(bajos);
+    expect(fi.every(f => Math.abs(f.FCon / f.FSin - f.factor) < 1e-9)).toBe(true);
   });
 });

@@ -80,3 +80,35 @@ export function fuerzasPorPiso(v: Direccion102, grupos: GrupoPlanta[], res: Map<
 export function corteYMomento(f: { z: number; F: number }[]): { Q: number; M: number } {
   return f.reduce((a, x) => ({ Q: a.Q + x.F, M: a.M + x.F * x.z }), { Q: 0, M: 0 });
 }
+
+/**
+ * Las plantas aisladas que hacen falta para el factor de interferencia: las de los niveles que tienen vecinos, sin
+ * los vecinos (la clave lleva «aislada:» adelante para no pisarse con las de contexto). Sin vecinos, ninguna.
+ */
+export function plantasAisladas(p: Proyecto, conContexto: GrupoPlanta[]): GrupoPlanta[] {
+  const conVecinos = new Set(conContexto.filter(g => g.vecinos.length).flatMap(g => g.niveles.map(n => n.nombre)));
+  if (!conVecinos.size) return [];
+  return plantasDistintas(p, [])
+    .filter(g => g.niveles.some(n => conVecinos.has(n.nombre)))
+    .map(g => ({ ...g, clave: `aislada:${g.clave}` }));
+}
+
+export interface FilaInterferencia {
+  nivel: string; z: number;
+  /** Cd de la planta del nivel con los vecinos y sola */
+  CdCon: number; CdSin: number;
+  /** factor de interferencia = Cd con vecinos / Cd sola (< 1: los vecinos la protegen; > 1: la cargan más) */
+  factor: number;
+  /** fuerzas del nivel (t) */
+  FCon: number; FSin: number;
+}
+
+/** el factor de interferencia por nivel, con las fuerzas con y sin vecinos (solo los niveles que tienen las dos) */
+export function interferencia(con: FilaPiso[], sin: FilaPiso[]): FilaInterferencia[] {
+  const s = new Map(sin.map(f => [f.nivel, f]));
+  return con.flatMap(c => {
+    const a = s.get(c.nivel);
+    if (!a || !(a.Cd > 0)) return [];
+    return [{ nivel: c.nivel, z: c.z, CdCon: c.Cd, CdSin: a.Cd, factor: c.Cd / a.Cd, FCon: c.Fsim, FSin: a.Fsim }];
+  });
+}
