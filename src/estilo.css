@@ -1789,3 +1789,12 @@ canvas.tunel2d.arrastrable { cursor: grab; }
   .asa-mover:not(.en-linea) { height: 22px; width: 72px; }
   .asa-mover:not(.en-linea)::before { top: 9px; }
 }
+
+/* avisos de diseño */
+.herr-planta .b-avisos { min-width: 30px; font-weight: 600; color: var(--ok); }
+.herr-planta .b-avisos.hay { color: var(--revisar); border-color: var(--revisar); }
+.avisos-panel { right: 58px; left: auto; top: 84px; width: 300px; max-height: calc(100% - 140px); }
+.avisos-panel .aviso-item { display: flex; flex-direction: column; gap: 3px; padding: 6px 0; border-top: 1px solid var(--hair); }
+.avisos-panel .aviso-item button { align-self: flex-start; }
+.avisos-panel .nota-losa { font-size: 11.5px; color: var(--ink2); line-height: 1.35; }
+.planta .muro.con-aviso polygon, .planta .muro.con-aviso rect, .planta .muro.con-aviso path { stroke: var(--revisar); stroke-width: 2.5; stroke-dasharray: 5 3; }

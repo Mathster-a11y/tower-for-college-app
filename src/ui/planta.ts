@@ -9,6 +9,7 @@ import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
+import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
 import type { TipoEsquina } from '../engine/contorno';
@@ -336,6 +337,50 @@ export function montarPlanta(cont: HTMLElement) {
   const bIndic = document.createElement('button'); bIndic.type = 'button'; bIndic.textContent = '?'; bIndic.className = 'b-indic';
   bIndic.title = 'Indicaciones: qué hacer con la herramienta elegida (una línea sobre la planta)'; bIndic.setAttribute('aria-label', 'Indicaciones de las herramientas');
   bIndic.addEventListener('click', () => { conIndic = !conIndic; try { localStorage.setItem('torre3d.indicaciones', conIndic ? '1' : '0'); } catch { /* sin almacenamiento */ } bIndic.setAttribute('aria-pressed', String(conIndic)); indicar(INDIC[modo]); });
+  /**
+   * avisos de diseño (tabique fuera de la losa, carpintería afuera, B × L distinto de la losa…): se recalculan cuando
+   * cambia el proyecto (no en cada cuadro de un arrastre); botón con la cantidad y una carta con la lista
+   */
+  let avisos: AvisoDiseno[] = [], revAvisos = -1;
+  const bAvisos = document.createElement('button'); bAvisos.type = 'button'; bAvisos.className = 'b-avisos';
+  bAvisos.title = 'Avisos de diseño: lo que conviene revisar (tocá uno para ir al nivel y al muro)';
+  const panelAv = document.createElement('div'); panelAv.className = 'calco-panel avisos-panel'; panelAv.hidden = true;
+  let avAbierto = false;
+  bAvisos.addEventListener('click', () => { avAbierto = !avAbierto; armarAvisos(); });
+  function recalcularAvisos() {
+    const rev = estado.revision ?? 0;
+    if (rev === revAvisos) return;
+    revAvisos = rev;
+    try { avisos = avisosDiseno(estado.proyecto, estado.calculo?.asig?.papeles as Record<string, { A?: string; B?: string }> | undefined); } catch { avisos = []; }
+    bAvisos.textContent = avisos.length ? `⚠ ${avisos.length}` : '✓';
+    bAvisos.classList.toggle('hay', avisos.length > 0);
+    bAvisos.setAttribute('aria-label', avisos.length ? `${avisos.length} avisos de diseño` : 'Sin avisos de diseño');
+    if (avAbierto) armarAvisos();
+  }
+  function armarAvisos() {
+    panelAv.hidden = !avAbierto; bAvisos.setAttribute('aria-pressed', String(avAbierto));
+    if (!avAbierto) return;
+    panelAv.replaceChildren();
+    const t = document.createElement('b'); t.textContent = avisos.length ? `Avisos de diseño (${avisos.length})` : 'Avisos de diseño'; panelAv.append(t);
+    if (!avisos.length) { const p0 = document.createElement('p'); p0.className = 'nota-losa'; p0.textContent = 'Nada para revisar: los tabiques apoyan en la losa, la carpintería está adentro y la planilla usa las medidas de la losa.'; panelAv.append(p0); }
+    avisos.forEach(a => {
+      const d = document.createElement('div'); d.className = 'aviso-item';
+      const tx = document.createElement('span'); tx.textContent = a.texto;
+      const ar = document.createElement('span'); ar.className = 'nota-losa'; ar.textContent = a.arreglo;
+      d.append(tx, ar);
+      if (a.muro || a.cotas.length) {
+        const ver = document.createElement('button'); ver.type = 'button'; ver.textContent = 'Ver';
+        ver.title = a.cotas.length ? `Ir ${rangoNiveles(estado.proyecto, a.cotas.slice(0, 1))}${a.muro ? ` y elegir ${a.muro}` : ''}` : `Elegir ${a.muro}`;
+        ver.addEventListener('click', () => {
+          if (a.cotas.length) { const z = [...a.cotas].sort((x, y) => y - x)[0]; const iPB = estado.proyecto.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1); estado.nivelPlanta = Math.abs((estado.proyecto.niveles[iPB]?.cota ?? 0) - z) < 1e-6 ? null : z; }
+          if (a.muro) { estado.grupoSel = null; estado.seleccion = a.muro; estado.avisarPanel(); }
+          dibujar();
+        });
+        d.append(ver);
+      }
+      panelAv.append(d);
+    });
+  }
   const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); indicar(INDIC[m]); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
@@ -1541,7 +1586,8 @@ export function montarPlanta(cont: HTMLElement) {
   mas.append(bMas);
   cont.appendChild(listaMas);
   barra.append(bMover, bLazo, bSil, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
-  barra.append(bIndic); bIndic.setAttribute('aria-pressed', String(conIndic));
+  barra.append(bIndic, bAvisos); bIndic.setAttribute('aria-pressed', String(conIndic));
+  cont.appendChild(panelAv);
   cont.appendChild(indic); indicar(INDIC[modo]);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
@@ -1817,6 +1863,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (rotulo) rotulo.textContent = '';
     iNivel = iN;
     const pl = plantaDeNivel(p, iN);
+    recalcularAvisos();
+    const conAviso = new Set(avisos.filter(a => a.muros && (a.tipo === 'sin-pieza' || a.cotas.some(z => Math.abs(z - (p.niveles[iN]?.cota ?? 0)) < 1e-6))).flatMap(a => a.muros!));
     const B = pl.B, L = pl.L;
     if (modo === 'silueta') armarPanelSil();
     const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
@@ -2046,7 +2094,7 @@ export function montarPlanta(cont: HTMLElement) {
       const esta = presenteEn(m, zN, zFund, zTop);
       const grupoSel = (!!m.grupo && p.muros.find(x => x.id === estado.seleccion)?.grupo === m.grupo) || (!!estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel));
       const fueraCtx = !dentroDe(p, m, estado.contexto), bloq = muroBloqueado(p, m);
-      const grupo = el('g', { 'data-muro': m.id, class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
+      const grupo = el('g', { 'data-muro': m.id, class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : '') + (conAviso.has(m.id) ? ' con-aviso' : ''), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
       if (limpias.has(m.id)) limpias.get(m.id)!.forEach(pg => forma.appendChild(el('polygon', { points: ptsPg(pg), fill: COLORES[papel], class: 'limpio' })));
       else if (t === 'perfil') {
