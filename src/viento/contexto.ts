@@ -129,3 +129,15 @@ export function contextoDesdeCAD(ents: import('../engine/cad').Entidad[], factor
   const final = out.filter(e => !usados.has(e)).map((e, i) => ({ ...e, id: `D${i + 1}` }));
   return { edificios: final, sinAltura, omitidos };
 }
+
+/** agrega al proyecto un edificio vecino con este contorno (de la planta, con arcos) y esta altura; devuelve su id */
+export function agregarVecino(p: import('../engine/modelo').Proyecto, v: import('../engine/silueta').Vertice[], altura: number, nombre = 'Edificio (calcado)'): string | { error: string } {
+  const pts = puntosSilueta(v, 8).map(q => ({ x: +q.x.toFixed(3), y: +q.y.toFixed(3) }));
+  if (pts.length < 3) return { error: 'El contorno necesita al menos tres puntos.' };
+  if (!(altura > 0)) return { error: 'El edificio necesita una altura.' };
+  const eds = p.contexto?.edificios ?? [], usados = new Set(eds.map(e => e.id));
+  let k = eds.length + 1; while (usados.has(`E${k}`)) k++;
+  const id = `E${k}`;
+  p.contexto = { edificios: [...eds, { id, nombre, v: pts, altura }] };
+  return id;
+}

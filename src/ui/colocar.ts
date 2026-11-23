@@ -7,6 +7,7 @@
  * elemento elegido.
  */
 import { estado, fmt } from './estado';
+import { agregarVecino } from '../viento/contexto';
 import { confirmar } from './tarjeta';
 import type { Camino, Cota } from '../engine/modelo';
 import type { Justificacion } from '../engine/colocar';
@@ -54,7 +55,7 @@ export function montarColocar(api: ApiPlanta) {
   const op = { vinculada: true, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
     matriz: 'rect' as 'rect' | 'polar' | 'camino', filas: 2, cols: 3, dx: 3.6, dy: 3.6, n: 6, total: 360, girarCopias: true, cx: 0, cy: 0,
     curva: false, dDesf: 0.6, angLibre: 30, espCam: 0.25, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false, arcoTg: true,
-    forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse', lados: 6, formaQue: 'perfil' as 'perfil' | 'muro' | 'camino', muroCurvo: false, justCam: ((): Justificacion => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })() };
+    forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse', lados: 6, formaQue: 'perfil' as 'perfil' | 'muro' | 'camino' | 'vecino', altVecino: 30, muroCurvo: false, justCam: ((): Justificacion => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })() };
   let caminoNuevo: { v: Camino['v']; paso?: Punto; ctrl?: Punto[] } | null = null;
   const caminosSel = new Set<string>();
   let cotaSel: string | null = null;
@@ -224,6 +225,7 @@ export function montarColocar(api: ApiPlanta) {
         pts = [];
         const c: Camino = { id: idCamino(), nombre: '', v: anillo, cerrado: true };
         if (op.formaQue === 'camino') { c.nombre = `Camino ${c.id.slice(1)}`; hacer(() => { (estado.proyecto.caminos ??= []).push(c); }, `«${c.nombre}» cerrado: se puede hacer perfil (▣) o muro (〰).`); }
+        else if (op.formaQue === 'vecino') hacer(() => { const r = agregarVecino(estado.proyecto, anillo, op.altVecino); return typeof r === 'string' ? null : r.error; }, `Edificio vecino de ${fmt(op.altVecino)} m (contexto urbano): lo usan los túneles de viento; se edita en Viento → Túnel 2D → Contexto urbano.`);
         else if (op.formaQue === 'perfil') hacer(() => { const r = perfilDesdeCamino(estado.proyecto, c, estado.contexto ?? undefined); return 'error' in r ? r.error : null; }, 'Perfil con esa forma. Doble clic sobre él para editar el contorno.');
         else hacer(() => { const r = muroSobreCamino(estado.proyecto, c, op.espCam, estado.contexto ?? undefined, op.justCam); return 'error' in r ? r.error : null; }, `Muro de ${fmt(op.espCam)} m siguiendo la forma (${NOMBRE_JUST[op.justCam]}).`);
         armar(); api.dibujar(); return;
@@ -373,9 +375,9 @@ export function montarColocar(api: ApiPlanta) {
 
   const selForma = () => { const selF = mk('select'); ([['rect', 'Rectángulo'], ['circulo', 'Círculo'], ['poligono', 'Polígono regular'], ['elipse', 'Elipse']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.forma === v; selF.append(o); });
     selF.addEventListener('change', () => { op.forma = selF.value as typeof op.forma; pts = []; armar(); api.dibujar(); }); return selF; };
-  const selQue = () => { const selQ = mk('select'); ([['perfil', 'perfil lleno'], ['muro', 'muro (anillo)'], ['camino', 'camino']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.formaQue === v; selQ.append(o); });
+  const selQue = () => { const selQ = mk('select'); ([['perfil', 'perfil lleno'], ['muro', 'muro (anillo)'], ['camino', 'camino'], ['vecino', 'edificio vecino (contexto)']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.formaQue === v; selQ.append(o); });
     selQ.addEventListener('change', () => { op.formaQue = selQ.value as typeof op.formaQue; armar(); api.dibujar(); });
-    selQ.title = 'Perfil lleno: un elemento macizo con esa forma. Muro: un anillo del espesor y la justificación elegidos. Camino: queda como camino cerrado.'; return selQ; };
+    selQ.title = 'Perfil lleno: un elemento macizo con esa forma. Muro: un anillo del espesor y la justificación elegidos. Camino: queda como camino cerrado. Edificio vecino: un edificio de alrededor para los túneles de viento (no entra en ningún cálculo), con la altura elegida.'; return selQ; };
   const filaJust = () => {
     const just = mk('div', '', 'col-fila col-just'); just.append(mk('span', 'justificación'));
     ([['izq', 'muro a la izq.', 'El muro queda a la izquierda del camino (en el sentido en que lo dibujás)'], ['eje', 'eje', 'El camino es el eje del muro'], ['der', 'muro a la der.', 'El muro queda a la derecha del camino']] as [Justificacion, string, string][])
@@ -401,7 +403,7 @@ export function montarColocar(api: ApiPlanta) {
       if (planta && panel.parentElement !== planta) planta.appendChild(panel);
       const extra: HTMLElement[] = [];
       if (herr === 'camino') extra.push(tilde('arco', op.arco, v => { op.arco = v; if (v) op.curva = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), ...(op.arco ? [tilde('tangente', op.arcoTg, v => { op.arcoTg = v; if (caminoNuevo) caminoNuevo.paso = undefined; }, 'El arco sale tangente al tramo anterior: alcanza con tocar el final (el primer arco pide un punto de paso)')] : []), tilde('Bézier', op.curva, v => { op.curva = v; if (v) op.arco = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), boton('Terminar', 'Enter', () => { terminarCamino(); poner(null); }), boton('Cerrar', 'Cierra el camino', () => { terminarCamino(true); poner(null); }));
-      if (herr === 'forma') extra.push(selForma(), ...(op.forma === 'poligono' ? [campoN('lados', op.lados, v => { op.lados = Math.max(3, Math.round(v)); }, 30)] : []), mk('span', '→'), selQue(), ...(op.formaQue === 'muro' ? [campoN('e', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')] : []));
+      if (herr === 'forma') extra.push(selForma(), ...(op.forma === 'poligono' ? [campoN('lados', op.lados, v => { op.lados = Math.max(3, Math.round(v)); }, 30)] : []), mk('span', '→'), selQue(), ...(op.formaQue === 'muro' ? [campoN('e', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')] : []), ...(op.formaQue === 'vecino' ? [campoN('alto', op.altVecino, v => { op.altVecino = v; }, 40, 'm')] : []));
       if ((herr === 'camino' && op.muroCurvo) || (herr === 'forma' && op.formaQue === 'muro')) { panel.append(fila(...extra)); extra.length = 0; if (herr === 'camino') extra.push(campoN('espesor', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')); panel.append(filaJust()); }
       if (herr === 'desfase') extra.push(campoN('a', op.dDesf, v => { op.dDesf = v; }, 44, 'm'));
       if (herr === 'girar-libre') extra.push(campoN('ángulo', op.angLibre, v => { op.angLibre = v; }, 44, '°'));
@@ -513,6 +515,7 @@ export function montarColocar(api: ApiPlanta) {
         c.cerrado ? boton('▣', 'Perfil irregular con este contorno', () => hacer(() => { const r = perfilDesdeCamino(estado.proyecto, c, estado.contexto ?? undefined); return 'error' in r ? r.error : null; }, `Perfil irregular con el contorno de «${c.nombre}». Doble clic sobre él para editarlo.`))
           : mk('span', ''),
         boton('〰', `Muro de ${fmt(op.espCam)} m que sigue este camino (${NOMBRE_JUST[op.justCam]})${c.cerrado ? '; cerrado queda un anillo' : ''}`, () => hacer(() => { const r = muroSobreCamino(estado.proyecto, c, op.espCam, estado.contexto ?? undefined, op.justCam); return 'error' in r ? r.error : null; }, `Muro de ${fmt(op.espCam)} m sobre «${c.nombre}» (${NOMBRE_JUST[op.justCam]}). Doble clic sobre él para editarlo.`)),
+        ...(c.cerrado ? [boton('⌂', `Edificio vecino con este contorno, de ${fmt(op.altVecino)} m (contexto urbano de los túneles de viento)`, () => hacer(() => { const r = agregarVecino(estado.proyecto, c.v, op.altVecino, c.nombre || 'Edificio (calcado)'); return typeof r === 'string' ? null : r.error; }, `Edificio vecino de ${fmt(op.altVecino)} m con el contorno de «${c.nombre}». Se edita en Viento → Túnel 2D → Contexto urbano.`))] : []),
         boton('⇄', 'Invertir el sentido', () => hacer(() => { const p = estado.proyecto; p.caminos = (p.caminos ?? []).map(x => (x.id === c.id ? invertirCamino(x) : x)); }, 'Sentido invertido.')),
         boton('✕', 'Borrar el camino', () => { caminosSel.delete(c.id); hacer(() => { const p = estado.proyecto; p.caminos = (p.caminos ?? []).filter(x => x.id !== c.id); }, 'Camino borrado.'); }));
       lista.append(f);
@@ -550,6 +553,12 @@ export function montarColocar(api: ApiPlanta) {
     const { X, Y } = v;
     const p = estado.proyecto;
     const g = el('g', { class: 'capa-colocar' });
+    // los edificios vecinos del contexto urbano (calcados o importados): gris, con su id y su altura
+    (p.contexto?.edificios ?? []).forEach(e => {
+      g.append(el('polygon', { points: e.v.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'vecino-planta' }));
+      const cx = e.v.reduce((a, q) => a + q.x, 0) / e.v.length, cy = e.v.reduce((a, q) => a + q.y, 0) / e.v.length;
+      g.append(el('text', { x: X(cx), y: Y(cy), class: 'vecino-rot', 'text-anchor': 'middle' }, `${e.id} · ${fmt(Math.max(e.altura, ...(e.retiros ?? []).map(r => r.altura)), 0)} m`));
+    });
     // caminos
     (p.caminos ?? []).forEach(c => {
       const ps = puntosCamino(c, 3);

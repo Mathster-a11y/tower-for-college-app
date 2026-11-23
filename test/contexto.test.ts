@@ -152,3 +152,16 @@ describe('vecinos con retiros', () => {
     expect(b.retiros!.map(x => x.altura)).toEqual([80, 95]);
   });
 });
+
+describe('calcar vecinos en la planta', () => {
+  it('una forma o un camino cerrado se vuelve un edificio vecino con su altura', async () => {
+    const { agregarVecino } = await import('../src/viento/contexto');
+    const p = ejemploGuia();
+    const id = agregarVecino(p, [{ x: 30, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 20 }, { x: 30, y: 20 }], 25);
+    expect(id).toBe('E1');
+    const id2 = agregarVecino(p, [{ x: -30, y: 0, b: 1 }, { x: -50, y: 0, b: 1 }], 40);   // un círculo de dos arcos
+    expect(id2).toBe('E2');
+    expect(p.contexto!.edificios[1].v.length).toBeGreaterThan(12);
+    expect(typeof agregarVecino(p, [{ x: 0, y: 0 }, { x: 1, y: 0 }], 10)).toBe('object');
+  });
+});
