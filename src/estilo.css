@@ -1846,3 +1846,14 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .sigue-losa .tramo-carp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 0; border-top: 1px dashed var(--rule); }
 .sigue-losa .tramo-carp select { max-width: 100%; }
 .sigue-losa .paneleria { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--hair); }
+
+/* la barra de herramientas de la planta: si no entra, en dos líneas (nunca cortada) */
+.herr-planta { flex-wrap: wrap !important; overflow: visible !important; row-gap: 4px; }
+/* avisos de diseño: chip arriba a la derecha, debajo del selector de planta */
+.chip-avisos { position: absolute; right: 10px; top: 80px; z-index: 2; font-weight: 600; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--edge); background: var(--panel); color: var(--ok); }
+.chip-avisos.hay { color: var(--revisar); border-color: var(--revisar); }
+.chip-avisos[aria-pressed="true"] { background: var(--tint); }
+/* «?» para volver a prender las indicaciones, donde iba la indicación */
+.b-indic-flotante { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 2; width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--edge); background: var(--panel); font-weight: 700; color: var(--accent); }
+.b-indic-flotante[hidden] { display: none; }
+.herr-planta.seg { border-radius: 14px; }

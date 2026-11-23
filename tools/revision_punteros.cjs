@@ -85,6 +85,7 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     // 6 · menú ⋯ abre y cierra
     await boton(tipo, '.herr-planta button:text-is("⋯")');
     const abre = await pg.locator('.menu-mas-lista:not([hidden])').count();
+    if (process.env.DEPURAR) console.log('menú', JSON.stringify(await pg.evaluate(() => { const b = [...document.querySelectorAll('.herr-planta button')].find(x => x.textContent === '⋯'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return [Math.round(r.x), Math.round(r.y), e.tagName + '.' + e.className + ':' + e.textContent.slice(0, 12)]; })));
     await toque(tipo, [sv[2].x + sv[2].width * 0.5, sv[2].y + sv[2].height * 0.9]);
     const cierra = await pg.locator('.menu-mas-lista:not([hidden])').count();
     anota(tipo, 'menú ⋯ abre y se cierra afuera', abre === 1 && cierra === 0, `${abre}/${cierra}`);

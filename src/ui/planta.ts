@@ -338,11 +338,11 @@ export function montarPlanta(cont: HTMLElement) {
     colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
   };
   const INDIC_TRAZO = 'Dibujar la losa: tocá los vértices uno por uno (se pegan a la grilla; con «a 90°» o Mayúsculas salen horizontales o verticales). Tocá el primero o Enter para cerrar · Retroceso borra el último · Esc cancela.';
-  const indicar = (t: string) => { indicTxt.textContent = t; indic.hidden = !conIndic || !t; };
-  indicX.addEventListener('click', () => { conIndic = false; try { localStorage.setItem('torre3d.indicaciones', '0'); } catch { /* sin almacenamiento */ } indic.hidden = true; bIndic.setAttribute('aria-pressed', 'false'); });
+  const indicar = (t: string) => { indicTxt.textContent = t; indic.hidden = !conIndic || !t; bIndic.hidden = conIndic; };
+  indicX.addEventListener('click', () => { conIndic = false; try { localStorage.setItem('torre3d.indicaciones', '0'); } catch { /* sin almacenamiento */ } indic.hidden = true; bIndic.hidden = false; bIndic.setAttribute('aria-pressed', 'false'); });
   const bIndic = document.createElement('button'); bIndic.type = 'button'; bIndic.textContent = '?'; bIndic.className = 'b-indic';
   bIndic.title = 'Indicaciones: qué hacer con la herramienta elegida (una línea sobre la planta)'; bIndic.setAttribute('aria-label', 'Indicaciones de las herramientas');
-  bIndic.addEventListener('click', () => { conIndic = !conIndic; try { localStorage.setItem('torre3d.indicaciones', conIndic ? '1' : '0'); } catch { /* sin almacenamiento */ } bIndic.setAttribute('aria-pressed', String(conIndic)); indicar(INDIC[modo]); });
+  bIndic.addEventListener('click', () => { conIndic = true; try { localStorage.setItem('torre3d.indicaciones', conIndic ? '1' : '0'); } catch { /* sin almacenamiento */ } bIndic.setAttribute('aria-pressed', String(conIndic)); indicar(INDIC[modo]); });
   /**
    * avisos de diseño (tabique fuera de la losa, carpintería afuera, B × L distinto de la losa…): se recalculan cuando
    * cambia el proyecto (no en cada cuadro de un arrastre); botón con la cantidad y una carta con la lista
@@ -1754,7 +1754,10 @@ export function montarPlanta(cont: HTMLElement) {
   bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
   bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
   barra.insertBefore(bCorte, bDibujar);
-  barra.append(bIndic, bAvisos); bIndic.setAttribute('aria-pressed', String(conIndic));
+  // «?» (prende las indicaciones cuando están ocultas) abajo, donde va la indicación; los avisos, un chip arriba a la
+  // derecha debajo del selector de planta: así la barra de herramientas entra en la planta
+  bIndic.className = 'b-indic-flotante'; bAvisos.className = 'chip-avisos';
+  cont.append(bIndic, bAvisos); bIndic.setAttribute('aria-pressed', String(conIndic)); bIndic.hidden = conIndic;
   cont.appendChild(panelAv);
   cont.appendChild(indic); indicar(INDIC[modo]);
   cont.appendChild(barra);
@@ -2827,6 +2830,14 @@ export function montarPlanta(cont: HTMLElement) {
   function acomodar() {
     const R = cont.getBoundingClientRect();
     if (!R.width) return;
+    // la barra de herramientas puede ocupar dos líneas (pantalla angosta o táctil): el selector de planta, el chip de
+    // avisos y las cartas del costado bajan para no taparla
+    {
+      const bb = barra.getBoundingClientRect(), abajo = bb.bottom - R.top + 6;
+      const bajar = (e: HTMLElement, base: number) => { e.style.top = ''; if (!e.classList.contains('movido') && e.getBoundingClientRect().top - R.top < abajo && e.getBoundingClientRect().left < bb.right) e.style.top = `${Math.max(base, abajo)}px`; };
+      bajar(dock, 44); bajar(selNivel, 46);
+      const sn = selNivel.getBoundingClientRect(); bAvisos.style.top = `${Math.round(sn.bottom - R.top + 6)}px`;
+    }
     // si cambió lo que tapan las cartas (se abrió, se cerró, se plegó o se agrandó una), la planta se vuelve a encuadrar
     const w0 = svg.clientWidth || 600, rs = w0 > 640 ? reservasCartas(w0) : { izq: 0, der: 0 }, firma = `${Math.round(rs.izq)}|${Math.round(rs.der)}`;
     if (firma !== firmaReservas) { firmaReservas = firma; pedirDibujo(); }
@@ -2842,7 +2853,7 @@ export function montarPlanta(cont: HTMLElement) {
       if (indicTxt.textContent !== t) indicar(t);
     }
     // abajo, de abajo hacia arriba: leyenda, herramientas, barras de selección y de grupo, barra del grupo que se edita
-    const pila = [ley, indic, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
+    const pila = [ley, indic, bIndic, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
     const puestos: DOMRect[] = [];
     pila.forEach(e => {
       if (!visible(e)) return;
