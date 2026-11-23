@@ -2,6 +2,9 @@
  * Cuadros flotantes movibles (planta): cada cuadro o barra lleva un asa (⠿) para arrastrarlo con el mouse, el dedo o
  * el lápiz adonde no tape lo que se está dibujando ni otra barra. No sale del área de la planta. La posición se
  * recuerda en este navegador; doble clic (o doble toque) en el asa lo devuelve a su lugar.
+ *
+ * Las cartas también cambian de tamaño: el tirador de la esquina de abajo a la derecha (◢) se arrastra; el tamaño se
+ * recuerda y doble clic en el tirador vuelve al de siempre.
  */
 const CLAVE = 'torre3d.flotantes.v1';
 type Pos = [number, number];
@@ -87,4 +90,64 @@ export function hacerMovible(el: HTMLElement, area: HTMLElement, clave: string, 
   new MutationObserver(() => { if (el.firstElementChild !== asa) el.prepend(asa); }).observe(el, { childList: true });
   // si la ventana o el panel cambian de tamaño, el cuadro vuelve a entrar en la planta
   new ResizeObserver(() => { const p = desplazamiento(el); if (p[0] || p[1]) poner(el, acotar(el, area, p)); }).observe(area);
+}
+
+const CLAVE_TAM = 'torre3d.tamanos.v1';
+let tamanos: Record<string, [number, number]> | null = null;
+function leerTam(): Record<string, [number, number]> {
+  if (tamanos) return tamanos;
+  try { tamanos = JSON.parse(localStorage.getItem(CLAVE_TAM) ?? '{}') as Record<string, [number, number]>; } catch { tamanos = {}; }
+  return tamanos!;
+}
+function guardarTam() { try { localStorage.setItem(CLAVE_TAM, JSON.stringify(tamanos ?? {})); } catch { /* sin almacenamiento */ } }
+function ponerTam(el: HTMLElement, t: [number, number] | null) {
+  if (!t) { el.style.removeProperty('width'); el.style.removeProperty('height'); el.style.removeProperty('max-height'); el.classList.remove('con-tamano'); return; }
+  el.style.setProperty('width', `${t[0]}px`, 'important');
+  el.style.setProperty('height', `${t[1]}px`, 'important');
+  el.style.setProperty('max-height', `${t[1]}px`, 'important');
+  el.classList.add('con-tamano');
+}
+
+/** agrega el tirador para cambiar el tamaño de la carta (dentro de «area»); «clave» recuerda el tamaño */
+export function hacerRedimensionable(el: HTMLElement, area: HTMLElement, clave: string) {
+  if (el.querySelector(':scope > .asa-tamano')) return;
+  el.classList.add('redimensionable');
+  const asa = document.createElement('button');
+  asa.type = 'button';
+  asa.className = 'asa-tamano';
+  asa.title = 'Arrastrá para cambiar el tamaño de esta carta (doble clic: vuelve al tamaño de siempre)';
+  asa.setAttribute('aria-label', 'Cambiar el tamaño de esta carta');
+  el.append(asa);
+  const t0 = leerTam()[clave];
+  if (t0) ponerTam(el, t0);
+  let arr: { id: number; x: number; y: number; w: number; h: number } | null = null;
+  asa.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    const r = el.getBoundingClientRect();
+    arr = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, w: r.width, h: r.height };
+    asa.setPointerCapture(ev.pointerId);
+    el.classList.add('cambiando-tamano');
+  });
+  asa.addEventListener('pointermove', ev => {
+    if (!arr || ev.pointerId !== arr.id) return;
+    const r = el.getBoundingClientRect(), a = area.getBoundingClientRect();
+    // no más allá del área de la planta, y no tan chica que no se pueda usar
+    const w = Math.round(Math.max(170, Math.min(a.right - r.left - 4, arr.w + ev.clientX - arr.x)));
+    const h = Math.round(Math.max(90, Math.min(a.bottom - r.top - 4, arr.h + ev.clientY - arr.y)));
+    ponerTam(el, [w, h]);
+  });
+  const fin = (ev: PointerEvent) => {
+    if (!arr || ev.pointerId !== arr.id) return;
+    arr = null; el.classList.remove('cambiando-tamano');
+    const r = el.getBoundingClientRect();
+    leerTam()[clave] = [Math.round(r.width), Math.round(r.height)]; guardarTam();
+    area.dispatchEvent(new Event('carta-cambiada'));
+  };
+  asa.addEventListener('pointerup', fin);
+  asa.addEventListener('pointercancel', fin);
+  asa.addEventListener('click', ev => ev.stopPropagation());
+  asa.addEventListener('dblclick', ev => { ev.stopPropagation(); ponerTam(el, null); delete leerTam()[clave]; guardarTam(); area.dispatchEvent(new Event('carta-cambiada')); });
+  // los cuadros que se rearman pierden el tirador: se vuelve a poner último
+  new MutationObserver(() => { if (el.lastElementChild !== asa) el.append(asa); }).observe(el, { childList: true });
 }

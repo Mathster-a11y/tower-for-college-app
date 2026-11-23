@@ -751,10 +751,11 @@ text[data-par].ultimo { font-size: 15px; }
 .dock-planta { position: absolute; top: 44px; left: 10px; z-index: 2; display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 90px); overflow: auto; pointer-events: none; }
 .dock-planta > * { pointer-events: auto; }
 .dock-planta .calco-panel { position: static; max-height: none; }
-.dock-planta .calco-panel > b { cursor: pointer; }
-.dock-planta .calco-panel > b::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
-.dock-planta .calco-panel.plegado > b::after { content: ' ▸'; }
-.dock-planta .calco-panel.plegado > :not(b) { display: none !important; }
+.calco-panel > b:first-of-type { cursor: pointer; }
+.calco-panel > b:first-of-type::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
+.calco-panel.plegado > b:first-of-type::after { content: ' ▸'; }
+.calco-panel.plegado > :not(b):not(.asa-mover) { display: none !important; }
+.calco-panel.plegado { height: auto !important; max-height: none !important; }
 @media (max-width: 760px) { .dock-planta { position: static; max-height: none; margin: 6px 10px; } }
 /* nodos del elemento elegido */
 .planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.1; pointer-events: none; }
@@ -1736,3 +1737,27 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .exo3d-aviso { flex: 1 1 100%; margin: 0; padding: 6px 8px; border-left: 3px solid var(--revisar); background: var(--panel); font-size: 0.9em; }
 .exo3d-txt { margin: 0; font-size: 0.85em; color: var(--ink2); line-height: 1.35; }
 .exo3d-ayuda { padding: 4px 2px; }
+
+/* cartas que cambian de tamaño: tirador abajo a la derecha, siempre a la vista aunque la carta se desplace por dentro */
+.calco-panel.redimensionable { min-width: 170px; }
+.calco-panel.con-tamano { overflow: auto; }
+.dock-planta .calco-panel.con-tamano { flex: none; }
+.asa-tamano { position: sticky; bottom: -6px; align-self: flex-end; margin: 2px -8px -6px auto; width: 16px; height: 16px; min-height: 0 !important; padding: 0; border: 0; background: none; cursor: nwse-resize; touch-action: none; flex: none; z-index: 2; }
+.asa-tamano::before { content: ''; position: absolute; inset: 3px; background: linear-gradient(135deg, transparent 0 45%, var(--edge) 45% 55%, transparent 55% 70%, var(--edge) 70% 80%, transparent 80%); }
+.asa-tamano:hover::before, .cambiando-tamano .asa-tamano::before { background: linear-gradient(135deg, transparent 0 45%, var(--accent) 45% 55%, transparent 55% 70%, var(--accent) 70% 80%, transparent 80%); }
+@media (max-width: 760px) { .asa-tamano { display: none; } }
+
+/* indicación de la herramienta activa (planta) */
+.indicacion-planta { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 2; max-width: min(640px, calc(100% - 120px)); display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px 4px 10px; border: 1px solid var(--edge); border-left: 3px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 94%, transparent); font-size: 12px; line-height: 1.35; color: var(--ink); pointer-events: auto; }
+.indicacion-planta[hidden] { display: none; }
+.indicacion-planta button { border: 0; background: none; padding: 0 2px; color: var(--ink2); min-height: 0; cursor: pointer; }
+.herr-planta .b-indic { font-weight: 700; min-width: 26px; }
+@media (max-width: 760px) { .indicacion-planta { position: static; transform: none; max-width: none; margin: 4px 10px; } }
+
+/* arco elegido en el editor de contornos: centro, radios y mediatriz */
+.capa-contorno .mediatriz { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 4; fill: none; pointer-events: none; }
+.capa-contorno .radio-arco { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 6 3; fill: none; pointer-events: none; }
+.capa-contorno .h-centro { cursor: move; }
+.capa-contorno .h-centro line { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.capa-contorno .h-centro-fondo { fill: color-mix(in srgb, var(--accent) 15%, var(--lienzo)); stroke: var(--accent); stroke-width: 1.2; }
+.capa-contorno .rot-centro { font-size: 11px; fill: var(--accent); pointer-events: none; paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }

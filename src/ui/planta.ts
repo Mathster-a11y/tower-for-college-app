@@ -18,7 +18,7 @@ import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
-import { hacerMovible } from './flotantes';
+import { hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
@@ -306,10 +306,39 @@ export function montarPlanta(cont: HTMLElement) {
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina. Después del primer punto se puede escribir el largo y Enter.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
   let refrescarBarraTr = () => { /* se completa cuando está la barra de transformaciones */ };
-  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); };
+  /**
+   * indicación de la herramienta activa: qué hacer ahora, en una línea sobre la leyenda (en una tablet no hay globos de
+   * ayuda al pasar el mouse). Se puede ocultar (✕) y volver a prender con «?» en la barra.
+   */
+  const indic = document.createElement('div'); indic.className = 'indicacion-planta'; indic.setAttribute('role', 'status');
+  const indicTxt = document.createElement('span'), indicX = document.createElement('button');
+  indicX.type = 'button'; indicX.textContent = '✕'; indicX.title = 'Ocultar las indicaciones (se vuelven a prender con «?» en la barra de herramientas)'; indicX.setAttribute('aria-label', 'Ocultar las indicaciones');
+  indic.append(indicTxt, indicX);
+  let conIndic = (() => { try { return localStorage.getItem('torre3d.indicaciones') !== '0'; } catch { return true; } })();
+  const INDIC: Record<'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' | 'calar' | 'lazo' | 'colocar', string> = {
+    mover: 'Mover: tocá un muro para elegirlo y arrastralo (flechas: 5 cm). Arrastrá el fondo para correr la vista; rueda o pellizco para el zoom; Mayúsculas + arrastrar elige varios.',
+    lazo: 'Lazo: dibujá un lazo alrededor de lo que querés elegir (entra todo muro con el centro adentro). Mayúsculas suma, Alt saca, Supr borra lo elegido.',
+    dibujar: 'Dibujar muros: tocá el inicio y el fin; sale horizontal o vertical y se pega a otros muros. Sigue encadenado: escribí el largo y Enter, o Esc para terminar.',
+    calibrar: 'Calibrar el calco: tocá dos puntos de la imagen y escribí la distancia real entre ellos.',
+    silueta: 'Contornos: arrastrá los vértices (□) de la losa o de la carpintería; en la carta están las formas, el loft y las herramientas de CAD. Esc sale.',
+    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Esc sale.',
+    calar: 'Calar: tocá el muro donde va el vano (puerta, ventana o hueco). Tocá un vano hecho para moverlo o sacarlo. Esc sale.',
+    colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
+  };
+  const indicar = (t: string) => { indicTxt.textContent = t; indic.hidden = !conIndic || !t; };
+  indicX.addEventListener('click', () => { conIndic = false; try { localStorage.setItem('torre3d.indicaciones', '0'); } catch { /* sin almacenamiento */ } indic.hidden = true; bIndic.setAttribute('aria-pressed', 'false'); });
+  const bIndic = document.createElement('button'); bIndic.type = 'button'; bIndic.textContent = '?'; bIndic.className = 'b-indic';
+  bIndic.title = 'Indicaciones: qué hacer con la herramienta elegida (una línea sobre la planta)'; bIndic.setAttribute('aria-label', 'Indicaciones de las herramientas');
+  bIndic.addEventListener('click', () => { conIndic = !conIndic; try { localStorage.setItem('torre3d.indicaciones', conIndic ? '1' : '0'); } catch { /* sin almacenamiento */ } bIndic.setAttribute('aria-pressed', String(conIndic)); indicar(INDIC[modo]); });
+  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); indicar(INDIC[m]); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
-  bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
+  bArmar.addEventListener('click', () => {
+    estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); });
+    const ms = estado.proyecto.muros, nA = new Set(ms.map(m => m.piezaA).filter(Boolean)).size, nB = new Set(ms.map(m => m.piezaB).filter(Boolean)).size;
+    const t = `Piezas armadas: ${nA} en el viento A y ${nB} en el viento B (los muros que se tocan forman una pieza; el ala queda pegada a su alma).`;
+    mensaje(t); indicar(t);
+  });
   // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
   const bCalco = document.createElement('label');
   bCalco.className = 'boton';
@@ -339,7 +368,8 @@ export function montarPlanta(cont: HTMLElement) {
   dock.className = 'dock-planta';
   cont.appendChild(dock);
   // clic en el título de un panel: se pliega o se despliega
-  dock.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel')) t.parentElement.classList.toggle('plegado'); });
+// (en todas las cartas, también las sueltas: un toque en el título las pliega y deja libre la planta)
+  cont.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel') && t === t.parentElement.querySelector(':scope > b')) { t.parentElement.classList.toggle('plegado'); firmaReservas = ''; } });
   const panelCad = document.createElement('div');
   panelCad.className = 'calco-panel cad-panel';
   panelCad.hidden = true;
@@ -1411,6 +1441,8 @@ export function montarPlanta(cont: HTMLElement) {
   mas.append(bMas);
   cont.appendChild(listaMas);
   barra.append(bMover, bLazo, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
+  barra.append(bIndic); bIndic.setAttribute('aria-pressed', String(conIndic));
+  cont.appendChild(indic); indicar(INDIC[modo]);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -1627,7 +1659,25 @@ export function montarPlanta(cont: HTMLElement) {
   // vista: acercar (rueda, pellizco, botones) y desplazar (arrastrar el fondo); zoom 1 = toda la planta
   let zoom = 1, centroVista = { x: 0, y: 0 };
   /** ancho útil de la última vista (sin el cuadro flotante de la derecha): el centro del zoom se mide sobre él */
-  let wUtilVista = 0;
+  let wUtilVista = 0, firmaReservas = '0|0';
+  /**
+   * cuánto tapan las cartas abiertas a cada costado de la planta (px): las del dock y las sueltas que no se movieron a
+   * mano. Las de la izquierda corren el encuadre a la derecha y al revés; cada costado, a lo sumo el 40 % del ancho.
+   */
+  function reservasCartas(w: number): { izq: number; der: number } {
+    const R = svg.getBoundingClientRect();
+    if (!R.width) return { izq: 0, der: 0 };
+    const cartas = [...cont.querySelectorAll<HTMLElement>(':scope > .calco-panel, :scope > .contorno-panel, :scope > .dock-planta')]
+      .filter(e => !e.hidden && !e.classList.contains('movido') && getComputedStyle(e).position === 'absolute' && (!e.classList.contains('dock-planta') || !!e.querySelector(':scope > .calco-panel:not([hidden])')));
+    let izq = 0, der = 0;
+    cartas.forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom < R.top + 60) return;
+      if ((r.left + r.right) / 2 < R.left + R.width / 2) izq = Math.max(izq, r.right - R.left + 12);
+      else der = Math.max(der, R.right - r.left + 12);
+    });
+    return { izq: Math.min(izq, w * 0.4), der: Math.min(der, w * 0.4) };
+  }
   const ZMIN = 0.5, ZMAX = 16;
 
   const aMundo = (ev: PointerEvent) => {
@@ -1674,11 +1724,12 @@ export function montarPlanta(cont: HTMLElement) {
     const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
     // con un cuadro flotante abierto a la derecha (calar, insertar, silueta) la planta se encuadra en lo que queda
     // libre a su izquierda: si no, el cuadro tapaba justo los muros de ese lado
-    const panelDer = [panelCal, panelIns, panelSil, svg.parentElement?.querySelector<HTMLElement>('.contorno-panel') ?? null].find(x => x && !x.hidden) ?? undefined;
-    const reservaD = panelDer && w > 640 ? Math.min(panelDer.offsetWidth + 16, w * 0.4) : 0, wUtil = w - reservaD;
+    // las cartas abiertas que el usuario no movió se reservan su costado (izquierdo o derecho, según dónde estén)
+    const { izq: reservaI, der: reservaD } = w > 640 ? reservasCartas(w) : { izq: 0, der: 0 }, wUtil = w - reservaI - reservaD;
     escala = (Math.min(wUtil, h) / ext) * zoom;
-    ox = wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
-    wUtilVista = wUtil;
+    ox = reservaI + wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
+    // (el centro de la vista en pantalla queda en wUtilVista / 2: lo usan el zoom y el pellizco)
+    wUtilVista = 2 * reservaI + wUtil;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.replaceChildren();
     const X = (x: number) => ox + x * escala, Y = (y: number) => oy - y * escala;
@@ -2367,8 +2418,21 @@ export function montarPlanta(cont: HTMLElement) {
   function acomodar() {
     const R = cont.getBoundingClientRect();
     if (!R.width) return;
+    // si cambió lo que tapan las cartas (se abrió, se cerró, se plegó o se agrandó una), la planta se vuelve a encuadrar
+    const w0 = svg.clientWidth || 600, rs = w0 > 640 ? reservasCartas(w0) : { izq: 0, der: 0 }, firma = `${Math.round(rs.izq)}|${Math.round(rs.der)}`;
+    if (firma !== firmaReservas) { firmaReservas = firma; pedirDibujo(); }
+    // con la herramienta «Mover», la indicación es la de la carta abierta del costado (colocar, cotas o guías)
+    if (modo === 'mover' || modo === 'lazo') {
+      const gu = [...dock.querySelectorAll<HTMLElement>(':scope > .guias-panel')].find(visible), co = [...dock.querySelectorAll<HTMLElement>(':scope > .colocar-panel:not(.guias-panel)')].find(visible);
+      const tit = (co?.querySelector(':scope > b')?.textContent ?? '').toLowerCase();
+      const t = edc.activo() ? 'Editar el contorno: arrastrá los vértices (□); tocá el medio de un lado (○) para elegirlo (recto, arco o Bézier); en un arco, arrastrá su centro (✛) sin mover los extremos. Enter: listo · Esc: cancelar.'
+        : gu ? 'Guías: armá la grilla de ejes o elegí una herramienta de líneas o círculos en la carta y tocá la planta. Con el imán prendido, los muros se pegan a las guías.'
+        : co ? (tit.startsWith('cota') ? 'Cotas: tocá el primer punto y después el segundo (se pegan a esquinas, medios y centros de los muros); la cota sigue al muro si se mueve.' : INDIC.colocar)
+        : INDIC[modo];
+      if (indicTxt.textContent !== t) indicar(t);
+    }
     // abajo, de abajo hacia arriba: leyenda, herramientas, barras de selección y de grupo, barra del grupo que se edita
-    const pila = [ley, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
+    const pila = [ley, indic, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
     const puestos: DOMRect[] = [];
     pila.forEach(e => {
       if (!visible(e)) return;
@@ -2414,6 +2478,17 @@ export function montarPlanta(cont: HTMLElement) {
   hacerMovible(dock, cont, 'paneles');
   ([[panelIns, 'insertar'], [panelCal, 'calar'], [panelMed, 'medidas'], [panelPrec, 'precision']] as const).forEach(([e, k]) => hacerMovible(e, cont, k));
   const pc = cont.querySelector<HTMLElement>(':scope > .contorno-panel'); if (pc) hacerMovible(pc, cont, 'contorno');
+  // todas las cartas (sueltas y las del costado) cambian de tamaño con el tirador ◢; las sueltas que falten, también se mueven
+  const claveCarta = (e: HTMLElement, i: number) => [...e.classList].find(c => c.endsWith('-panel') && c !== 'calco-panel' && c !== 'colocar-panel' && c !== 'piezas-panel') ?? (e.classList.contains('colocar-panel') ? 'colocar' : `carta${i}`);
+  const prepararCartas = () => cont.querySelectorAll<HTMLElement>(':scope > .calco-panel, :scope > .contorno-panel, :scope > .dock-planta > .calco-panel').forEach((e, i) => {
+    const k = claveCarta(e, i);
+    if (e.parentElement === cont) hacerMovible(e, cont, k);
+    hacerRedimensionable(e, cont, k);
+  });
+  prepararCartas();
+  new MutationObserver(prepararCartas).observe(cont, { childList: true });
+  new MutationObserver(prepararCartas).observe(dock, { childList: true });
+  cont.addEventListener('carta-cambiada', () => { firmaReservas = ''; pedirAcomodar(); });
   ([[barraSel, 'barra-eleccion'], [barraGrupo, 'barra-grupo'], [barraLazo, 'barra-lazo'], [barraDib, 'barra-dibujo'], [barraTr, 'barra-transformar'], [barraCtx, 'barra-contexto']] as const).forEach(([e, k]) => hacerMovible(e, cont, k, { enLinea: true }));
   let cuadroAcomodar = 0;
   const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
