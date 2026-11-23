@@ -17,6 +17,11 @@ export interface OpcionesGeo3 {
   nx: number; ny: number; nz: number;
   /** alto del dominio en múltiplos de la altura de la torre (1,5 por defecto) */
   altoRel?: number;
+  /**
+   * contexto urbano: los edificios vecinos (contorno en planta, m, en las coordenadas del proyecto, y altura sobre PB),
+   * como prismas. La fuerza y el Cp siguen siendo solo de la torre
+   */
+  contexto?: { pol: P[]; altura: number }[] | null;
 }
 
 export interface Geometria3D {
@@ -36,6 +41,9 @@ export interface Geometria3D {
    * con el contorno en coordenadas de la red (x, y)
    */
   tramos: { h0: number; h1: number; pol: P[] }[];
+  /** con contexto: las celdas sólidas de la torre (las caras y el Cp son solo de ella) y los vecinos en la red */
+  cuerpo?: Uint8Array;
+  vecinos: { pol: P[]; altura: number }[];
 }
 
 /**
@@ -124,12 +132,22 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   const xMin = Math.min(...todos.map(q => q.x)), xMax = Math.max(...todos.map(q => q.x));
   const yMin = Math.min(...todos.map(q => q.y)), yMax = Math.max(...todos.map(q => q.y));
   const B = yMax - yMin, L = xMax - xMin;
+  // el contexto, girado igual; el grupo entero (torre + vecinos) tiene que entrar en el dominio
+  const ctx = (o.contexto ?? []).filter(c => c.pol.length >= 3 && c.altura > 0).map(c => ({ altura: c.altura, pol: c.pol.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
+  const gx = [xMin, xMax, ...ctx.flatMap(c => c.pol.map(q => q.x))], gy = [yMin, yMax, ...ctx.flatMap(c => c.pol.map(q => q.y))];
+  const gx0 = Math.min(...gx), gx1 = Math.max(...gx), gy0 = Math.min(...gy), gy1 = Math.max(...gy);
+  const Hmax = Math.max(H, ...ctx.map(c => c.altura));
   // escala: la torre ocupa 1/altoRel del alto; y entra con lugar en x (4 L delante como mínimo) y en y (1,5 B a cada lado)
   const altoRel = o.altoRel ?? 1.5;
-  const escala = Math.min((nz - 1) / (altoRel * H), (nx * 0.55) / (L + 3 * B), (ny * 0.6) / B);
-  const hC = Math.max(1, Math.round(H * escala));
+  let escala = Math.min((nz - 1) / (altoRel * H), (nx * 0.55) / (L + 3 * B), (ny * 0.6) / B);
   // la torre a un cuarto del largo (más lugar para la estela), centrada en y
-  const ox = Math.round(nx * 0.25) - xMin * escala, oy = (ny - B * escala) / 2 - yMin * escala;
+  let ox = Math.round(nx * 0.25) - xMin * escala, oy = (ny - B * escala) / 2 - yMin * escala;
+  if (ctx.length) {
+    // con contexto: que entre el grupo (desde el 15 % del largo, con estela detrás, y centrado a lo ancho) y el más alto
+    escala = Math.min(escala, (nz - 1) / (1.3 * Hmax), (nx * 0.7) / (gx1 - gx0), (ny * 0.82) / (gy1 - gy0));
+    ox = Math.round(nx * 0.15) - gx0 * escala; oy = (ny - (gy1 - gy0) * escala) / 2 - gy0 * escala;
+  }
+  const hC = Math.max(1, Math.round(H * escala));
   const pols = rot.map(n => ({ cota: n.cota, pol: n.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
   const solido = new Uint8Array(nx * ny * nz);
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) solido[y * nx + x] = 1;      // suelo
@@ -152,11 +170,22 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
       caja.x0 = Math.min(caja.x0, x); caja.x1 = Math.max(caja.x1, x); caja.y0 = Math.min(caja.y0, y); caja.y1 = Math.max(caja.y1, y);
     }
   }
-  // planos donde cambia la planta (en coordenadas de la red: la altura h está en z = h·escala + 1) y la azotea
-  const planos = [...new Set(pols.map(q => q.cota))].map(h => h * escala + 1);
+  // los vecinos: prismas desde el suelo (después de la torre: no cuentan en su caja ni en sus celdas)
+  let cuerpo: Uint8Array | undefined;
+  const vecinos = ctx.map(c => ({ altura: c.altura, pol: c.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
+  if (vecinos.length) {
+    cuerpo = solido.slice(); for (let k = 0; k < nx * ny; k++) cuerpo[k] = 0;        // sin el suelo
+    for (const v of vecinos) {
+      const bx0 = Math.max(0, Math.floor(Math.min(...v.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...v.pol.map(q => q.x))));
+      const by0 = Math.max(0, Math.floor(Math.min(...v.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...v.pol.map(q => q.y))));
+      for (let z = 1; z < nz && (z - 0.5) / escala <= v.altura; z++) for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (dentro(v.pol, x + 0.5, y + 0.5)) solido[(z * ny + y) * nx + x] = 1;
+    }
+  }
+  // planos donde cambia la planta (en coordenadas de la red: la altura h está en z = h·escala + 1) y la azotea (y las de los vecinos)
+  const planos = [...new Set([...pols.map(q => q.cota), ...vecinos.map(v => v.altura)])].map(h => h * escala + 1);
   // los tramos: cada nivel rige de su cota a la del siguiente (el primero, desde el suelo); el último es la azotea
   const tramos = pols.slice(0, -1).map((n, k) => ({ h0: k === 0 ? 0 : n.cota, h1: pols[k + 1].cota, pol: n.pol })).filter(t => t.h1 > t.h0 + 1e-9);
-  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos };
+  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos, cuerpo, vecinos };
 }
 
 /**
@@ -183,8 +212,9 @@ export type Cara = 'barlovento' | 'sotavento' | 'lateral' | 'cubierta';
  * (−z, sin contar el suelo) cubierta.
  */
 export function celdasDeCara(g: Geometria3D): { celda: number; cara: Cara; x: number; y: number; z: number; nx: number; ny: number; nz: number }[] {
-  const { nx, ny, nz, solido } = g, out: ReturnType<typeof celdasDeCara> = [];
-  const s = (x: number, y: number, z: number) => x >= 0 && x < nx && y >= 0 && y < ny && z >= 1 && z < nz && solido[(z * ny + y) * nx + x] === 1;
+  const { nx, ny, nz, solido } = g, out: ReturnType<typeof celdasDeCara> = [], torre = g.cuerpo ?? solido;
+  // con contexto, solo las caras de la torre (las de los vecinos no se miden)
+  const s = (x: number, y: number, z: number) => x >= 0 && x < nx && y >= 0 && y < ny && z >= 1 && z < nz && torre[(z * ny + y) * nx + x] === 1;
   for (let z = 1; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const c = (z * ny + y) * nx + x;
     if (solido[c]) continue;

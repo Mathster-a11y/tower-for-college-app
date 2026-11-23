@@ -38,6 +38,8 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   motor: 'placa' as 'placa' | 'procesador',
   /** túnel «lento»: la velocidad de la red a la altura de la torre baja de 0,08 a 0,05 (más estable, más pasos) */
   lento: false,
+  /** contexto urbano: simular con los edificios vecinos del proyecto */
+  contexto: true,
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -56,7 +58,9 @@ let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam:
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
-function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento]); }
+function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento, cfg.contexto]); }
+/** los vecinos del contexto urbano que van al túnel (si se eligió usarlos) */
+const vecinos3d = () => (cfg.contexto ? (estado.proyecto.contexto?.edificios ?? []).map(e => ({ pol: e.v, altura: e.altura })) : []);
 const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
@@ -67,8 +71,10 @@ function nivelesProyecto() {
 async function iniciar() {
   detener();
   const T = tamActual();
-  UH = cfg.lento ? 0.05 : 0.08;
-  const geo = geometria3D({ niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz });
+  const ctx = vecinos3d();
+  // con vecinos el aire se acelera en las calles: el túnel lento siempre
+  UH = cfg.lento || ctx.length ? 0.05 : 0.08;
+  const geo = geometria3D({ niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: ctx });
   const exp = datos102De(estado.proyecto).exposicion;
   const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
   const caras = celdasDeCara(geo);
@@ -172,6 +178,15 @@ function armarVista(cont: HTMLElement) {
   gt.computeVertexNormals();
   const torre = new THREE.Mesh(gt, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }));
   esc.add(torre);
+  // los vecinos del contexto urbano: prismas grises (no se miden)
+  if (g.vecinos.length) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x9a9ca3, roughness: 1 });
+    for (const v of g.vecinos) {
+      const forma = new THREE.Shape(v.pol.map(q => new THREE.Vector2((q.x - g.nx / 2) / g.escala, (q.y - g.ny / 2) / g.escala)));
+      const m = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: v.altura, bevelEnabled: false }), mat);
+      m.rotation.x = -Math.PI / 2; esc.add(m);
+    }
+  }
   const lineas = new THREE.Group(); esc.add(lineas);
   vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave };
   cont.append(ren.domElement);
@@ -401,7 +416,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (1,6 veces la de la altura de la torre o más).'} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (1,6 veces la de la altura de la torre o más).'} Girá con el mouse.`));
   dibujar();
 }
 
@@ -441,6 +456,11 @@ export function panelTunel3d(c: H) {
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),
     rango('Posición del corte vertical', cfg.yRel, x => { cfg.yRel = x; }),
   ),
+  ...((estado.proyecto.contexto?.edificios.length ?? 0) ? [(() => {
+    const l = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.contexto ? { checked: '' } : {}) }), ` Con los edificios vecinos (${estado.proyecto.contexto!.edificios.length}, del contexto urbano: se arman en el túnel 2D)`);
+    l.querySelector('input')!.addEventListener('change', e => { cfg.contexto = (e.target as HTMLInputElement).checked; estado.avisarPanel(); });
+    return l;
+  })()] : []),
   chk('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), chk('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
   chk('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; if (corrida) corrida.ultimasLineas = 0; }),
   chk('Viento en la vereda (1,5 m)', cfg.vereda, x => { cfg.vereda = x; }),

@@ -45,3 +45,25 @@ describe('túnel 2D con contexto', () => {
     for (const p of con.contornos) for (const q of p) { expect(q.x).toBeGreaterThan(3 * con.D); expect(q.y).toBeGreaterThan(0); expect(q.y).toBeLessThan(con.ny); }
   });
 });
+
+describe('túnel 3D con contexto', () => {
+  it('los vecinos son prismas; las caras y la caja son solo de la torre', async () => {
+    const { celdasDeCara, geometria3D } = await import('../src/viento/geometria3d');
+    const torre = [{ x: -20, y: -9 }, { x: 20, y: -9 }, { x: 20, y: 9 }, { x: -20, y: 9 }];
+    const niveles = [0, 30, 60].map(c => ({ cota: c, silueta: torre }));
+    const vec = armarEscenario('costados', cajaDe(torre), 60, 'A', 20, 1.2).map(e => ({ pol: e.v, altura: e.altura }));
+    const sola = geometria3D({ niveles, dir: 'A', nx: 96, ny: 48, nz: 40 });
+    const con = geometria3D({ niveles, dir: 'A', nx: 96, ny: 48, nz: 40, contexto: vec });
+    expect(con.vecinos).toHaveLength(2); expect(con.cuerpo).toBeDefined();
+    const nCuerpo = con.cuerpo!.reduce((s, v) => s + v, 0);
+    expect(nCuerpo).toBe(con.celdas);
+    const nSol = (g: typeof con) => g.solido.reduce((s, v) => s + v, 0) - g.nx * g.ny;
+    expect(nSol(con)).toBeGreaterThan(2 * nCuerpo);
+    // las caras: todas pegadas a la torre (ninguna a un vecino)
+    for (const f of celdasDeCara(con)) {
+      const vecina = (f.z * con.ny + f.y - f.ny) * con.nx + f.x - f.nx;
+      if (f.nz === 0) expect(con.cuerpo![vecina]).toBe(1);
+    }
+    expect(sola.vecinos).toHaveLength(0);
+  });
+});
