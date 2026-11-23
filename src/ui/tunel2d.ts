@@ -20,6 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
+import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe2D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, enUnidad, vientoDisenoEn, nombreUnidad, textoReferencia, txtPct, txtVel, txtVelLargo, vientoQueLlega } from './unidadViento';
 import { llaveEnLienzo, simbolosEnLienzo, type Llave, type Simbolo } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
@@ -42,6 +43,8 @@ const RES: Record<string, { D: number; texto: string }> = { rapida: { D: 14, tex
 let U0 = 0.1;
 
 /** lo que eligió el alumno (vive mientras la página está abierta; no se guarda en el proyecto) */
+/** la fidelidad elegida antes (si hay) arma las opciones de entrada */
+const cfgInicial = () => { const f = fidelidadGuardada(); return f ? FIDELIDAD[f].d2 : null; };
 const cfg = {
   nivel: null as string | null, angulo: 0, re: 'medio', res: 'normal', ochava: 0, forma: 'dibujada' as 'dibujada' | 'vivas' | 'muros',
   /** paredes exactas (rebote interpolado + TRT) o en escalera (como antes, para comparar) */
@@ -68,6 +71,7 @@ const cfg = {
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
+{ const f = cfgInicial(); if (f) Object.assign(cfg, f); }
 /** la ventana de detalle de la corrida: su geometría fina y los promedios en el tiempo */
 interface CorridaDetalle { geo: GeometriaDetalle; transicion: Uint8Array; medible: Uint8Array; sumaV: Float64Array; sumaV2: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
 let det: CorridaDetalle | null = null;
@@ -1119,6 +1123,14 @@ export function panelTunel(c: H) {
   reini.addEventListener('click', () => { iniciar(); estado.avisarPanel(); });
   c.append(h('div', { class: 'fila-acciones' }, play, reini));
   const d = seccion('Túnel').cuerpo; c.append(d.parentElement!);
+  // el nivel de fidelidad: arma resolución, paredes y canal de una vez (y se recuerda para los dos túneles)
+  {
+    const actual = nivelDe2D({ res: cfg.res, paredes: cfg.paredes, canal: cfg.canal }, !!cfg.ventana), rec = fidelidadRecomendada(null);
+    const ops: [string, string][] = ORDEN_FIDELIDAD.map(f => [f, `${FIDELIDAD[f].nombre}${f === rec ? ' (la que conviene acá)' : ''}`]);
+    if (!actual) ops.push(['medida', 'a medida (cambiaste una opción suelta)']);
+    d.append(sel('Fidelidad', ops, actual ?? 'medida', x => { if (x === 'medida') return; const f = x as Fidelidad; Object.assign(cfg, FIDELIDAD[f].d2); guardarFidelidad(f); }),
+      h('p', { class: 'nota chica' }, actual ? `${FIDELIDAD[actual].nombre[0].toUpperCase()}${FIDELIDAD[actual].nombre.slice(1)}: para ${FIDELIDAD[actual].para}.${actual === 'maxima' ? '' : ' Más fidelidad: más celdas y más lento.'}` : 'Las opciones de abajo no coinciden con ningún nivel.'));
+  }
   d.append(h('div', { class: 'grilla2' },
     sel('Corte en planta', ns.map(x => [x.n.nombre, `${x.n.nombre} (${fmt(x.n.cota, 1)} m) · ${contornoAlViento(estado.proyecto, x.i).de}${(estado.proyecto.niveles[x.i].carpinteria?.length ?? 0) >= 3 ? ' propia' : ''}`] as [string, string]), nivelElegido()?.n.nombre ?? '', x => { cfg.nivel = x; }),
     sel('Giro del viento', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }),

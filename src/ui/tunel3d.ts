@@ -17,6 +17,7 @@ import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { tramosEdificio } from '../viento/contexto';
+import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoQueLlega } from './unidadViento';
 import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
@@ -46,6 +47,8 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   flechas: 'fijas' as ModoFlechas,
   /** el estilo de las flechas al volver a prenderlas, los puntos de velocidad alta y las llaves de colores */
   estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', llave: true, simbolos: false };
+// la fidelidad elegida antes (si hay) arma las opciones de entrada
+{ const f = fidelidadGuardada(); if (f) Object.assign(cfg, FIDELIDAD[f].d3); }
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -448,6 +451,14 @@ export function panelTunel3d(c: H) {
   reini.addEventListener('click', () => { void iniciar(); });
   c.append(h('div', { class: 'fila-acciones' }, play, reini));
   const d = seccion('Túnel 3D').cuerpo; c.append(d.parentElement!);
+  // el nivel de fidelidad: motor, grilla y paredes de una vez (se recuerda para los dos túneles)
+  {
+    const actual = nivelDe3D({ motor: cfg.motor, tam: cfg.tam, paredes: cfg.paredes }), rec = fidelidadRecomendada(soporteGpu === undefined ? null : !!soporteGpu);
+    const ops: [string, string][] = ORDEN_FIDELIDAD.map(f => [f, `${FIDELIDAD[f].nombre}${f === rec ? ' (la que conviene acá)' : ''}${FIDELIDAD[f].d3.motor === 'placa' && soporteGpu === null ? ' · necesita placa de video' : ''}`]);
+    if (!actual) ops.push(['medida', 'a medida (cambiaste una opción suelta)']);
+    d.append(sel('Fidelidad', ops, actual ?? 'medida', x => { if (x === 'medida') return; const f = x as Fidelidad; Object.assign(cfg, FIDELIDAD[f].d3); guardarFidelidad(f); }, true),
+      h('p', { class: 'nota chica' }, actual ? `${FIDELIDAD[actual].nombre[0].toUpperCase()}${FIDELIDAD[actual].nombre.slice(1)}: para ${FIDELIDAD[actual].para}.` : 'Las opciones de abajo no coinciden con ningún nivel.'));
+  }
   d.append(h('div', { class: 'grilla2' },
     sel('Velocidad del túnel', [['normal', 'normal (0,08 de la red)'], ['lento', 'lenta (0,05: más estable, tarda más)']], cfg.lento ? 'lento' : 'normal', x => { cfg.lento = x === 'lento'; }, true),
     sel('Motor', [['placa', soporteGpu === null ? 'placa de video (no hay WebGPU)' : 'placa de video (WebGPU)'], ['procesador', 'procesador (sin placa, más lento)']], cfg.motor, x => { cfg.motor = x as 'placa' | 'procesador'; }, true),

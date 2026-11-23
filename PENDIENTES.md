@@ -17,7 +17,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 8. ~~Cp y fuerza por piso del túnel como hoja del Excel~~ (23/11: «⤓ Excel (.xlsx)» con Piso por piso, Interferencia y Cp del perímetro, fórmulas y gráficos)
 9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
 10. 3D en el procesador más rápido: varios núcleos o WebAssembly
-11. Niveles de fidelidad (básico → máximo) para computadoras de pocos recursos y de laboratorio
+11. ~~Niveles de fidelidad (básica → máxima)~~ (23/11: selector «Fidelidad» en los dos túneles, con la que conviene para la computadora; se recuerda)
 12. Exportar el caso a OpenFOAM (nivel de laboratorio)
 13. ~~Túnel 2D: modo «solo los muros»~~ (23/11: Planta → «solo los muros»; al menos 40 celdas por ancho y los tabiques de menos de 1,2 celdas engrosados, con aviso)
 
