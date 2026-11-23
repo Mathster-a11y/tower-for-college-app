@@ -46,6 +46,8 @@ export interface Nivel {
    * (ancho) y el b máx (largo) del perfil al que se le aplica el viento; B y L se cargan a mano.
    */
   carpinteria?: VerticeContorno[] | null;
+  /** la silueta de este nivel se editó a mano: el perfil, los lofts y el plano de corte no la tocan (vacío = no) */
+  manual?: boolean | null;
 }
 
 /** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */

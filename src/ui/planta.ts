@@ -10,6 +10,7 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { montarCorte } from './corteTorre';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
@@ -719,10 +720,14 @@ export function montarPlanta(cont: HTMLElement) {
       return;
     }
     const delLoft = loftDeNivel(p, iNivel);
-    const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre);
+    const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !n.manual;
+    // piso por piso: una losa generada se suelta para editarla a mano; una suelta se vuelve a atar
+    const generable = !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) || (p.lofts ?? []).some(l => nivelesDeLoft(p, l).intermedios.includes(iNivel));
+    const bSoltar = (delLoft || delPerfil) ? [boton('Soltar esta losa (editarla a mano)', () => estado.cambiar(pp => { pp.niveles[iNivel].manual = true; }), 'Queda con la forma que tiene ahora y deja de recalcularse: la editás como cualquier losa. Los demás pisos siguen con el perfil o el loft.')]
+      : n.manual && generable ? [boton('Volver a atar (que la genere el perfil o el loft)', () => estado.cambiar(pp => { delete pp.niveles[iNivel].manual; }), 'Se pierde lo editado a mano en este piso')] : [];
     const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
     const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...bSoltar, linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       filaV, dxf,
@@ -1702,6 +1707,12 @@ export function montarPlanta(cont: HTMLElement) {
   mas.append(bMas);
   cont.appendChild(listaMas);
   barra.append(bMover, bLazo, bSil, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
+  // corte de la torre: la silueta se ajusta en un corte vertical, con el plano del proyecto calcado debajo
+  const corte = montarCorte(cont, mensaje);
+  const bCorte = document.createElement('button'); bCorte.type = 'button'; bCorte.textContent = 'Corte';
+  bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
+  bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
+  barra.insertBefore(bCorte, bDibujar);
   barra.append(bIndic, bAvisos); bIndic.setAttribute('aria-pressed', String(conIndic));
   cont.appendChild(panelAv);
   cont.appendChild(indic); indicar(INDIC[modo]);
@@ -2064,7 +2075,7 @@ export function montarPlanta(cont: HTMLElement) {
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
       // las losas que genera un loft no se editan a mano (se recalculan solas): sin manijas
-      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre))) || (editaCarp && estado.proyecto.carpinteriaRetiro != null) ? [] : vEd).forEach((v, i) => {
+      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && estado.proyecto.carpinteriaRetiro != null) ? [] : vEd).forEach((v, i) => {
         // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
         const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));

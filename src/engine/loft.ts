@@ -172,6 +172,7 @@ export function nivelesDeLoft(p: Proyecto, l: Loft): { secciones: number[]; inte
 }
 /** el loft que genera la losa del nivel i (si la genera alguno) */
 export function loftDeNivel(p: Proyecto, i: number): Loft | null {
+  if (p.niveles[i]?.manual) return null;                      // suelta: editada a mano
   return (p.lofts ?? []).find(l => nivelesDeLoft(p, l).intermedios.includes(i)) ?? null;
 }
 /** el loft del que el nivel i es sección */
@@ -201,6 +202,7 @@ export function aplicarLofts(p: Proyecto): number {
     const zs = orden.map(o => o.z);
     intermedios.forEach(i => {
       const n: Nivel = p.niveles[i];
+      if (n.manual) return;                                   // editada a mano: el loft no la pisa
       const s = interpolarSilueta(secs, zs, n.cota, l.tipo ?? 'recto', l.giro ?? 0);
       n.silueta = s;
       if (l.bl ?? true) { const c = cajaSilueta(s); n.B = +c.B.toFixed(2); n.L = +c.L.toFixed(2); }

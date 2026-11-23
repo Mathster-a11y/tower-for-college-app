@@ -112,7 +112,7 @@ export function aplicarPerfil(p: Proyecto): number {
   if (z1 <= z0 + 1e-6) return 0;
   let n = 0;
   p.niveles.forEach((nv, i) => {
-    if (i >= ib) return;                                       // solo los de arriba de la base
+    if (i >= ib || nv.manual) return;                          // solo los de arriba de la base, y no los editados a mano
     const h = (nv.cota - z0) / (z1 - z0), v = valorPerfil(pf, h);
     if (!(v.fx > 0.02 && v.fy > 0.02)) return;
     const s = transformarPlanta(base, v.fx, v.fy, v.dx, v.dy, v.giro);
