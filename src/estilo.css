@@ -1837,3 +1837,9 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .corte-svg .calib { fill: var(--elegido, #e8a317); }
 .corte-svg .nivel { font-size: 10px; fill: var(--ink2); }
 .corte-svg .rot { font-size: 12px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+.corte-svg .plano { stroke: var(--corte); stroke-width: 1.6; stroke-dasharray: 8 5; }
+.corte-svg .plano-sacado { fill: color-mix(in srgb, var(--corte) 10%, transparent); pointer-events: none; }
+.corte-svg .manija-plano { fill: var(--lienzo); stroke: var(--corte); stroke-width: 2; cursor: move; }
+.corte-barra .plano-item { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid var(--corte); border-radius: 6px; color: var(--corte); }
+.corte-barra .plano-item button { padding: 1px 5px; min-height: 0; font-size: 11px; }

@@ -13,13 +13,14 @@ import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, type Vertice } from '..
 import { nivelBase } from '../engine/perfil_torre';
 import { nivelesDeLoft } from '../engine/loft';
 import { presenteEn, rectangulos, type Proyecto } from '../engine/modelo';
+import { anguloPlano, type PlanoCorte } from '../engine/planos_corte';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag: string, a: Record<string, string | number> = {}, txt?: string) => { const e = document.createElementNS(NS, tag); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, String(v))); if (txt !== undefined) e.textContent = txt; return e as SVGElement; };
 const f2 = (x: number) => x.toFixed(2).replace('.', ',');
 
 type Rango = 'este' | 'arriba' | 'abajo' | 'todos';
-type Modo = 'editar' | 'calibrar' | 'mover-calco';
+type Modo = 'editar' | 'calibrar' | 'mover-calco' | 'plano';
 
 /** niveles que genera el perfil o un loft (al editarlos a mano quedan sueltos) */
 function generados(p: Proyecto): Set<number> {
@@ -43,6 +44,8 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   const W = (w: number) => ox + w * k, Z = (z: number) => oy - z * k;
   const aMundo = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { w: (ev.clientX - r.left - ox) / k, z: -(ev.clientY - r.top - oy) / k }; };
   let calib: { w: number; z: number }[] = [];
+  /** puntos del plano de corte que se está dibujando */
+  let plano: { w: number; z: number }[] = [];
   /** losas cambiadas mientras se arrastra (vista previa): índice → contorno */
   let previa: Map<number, Vertice[]> | null = null;
 
@@ -81,10 +84,24 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       op.addEventListener('input', () => { if (estado.calcoCorte) { estado.calcoCorte.opacidad = +op.value; dibujar(); } });
       ext.push(bc, bm, op, boton('Quitar el calco', '', () => { estado.calcoCorte = null; modo = 'editar'; armar(); }));
     }
-    barra.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'Corte de la torre' }), seg, lpos, lr, ...ext, boton('Cerrar', 'Volver a la planta (Esc)', cerrar));
+    // planos de corte: los de este corte, con su ángulo, qué sacan y quitar
+    const pls = (estado.proyecto.planosCorte ?? []).filter(q => q.eje === eje);
+    const bp = boton('+ Plano de corte', 'Dos puntos en el corte: el plano pasa por ellos y saca lo de arriba (la corona a 45° del Citicorp)', () => { modo = modo === 'plano' ? 'editar' : 'plano'; plano = []; armar(); }); bp.setAttribute('aria-pressed', String(modo === 'plano'));
+    const listaP = pls.map(q => {
+      const d = document.createElement('span'); d.className = 'plano-item';
+      // ángulo exacto: se queda la punta a y la otra gira (mismo largo, mismo sentido)
+      const ang = document.createElement('input'); ang.type = 'text'; ang.inputMode = 'decimal'; ang.className = 'campo-vertice'; ang.value = f2(anguloPlano(q)); ang.setAttribute('aria-label', `Ángulo del plano ${q.id}`);
+      ang.addEventListener('change', () => { const t = parseFloat(ang.value.replace(',', '.')); if (!(t >= 0 && t <= 90)) return; cambiarPlano(q.id, x => { const L = Math.hypot(x.b.w - x.a.w, x.b.z - x.a.z), sw = x.b.w >= x.a.w ? 1 : -1, sz = x.b.z >= x.a.z ? 1 : -1, r = (t * Math.PI) / 180; x.b = { w: +(x.a.w + sw * L * Math.cos(r)).toFixed(2), z: +(x.a.z + sz * L * Math.sin(r)).toFixed(2) }; }); });
+      d.append(`${q.id} · `, ang, '°',
+        boton(`saca ${(q.saca ?? 'arriba') === 'arriba' ? 'arriba' : 'abajo'} ⇅`, 'Cambiar qué lado del plano se saca', () => cambiarPlano(q.id, x => { x.saca = (x.saca ?? 'arriba') === 'arriba' ? 'abajo' : 'arriba'; })),
+        boton('✕', 'Quitar el plano: las losas vuelven a como estaban antes de cortarlas', () => quitarPlano(q.id)));
+      return d;
+    });
+    barra.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'Corte de la torre' }), seg, lpos, lr, bp, ...listaP, ...ext, boton('Cerrar', 'Volver a la planta (Esc)', cerrar));
   }
   function armarPie() {
-    pie.textContent = modo === 'calibrar' ? (calib.length ? 'Tocá el segundo punto del plano (de una medida que conozcas: el ancho de la torre, la altura de un piso…).' : 'Escala del calco: tocá el primer punto de una medida conocida del plano.')
+    pie.textContent = modo === 'plano' ? (plano.length ? 'Tocá el segundo punto del plano (por ejemplo, el otro extremo del techo inclinado del plano calcado).' : 'Plano de corte: tocá el primer punto de la recta (en el alzado calcado, una punta del techo inclinado). Se saca lo de arriba; después se puede cambiar.')
+      : modo === 'calibrar' ? (calib.length ? 'Tocá el segundo punto del plano (de una medida que conozcas: el ancho de la torre, la altura de un piso…).' : 'Escala del calco: tocá el primer punto de una medida conocida del plano.')
       : modo === 'mover-calco' ? 'Arrastrá el plano hasta que su piso (cota 0) y su eje coincidan con los de la torre. Volvé a tocar «Mover el calco» para terminar.'
       : `Arrastrá los bordes de las losas (●) hasta que coincidan con el plano: cambia ${rango === 'este' ? 'solo ese piso' : rango === 'arriba' ? 'ese piso y los de arriba' : rango === 'abajo' ? 'ese piso y los de abajo' : 'todos los pisos'}. Rueda o pellizco para el zoom; arrastrá el fondo para correr la vista; Esc cierra.`;
   }
@@ -137,11 +154,26 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       for (const [lado, w] of [['min', w0], ['max', w1]] as const) svg.append(el('circle', { cx: W(w), cy: Z(x.n.cota), r: 6, class: 'manija', 'data-i': x.i, 'data-lado': lado }));
     });
     calib.forEach(q => svg.append(el('circle', { cx: W(q.w), cy: Z(q.z), r: 5, class: 'calib' })));
+    // planos de corte de este corte: la recta de borde a borde de la vista, el lado que se saca sombreado, y sus manijas
+    const ancho = svg.clientWidth || 800, alto = svg.clientHeight || 600;
+    (p.planosCorte ?? []).filter(q => q.eje === eje).forEach(q => {
+      const a = previaPlano?.id === q.id ? previaPlano.a : q.a, b = previaPlano?.id === q.id ? previaPlano.b : q.b;
+      const dx = W(b.w) - W(a.w), dy = Z(b.z) - Z(a.z), L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, big = 4 * (ancho + alto);
+      const p1 = [W(a.w) - ux * big, Z(a.z) - uy * big], p2 = [W(a.w) + ux * big, Z(a.z) + uy * big];
+      // lado que se saca: hacia arriba de la pantalla (o abajo) desde la recta
+      const arriba = (q.saca ?? 'arriba') === 'arriba', nx = uy, ny = -ux, s = (ny < 0) === arriba ? 1 : -1;
+      svg.append(el('polygon', { points: `${p1[0]},${p1[1]} ${p2[0]},${p2[1]} ${p2[0] + nx * s * big},${p2[1] + ny * s * big} ${p1[0] + nx * s * big},${p1[1] + ny * s * big}`, class: 'plano-sacado' }));
+      svg.append(el('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], class: 'plano' }));
+      svg.append(el('text', { x: W((a.w + b.w) / 2) + 8, y: Z((a.z + b.z) / 2) - 8, class: 'rot' }, `${q.id} · ${f2(anguloPlano({ ...q, a, b }))}°`));
+      ([['a', a], ['b', b]] as const).forEach(([k2, pt]) => svg.append(el('rect', { x: W(pt.w) - 6, y: Z(pt.z) - 6, width: 12, height: 12, class: 'manija-plano', 'data-plano': q.id, 'data-punta': k2 })));
+    });
+    plano.forEach(q => svg.append(el('circle', { cx: W(q.w), cy: Z(q.z), r: 5, class: 'calib' })));
     if (arr && arr.rot) svg.append(el('text', { x: arr.sx + 12, y: arr.sy - 12, class: 'rot' }, arr.rot));
   }
 
   // arrastres: una manija (borde de losa), el calco o el fondo (correr la vista)
-  let arr: { tipo: 'borde' | 'calco' | 'vista'; id: number; i?: number; lado?: 'min' | 'max'; w0?: number; z0?: number; sx: number; sy: number; c0?: { w: number; z: number }; cx0?: number; cz0?: number; rot?: string } | null = null;
+  let previaPlano: { id: string; a: { w: number; z: number }; b: { w: number; z: number } } | null = null;
+  let arr: { punta?: 'a' | 'b'; tipo: 'borde' | 'calco' | 'vista' | 'plano'; id: number; i?: number; lado?: 'min' | 'max'; w0?: number; z0?: number; sx: number; sy: number; c0?: { w: number; z: number }; cx0?: number; cz0?: number; rot?: string } | null = null;
   svg.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     ev.preventDefault();
@@ -159,6 +191,26 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       }
       return;
     }
+    if (modo === 'plano') {
+      plano.push(q); armarPie(); dibujar();
+      if (plano.length === 2) {
+        const [a, b] = plano; plano = []; modo = 'editar';
+        if (Math.hypot(b.w - a.w, b.z - a.z) < 0.2) { armar(); return; }
+        const pp = estado.proyecto, id = (() => { let n = 1; while ((pp.planosCorte ?? []).some(x => x.id === `P${n}`)) n++; return `P${n}`; })();
+        const r4 = (x: number) => Math.round(x * 100) / 100;
+        estado.cambiar(px => {
+          const antes = px.niveles.map(n => ({ cota: n.cota, silueta: n.silueta ? n.silueta.map(v => ({ ...v })) : null, B: n.B ?? null, L: n.L ?? null }));
+          px.planosCorte = [...(px.planosCorte ?? []), { id, eje, a: { w: r4(a.w), z: r4(a.z) }, b: { w: r4(b.w), z: r4(b.z) }, antes }];
+        });
+        mensaje(`Plano ${id} a ${f2(anguloPlano({ id, eje, a, b }))}°: las losas que cruza quedan recortadas. Cambiá el lado con ⇅ o movelo con sus manijas (□).`);
+      }
+      return;
+    }
+    const hp = (ev.target as Element).closest?.('.manija-plano');
+    if (hp && modo === 'editar') {
+      const q0 = (estado.proyecto.planosCorte ?? []).find(x => x.id === hp.getAttribute('data-plano'));
+      if (q0) { previaPlano = { id: q0.id, a: { ...q0.a }, b: { ...q0.b } }; arr = { tipo: 'plano', id: ev.pointerId, punta: hp.getAttribute('data-punta') as 'a' | 'b', sx: ev.clientX, sy: ev.clientY }; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } return; }
+    }
     const h = (ev.target as Element).closest?.('.manija');
     if (h && modo === 'editar') {
       const i = +h.getAttribute('data-i')!, lado = h.getAttribute('data-lado') as 'min' | 'max', t = tramoCorte(plantaDeNivel(estado.proyecto, i).silueta, eje, c)!;
@@ -172,6 +224,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   svg.addEventListener('pointermove', ev => {
     if (!arr || ev.pointerId !== arr.id) return;
     const r = svg.getBoundingClientRect();
+    if (arr.tipo === 'plano' && previaPlano) { const q = aMundo(ev); previaPlano[arr.punta!] = { w: Math.round(q.w * 100) / 100, z: Math.round(q.z * 100) / 100 }; dibujar(); return; }
     if (arr.tipo === 'vista') { centro = { w: arr.c0!.w - (ev.clientX - arr.sx) / k, z: arr.c0!.z + (ev.clientY - arr.sy) / k }; dibujar(); return; }
     if (arr.tipo === 'calco' && estado.calcoCorte) { estado.calcoCorte.x = arr.cx0! + (ev.clientX - arr.sx) / k; estado.calcoCorte.z = arr.cz0! - (ev.clientY - arr.sy) / k; dibujar(); return; }
     // borde: el corrimiento (al cm) se aplica a cada piso afectado desde su propio borde
@@ -188,6 +241,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   const soltar = (ev: PointerEvent) => {
     if (!arr || ev.pointerId !== arr.id) return;
     const a = arr; arr = null;
+    if (a.tipo === 'plano' && previaPlano) { const pv = previaPlano; previaPlano = null; cambiarPlano(pv.id, x => { x.a = pv.a; x.b = pv.b; }); return; }
     if (a.tipo === 'borde' && previa && previa.size) {
       const cambios = previa, gen = generados(estado.proyecto);
       previa = null;
@@ -201,10 +255,29 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   };
   svg.addEventListener('pointerup', soltar); svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('wheel', ev => { ev.preventDefault(); const p0 = estado.proyecto; encuadrar(p0); const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, q = { w: (mx - ox) / k, z: (oy - my) / k }; const f = ev.deltaY < 0 ? 1.2 : 1 / 1.2; zoom = Math.max(0.3, Math.min(40, zoom * f)); const k2 = k * f; centro = { w: q.w - (mx - (svg.clientWidth || 800) / 2) / k2, z: q.z + (my - (svg.clientHeight || 600) / 2) / k2 }; dibujar(); }, { passive: false });
-  document.addEventListener('keydown', ev => { if (!raiz.hidden && ev.key === 'Escape' && !(ev.target as HTMLElement).closest?.('input, select, textarea')) { ev.preventDefault(); if (modo !== 'editar') { modo = 'editar'; calib = []; armar(); } else cerrar(); } });
+  document.addEventListener('keydown', ev => { if (!raiz.hidden && ev.key === 'Escape' && !(ev.target as HTMLElement).closest?.('input, select, textarea')) { ev.preventDefault(); if (modo !== 'editar') { modo = 'editar'; calib = []; plano = []; armar(); } else cerrar(); } });
   new ResizeObserver(() => dibujar()).observe(raiz);
   estado.suscribir(() => { if (!raiz.hidden && !arr) armar(); });
 
+  /** cambia un plano: las losas vuelven a como estaban antes de cortarlas y se recortan con el plano nuevo */
+  function cambiarPlano(id: string, f: (q: PlanoCorte) => void) {
+    estado.cambiar(pp => {
+      const q = (pp.planosCorte ?? []).find(x => x.id === id); if (!q) return;
+      restaurar(pp, q); f(q);
+    });
+  }
+  function quitarPlano(id: string) {
+    estado.cambiar(pp => {
+      const q = (pp.planosCorte ?? []).find(x => x.id === id); if (!q) return;
+      restaurar(pp, q);
+      pp.planosCorte = (pp.planosCorte ?? []).filter(x => x.id !== id); if (!pp.planosCorte.length) delete pp.planosCorte;
+    });
+    mensaje(`Plano ${id} quitado: las losas que recortaba volvieron a como estaban.`);
+  }
+  /** las losas como estaban antes del plano (las que no se tocaron después quedan igual) */
+  function restaurar(pp: Proyecto, q: PlanoCorte) {
+    (q.antes ?? []).forEach(a => { const n = pp.niveles.find(x => Math.abs(x.cota - a.cota) < 1e-6); if (!n) return; n.silueta = a.silueta ? a.silueta.map(v => ({ ...v })) : null; n.B = a.B; n.L = a.L; });
+  }
   function armar() { armarBarra(); armarPie(); dibujar(); }
   function abrir() { raiz.hidden = false; armar(); }
   function cerrar() { raiz.hidden = true; modo = 'editar'; calib = []; previa = null; mensaje('Corte cerrado.'); }

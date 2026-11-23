@@ -309,6 +309,8 @@ export interface Proyecto {
   perfilTorre?: import('./perfil_torre').PerfilTorre | null;
   /** la carpintería de cada nivel sigue a su losa, desfasada hacia adentro estos metros (vacío = a mano) */
   carpinteriaRetiro?: number | null;
+  /** planos que recortan las losas (la corona a 45° del Citicorp), dibujados en el corte de la torre (planos_corte.ts) */
+  planosCorte?: import('./planos_corte').PlanoCorte[];
   /**
    * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
    * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados

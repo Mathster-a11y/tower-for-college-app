@@ -137,7 +137,7 @@ export function leerProyecto(x: unknown): Lectura {
   }
 
   // --- listas opcionales del proyecto
-  for (const k of ['grupos', 'caminos', 'cotas', 'guias', 'huecosLosa', 'lofts'] as const) {
+  for (const k of ['grupos', 'caminos', 'cotas', 'guias', 'huecosLosa', 'lofts', 'planosCorte'] as const) {
     if (!nulo(q[k]) && !(Array.isArray(q[k]) && (q[k] as unknown[]).every(esObj))) error(`«${k}» está dañado.`);
   }
   if (Array.isArray(q.grupos) && !(q.grupos as Record<string, unknown>[]).every(g => typeof g.id === 'string')) error('Hay un grupo sin identificador.');
