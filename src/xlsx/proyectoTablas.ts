@@ -116,6 +116,7 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Carpintería por tramos', 'desde una cota hacia arriba: «0 sin; 34,75 losa 0,3; 230 continua 0,3» (cota en m, modo sin, losa (por piso) o continua (envolvente), retiro en m y, si va, plana o curva)',
     p => (p.carpinteriaTramos?.length ? p.carpinteriaTramos.map(t => [String(t.desde).replace('.', ','), t.modo, ...(t.retiro ? [String(t.retiro).replace('.', ',')] : []), ...(t.forma ? [t.forma] : [])].join(' ')).join('; ') : null),
     (p, v) => { if (!txt(v)) return; const ts = txt(v).split(';').map(it => { const [d, m0, ...resto] = it.trim().split(/\s+/); const m = ({ piso: 'losa', envolvente: 'continua' } as Record<string, string>)[(m0 ?? '').toLowerCase()] ?? (m0 ?? '').toLowerCase(); const t: NonNullable<Proyecto['carpinteriaTramos']>[number] = { desde: num(d) ?? NaN, modo: m as 'sin' | 'losa' | 'continua' }; resto.forEach(x => { const f = x.toLowerCase(); if (f === 'plana' || f === 'curva') t.forma = f; else { const rr = num(x); if (rr !== null) t.retiro = rr; } }); return t; }).filter(t => isFinite(t.desde) && ['sin', 'losa', 'continua'].includes(t.modo)); if (ts.length) p.carpinteriaTramos = ts; }],
+  ['Carpintería fija', 'sí = la carpintería no sigue a las losas: los tramos no la recalculan y las losas se editan sin tocarla (vacío = sigue)', p => b2s(!!p.carpinteriaFija), (p, v) => { if (sino(v)) p.carpinteriaFija = true; }],
   ['Panelería', 'montantes cada m; antepecho opaco m; travesaños intermedios: «1,5; 0,9; 0» (vacío = sin paneles)',
     p => (p.paneleria ? [p.paneleria.modulo, p.paneleria.antepecho ?? 0, p.paneleria.intermedios ?? 0].map(x => String(x).replace('.', ',')).join('; ') : null),
     (p, v) => { if (!txt(v)) return; const [m, a, i] = txt(v).split(';').map(x => num(x.trim())); if (m !== null && m !== undefined && m > 0) p.paneleria = { modulo: m, antepecho: a ?? 0, intermedios: i ?? 0 }; }],
@@ -199,7 +200,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
   p.sitio = { ...p.sitio }; p.fundacion = { ...p.fundacion };
   delete p.areasAuto;
   delete p.exo;
-  delete p.perfilTorre; delete p.carpinteriaRetiro; delete p.planosCorte; delete p.carpinteriaTramos; delete p.paneleria;
+  delete p.perfilTorre; delete p.carpinteriaRetiro; delete p.planosCorte; delete p.carpinteriaTramos; delete p.paneleria; delete p.carpinteriaFija;
   for (const g of leerHoja(H(T.proyecto))) {
     const d = DATOS.find(x => norm(x[0]) === norm(g('Dato')));
     if (d) d[3](p, g('Valor'));

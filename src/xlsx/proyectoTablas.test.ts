@@ -56,6 +56,7 @@ function completo(): Proyecto {
   p.carpinteriaRetiro = 0.3;
   p.paneleria = { modulo: 1.5, antepecho: 0.9, intermedios: 1 };
   p.niveles[2].carpManual = true; p.niveles[2].carpVoladizo = true;
+  p.carpinteriaFija = true;
   p.carpinteriaTramos = [{ desde: 0, modo: 'sin' }, { desde: 3, modo: 'losa', retiro: 0.3, forma: 'plana' }, { desde: 40, modo: 'continua', retiro: 0.25, forma: 'curva' }];
   p.exo!.zonas = [{ desde: 0, tipo: 'E' }, { desde: 30, tipo: 'A', modulo: 6, vanos: 2 }];
   p.nombre = 'Torre «completa» & cía'; p.alumno = 'Ana';

@@ -91,6 +91,8 @@ export const moduloFacetas = (p: Proyecto) => Math.max(0.3, p.paneleria?.modulo 
 /** escribe la carpintería de cada nivel según los tramos; devuelve los niveles donde lo común no salió exacto */
 export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproximados: number[] } {
   const tramos = tramosCarpinteria(p);
+  // carpintería fija: las losas se editan sin tocarla (los avisos dicen si queda fuera de una losa o sobre un vacío)
+  if (p.carpinteriaFija) return { niveles: 0, aproximados: [] };
   // las piezas de más las calculan los tramos: sin tramos (o en los pisos a mano) no hay
   p.niveles.forEach(nv => { delete nv.carpinteriaPartida; });
   if (!tramos.length) return { niveles: 0, aproximados: [] };

@@ -304,7 +304,7 @@ export function montarPlanta(cont: HTMLElement) {
   /** perfil de la torre: la sección abierta y el punto elegido */
   let pfAbierto = false, pfSel: number | null = null;
   const lft = { abierto: false, otra: null as number | null, medias: [] as number[], tipo: 'recto' as 'recto' | 'suave', giro: 0, bl: true };
-  const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'ambas' as 'ambas' | 'losa' | 'carpinteria', todos: true };
+  const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'losa' as 'ambas' | 'losa' | 'carpinteria', queCarp: 'carpinteria' as 'ambas' | 'losa' | 'carpinteria', todos: true };
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
@@ -610,7 +610,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelSil.hidden = true;
   dock.appendChild(panelSil);
   /** editar a mano la carpintería de un piso que calcula un tramo la suelta (los tramos dejan de recalcularla) */
-  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual) { n.carpManual = true; delete n.carpinteriaPartida; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
+  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual && !estado.proyecto.carpinteriaFija) { n.carpManual = true; delete n.carpinteriaPartida; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
@@ -624,6 +624,19 @@ export function montarPlanta(cont: HTMLElement) {
   };
   /** los vértices que se están editando (losa o carpintería), propios o heredados */
   const verticesEd = (): Vertice[] => (editaCarp ? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
+  /** la relación losa ↔ carpintería, a la vista: si la carpintería sigue a las losas (tramos) se puede fijar */
+  function estadoCarpLosas(): HTMLElement[] {
+    const p = estado.proyecto, tramos = tramosCarpinteria(p).length > 0;
+    const l = (t: string) => { const x = document.createElement('span'); x.className = 'estado-carp'; x.textContent = t; return x; };
+    const bt = (t: string, ti: string, f: () => void) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; x.addEventListener('click', f); return x; };
+    const fila = (...xs: HTMLElement[]) => { const d = document.createElement('div'); d.className = 'fila-acciones'; d.append(...xs); return d; };
+    if (tramos && !p.carpinteriaFija) return [l('carpintería: sigue a las losas (por tramos); si cambiás una losa, se recalcula'),
+      fila(bt('Fijar la carpintería', 'La carpintería queda como está ahora: las losas se editan (a mano, perfil, loft, planos de corte) sin tocarla. Los avisos dicen si queda fuera de una losa o sobre un vacío.', () => estado.cambiar(pp => { pp.carpinteriaFija = true; })))];
+    if (tramos) return [l('carpintería: fija; las losas se editan sin tocarla'),
+      fila(bt('Que siga a las losas', 'Los tramos vuelven a calcular la carpintería con las losas de ahora (se pierde la carpintería fija)', () => estado.cambiar(pp => { delete pp.carpinteriaFija; })))];
+    const hay = p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3);
+    return [l(hay ? 'carpintería: dibujada a mano, independiente de las losas' : 'sin carpintería: el viento toma el borde de la losa')];
+  }
   function armarPanelSil() {
     const p = estado.proyecto, n = p.niveles[iNivel];
     if (!n) return;
@@ -756,7 +769,7 @@ export function montarPlanta(cont: HTMLElement) {
         const tn = tramoEn(p, n.cota);
         // este piso: lo calcula el tramo, o se soltó para editarlo a mano (con control de que no pase sobre un vacío)
         const piso: HTMLElement[] = [];
-        if (tn && tn.modo !== 'sin') {
+        if (tn && tn.modo !== 'sin' && !p.carpinteriaFija) {
           const pt = n.carpinteriaPartida;
           if (!n.carpManual) {
             piso.push(linea(pt ? `lo común a esta losa y la de arriba son ${pt.piezas} piezas separadas: la carpintería va por la más grande y ${String(pt.area).replace('.', ',')} m² quedan sin carpintería (ver avisos)` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
@@ -770,7 +783,7 @@ export function montarPlanta(cont: HTMLElement) {
               h2(boton('Volver a atar al tramo', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; delete nv.carpManual; delete nv.carpVoladizo; }), 'Se pierde lo editado a mano en este piso: vuelve a ser lo común a su losa y la de arriba')), vol);
           }
         }
-        panelSil.append(que, b(`Carpintería de ${n.nombre}`), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
         return;
       }
       panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
@@ -786,7 +799,7 @@ export function montarPlanta(cont: HTMLElement) {
           mensaje(`Carpintería de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles: el viento (túneles y presiones) la usa en toda la torre.`);
         }, 'La misma carpintería en todos los pisos: lo que usan el túnel 2D, el túnel 3D y las presiones en cada piso.')] : []),
         boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).')),
-        seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L)));
+        seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L), true));
       return;
     }
     const delLoft = loftDeNivel(p, iNivel);
@@ -800,6 +813,7 @@ export function montarPlanta(cont: HTMLElement) {
     panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
+      ...estadoCarpLosas(),
       // primero la forma (lo que hace falta en una torre en blanco), después ajustarla, al final lo demás
       seccionDesdeCero(),
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
@@ -1094,7 +1108,9 @@ export function montarPlanta(cont: HTMLElement) {
    * esquinas de la torre de una vez: redondeadas, en chaflán o sustraídas, en la losa y/o la carpintería de este nivel
    * o de todos. Cambia la forma que recibe el viento (presiones 3D y túneles), no B y L de la planilla.
    */
-  function seccionEsquinas(ancho: number): HTMLElement {
+  /** @param enCarp desde la carta de la carpintería: por defecto cambia solo la carpintería (desde la losa, solo la losa) */
+  function seccionEsquinas(ancho: number, enCarp = false): HTMLElement {
+    const queAhora = () => (enCarp ? esq.queCarp : esq.que);
     const det = document.createElement('details'); det.className = 'esquinas-torre'; det.open = esq.abierto;
     det.addEventListener('toggle', () => { esq.abierto = det.open; });
     const sum = document.createElement('summary'); sum.textContent = 'Esquinas (viento)'; det.append(sum);
@@ -1114,7 +1130,7 @@ export function montarPlanta(cont: HTMLElement) {
       elegir<TipoEsquina>('Forma', [['redondeada', 'redondeadas (arco)'], ['chaflan', 'en chaflán (ochava)'], ['sustraida', 'sustraídas (retranqueo)']], esq.tipo, x => { esq.tipo = x; }),
       medida(esq.tipo === 'redondeada' ? 'radio r ' : esq.tipo === 'chaflan' ? 'corte d ' : 'a ', esq.a, x => { esq.a = x; }),
       ...(esq.tipo === 'sustraida' ? [medida('b ', esq.b, x => { esq.b = x; })] : []),
-      elegir('Contorno', [['ambas', 'losa y carpintería'], ['losa', 'solo la losa'], ['carpinteria', 'solo la carpintería']], esq.que, x => { esq.que = x; }),
+      elegir('Contorno', [['ambas', 'losa y carpintería'], ['losa', 'solo la losa'], ['carpinteria', 'solo la carpintería']], queAhora(), x => { if (enCarp) esq.queCarp = x; else esq.que = x; }),
       elegir('Niveles', [['todos', 'todos los niveles'], ['este', 'solo este nivel']], esq.todos ? 'todos' : 'este', x => { esq.todos = x === 'todos'; }),
     );
     const nota = document.createElement('p'); nota.className = 'nota';
@@ -1127,7 +1143,7 @@ export function montarPlanta(cont: HTMLElement) {
     aplicar.addEventListener('click', async () => {
       const p2 = estado.proyecto;
       const niveles = esq.todos ? p2.niveles.map((_, k) => k) : [iNivel];
-      const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: esq.que, niveles });
+      const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: queAhora(), niveles });
       if (!r.cambios.length) { await avisar('error', 'No se cambió ninguna esquina', r.avisos.join(' ') || 'No hay esquinas salientes entre lados rectos.'); return; }
       estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else { soltarCarp(nv); nv.carpinteria = c.v; } }); });
       if (r.avisos.length) await avisar('info', 'Esquinas tratadas, con avisos', r.avisos.join(' '));

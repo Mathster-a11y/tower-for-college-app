@@ -31,6 +31,22 @@ describe('carpintería por tramos', () => {
     n14.carpVoladizo = true;
     expect(avisosDiseno(p).filter(a => a.tipo === 'carpinteria-vacio')).toEqual([]);
   });
+  it('carpintería fija: las losas se editan (a mano, perfil, loft, planos) sin tocarla', () => {
+    const p = ejemploGuia();
+    p.niveles.forEach(n => { n.silueta = rectangulo(20, 16); });
+    p.carpinteriaTramos = [{ desde: 0, modo: 'losa', retiro: 0.3 }];
+    aplicarCarpinteriaTramos(p);
+    const antes = JSON.stringify(p.niveles.map(n => n.carpinteria));
+    p.carpinteriaFija = true;
+    p.niveles.forEach(n => { n.silueta = rectangulo(12, 10); });          // todas las losas más chicas
+    aplicarCarpinteriaTramos(p);
+    expect(JSON.stringify(p.niveles.map(n => n.carpinteria))).toBe(antes);
+    // queda fuera de las losas: se avisa
+    expect(avisosDiseno(p).some(a => a.tipo === 'carpinteria-fuera')).toBe(true);
+    // que siga a las losas: vuelve a ser lo común metido 0,30 m
+    delete p.carpinteriaFija; aplicarCarpinteriaTramos(p);
+    expect(cajaSilueta(p.niveles[3].carpinteria!)).toMatchObject({ B: 11.4, L: 9.4 });
+  });
   it('lo común a dos losas: la de adentro si una contiene a la otra; recorte exacto con una convexa', () => {
     expect(comunLosas(rectangulo(20, 16), rectangulo(10, 8))).toEqual({ v: rectangulo(10, 8), piezas: [rectangulo(10, 8)], exacto: true });
     const corrida = rectangulo(20, 16).map(q => ({ x: q.x + 5, y: q.y }));

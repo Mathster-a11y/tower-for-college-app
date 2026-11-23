@@ -1897,3 +1897,4 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 
 /* carpintería: color propio (no es tracción ni compresión: nunca rojo ni azul) */
 .planta .carpinteria.carpinteria-pieza { stroke-dasharray: none; }
+.silueta-panel .estado-carp { display: block; margin-top: 4px; padding: 4px 6px; border-radius: 6px; background: color-mix(in srgb, var(--carpinteria) 8%, transparent); color: var(--ink2); font-size: 11.5px; }
