@@ -1704,3 +1704,8 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
 canvas.tunel2d.arrastrable { cursor: grab; }
 .llave-sim.derecha { left: auto; right: 8px; top: 8px; bottom: auto; }
+/* salvaguardas del túnel: lista de puntos de velocidad alta */
+.altos { margin-top: 8px; font-size: 12.5px; }
+.altos ol { margin: 4px 0 2px 18px; padding: 0; }
+.altos li { margin: 1px 0; }
+.zoom-tunel .zoom-chk { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 85%, transparent); padding: 1px 6px; border-radius: 4px; display: inline-flex; gap: 4px; align-items: center; }

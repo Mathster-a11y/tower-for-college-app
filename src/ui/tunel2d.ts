@@ -22,6 +22,7 @@ import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
+import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion';
@@ -31,7 +32,8 @@ const RE: Record<string, { Re: number; cs: number; texto: string }> = {
   alto: { Re: 20000, cs: 0.22, texto: 'alto (Re ≈ 20 000, con más modelo de turbulencia)' },
 };
 const RES: Record<string, { D: number; texto: string }> = { rapida: { D: 14, texto: 'rápida (14 celdas por ancho)' }, normal: { D: 20, texto: 'normal (20 celdas)' }, fina: { D: 30, texto: 'fina (30 celdas, más lenta)' } };
-const U0 = 0.1;
+/** velocidad de entrada en unidades de la red (0,1; 0,06 con el túnel «lento», más estable cuando el aire se acelera mucho) */
+let U0 = 0.1;
 
 /** lo que eligió el alumno (vive mientras la página está abierta; no se guarda en el proyecto) */
 const cfg = {
@@ -41,6 +43,8 @@ const cfg = {
   /** canal ancho (12 anchos de alto: bloquea ≈ 8 %) o angosto (7 anchos: ≈ 14 %, más rápido) */
   canal: 'ancho' as 'ancho' | 'angosto',
   segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
+  /** túnel «lento»: la entrada a 0,06 en vez de 0,1 de la red (más estable, más pasos por pasada) */
+  lento: false,
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
   /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
@@ -49,7 +53,7 @@ const cfg = {
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };
 /** la ventana de detalle de la corrida: su geometría fina y los promedios en el tiempo */
-interface CorridaDetalle { geo: GeometriaDetalle; transicion: Uint8Array; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
+interface CorridaDetalle { geo: GeometriaDetalle; transicion: Uint8Array; medible: Uint8Array; sumaV: Float64Array; sumaR: Float64Array; muestras: number; maxInst: number; roto: boolean }
 let det: CorridaDetalle | null = null;
 /** marcando el recuadro en el túnel (arrastrando) */
 let marcando = false, arrastre: { x0: number; y0: number; x1: number; y1: number } | null = null;
@@ -68,6 +72,8 @@ interface Corrida {
   roto: boolean; med: Mediciones | null; humo: Float32Array; cuadrosSinMirar: number; nivel: string; cota: number;
   /** Cp promediado en el tiempo a lo largo del perímetro de la planta */
   perim: PromedioPerimetro;
+  /** salvaguardas: la velocidad media de cada celda (suma y cuadros), la más alta del último cuadro (red) y dónde se rompió */
+  sumaV: Float64Array; nV: number; maxRed: number; dondeRoto: string | null; altos: PuntoAlto[];
 }
 let corrida: Corrida | null = null;
 let lienzo: HTMLCanvasElement | null = null;
@@ -89,7 +95,7 @@ function nivelElegido() {
 }
 
 function claveCorrida(): string {
-  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia]);
+  return JSON.stringify([estado.revision, estado.dir, nivelElegido()?.n.nombre, cfg.angulo, cfg.re, cfg.res, cfg.ochava, cfg.forma, cfg.paredes, cfg.canal, cfg.segunda, cfg.distancia, cfg.lento]);
 }
 
 function iniciar() {
@@ -107,6 +113,7 @@ function iniciar() {
     pol = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   }
   const D = RES[cfg.res].D, re = RE[cfg.re];
+  U0 = cfg.lento ? 0.06 : 0.1;
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
   if (cfg.ochava > 0) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
@@ -117,7 +124,8 @@ function iniciar() {
   const worker = new TunelWorker();
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * geo.nx; humo[2 * k + 1] = Math.random() * geo.ny; }
-  corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota, perim: new PromedioPerimetro(perimetro(geo), U0) };
+  corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota, perim: new PromedioPerimetro(perimetro(geo), U0),
+    sumaV: new Float64Array(geo.nx * geo.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [] };
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
   const exactas = cfg.paredes === 'exactas';
   worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk' } satisfies MensajeTunel);
@@ -135,7 +143,8 @@ function ponerVentana(v: Ventana | null) {
   // las celdas donde la ventana se relaja hacia el túnel grueso (la orilla y la banda): se velan y no se miden
   const sb = sigmaBanda(gd), transicion = new Uint8Array(n);
   for (let k = 0; k < n; k++) transicion[k] = sb[k] > 0.01 || sb[k] >= 1 ? 1 : 0;
-  det = { geo: gd, transicion, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
+  const medible = new Uint8Array(n); for (let k = 0; k < n; k++) medible[k] = gd.solido[k] || transicion[k] ? 0 : 1;
+  det = { geo: gd, transicion, medible, sumaV: new Float64Array(n), sumaR: new Float64Array(n), muestras: 0, maxInst: 0, roto: false };
   c.worker.postMessage({ tipo: 'detalle', geo: gd, exactas: cfg.paredes === 'exactas' } satisfies MensajeTunel);
 }
 
@@ -151,6 +160,7 @@ function recibir(r: CuadroTunel) {
   const c = corrida;
   if (!c) return;
   c.esperando = false; c.campo = r; c.pasos = r.pasos; c.roto = r.roto;
+  vigilar(c, r);
   if (grab && grab.clave === c.clave) {
     grab.g.agregar(r.pasos, r.ux, r.uy, r.rho, r.Fx, r.Fy);
     // corrida larga: al llegar a las pasadas pedidas, se guarda sola
@@ -170,9 +180,15 @@ function recibir(r: CuadroTunel) {
     const desde = Math.max(0, c.Fx.length - Math.min(c.Fx.length, c.pasos - Math.round((0.6 * c.geo.nx) / U0)));
     c.med = medir(c.Fx.slice(desde), c.Fy.slice(desde), U0, c.geo.D);
     c.perim.sumar(r.rho);                                             // la presión en el perímetro, pasado el arranque
+    if (SALVAGUARDAS) { for (let k = 0; k < r.ux.length; k++) c.sumaV[k] += Math.hypot(r.ux[k], r.uy[k]); c.nV++; }
     if (det && r.det && r.det.nx === det.geo.nx && r.det.ny === det.geo.ny) {
-      const d = r.det; let mx = 0;
-      for (let k = 0; k < d.ux.length; k++) { const v = Math.hypot(d.ux[k], d.uy[k]); det.sumaV[k] += v; det.sumaR[k] += d.rho[k]; if (!det.geo.solido[k]) mx = Math.max(mx, v); }
+      const d = r.det, n = d.ux.length, inst = new Float32Array(n); let mx = 0;
+      for (let k = 0; k < n; k++) { const v = Math.hypot(d.ux[k], d.uy[k]); inst[k] = v; det.sumaV[k] += v; det.sumaR[k] += d.rho[k]; }
+      if (SALVAGUARDAS) {
+        // el pico de cada cuadro promediado en ~1 m² (salvaguarda C): el de una celda crece al afinar la grilla
+        const prom = promedioArea(det.geo.nx, det.geo.ny, inst, det.medible, ladoMetro(1 / (c.geo.escala * det.geo.r)));
+        for (let k = 0; k < n; k++) if (det.medible[k] && prom[k] > mx) mx = prom[k];
+      } else for (let k = 0; k < n; k++) if (!det.geo.solido[k] && inst[k] > mx) mx = inst[k];
       det.muestras++; det.maxInst = Math.max(det.maxInst, mx / U0);
     }
   }
@@ -280,8 +296,9 @@ function dibujar() {
     for (let k = 0; k < hm.length; k += 2) g.fillRect(hm[k] * s - t / 2, (ny - hm[k + 1]) * s - t / 2, t, t);
     g.globalAlpha = 1;
   }
-  // lo que no se mueve con el zoom: el recuadro de la ventana arriba, la llave de colores y el aumento
+  // lo que no se mueve con el zoom: los puntos de velocidad alta, el recuadro de la ventana arriba, la llave de colores
   g.setTransform(1, 0, 0, 1, 0, 0);
+  if (SALVAGUARDAS) marcarAltos(g, c, s);
   if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
   const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   const lf = llaveFlechas();
@@ -293,6 +310,51 @@ function llaveFlechas(): Llave | null {
   if (cfg.flechas === 'fijas' && cfg.vista !== 'velocidad') return { titulo: 'Flechas: dirección; el color, la velocidad', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
   if (cfg.flechas === 'proporcionales') return { titulo: 'Flechas: el largo dice la velocidad', colores: [css('--lienzo', '#ffffff'), css('--ink', '#223344')], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
   return null;
+}
+
+/** guardia de estabilidad (salvaguarda B): la velocidad más alta en unidades de la red y, si se rompió, dónde */
+function vigilar(c: Corrida, r: CuadroTunel) {
+  const { nx, solido } = c.geo;
+  let mx = 0;
+  for (let k = 0; k < r.ux.length; k++) if (!solido[k]) { const v = Math.hypot(r.ux[k], r.uy[k]); if (v > mx) mx = v; }
+  c.maxRed = mx;
+  if (r.roto && !c.dondeRoto) {
+    // las celdas que se fueron de rango (densidad imposible o NaN): su centro, dicho respecto de la torre
+    let sx = 0, sy = 0, n = 0;
+    for (let k = 0; k < r.rho.length; k++) if (!solido[k] && !(r.rho[k] > 0.2 && r.rho[k] < 5)) { sx += k % nx; sy += Math.floor(k / nx); n++; }
+    c.dondeRoto = n ? dondeRespectoTorre({ x: sx / n, y: sy / n }, c.geo.caja, 1 / c.geo.escala) : 'en una zona chica';
+  }
+  // los puntos de velocidad alta (salvaguarda A), con la velocidad media promediada en ~1 m² (salvaguarda C)
+  if (SALVAGUARDAS && c.nV > 0 && (c.nV % 10 === 1)) {
+    const n = c.geo.nx * c.geo.ny, media = new Float32Array(n), aire = new Uint8Array(n);
+    for (let k = 0; k < n; k++) { media[k] = c.sumaV[k] / c.nV / U0; aire[k] = solido[k] ? 0 : 1; }
+    const prom = promedioArea(c.geo.nx, c.geo.ny, media, aire, ladoMetro(1 / c.geo.escala));
+    // el entorno de la torre: hasta un ancho de torre alrededor (lo que pasa lejos en la estela no es de la fachada)
+    const k = c.geo.caja, D = c.geo.D, zona = { x0: k.x0 - D, x1: k.x1 + D, y0: k.y0 - D, y1: k.y1 + D };
+    c.altos = puntosAltos(c.geo.nx, c.geo.ny, prom, solido, 1.3, 4, Math.max(3, D / 4), zona);
+  }
+}
+
+/** los puntos de velocidad alta en el túnel: un anillo y la velocidad media (en veces la de entrada) */
+function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number) {
+  const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
+  g.save(); g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'middle';
+  c.altos.forEach((p, i) => {
+    const x = (p.x * s - zoom.ox) * zoom.z, y = ((ny - p.y) * s - zoom.oy) * zoom.z;
+    if (x < -20 || y < -20 || x > (lienzo?.width ?? 0) + 20 || y > (lienzo?.height ?? 0) + 20) return;
+    for (const [col, w] of [[fondo, 4], [tinta, 1.6]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI); g.stroke(); }
+    const t = `${i + 1} · ${fmt(p.valor, 2)} V`;
+    g.lineWidth = 3.5; g.strokeStyle = fondo; g.strokeText(t, x + 13, y); g.fillStyle = tinta; g.fillText(t, x + 13, y);
+  });
+  // si se rompió: un cartel en el túnel en vez de una imagen sin sentido
+  if (c.roto) {
+    const t1 = 'La simulación se volvió inestable', t2 = `cerca de ${c.dondeRoto ?? 'la torre'}. Probá el túnel «lento» o más resolución.`;
+    g.font = '600 13px system-ui, sans-serif';
+    const w = Math.max(g.measureText(t1).width, g.measureText(t2).width) + 24, x = ((lienzo?.width ?? 400) - w) / 2, y = 40;
+    g.globalAlpha = 0.92; g.fillStyle = fondo; g.fillRect(x, y, w, 46); g.globalAlpha = 1; g.strokeStyle = tinta; g.lineWidth = 1; g.strokeRect(x, y, w, 46);
+    g.fillStyle = tinta; g.textAlign = 'center'; g.fillText(t1, x + w / 2, y + 14); g.font = '12px system-ui, sans-serif'; g.fillText(t2, x + w / 2, y + 32);
+  }
+  g.restore();
 }
 
 /** la llave de colores de la vista elegida (la misma en el túnel y en la ventana) */
@@ -388,11 +450,11 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   g.fillStyle = css('--ink', '#223344'); g.strokeStyle = css('--elegido', '#ef9f27'); g.lineWidth = 1.5;
   for (const p of det.geo.contornos) { g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill(); g.stroke(); }
   g.restore();
-  dibujarFlechas(g, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 28, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
-  // una copia sin la llave, para el recuadro de arriba (ahí la llave quedaría ilegible)
+  // una copia sin la llave ni las flechas, para el recuadro de arriba (ahí la llave quedaría ilegible)
   if (!copiaDet) copiaDet = document.createElement('canvas');
   if (copiaDet.width !== cv.width || copiaDet.height !== cv.height) { copiaDet.width = cv.width; copiaDet.height = cv.height; }
   copiaDet.getContext('2d')!.drawImage(cv, 0, 0);
+  dibujarFlechas(g, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 28, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
   llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(170, cv.width * 0.4), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   actualizarLecturaDetalle(c);
 }
@@ -407,19 +469,30 @@ function actualizarLecturaDetalle(c: Corrida) {
   if (det.roto) { el.replaceChildren(h('p', { class: 'aviso-linea' }, 'La ventana se volvió inestable: probá con ×2 o con un recuadro que no corte la torre tan cerca de una esquina.')); return; }
   if (!n) { el.replaceChildren(h('p', { class: 'nota' }, 'Los promedios de la ventana arrancan junto con las mediciones del túnel, pasado el arranque.')); return; }
   const rhoRef = c.campo?.rho[celdaRef2D(c.geo)] ?? 1;
-  let vMax = 0, cpMin = Infinity;
+  let vMax = 0, cpMin = Infinity, pVmax = { x: 0, y: 0 };
+  // la velocidad media y el Cp en la pared; con las salvaguardas, promediados en ~1 m² (no el valor de una celda)
+  const lado = SALVAGUARDAS ? ladoMetro(1 / (c.geo.escala * det.geo.r)) : 1, N = nx * ny;
+  const media = new Float32Array(N), cp = new Float32Array(N), pared = new Uint8Array(N);
   for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) {
     const q = y * nx + x;
-    if (solido[q] || det.transicion[q]) continue;                 // la banda de transición no se mide
-    vMax = Math.max(vMax, det.sumaV[q] / n / U0);
-    if (solido[q - 1] || solido[q + 1] || solido[q - nx] || solido[q + nx]) cpMin = Math.min(cpMin, (det.sumaR[q] / n - rhoRef) / 3 / (0.5 * U0 * U0));
+    media[q] = det.sumaV[q] / n / U0; cp[q] = (det.sumaR[q] / n - rhoRef) / 3 / (0.5 * U0 * U0);
+    if (det.medible[q] && (solido[q - 1] || solido[q + 1] || solido[q - nx] || solido[q + nx])) pared[q] = 1;
   }
+  const mediaA = lado > 1 ? promedioArea(nx, ny, media, det.medible, lado) : media, cpA = lado > 1 ? promedioArea(nx, ny, cp, pared, lado) : cp;
+  for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) {
+    const q = y * nx + x;
+    if (!det.medible[q]) continue;                                    // la torre y la banda de transición no se miden
+    if (mediaA[q] > vMax) { vMax = mediaA[q]; pVmax = { x: x + 0.5, y: y + 0.5 }; }
+    if (pared[q] && cpA[q] < cpMin) cpMin = cpA[q];
+  }
+  const viva = SALVAGUARDAS && esquinaVivaCerca(pVmax, det.geo.contornos, 3 * det.geo.r);
   const V = estimarV();
   el.replaceChildren(h('div', { class: 'kpis' },
     kpi('Viento medio más alto', `${fmt(vMax, 2)} × V`, `≈ ${fmt(vMax * V, 0)} m/s con V = ${fmt(V, 0)} m/s`),
     kpi('Pico (remolinos)', `${fmt(det.maxInst, 2)} × V`, `≈ ${fmt(det.maxInst * V, 0)} m/s`),
     ...(isFinite(cpMin) ? [kpi('Succión más fuerte en la pared', `Cp ${fmt(cpMin, 2)}`, 'promedio en el tiempo')] : [])),
-    h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`));
+    h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros${lado > 1 ? `, y cada valor promediado en un cuadrado de ${fmt(lado / (c.geo.escala * det.geo.r), 1)} m de lado (el de una celda crece al afinar la grilla)` : ''}. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`),
+    ...(viva ? [h('p', { class: 'nota chica' }, 'La velocidad más alta está junto a una esquina viva: ahí la velocidad teórica es infinita y el pico de la simulación depende de la grilla. Redondear o chaflanar la esquina lo baja de verdad.')] : []));
 }
 
 /** el tamaño del recuadro en metros, con la definición que le toca, y botones para achicarlo o agrandarlo en su lugar */
@@ -577,6 +650,7 @@ export function panelTunel(c: H) {
     sel('Resolución', Object.entries(RES).map(([k, v]) => [k, v.texto] as [string, string]), cfg.res, x => { cfg.res = x; }),
     sel('Paredes', [['exactas', 'exactas: la curva real (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x; }),
     sel('Canal', [['ancho', 'ancho: 12 anchos (bloquea ≈ 8 %, más preciso)'], ['angosto', 'angosto: 7 anchos (≈ 14 %, más rápido)']], cfg.canal, x => { cfg.canal = x; }),
+    sel('Velocidad del túnel', [['normal', 'normal (0,1 de la red)'], ['lento', 'lenta (0,06: más estable, tarda más)']], cfg.lento ? 'lento' : 'normal', x => { cfg.lento = x === 'lento'; }),
     sel('Planta', [['dibujada', 'como está dibujada'], ['vivas', 'su caja, con esquinas vivas (para comparar)']], cfg.forma, x => { cfg.forma = x; }),
     sel('Ochavas', ['0', '5', '10', '15'].map(v => [v, v === '0' ? 'sin ochavas (esquinas vivas)' : `${v} % del ancho`] as [string, string]), String(cfg.ochava), x => { cfg.ochava = +x; }),
     sel('Otra torre igual', [['no', 'no'], ['detras', 'detrás'], ['lado', 'al lado']], cfg.segunda, x => { cfg.segunda = x; }),
@@ -835,12 +909,14 @@ function empezarRepro(g: GrabacionAbierta) {
   if (grab) grab = null;
   corrida?.worker.terminate();
   const m = g.meta;
+  U0 = m.u0;                                                          // la escala de colores con la velocidad con la que se grabó
   const geo: Geometria2D = { nx: m.nx, ny: m.ny, solido: g.solido, escala: m.escala, anchoM: m.anchoM, D: m.D, celdasTorre: 0, caja: m.caja, contornos: m.contornos, q: new Float32Array(0) };
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * m.nx; humo[2 * k + 1] = Math.random() * m.ny; }
   // la corrida «en pantalla» pasa a ser la grabación: dibujar() y las mediciones la muestran igual que en vivo
   corrida = { clave: 'grabacion', geo, nu: 0, cs: 0, worker: { terminate() {}, postMessage() {} } as unknown as Worker, campo: null, pasos: m.pasos[0] ?? 0, Fx: Array.from(g.Fx), Fy: Array.from(g.Fy), corriendo: false, esperando: false, roto: false,
-    med: m.med ? { Cd: m.med.Cd, Cl: 0, ClRms: m.med.ClRms, f: null, St: m.med.St } : null, humo, cuadrosSinMirar: 0, nivel: m.nivel, cota: m.cota, perim: new PromedioPerimetro(perimetro(geo), m.u0) };
+    med: m.med ? { Cd: m.med.Cd, Cl: 0, ClRms: m.med.ClRms, f: null, St: m.med.St } : null, humo, cuadrosSinMirar: 0, nivel: m.nivel, cota: m.cota, perim: new PromedioPerimetro(perimetro(geo), m.u0),
+    sumaV: new Float64Array(m.nx * m.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [] };
   repro = { g, k: 0, reloj: null, video: null };
   mostrarCuadro(0);
   estado.avisarPanel();
@@ -965,7 +1041,29 @@ function actualizarMediciones() {
     h('p', { class: 'nota' }, St && isFinite(Vcr)
       ? `Con la frecuencia propia de la torre (n1 = ${fmt(n1, 2)} Hz, del ${estado.config.metodo === 'fem' ? 'FEM' : '102-25'}) y B = ${fmt(c.geo.anchoM, 1)} m, los remolinos se desprenden a la frecuencia de la torre con un viento de V = n1 · B / St = ${fmt(Vcr, 1)} m/s. El viento de diseño es ${fmt(V, 1)} m/s: ${Vcr < V ? 'la resonancia puede aparecer por debajo del viento de diseño; en una torre real se estudia en túnel de viento.' : 'la resonancia quedaría por encima del viento de diseño.'} Es una estimación didáctica.`
       : 'El Strouhal aparece cuando la estela oscila con claridad (en un cuadrado, después de unas 40 a 80 pasadas). Sirve para estimar la velocidad crítica de desprendimiento con la n1 de la torre.'),
+    ...(SALVAGUARDAS ? salvaguardasPanel(c, V) : []),
   );
+}
+
+/** guardia de estabilidad y lista de puntos de velocidad alta, en «Lo que se mide» */
+function salvaguardasPanel(c: Corrida, V: number): H[] {
+  const out: H[] = [];
+  if (c.roto || c.maxRed > AVISO_RED) {
+    const b = h('button', { type: 'button', class: 'boton' }, cfg.lento ? 'Empezar de nuevo' : 'Usar el túnel lento y empezar de nuevo');
+    b.addEventListener('click', () => { cfg.lento = true; iniciar(); estado.avisarPanel(); });
+    out.push(h('p', { class: 'aviso-linea' }, c.roto
+      ? `La simulación se volvió inestable cerca de ${c.dondeRoto ?? 'la torre'}: el aire se aceleró más de lo que el método aguanta (pasa en esquinas vivas con viscosidad baja). ${cfg.lento ? 'Probá más resolución o un Reynolds más bajo.' : 'El túnel lento (entrada a 0,06 de la red) suele alcanzar.'}`
+      : `El aire llega a ${fmt(c.maxRed, 2)} en unidades de la red (${c.maxRed > CRITICO_RED ? 'muy cerca del' : 'cerca del'} límite del método, ≈ ${fmt(CRITICO_RED, 2)}): puede volverse inestable.`), b);
+  }
+  if (c.altos.length) {
+    const m = 1 / c.geo.escala, sv = isFinite(V) ? V : null;
+    const algunaViva = c.altos.some(p => esquinaVivaCerca(p, c.geo.contornos, 3));
+    out.push(h('div', { class: 'altos' },
+      h('b', {}, 'Velocidad alta (media en el tiempo, promedio en 1 m²)'),
+      h('ol', {}, ...c.altos.map(p => h('li', {}, `${fmt(p.valor, 2)} V${sv ? ` ≈ ${fmt(p.valor * sv, 0)} m/s` : ''} · ${dondeRespectoTorre(p, c.geo.caja, m)}${esquinaVivaCerca(p, c.geo.contornos, 3) ? ' · junto a una esquina viva' : ''}`))),
+      ...(algunaViva ? [h('p', { class: 'nota chica' }, 'En una esquina viva la velocidad teórica es infinita: el aire se despega y deja una capa delgada muy rápida, y su pico crece al afinar la grilla. Por eso acá va promediado en 1 m². Redondear o chaflanar la esquina baja el pico de verdad.')] : [])));
+  }
+  return out;
 }
 
 /** para las pruebas y para soltar el worker al cambiar de proyecto */

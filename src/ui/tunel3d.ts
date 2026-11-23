@@ -14,6 +14,7 @@ import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
+import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { llaveHtml, type Llave } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
@@ -25,7 +26,9 @@ const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }>
 };
 /** sin placa de video: el procesador, con una grilla gruesa (unas 25 a 40 veces más lento por celda que una placa media) */
 const TAM_CPU = { nx: 80, ny: 40, nz: 32, texto: 'procesador (80 × 40 × 32, 0,1 M celdas)' };
-const UH = 0.08, RE = 5000, CS = 0.17;
+/** velocidad a la altura de la torre en unidades de la red (0,05 con el túnel «lento», más estable) */
+let UH = 0.08;
+const RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
 const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, vereda: false, horizontal: true, vertical: false,
@@ -33,6 +36,8 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   vientoMedio: 4, lawson: true,
   /** motor: la placa de video (WebGPU) o el procesador (sin placa, más lento y con la grilla gruesa) */
   motor: 'placa' as 'placa' | 'procesador',
+  /** túnel «lento»: la velocidad de la red a la altura de la torre baja de 0,08 a 0,05 (más estable, más pasos) */
+  lento: false,
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -42,6 +47,8 @@ interface Corrida {
   clave: string; geo: Geometria3D; uIn: Float32Array; gpu: Lbm3dGpu | null; error: string | null; cargando: boolean;
   prom: PromedioCp; caras: ReturnType<typeof celdasDeCara>; campo: Float32Array | null;
   corriendo: boolean; ocupado: boolean; k: number; mlups: number; ultimoCampo: number; ultimasLineas: number; sinMirar: number;
+  /** salvaguardas: la velocidad más alta en unidades de la red y, si se rompió, dónde (y se pausa) */
+  maxRed: number; roto: string | null;
 }
 let corrida: Corrida | null = null;
 let soporteGpu: string | null | undefined;                    // undefined: todavía no se preguntó
@@ -49,7 +56,7 @@ let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam:
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
-function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor]); }
+function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento]); }
 const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
@@ -60,12 +67,13 @@ function nivelesProyecto() {
 async function iniciar() {
   detener();
   const T = tamActual();
+  UH = cfg.lento ? 0.05 : 0.08;
   const geo = geometria3D({ niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz });
   const exp = datos102De(estado.proyecto).exposicion;
   const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
   const caras = celdasDeCara(geo);
   const c: Corrida = { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null,
-    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0 };
+    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null };
   corrida = c;
   try {
     const anchoC = geo.B * geo.escala;
@@ -98,6 +106,7 @@ async function ciclo() {
     const ahora = performance.now();
     if (ahora - c.ultimoCampo > 1200) {
       c.campo = await c.gpu.campo(); c.ultimoCampo = performance.now();
+      if (vigilar3d(c)) { estado.avisarPanel(); return; }               // se rompió: se pausa y se dice dónde
       // se promedia pasada una pasada del aire por el canal
       if (c.gpu.pasos > (0.8 * c.geo.nx) / UH) c.prom.sumar(c.campo, 4, 3);
       if (corrida !== c) return;                              // se cambió la grilla o el giro mientras leía
@@ -174,7 +183,7 @@ function armarVista(cont: HTMLElement) {
  * celdas (sin pixelado; el borde de la torre queda suave porque las celdas sólidas entran con su color en la mezcla)
  */
 const rgbS = { r: 0, g: 0, b: 0 };
-function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean, vel?: (i: number, j: number) => [number, number] | null) {
+function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean, vel?: (i: number, j: number) => [number, number] | null, marcas: PuntoAlto[] = []) {
   const n = ancho * alto, R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), aire = new Uint8Array(n), col = new THREE.Color();
   for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) {
     const c = j * ancho + i;
@@ -203,6 +212,16 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
     const VA = new Float32Array(n), VB = new Float32Array(n), sol = new Uint8Array(n);
     for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) { const c = j * ancho + i, m = vel(i, j); if (m) { VA[c] = m[0]; VB[c] = m[1]; } else sol[c] = 1; }
     dibujarFlechas(g, { W, H, x0: 0, dx: 1 / k, y0: alto, dy: 1 / k }, cfg.flechas, muestraVelocidad(VA, VB, sol, ancho, alto, 1), Math.max(18, Math.round(W / 32)), '#1d1d24', '#f4f4f4', cfg.vereda || cfg.color === 'cp');
+  }
+  // los puntos de velocidad alta (salvaguarda A): un anillo y cuántas veces la velocidad de esa altura
+  if (marcas.length) {
+    const rr = Math.max(10, W / 60);
+    g.font = `600 ${Math.round(rr * 1.1)}px system-ui, sans-serif`; g.textBaseline = 'middle';
+    marcas.forEach((p, i) => {
+      const x = p.x * k, y = H - p.y * k, t = `${i + 1} · ${p.valor.toFixed(2).replace('.', ',')} V`;
+      for (const [col, w] of [['#f4f4f4', rr * 0.45], ['#1d1d24', rr * 0.18]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, rr, 0, 2 * Math.PI); g.stroke(); }
+      g.lineWidth = rr * 0.4; g.strokeStyle = '#f4f4f4'; g.strokeText(t, x + rr * 1.4, y); g.fillStyle = '#1d1d24'; g.fillText(t, x + rr * 1.4, y);
+    });
   }
   const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -243,7 +262,8 @@ function actualizarCampo() {
   v.planoH = v.planoV = null;
   const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
   if (cfg.horizontal || cfg.vereda) {
-    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; });
+    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; },
+      SALVAGUARDAS && !(cfg.vereda && cfg.lawson) ? altosDelCorte(c, zc) : []);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = (zc - 0.5) / g.escala; v.esc.add(m); v.planoH = m;
   }
@@ -300,6 +320,34 @@ function dibujar() {
   v.ren.render(v.esc, v.cam);
 }
 
+// ------------------------------------------------------------------------------------------------ salvaguardas
+/**
+ * guardia de estabilidad del 3D (salvaguarda B): la velocidad más alta en unidades de la red y las celdas que se
+ * fueron de rango. Si hay alguna, pausa y anota dónde (devuelve true)
+ */
+function vigilar3d(c: Corrida): boolean {
+  const F = c.campo!, g = c.geo; let mx = 0, n = 0, sx = 0, sy = 0, sz = 0;
+  for (let cel = 0; cel < g.nx * g.ny * g.nz; cel++) {
+    if (g.solido[cel]) continue;
+    const r = F[4 * cel + 3], v = Math.hypot(F[4 * cel], F[4 * cel + 1], F[4 * cel + 2]);
+    if (!(r > 0.5 && r < 1.5) || !(v === v)) { n++; const x = cel % g.nx, y = Math.floor(cel / g.nx) % g.ny, z = Math.floor(cel / (g.nx * g.ny)); sx += x; sy += y; sz += z; continue; }
+    if (v > mx) mx = v;
+  }
+  c.maxRed = mx;
+  if (!n || !SALVAGUARDAS) return false;
+  c.roto = `a ${fmt((sz / n - 0.5) / g.escala, 0)} m de altura, ${dondeRespectoTorre({ x: sx / n, y: sy / n }, g.caja, 1 / g.escala)}`;
+  c.corriendo = false;
+  return true;
+}
+
+/** los puntos de velocidad alta del corte horizontal (salvaguarda A), en celdas del corte */
+function altosDelCorte(c: Corrida, z: number): PuntoAlto[] {
+  const g = c.geo, F = c.campo!, n = g.nx * g.ny, v = new Float32Array(n), sol = new Uint8Array(n), ref = c.uIn[z] || UH;
+  for (let k = 0; k < n; k++) { const cel = z * n + k; sol[k] = g.solido[cel]; if (!sol[k]) v[k] = Math.hypot(F[4 * cel], F[4 * cel + 1], F[4 * cel + 2]) / ref; }
+  const B = g.caja.y1 - g.caja.y0, k = g.caja;
+  return puntosAltos(g.nx, g.ny, v, sol, 1.5, 4, Math.max(3, B / 4), { x0: k.x0 - B, x1: k.x1 + B, y0: k.y0 - B, y1: k.y1 + B });
+}
+
 // ------------------------------------------------------------------------------------------------ llaves de colores
 let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
@@ -342,6 +390,11 @@ export function centroTunel3d(c: H, _tam: Tam) {
   const cr = corrida!;
   if (cr.cargando) { c.append(h('p', { class: 'nota' }, cfg.motor === 'procesador' ? 'Preparando la torre…' : 'Preparando la torre y la placa de video…')); return; }
   if (cr.error) { c.append(h('p', { class: 'aviso-viejo' }, `No se pudo arrancar el túnel 3D: ${cr.error}`)); return; }
+  if (cr.roto) {
+    const b = h('button', { type: 'button', class: 'boton' }, cfg.lento ? 'Empezar de nuevo' : 'Empezar de nuevo con el túnel lento');
+    b.addEventListener('click', () => { cfg.lento = true; void iniciar(); estado.avisarPanel(); });
+    c.append(h('p', { class: 'aviso-viejo' }, `La simulación se volvió inestable ${cr.roto} y quedó en pausa (con la imagen así no se puede leer nada). Pasa cuando el aire se acelera más de lo que el método aguanta, en esquinas vivas con la grilla gruesa. ${cfg.lento ? 'Probá otra grilla o paredes en escalera.' : 'El túnel lento suele alcanzar.'}`), b);
+  }
   const marco = h('div', { class: 'tunel-marco tunel3d' });
   llaves3d = h('div', {}); marco.append(llaves3d); armarLlaves3d();
   c.append(marco);
@@ -378,6 +431,7 @@ export function panelTunel3d(c: H) {
   c.append(h('div', { class: 'fila-acciones' }, play, reini));
   const d = seccion('Túnel 3D').cuerpo; c.append(d.parentElement!);
   d.append(h('div', { class: 'grilla2' },
+    sel('Velocidad del túnel', [['normal', 'normal (0,08 de la red)'], ['lento', 'lenta (0,05: más estable, tarda más)']], cfg.lento ? 'lento' : 'normal', x => { cfg.lento = x === 'lento'; }, true),
     sel('Motor', [['placa', soporteGpu === null ? 'placa de video (no hay WebGPU)' : 'placa de video (WebGPU)'], ['procesador', 'procesador (sin placa, más lento)']], cfg.motor, x => { cfg.motor = x as 'placa' | 'procesador'; }, true),
     cfg.motor === 'procesador' ? h('label', { class: 'campo' }, h('span', {}, 'Grilla'), h('span', { class: 'nota chica' }, TAM_CPU.texto)) : sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
     sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
@@ -438,7 +492,15 @@ function actualizarPanel(forzar = false) {
         h('p', { class: 'nota chica' }, 'Supone vientos de Rayleigh (Weibull k = 2) con el viento medio del lugar, el perfil del 102-25 para bajar a 1,5 m y la dirección simulada todo el año. Un estudio de confort real usa la rosa de vientos de la estación y todas las direcciones.'));
     }
   }
+  // guardia de estabilidad (salvaguarda B): aviso cuando el aire se acerca al límite del método
+  const aviso: H[] = [];
+  if (SALVAGUARDAS && c.maxRed > AVISO_RED && !c.roto) {
+    const b = h('button', { type: 'button', class: 'boton' }, 'Usar el túnel lento y empezar de nuevo');
+    b.addEventListener('click', () => { cfg.lento = true; void iniciar(); estado.avisarPanel(); });
+    aviso.push(h('p', { class: 'aviso-linea' }, `El aire llega a ${fmt(c.maxRed, 2)} en unidades de la red (${c.maxRed > CRITICO_RED ? 'muy cerca del' : 'cerca del'} límite del método, ≈ ${fmt(CRITICO_RED, 2)}): puede volverse inestable.`), ...(cfg.lento ? [] : [b]));
+  }
   el.replaceChildren(
+    ...aviso,
     h('div', { class: 'kpis' },
       kpi('Tiempo', fmt(pasadas, 1), `pasadas del aire por el túnel (${c.gpu.pasos} pasos)${c.corriendo ? '' : ' · en pausa'}`),
       kpi(cfg.motor === 'procesador' ? 'Procesador' : 'Placa de video', `${fmt(c.mlups, c.mlups < 10 ? 1 : 0)} M/s`, 'millones de celdas por segundo'),
