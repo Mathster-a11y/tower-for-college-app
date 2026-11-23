@@ -1761,3 +1761,17 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .capa-contorno .h-centro line { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
 .capa-contorno .h-centro-fondo { fill: color-mix(in srgb, var(--accent) 15%, var(--lienzo)); stroke: var(--accent); stroke-width: 1.2; }
 .capa-contorno .rot-centro { font-size: 11px; fill: var(--accent); pointer-events: none; paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+/* losa desde cero */
+.losa-cero .nota-losa { margin: 6px 0 2px; font-size: 11.5px; color: var(--ink2); line-height: 1.35; }
+.galeria-formas { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; }
+.galeria-formas button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; font-size: 10.5px; line-height: 1.15; min-height: 0; border-radius: 6px; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.galeria-formas svg polygon { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: 1.2; }
+.galeria-formas button[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+.campos-forma { display: flex; flex-direction: column; }
+.planta .lado-saliente { stroke: var(--elegido, #e8a317); stroke-width: 5; stroke-linecap: round; opacity: .8; pointer-events: none; }
+.planta .trazo-losa polyline { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-width: 2; }
+.planta .trazo-losa .cierre { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 4; }
+.planta .trazo-losa circle { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.5; }
+.planta .trazo-losa circle.primero { fill: var(--accent); }
+.planta .trazo-losa .medida-trazo { font-size: 11px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }

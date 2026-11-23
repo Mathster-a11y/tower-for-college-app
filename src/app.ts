@@ -570,7 +570,19 @@ $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null;
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 // proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
-$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
+$('b-nuevo').addEventListener('click', async () => {
+  cerrarMenus();
+  // documento en blanco: pisos y altura; la losa sale rectangular de 20 × 16 y se cambia en Planta → Contornos → «Losa desde cero»
+  const r = await pedirTexto('Proyecto nuevo, en blanco', 'Cuántos pisos sobre PB y qué altura tiene cada uno, como «10 × 3» (diez pisos de 3 m). Después se dibujan la losa (Contornos → «Losa desde cero») y los muros (Dibujar o Insertar).', '10 × 3', 'Crear');
+  if (r === null) return;
+  const m = /^\s*(\d+)\s*[x×*]\s*([\d.,]+)\s*$/i.exec(r);
+  const n = m ? Math.max(1, Math.min(200, +m[1])) : 10, hp = m ? Math.max(2, Math.min(10, +m[2].replace(',', '.'))) : 3;
+  const base = proyectoVacio();
+  const niveles = Array.from({ length: n + 1 }, (_, k) => { const piso = n - k, cota = +(piso * hp).toFixed(2); return piso === n ? { nombre: 'Azotea', cota, B: 20, L: 16 } : piso === 0 ? { nombre: 'PB', cota: 0 } : { nombre: `${piso}º`, cota }; });
+  plantillaAbierta = null;
+  reemplazarConCopia({ ...base, niveles, calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } });
+  estado.etapa = 'diseno'; dibujarTodo();
+});
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-comparacion').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la comparación de métodos')) void descargarComparacion(); });
