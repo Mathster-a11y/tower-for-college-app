@@ -54,6 +54,11 @@ export interface OpcionesLbm {
    * Con torres vecinas, para medir solo la torre del proyecto
    */
   cuerpo?: Uint8Array;
+  /**
+   * paredes exactas con la interpolación lineal en vez de la cuadrática (más estable con viscosidad de red muy baja y
+   * varios cuerpos; ver lbm3d, paredesLineales)
+   */
+  paredesLineales?: boolean;
 }
 /** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
 export const LAMBDA_TRT = 3 / 16;
@@ -78,6 +83,7 @@ export class Lbm2D {
   private qEnl: Float32Array; private otra: Int32Array; private otra2: Int32Array;
   /** por enlace: 1 si el sólido del enlace es del cuerpo que se mide */
   private delCuerpo: Uint8Array;
+  readonly lineal: boolean;
   readonly trt: boolean;
   readonly exactas: boolean;
   readonly ommMin: number;
@@ -125,6 +131,7 @@ export class Lbm2D {
     const nE = this.enlaces.length / 2;
     this.qEnl = new Float32Array(nE).fill(0.5); this.otra = new Int32Array(nE).fill(-1); this.otra2 = new Int32Array(nE).fill(-1);
     this.delCuerpo = new Uint8Array(nE).fill(1);
+    this.lineal = !!o.paredesLineales;
     if (o.cuerpo) for (let k = 0; k < nE; k++) {
       const c = this.enlaces[2 * k], i = this.enlaces[2 * k + 1], x = c % this.nx, y = (c - x) / this.nx;
       let xs = x - EX[i], ys = y - EY[i];
@@ -248,7 +255,7 @@ export class Lbm2D {
         // interpolación cuadrática de Bouzidi (exacta para un perfil parabólico); lineal si no hay dos celdas de aire
         // detrás; y el rebote simple si no hay ninguna
         const q = qE[n], c2 = otra[n], c3 = otra2[n];
-        if (c2 >= 0 && c3 >= 0) {
+        if (c2 >= 0 && c3 >= 0 && !this.lineal) {
           vuelve = q < 0.5
             ? q * (1 + 2 * q) * fo + (1 - 4 * q * q) * f[io * N + c2] - q * (1 - 2 * q) * f[io * N + c3]
             : fo / (q * (2 * q + 1)) + ((2 * q - 1) / q) * f[i * N + c] + ((1 - 2 * q) / (1 + 2 * q)) * f[i * N + c2];
