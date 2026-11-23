@@ -48,6 +48,15 @@ export interface Nivel {
   carpinteria?: VerticeContorno[] | null;
   /** la silueta de este nivel se editó a mano: el perfil, los lofts y el plano de corte no la tocan (vacío = no) */
   manual?: boolean | null;
+  /**
+   * más piezas de carpintería en este piso (además de «carpinteria», que es la más grande): lo común a la losa de
+   * abajo y la de arriba puede partirse en dos o más piezas. Las calculan los tramos «por losa»; no van al Excel
+   */
+  carpinteriaPiezas?: VerticeContorno[][] | null;
+  /** la carpintería de este piso se editó a mano: los tramos no la recalculan (vacío = no) */
+  carpManual?: boolean | null;
+  /** la carpintería a mano sale de lo común a propósito (un vidrio en voladizo, un atrio): no se avisa (vacío = no) */
+  carpVoladizo?: boolean | null;
 }
 
 /** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */

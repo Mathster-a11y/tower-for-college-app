@@ -3,7 +3,7 @@ import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/abert
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, confirmar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
-import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
+import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
@@ -431,7 +431,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelCad.className = 'calco-panel cad-panel';
   panelCad.hidden = true;
   dock.appendChild(panelCad);
-  const COLOR_USO: Record<string, string> = { referencia: 'var(--dim)', muros: 'var(--ink)', losa: 'var(--ink2)', 'carpintería': 'var(--serie-1)' };
+  const COLOR_USO: Record<string, string> = { referencia: 'var(--dim)', muros: 'var(--ink)', losa: 'var(--ink2)', 'carpintería': 'var(--carpinteria)' };
   function cargarDXF(nombre: string, texto: string) {
     const d = leerDXFCompleto(texto);
     if (!d.entidades.length) { mensaje(`${nombre}: no tiene líneas, polilíneas ni círculos en la sección de entidades.`); return; }
@@ -593,7 +593,7 @@ export function montarPlanta(cont: HTMLElement) {
     const contorno = (u: 'losa' | 'carpintería') => boton(u === 'losa' ? 'Usar como losa' : 'Usar como carpintería', u === 'losa' ? 'El contorno cerrado más grande de las capas «losa» pasa a ser la silueta de este nivel.' : 'El contorno cerrado más grande de las capas «carpintería» pasa a ser la carpintería de este nivel: su caja da a máx y b máx.', () => {
       const v = contornoDesdeCAD(deUso(u));
       if (!v) { mensaje(`No hay un contorno cerrado (polilínea cerrada) en las capas marcadas como «${u}».`); return; }
-      estado.cambiar(() => { const n = estado.proyecto.niveles[iNivel]; if (u === 'losa') n.silueta = v.map(q => ({ ...q })); else n.carpinteria = v.map(q => ({ ...q })); });
+      estado.cambiar(() => { const n = estado.proyecto.niveles[iNivel]; if (u === 'losa') n.silueta = v.map(q => ({ ...q })); else { soltarCarp(n); n.carpinteria = v.map(q => ({ ...q })); } });
     });
     const quitar = boton('Quitar plano', 'Saca el dibujo de fondo (lo creado con él queda)', () => { estado.cad = null; armarPanelCad(); dibujar(); });
     const acciones = document.createElement('div'); acciones.className = 'acciones-cad';
@@ -609,10 +609,13 @@ export function montarPlanta(cont: HTMLElement) {
   panelSil.className = 'calco-panel silueta-panel';
   panelSil.hidden = true;
   dock.appendChild(panelSil);
+  /** editar a mano la carpintería de un piso que calcula un tramo la suelta (los tramos dejan de recalcularla) */
+  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual) { n.carpManual = true; delete n.carpinteriaPiezas; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
     if (editaCarp) {
+      soltarCarp(n);
       if (!n.carpinteria || n.carpinteria.length < 3) n.carpinteria = (carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta).map(v => ({ ...v }));
       return n.carpinteria;
     }
@@ -643,7 +646,7 @@ export function montarPlanta(cont: HTMLElement) {
       const u = ((await pedirTexto('Unidad del dibujo', `Escribí m, cm o mm. El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF.`, guess, 'Importar')) ?? '').trim().toLowerCase();
       const factor = u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : u === 'm' ? 1 : NaN;
       if (!isFinite(factor)) return;
-      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) nv.carpinteria = c; else nv.silueta = c; });
+      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) { soltarCarp(nv); nv.carpinteria = c; } else nv.silueta = c; });
     });
     const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
     ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
@@ -678,7 +681,7 @@ export function montarPlanta(cont: HTMLElement) {
       ponerModo('mover');
       edc.abrirContorno({
         titulo: `${carp ? 'Carpintería' : 'Losa'} del nivel ${nombre}`, v: v0,
-        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) nv.carpinteria = v; else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
+        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) { soltarCarp(nv); nv.carpinteria = v; } else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
       });
     }, 'Arcos (por tres puntos o por radio), empalmes, chaflanes, dividir lados, largo y ángulo exactos, desfasar, simetría, girar, escalar y formas (círculo, polígono, elipse). El mismo editor que el contorno de los muros.');
     filaV.append(agregar, borrar, cad);
@@ -751,7 +754,23 @@ export function montarPlanta(cont: HTMLElement) {
         }
         segue.append(pan);
         const tn = tramoEn(p, n.cota);
-        panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue, linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'));
+        // este piso: lo calcula el tramo, o se soltó para editarlo a mano (con control de que no pase sobre un vacío)
+        const piso: HTMLElement[] = [];
+        if (tn && tn.modo !== 'sin') {
+          const nPiezas = 1 + (n.carpinteriaPiezas?.length ?? 0);
+          if (!n.carpManual) {
+            piso.push(linea(nPiezas > 1 ? `lo común a esta losa y la de arriba son ${nPiezas} piezas separadas: ${nPiezas} carpinterías en este piso` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
+              h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.carpManual = true; delete nv.carpinteriaPiezas; }), 'Queda con la forma de ahora y el tramo deja de recalcularla. Si pasa sobre un vacío, aparece un aviso.')));
+          } else {
+            const vol = document.createElement('label'); vol.className = 'campo-esq'; vol.title = 'Un vidrio en voladizo o un atrio hecho a propósito: no se avisa aunque salga de lo común a las dos losas';
+            const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!n.carpVoladizo;
+            cb.addEventListener('change', () => estado.cambiar(pp => { if (cb.checked) pp.niveles[iNivel].carpVoladizo = true; else delete pp.niveles[iNivel].carpVoladizo; }));
+            vol.append(cb, ' voladizo a propósito (no avisar)');
+            piso.push(linea('editada a mano: el tramo no la recalcula'), filaV,
+              h2(boton('Volver a atar al tramo', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; delete nv.carpManual; delete nv.carpVoladizo; }), 'Se pierde lo editado a mano en este piso: vuelve a ser lo común a su losa y la de arriba')), vol);
+          }
+        }
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
         return;
       }
       panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
@@ -1110,7 +1129,7 @@ export function montarPlanta(cont: HTMLElement) {
       const niveles = esq.todos ? p2.niveles.map((_, k) => k) : [iNivel];
       const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: esq.que, niveles });
       if (!r.cambios.length) { await avisar('error', 'No se cambió ninguna esquina', r.avisos.join(' ') || 'No hay esquinas salientes entre lados rectos.'); return; }
-      estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else nv.carpinteria = c.v; }); });
+      estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else { soltarCarp(nv); nv.carpinteria = c.v; } }); });
       if (r.avisos.length) await avisar('info', 'Esquinas tratadas, con avisos', r.avisos.join(' '));
     });
     const pie = document.createElement('p'); pie.className = 'nota';
@@ -2108,6 +2127,8 @@ export function montarPlanta(cont: HTMLElement) {
     }
     // carpintería del nivel: contorno y su caja (a máx × b máx), que es lo que se carga a mano como B y L
     const car = carpinteriaDeNivel(p, iN);
+    // las otras piezas de la carpintería del piso (lo común a las dos losas partido en dos o más)
+    (p.niveles[iN]?.carpinteriaPiezas ?? []).forEach(v => { const pc = puntosSilueta(v); svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria carpinteria-pieza' })); });
     if (car) {
       const pc = puntosSilueta(car.v);
       svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' }));

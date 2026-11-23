@@ -84,6 +84,7 @@ export function leerProyecto(x: unknown): Lectura {
       if (!num(n.cota)) error(`${quien} («${n.nombre}»): la cota tiene que ser un número.`);
       for (const k of ['B', 'L', 'pisos'] as const) if (!nulo(n[k]) && !(num(n[k]) && (n[k] as number) > 0)) error(`${quien} («${n.nombre}»): «${k}» tiene que ser un número mayor que 0 o quedar vacío.`);
       for (const k of ['silueta', 'carpinteria'] as const) if (!nulo(n[k]) && !contornoValido(n[k], 0)) error(`${quien} («${n.nombre}»): la ${k === 'silueta' ? 'silueta' : 'carpintería'} está dañada.`);
+      if (!nulo(n.carpinteriaPiezas) && !(Array.isArray(n.carpinteriaPiezas) && n.carpinteriaPiezas.every(v => contornoValido(v, 0)))) error(`${quien} («${n.nombre}»): una pieza de la carpintería está dañada.`);
     });
     if (!errores.length) {
       const ns = niveles as Nivel[];

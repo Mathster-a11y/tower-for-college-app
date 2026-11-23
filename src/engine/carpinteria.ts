@@ -13,8 +13,8 @@
  */
 import type { Proyecto } from './modelo';
 import { desfasarAnillo } from './contorno';
-import { adentro } from './avisos';
-import { areaSilueta, plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
+import { interseccion } from './interseccion';
+import { plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
 
 export type ModoCarpinteria = 'sin' | 'losa' | 'continua';
 /** «plana»: los lados curvos de la losa pasan a facetas rectas (un paño plano por faceta); «curva» (o vacío): sigue la curva */
@@ -36,39 +36,27 @@ export function tramoEn(p: Proyecto, z: number): TramoCarpinteria | null {
 }
 
 const area = (q: Punto[]) => q.reduce((s, a, i) => { const b = q[(i + 1) % q.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2;
-const convexo = (q: Punto[]) => { let sg = 0; for (let i = 0; i < q.length; i++) { const a = q[i], b = q[(i + 1) % q.length], c = q[(i + 2) % q.length], cr = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x); if (Math.abs(cr) < 1e-9) continue; const s = Math.sign(cr); if (sg && s !== sg) return false; sg = s; } return true; };
-/** Sutherland–Hodgman: el polígono «suj» recortado por el polígono convexo «rec» (los dos antihorarios) */
-function recortarConvexo(suj: Punto[], rec: Punto[]): Punto[] {
-  let out = suj;
-  for (let i = 0; i < rec.length && out.length; i++) {
-    const a = rec[i], b = rec[(i + 1) % rec.length], dentro = (q: Punto) => (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x) >= -1e-9;
-    const inp = out; out = [];
-    for (let j = 0; j < inp.length; j++) {
-      const p = inp[j], q = inp[(j + 1) % inp.length], dp = dentro(p), dq = dentro(q);
-      if (dp) out.push(p);
-      if (dp !== dq) {
-        const d1 = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x), d2 = (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x), t = d1 / (d1 - d2);
-        out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
-      }
-    }
-  }
-  return out;
-}
-const ccw = (q: Punto[]) => (area(q) < 0 ? [...q].reverse() : q);
 
 /**
- * Lo común a dos losas (lo que está en las dos). Exacto si una contiene a la otra (y entonces con sus arcos) o si una
- * es convexa; si no, la más chica (exacto: false, para avisar).
+ * Lo común a dos losas (lo que está en las dos), exacto para cualquier forma. Si una contiene a la otra, es esa (con sus
+ * arcos); si no, la intersección en piezas (puede ser más de una), de la más grande a la más chica.
  */
-export function comunLosas(a: Vertice[], b: Vertice[]): { v: Vertice[]; exacto: boolean } {
+export function comunLosas(a: Vertice[], b: Vertice[]): { v: Vertice[]; piezas: Vertice[][]; exacto: boolean } {
   const pa = puntosSilueta(a, 4), pb = puntosSilueta(b, 4);
-  if (pb.every(q => adentro(q, pa, 1e-4))) return { v: b, exacto: true };
-  if (pa.every(q => adentro(q, pb, 1e-4))) return { v: a, exacto: true };
-  const A = ccw(pa), B = ccw(pb);
-  const r = convexo(B) ? recortarConvexo(A, B) : convexo(A) ? recortarConvexo(B, A) : null;
-  if (r && r.length >= 3) return { v: r.map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4) })), exacto: true };
-  return { v: areaSilueta(a) <= areaSilueta(b) ? a : b, exacto: false };
+  const ri = interseccion(pa, pb);
+  // una contiene a la otra (no alcanza con los vértices: en una losa cóncava los lados pueden cruzar un vacío): lo
+  // común es una sola pieza con el área de la más chica; entonces se usa esa losa tal cual, con sus arcos
+  const ar = (q: Punto[]) => Math.abs(area(q)), aa = ar(pa), ab = ar(pb);
+  if (ri.length === 1) {
+    if (Math.abs(ar(ri[0]) - ab) < 1e-6 * Math.max(1, ab)) return { v: b, piezas: [b], exacto: true };
+    if (Math.abs(ar(ri[0]) - aa) < 1e-6 * Math.max(1, aa)) return { v: a, piezas: [a], exacto: true };
+  }
+  const r = ri.map(q => q.map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) })));
+  return { v: r[0] ?? [], piezas: r, exacto: true };
 }
+/** la carpintería de un piso: la principal y las demás piezas */
+export const piezasCarpinteria = (n: { carpinteria?: Vertice[] | null; carpinteriaPiezas?: Vertice[][] | null }): Vertice[][] =>
+  [...(n.carpinteria && n.carpinteria.length >= 3 ? [n.carpinteria] : []), ...(n.carpinteriaPiezas ?? []).filter(q => q.length >= 3)];
 
 // ------------------------------------------------------------------ facetas: la carpintería plana
 const curvo = (q: Vertice) => !!(q.c1 && q.c2) || Math.abs(q.b ?? 0) > 1e-9;
@@ -107,25 +95,25 @@ export const moduloFacetas = (p: Proyecto) => Math.max(0.3, p.paneleria?.modulo 
 /** escribe la carpintería de cada nivel según los tramos; devuelve los niveles donde lo común no salió exacto */
 export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproximados: number[] } {
   const tramos = tramosCarpinteria(p);
+  // las piezas de más las calculan los tramos: sin tramos (o en los pisos a mano) no hay
+  p.niveles.forEach(nv => { if (!tramos.length || nv.carpManual) delete nv.carpinteriaPiezas; });
   if (!tramos.length) return { niveles: 0, aproximados: [] };
   // niveles de abajo hacia arriba (para saber cuál es la losa de arriba de cada piso)
   const orden = p.niveles.map((n, i) => ({ n, i })).sort((x, y) => x.n.cota - y.n.cota);
   const sil = new Map(orden.map(({ i }) => [i, plantaDeNivel(p, i).silueta]));
   let n = 0; const aprox: number[] = [];
-  const hecho = new Map<number, Vertice[]>();
+  const hecho = new Map<number, Vertice[][]>();
   orden.forEach(({ n: nv, i }, k) => {
     const t = tramoEn(p, nv.cota);
     if (!t) return;                                            // debajo del primer tramo: a mano
-    if (t.modo === 'sin') { nv.carpinteria = null; return; }
+    if (nv.carpManual) return;                                 // editada a mano: la controlan los avisos
+    if (t.modo === 'sin') { nv.carpinteria = null; delete nv.carpinteriaPiezas; return; }
     const d = Math.max(0, t.retiro ?? 0), arriba = orden[k + 1];
-    let base = sil.get(i)!;
-    if (t.modo === 'losa' && arriba) {
-      const c = comunLosas(base, sil.get(arriba.i)!);
-      base = c.v; if (!c.exacto) aprox.push(nv.cota);
-    }
-    const v = d > 0 ? desfasarAnillo(base, -d) : base;
-    if ('error' in v) return;
-    hecho.set(i, (v as Vertice[]).map(q => ({ ...q })));
+    let bases: Vertice[][] = [sil.get(i)!];
+    if (t.modo === 'losa' && arriba) bases = comunLosas(sil.get(i)!, sil.get(arriba.i)!).piezas;
+    const vs = bases.map(b => (d > 0 ? desfasarAnillo(b, -d) : b)).filter(v => !('error' in v) && (v as Vertice[]).length >= 3) as Vertice[][];
+    if (!vs.length) { if (bases.length) aprox.push(nv.cota); return; }
+    hecho.set(i, vs.map(v => v.map(q => ({ ...q }))));
   });
   // carpintería plana: ya metida, los lados curvos pasan a facetas. En un mismo tramo, si las carpinterías tienen los
   // mismos lados (una torre ahusada o con perfil), cada lado lleva las mismas facetas en todos los pisos: así las
@@ -134,12 +122,17 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
   tramos.forEach(t => {
     if (!esPlana(t) || t.modo === 'sin') return;
     const idx = orden.filter(({ n: nv, i }) => tramoEn(p, nv.cota) === t && hecho.has(i)).map(({ i }) => i);
-    const vs = idx.map(i => hecho.get(i)!), forma = (v: Vertice[]) => v.map(q => (curvo(q) ? 'c' : 'r')).join('');
+    const vs = idx.map(i => hecho.get(i)![0]), forma = (v: Vertice[]) => v.map(q => (curvo(q) ? 'c' : 'r')).join('');
     const iguales = vs.length > 1 && vs.every(v => forma(v) === forma(vs[0]));
     const nf = iguales ? vs.map(v => facetasDe(v, mod)).reduce((x, y) => x.map((c, k) => Math.max(c, y[k]))) : null;
-    idx.forEach((i, k) => hecho.set(i, facetar(vs[k], mod, nf ?? undefined)));
+    idx.forEach((i, k) => hecho.set(i, [facetar(vs[k], mod, nf ?? undefined), ...hecho.get(i)!.slice(1).map(v => facetar(v, mod))]));
   });
-  hecho.forEach((v, i) => { p.niveles[i].carpinteria = v; n++; });
+  hecho.forEach((vs, i) => {
+    const nv = p.niveles[i];
+    nv.carpinteria = vs[0];
+    if (vs.length > 1) nv.carpinteriaPiezas = vs.slice(1); else delete nv.carpinteriaPiezas;
+    n++;
+  });
   return { niveles: n, aproximados: aprox };
 }
 
@@ -231,7 +224,12 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
     const md = modo(nivs[k].n.cota);
     if (md === 'sin') { k++; continue; }
     const plana = esPlana(tramoEn(p, nivs[k].n.cota));
-    if (md === 'losa') { const pts = ccwP(puntosSilueta(contorno(nivs[k].i), 8)); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts, plana }); k++; continue; }
+    if (md === 'losa') {
+      // una banda por pieza de carpintería del piso
+      const nv = p.niveles[nivs[k].i], ps = piezasCarpinteria(nv);
+      (ps.length ? ps : [contorno(nivs[k].i)]).forEach(v => { const pts = ccwP(puntosSilueta(v, 8)); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts, plana }); });
+      k++; continue;
+    }
     let f = k + 1;
     while (f + 1 < nivs.length && modo(nivs[f].n.cota) === 'continua' && esPlana(tramoEn(p, nivs[f].n.cota)) === plana) f++;
     const rs = nivs.slice(k, f + 1).map(x => ccwP(puntosSilueta(contorno(x.i), plana ? 8 : 3)));

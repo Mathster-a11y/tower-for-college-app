@@ -4,15 +4,18 @@
  *
  *  - un tabique que sale de la losa, o que cae en un hueco de la losa;
  *  - la carpintería (la fachada) que sale de la losa;
+ *  - la carpintería losa por losa editada a mano que pasa sobre un vacío (fuera de lo común a la losa de abajo y la de
+ *    arriba), salvo que sea un voladizo a propósito;
  *  - la losa que no mide lo que la planilla usa para el viento (B × L);
  *  - un tabique que no forma pieza en ningún viento (no toma viento).
  *
  * Los niveles se agrupan: «del 3º al 12º» en vez de un aviso por piso.
  */
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { comunLosas, piezasCarpinteria, tramoEn } from './carpinteria';
 import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
-export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'bl-caja' | 'sin-pieza';
+export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'carpinteria-vacio' | 'bl-caja' | 'sin-pieza';
 export interface AvisoDiseno {
   tipo: TipoAviso;
   /** texto para el usuario */
@@ -111,6 +114,16 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     out.push({ tipo: 'fuera-losa', muro: ids[0], muros: ids, cotas: f.cotas, texto: `${lista(ids)} ${ids.length > 1 ? 'salen' : 'sale'} de la losa ${rangoNiveles(p, f.cotas)} (hasta ${f2(max)} m).`, arreglo: `${ids.length > 1 ? 'Corrrelos' : 'Correlo'} hacia adentro o agrandá la losa de esos niveles (botón «Losa»). Un tabique tiene que apoyar en la losa en todos los pisos.`.replace('Corrrelos', 'Corrélos') });
   });
   juntar(enHueco, f => f.hueco).forEach(({ ids, f }) => out.push({ tipo: 'sobre-hueco', muro: ids[0], muros: ids, cotas: f.cotas, texto: `${lista(ids)} ${ids.length > 1 ? 'caen' : 'cae'} en el hueco de losa «${f.hueco}» ${rangoNiveles(p, f.cotas)}.`, arreglo: 'Corré los muros o achicá el hueco (Calar → Losa): ahí no hay losa que los ate.' }));
+  // carpintería por losa editada a mano: tiene que quedar en lo común a su losa y la de arriba (si no, pasa sobre un vacío)
+  const vacio: number[] = []; let vacioMax = 0;
+  const ordenZ = p.niveles.map((n, i) => ({ n, i })).filter(({ n }) => n.cota >= -1e-6).sort((a, b) => a.n.cota - b.n.cota);
+  ordenZ.forEach(({ n, i }, k) => {
+    if (!n.carpManual || n.carpVoladizo || tramoEn(p, n.cota)?.modo !== 'losa' || !ordenZ[k + 1]) return;
+    const com = comunLosas(plantaDeNivel(p, i).silueta, plantaDeNivel(p, ordenZ[k + 1].i).silueta).piezas.map(v => puntosSilueta(v, 8));
+    const d = Math.max(0, ...piezasCarpinteria(n).flatMap(v => puntosSilueta(v, 8)).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
+    if (d > TOL) { vacio.push(n.cota); vacioMax = Math.max(vacioMax, d); }
+  });
+  if (vacio.length) out.push({ tipo: 'carpinteria-vacio', cotas: vacio, texto: `La carpintería editada a mano pasa sobre un vacío ${rangoNiveles(p, vacio)} (hasta ${f2(vacioMax)} m fuera de lo común a la losa de abajo y la de arriba).`, arreglo: 'Volvé a atarla al tramo (Losa → Carpintería → «Volver a atar»), metela a mano, o marcala como voladizo a propósito.' });
   if (carp.cotas.length) out.push({ tipo: 'carpinteria-fuera', cotas: carp.cotas, texto: `La carpintería sale de la losa ${rangoNiveles(p, carp.cotas)} (hasta ${f2(carp.max)} m).`, arreglo: 'Usá «Carpintería que sigue a la losa» (botón «Losa» → Carpintería) o metela a mano: la fachada apoya en el borde de la losa.' });
   bl.forEach((cotas, clave) => {
     const [plan, caja] = clave.split('|');

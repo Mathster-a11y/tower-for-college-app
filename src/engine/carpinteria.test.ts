@@ -5,8 +5,29 @@ import { cajaSilueta, carpinteriaDeNivel, rectangulo } from './silueta';
 import { avisosDiseno } from './avisos';
 
 describe('carpintería por tramos', () => {
+  it('por losa con lo común partido en dos: dos carpinterías en el piso, ninguna sobre el vacío', () => {
+    const p = ejemploGuia();
+    const U = [[0, 0], [24, 0], [24, 24], [16, 24], [16, 8], [8, 8], [8, 24], [0, 24]].map(([x, y]) => ({ x: x - 12, y: y - 12 }));
+    const L = [[2, 10], [22, 10], [22, 22], [18, 22], [18, 16], [2, 16]].map(([x, y]) => ({ x: x - 12, y: y - 12 }));
+    const i15 = p.niveles.findIndex(n => n.nombre === '15º');
+    p.niveles.forEach((n, i) => { n.silueta = i <= i15 ? L : U; });
+    p.carpinteriaTramos = [{ desde: 0, modo: 'losa', retiro: 0.2 }];
+    aplicarCarpinteriaTramos(p);
+    const n14 = p.niveles[i15 + 1];                                   // entre la U (abajo) y la L (arriba)
+    expect(n14.carpinteriaPiezas?.length).toBe(1);
+    [n14.carpinteria!, ...n14.carpinteriaPiezas!].flat().forEach(q => expect(q.x <= -4 + 1e-6 || q.x >= 4 - 1e-6).toBe(true));
+    // el piso de abajo (U sobre U): una sola
+    expect(p.niveles[i15 + 2].carpinteriaPiezas).toBeUndefined();
+    // la fachada: una banda por pieza en ese piso
+    const z14 = n14.cota;
+    expect(bandasFachada(p).filter(b => b.z0 === z14).length).toBe(2);
+    // a mano: los tramos no la tocan
+    n14.carpManual = true; n14.carpinteria = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }];
+    aplicarCarpinteriaTramos(p);
+    expect(n14.carpinteria.length).toBe(3); expect(n14.carpinteriaPiezas).toBeUndefined();
+  });
   it('lo común a dos losas: la de adentro si una contiene a la otra; recorte exacto con una convexa', () => {
-    expect(comunLosas(rectangulo(20, 16), rectangulo(10, 8))).toEqual({ v: rectangulo(10, 8), exacto: true });
+    expect(comunLosas(rectangulo(20, 16), rectangulo(10, 8))).toEqual({ v: rectangulo(10, 8), piezas: [rectangulo(10, 8)], exacto: true });
     const corrida = rectangulo(20, 16).map(q => ({ x: q.x + 5, y: q.y }));
     const c = comunLosas(rectangulo(20, 16), corrida);
     expect(c.exacto).toBe(true);

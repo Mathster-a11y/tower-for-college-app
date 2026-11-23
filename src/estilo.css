@@ -22,7 +22,7 @@
   --edge: #c3cad1; --field-edge: #b3bcc5; --rule: #dfe3e7; --hair: #e1e5ea;
   --ink: #1f2328; --ink2: #5f6b76; --head: #6b7781; --dim: #8a949e;
   --accent: #1a6bbd; --accent-dark: #15559a; --tint: #dbe8f6; --danger: #c62828; --warn: #b8401a; --run-fill: #eaf6ec; --run-ink: #1a7a3a; --hand: #00747f;
-  --traccion: #e24b4a; --compresion: #378add; --deformada: #1d9e75; --carga: #d85a30; --reaccion: #6a1b9a; --corte: #7f77dd; --elegido: #ef9f27; --cero: #888888; --grilla: #e8e8e8;
+  --traccion: #e24b4a; --compresion: #378add; --deformada: #1d9e75; --carga: #d85a30; --reaccion: #6a1b9a; --corte: #7f77dd; --carpinteria: #5b4a8b; --elegido: #ef9f27; --cero: #888888; --grilla: #e8e8e8;
   --r-diseno: #1a6bbd; --r-viento: #b8401a; --r-fuerzas: #3f51b5; --r-estabilidad: #00747f; --r-rigidez: #8a5f00; --r-rototrasl: #6a3d9a; --r-flexion: #ad1457; --r-resumen: #2e7d32; --r-ayuda: #455a64;
   --ok: #1a7a3a; --ok-fill: #eaf6ec; --mal: #c62828; --mal-fill: #fbe9e9; --revisar: #8a5f00; --revisar-fill: #fbf1dc; --info-fill: #dbe8f6;
   --num: #a55500;
@@ -39,7 +39,7 @@
     --edge: #3d4d5e; --field-edge: #4a5a6b; --rule: #2c3946; --hair: #2a3542;
     --ink: #dce4ec; --ink2: #9aa8b6; --head: #8b99a7; --dim: #7d8b99;
     --accent: #4aa3ff; --accent-dark: #2f86e0; --tint: #203a57; --danger: #ff6b6b; --warn: #ff8a5c; --run-fill: #1d3326; --run-ink: #5fd47e; --hand: #3fc1c9;
-    --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
+    --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --carpinteria: #c2b5f2; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
     --r-diseno: #4aa3ff; --r-viento: #ff8a5c; --r-fuerzas: #8c9eff; --r-estabilidad: #3fc1c9; --r-rigidez: #ffb547; --r-rototrasl: #c38bff; --r-flexion: #ff6fa8; --r-resumen: #5fd47e; --r-ayuda: #9aa8b6;
     --ok: #5fd47e; --ok-fill: #1d3326; --mal: #ff6b6b; --mal-fill: #3a2026; --revisar: #ffb547; --revisar-fill: #3a2f18; --info-fill: #203a57;
     --num: #ffb547;
@@ -52,7 +52,7 @@
   --edge: #3d4d5e; --field-edge: #4a5a6b; --rule: #2c3946; --hair: #2a3542;
   --ink: #dce4ec; --ink2: #9aa8b6; --head: #8b99a7; --dim: #7d8b99;
   --accent: #4aa3ff; --accent-dark: #2f86e0; --tint: #203a57; --danger: #ff6b6b; --warn: #ff8a5c; --run-fill: #1d3326; --run-ink: #5fd47e; --hand: #3fc1c9;
-  --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
+  --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --carpinteria: #c2b5f2; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
   --r-diseno: #4aa3ff; --r-viento: #ff8a5c; --r-fuerzas: #8c9eff; --r-estabilidad: #3fc1c9; --r-rigidez: #ffb547; --r-rototrasl: #c38bff; --r-flexion: #ff6fa8; --r-resumen: #5fd47e; --r-ayuda: #9aa8b6;
   --ok: #5fd47e; --ok-fill: #1d3326; --mal: #ff6b6b; --mal-fill: #3a2026; --revisar: #ffb547; --revisar-fill: #3a2f18; --info-fill: #203a57;
   --num: #ffb547;
@@ -735,10 +735,10 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .cad .cad-referencia { stroke: color-mix(in srgb, var(--ink2) 45%, transparent); }
 .planta .cad .cad-muros { stroke: color-mix(in srgb, var(--ink) 70%, transparent); }
 .planta .cad .cad-losa { stroke: color-mix(in srgb, var(--ink2) 60%, transparent); stroke-dasharray: 5 3; }
-.planta .cad .cad-carpinteria { stroke: var(--serie-1); stroke-width: 1.6; }
-.planta .carpinteria { fill: none; stroke: var(--serie-1); stroke-width: 2.2; pointer-events: none; }
+.planta .cad .cad-carpinteria { stroke: var(--carpinteria); stroke-width: 1.6; }
+.planta .carpinteria { fill: none; stroke: var(--carpinteria); stroke-width: 2.2; pointer-events: none; }
 .planta .caja-carpinteria { fill: none; stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 6 4; pointer-events: none; }
-.planta .caja-txt { fill: var(--serie-1); }
+.planta .caja-txt { fill: var(--carpinteria); }
 .planta .iman-txt { fill: var(--elegido); font-weight: 600; }
 .cad-panel { width: 270px; max-height: calc(100% - 60px); overflow: auto; }
 .cad-panel .capas-cad { display: grid; gap: 3px; margin: 4px 0; }
@@ -771,8 +771,8 @@ text[data-par].ultimo { font-size: 15px; }
 .corte-tabla { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
 .corte-tabla th, .corte-tabla td { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .corte-tabla th:nth-child(2), .corte-tabla td:nth-child(2) { text-align: left; }
-.planta .carpinteria.editando { stroke-width: 3; fill: color-mix(in srgb, var(--serie-1) 6%, transparent); pointer-events: visiblePainted; cursor: copy; }
-.planta .vertice.vertice-carp { stroke: var(--serie-1); }
+.planta .carpinteria.editando { stroke-width: 3; fill: color-mix(in srgb, var(--carpinteria) 6%, transparent); pointer-events: visiblePainted; cursor: copy; }
+.planta .vertice.vertice-carp { stroke: var(--carpinteria); }
 .planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
 .silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }
 .planta .nodos .ref rect, .planta .nodos .ref polygon { fill: var(--elegido); stroke: var(--elegido); }
@@ -1831,7 +1831,7 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .corte-svg .losa.generada { fill: color-mix(in srgb, var(--accent) 45%, var(--dim)); }
 .corte-svg .losa.manual { fill: var(--ink2); }
 .corte-svg .fachada { fill: none; stroke: var(--accent); stroke-width: 1.6; }
-.corte-svg .carp { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.corte-svg .carp { fill: none; stroke: var(--carpinteria); stroke-width: 1.2; stroke-dasharray: 5 4; }
 .corte-svg .manija { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: ew-resize; }
 .corte-svg .manija:hover { fill: var(--accent); }
 .corte-svg .calib { fill: var(--elegido, #e8a317); }
@@ -1894,3 +1894,6 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .formulario > button { grid-column: 1 / -1; justify-self: start; white-space: normal; text-align: left; }
 /* en una carta baja, nada se aplasta: la carta se desplaza */
 .silueta-panel > * { flex-shrink: 0; }
+
+/* carpintería: color propio (no es tracción ni compresión: nunca rojo ni azul) */
+.planta .carpinteria.carpinteria-pieza { stroke-dasharray: none; }
