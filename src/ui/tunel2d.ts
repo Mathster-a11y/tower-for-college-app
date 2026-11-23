@@ -506,7 +506,7 @@ export function centroTunel(c: H, tam: Tam) {
       // qué contorno está en el túnel: la carpintería (propia o heredada) o la losa, y si hay carpintería en otro piso
       const ne = nivelElegido(); if (!ne) return [];
       const p = estado.proyecto, c = contornoAlViento(p, ne.i), otros = p.niveles.filter(n => (n.carpinteria?.length ?? 0) >= 3).map(n => n.nombre);
-      if (c.de === 'losa' && otros.length) return [h('p', { class: 'aviso-linea' }, `En ${ne.n.nombre} el viento choca con la losa: la carpintería está dibujada en ${otros.join(', ')}. Elegí ese corte o, en Diseño → Contornos → Carpintería, «Copiar a todos los niveles».`)];
+      if (c.de === 'losa' && otros.length) return [h('p', { class: 'aviso-linea' }, `En ${ne.n.nombre} el viento choca con la losa: la carpintería está dibujada en ${otros.join(', ')}. Elegí ese corte o, en Diseño → Planta → Losa → Carpintería, «Copiar a todos los niveles» (o armala por tramos).`)];
       return [h('p', { class: 'llave' }, `Contorno en el túnel: ${c.de === 'carpintería' ? `la carpintería${(p.niveles[ne.i].carpinteria?.length ?? 0) >= 3 ? ` de ${ne.n.nombre}` : ' (heredada de otro nivel)'}` : 'la losa (no hay carpintería dibujada)'}.`)];
     })(),
     h('div', { class: 'tunel-marco' }, lienzo, botonesZoom(lienzo)),

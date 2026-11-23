@@ -1890,3 +1890,7 @@ canvas.tunel2d.arrastrable { cursor: grab; }
   .sigue-losa .quitar-tramo { min-width: 36px; }
 }
 .sigue-losa .forma-tramo { display: flex; } .sigue-losa .forma-tramo button { flex: 1; }
+/* un botón suelto dentro de un formulario ocupa la fila entera (no ensancha la columna de los rótulos) */
+.formulario > button { grid-column: 1 / -1; justify-self: start; white-space: normal; text-align: left; }
+/* en una carta baja, nada se aplasta: la carta se desplaza */
+.silueta-panel > * { flex-shrink: 0; }

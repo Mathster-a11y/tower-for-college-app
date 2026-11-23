@@ -572,8 +572,8 @@ $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; r
 // proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
 $('b-nuevo').addEventListener('click', async () => {
   cerrarMenus();
-  // documento en blanco: pisos y altura; la losa sale rectangular de 20 × 16 y se cambia en Planta → Contornos → «Losa desde cero»
-  const r = await pedirTexto('Proyecto nuevo, en blanco', 'Cuántos pisos sobre PB y qué altura tiene cada uno, como «10 × 3» (diez pisos de 3 m). Después se dibujan la losa (Contornos → «Losa desde cero») y los muros (Dibujar o Insertar).', '10 × 3', 'Crear');
+  // documento en blanco: pisos y altura; la losa sale rectangular de 20 × 16 y se cambia en Planta → Losa → «Losa desde cero»
+  const r = await pedirTexto('Proyecto nuevo, en blanco', 'Cuántos pisos sobre PB y qué altura tiene cada uno, como «10 × 3» (diez pisos de 3 m). Después: la forma de la losa (Planta → Losa → «Losa desde cero»), la carpintería (Losa → Carpintería) y los muros (Dibujar, Insertar o Colocar).', '10 × 3', 'Crear');
   if (r === null) return;
   const m = /^\s*(\d+)\s*[x×*]\s*([\d.,]+)\s*$/i.exec(r);
   const n = m ? Math.max(1, Math.min(200, +m[1])) : 10, hp = m ? Math.max(2, Math.min(10, +m[2].replace(',', '.'))) : 3;
