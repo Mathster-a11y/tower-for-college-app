@@ -53,6 +53,57 @@ export function imanar(p: Punto, muros: Muro[], tol = 0.4): { p: Punto; a: 'extr
   return { p: { x: grilla(p.x), y: grilla(p.y) }, a: 'grilla' };
 }
 
+/** punto con nombre para las inferencias (extremo o medio de un muro, un vértice ya dibujado…) */
+export interface PuntoRef { p: Punto; rotulo: string }
+/** guía de una inferencia: la línea de puntos de donde sale la alineación hasta el punto pegado */
+export interface GuiaInferencia { de: Punto; a: Punto }
+export interface Inferencia { p: Punto; a: 'extremo' | 'medio' | 'eje' | 'alineado' | 'grilla'; rotulo: string; guias: GuiaInferencia[] }
+
+/** extremos y medios de los muros (los puntos que se ofrecen al dibujar) */
+export function puntosDeMuros(muros: Muro[]): PuntoRef[] {
+  const out: PuntoRef[] = [];
+  muros.forEach(m => {
+    const t = tipoDe(m);
+    if (t === 'tabique') { const [a, b] = extremos(m); out.push({ p: a, rotulo: `extremo de ${m.id}` }, { p: b, rotulo: `extremo de ${m.id}` }, { p: { x: m.x, y: m.y }, rotulo: `medio de ${m.id}` }); }
+    else if (t === 'perfil') { const E = ejeDeMuro(m); if (E) out.push({ p: E.a, rotulo: `extremo de ${m.id}` }, { p: E.b, rotulo: `extremo de ${m.id}` }, { p: { x: (E.a.x + E.b.x) / 2, y: (E.a.y + E.b.y) / 2 }, rotulo: `medio de ${m.id}` }); }
+    else out.push({ p: { x: m.x, y: m.y }, rotulo: `centro de ${m.id}` });
+  });
+  return out;
+}
+
+/**
+ * Inferencias al dibujar (como el motor de inferencias de los programas de CAD): el punto se pega, en este orden, a
+ * un extremo o al medio de un muro (o a uno de los puntos «extra», como los vértices ya dibujados), al eje de un muro,
+ * o se alinea en x y/o en y con alguno de esos puntos (guías de puntos; si hay alineación en los dos sentidos, va al
+ * cruce). Si no, a la grilla. El rótulo dice qué pasó: «medio de M3», «alineado con extremo de M2».
+ * @param soloEje si se dibuja a 90°, solo se ajusta esa coordenada (la otra la fija el tramo)
+ */
+export function inferir(q: Punto, muros: Muro[], tol: number, extra: PuntoRef[] = [], soloEje?: 'x' | 'y'): Inferencia {
+  const refs = [...extra, ...puntosDeMuros(muros)];
+  if (!soloEje) {
+    let mejor: PuntoRef | null = null, dmin = tol;
+    refs.forEach(r => { const d = Math.hypot(r.p.x - q.x, r.p.y - q.y); if (d <= dmin) { dmin = d; mejor = r; } });
+    if (mejor) { const m = mejor as PuntoRef; return { p: { x: r4(m.p.x), y: r4(m.p.y) }, a: m.rotulo.startsWith('medio') ? 'medio' : 'extremo', rotulo: m.rotulo, guias: [] }; }
+    const ej = imanar(q, muros, tol);
+    if (ej.a === 'eje') return { p: ej.p, a: 'eje', rotulo: `sobre ${ej.id}`, guias: [] };
+  }
+  // alineaciones: el punto de referencia más cercano en cada sentido cuya x (o y) está a menos de tol
+  const alin = (eje: 'x' | 'y') => {
+    let mejor: PuntoRef | null = null, dmin = tol;
+    refs.forEach(r => { const d = Math.abs(r.p[eje] - q[eje]); if (d <= dmin + 1e-12 && (!mejor || d < dmin - 1e-9 || Math.hypot(r.p.x - q.x, r.p.y - q.y) < Math.hypot(mejor.p.x - q.x, mejor.p.y - q.y))) { dmin = d; mejor = r; } });
+    return mejor as PuntoRef | null;
+  };
+  const ax = soloEje === 'y' ? null : alin('x'), ay = soloEje === 'x' ? null : alin('y');
+  if (ax || ay) {
+    const p = { x: ax ? r4(ax.p.x) : soloEje === 'y' ? q.x : grilla(q.x), y: ay ? r4(ay.p.y) : soloEje === 'x' ? q.y : grilla(q.y) };
+    const guias = [...(ax ? [{ de: ax.p, a: p }] : []), ...(ay ? [{ de: ay.p, a: p }] : [])];
+    // ↕: guía vertical (misma x) · ↔: guía horizontal (misma y)
+    const rot = ax && ay ? (ax === ay ? ax.rotulo : `↕ ${ax.rotulo} · ↔ ${ay.rotulo}`) : ax ? `↕ alineado con ${ax.rotulo}` : `↔ alineado con ${ay!.rotulo}`;
+    return { p, a: 'alineado', rotulo: rot, guias };
+  }
+  return { p: { x: soloEje === 'y' ? q.x : grilla(q.x), y: soloEje === 'x' ? q.y : grilla(q.y) }, a: 'grilla', rotulo: '', guias: [] };
+}
+
 /** Tabique entre dos puntos: horizontal (dir X) o vertical (dir Y) según el eje que más cambia. null si es muy corto. */
 export function muroDesdeTramo(a: Punto, b: Punto, espesor = 0.2): Pick<Muro, 'dir' | 'x' | 'y' | 'largo' | 'espesor'> | null {
   const dx = b.x - a.x, dy = b.y - a.y;

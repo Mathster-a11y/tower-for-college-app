@@ -4,7 +4,7 @@ import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, line
 import { avisar, confirmar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto } from '../engine/dibujo';
+import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
@@ -2325,7 +2325,9 @@ export function montarPlanta(cont: HTMLElement) {
         if (pts.length >= 2) g.append(el('polyline', { points: pts.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ') }));
         if (trazo.length >= 3 && trazoCursor) g.append(el('line', { x1: X(trazoCursor.x), y1: Y(trazoCursor.y), x2: X(trazo[0].x), y2: Y(trazo[0].y), class: 'cierre' }));
         trazo.forEach((q, k) => g.append(el('circle', { cx: X(q.x), cy: Y(q.y), r: k === 0 ? 7 : 4, class: k === 0 ? 'primero' : '' })));
-        if (trazoCursor && trazo.length) { const u = trazo[trazo.length - 1], t = el('text', { x: X(trazoCursor.x) + 10, y: Y(trazoCursor.y) - 10, class: 'medida-trazo' }); t.textContent = `${Math.hypot(trazoCursor.x - u.x, trazoCursor.y - u.y).toFixed(2).replace('.', ',')} m`; g.append(t); }
+        if (trazoCursor && trazo.length) { const u = trazo[trazo.length - 1], t = el('text', { x: X(trazoCursor.x) + 10, y: Y(trazoCursor.y) - 10, class: 'medida-trazo' }); t.textContent = `${Math.hypot(trazoCursor.x - u.x, trazoCursor.y - u.y).toFixed(2).replace('.', ',')} m${ultimoIman ? ` · ${ultimoIman}` : ''}`; g.append(t); }
+        else if (trazoCursor && ultimoIman) { const t = el('text', { x: X(trazoCursor.x) + 10, y: Y(trazoCursor.y) - 10, class: 'medida-trazo' }); t.textContent = ultimoIman; g.append(t); }
+        if (trazoCursor) guiasIman.forEach(gi => { g.append(el('line', { x1: X(gi.de.x), y1: Y(gi.de.y), x2: X(gi.a.x), y2: Y(gi.a.y), class: 'guia-inferencia' }), el('circle', { cx: X(gi.de.x), cy: Y(gi.de.y), r: 3, class: 'guia-inferencia-punto' })); });
         svg.append(g);
       }
     }
@@ -2500,7 +2502,9 @@ export function montarPlanta(cont: HTMLElement) {
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
       }
       pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 2 : 3.5, class: `iman ${iman}` }));
-      if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+      guiasIman.forEach(g => { pr.appendChild(el('line', { x1: X(g.de.x), y1: Y(g.de.y), x2: X(g.a.x), y2: Y(g.a.y), class: 'guia-inferencia' })); pr.appendChild(el('circle', { cx: X(g.de.x), cy: Y(g.de.y), r: 3, class: 'guia-inferencia-punto' })); });
+      // el rótulo, del lado del cursor donde entra (cerca del borde derecho, a la izquierda)
+      if (ultimoIman && ultimoIman !== 'grilla') { const izq = X(cursor.x) + 10 + ultimoIman.length * 6.6 > (svg.clientWidth || 600) - 8; pr.appendChild(el('text', { x: X(cursor.x) + (izq ? -10 : 10), y: Y(cursor.y) - 10, class: 'etiqueta iman-txt', 'text-anchor': izq ? 'end' : 'start' }, ultimoIman)); }
       svg.appendChild(pr);
     }
     // línea de referencia de los muros elegidos que se dibujaron por una cara (como ArchiCAD: se ve al elegirlos)
@@ -2547,11 +2551,19 @@ export function montarPlanta(cont: HTMLElement) {
     const q = aMundo(ev), tol = tolPx() / escala + 0.05;
     const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
     if (nc) { iman = nc.t === 'intersección' || nc.t === 'centro' ? 'extremo' : 'eje'; ultimoIman = nc.t; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
-    const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol);
+    // inferencias: extremos y medios de los muros de este nivel, su eje, alineaciones con esos puntos (y con el
+    // arranque del tramo), y si no, la grilla; las guías del plano tienen prioridad si están más cerca
+    const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
+    const ms = estado.proyecto.muros.filter(m => (!excluir || !excluir.has(m.id)) && presenteEn(m, zN, zF, zT));
+    const r = inferir(q, ms, tol, cadenaDibujo.map((p0, k) => ({ p: p0, rotulo: k === 0 ? 'el arranque' : `el vértice ${k + 1}` })));
     const gm = imanDeGuias(q, tol);
-    if (gm && (r.a === 'grilla' || (gm.punto && (r.a === 'eje' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { iman = gm.punto ? 'extremo' : 'eje'; ultimoIman = gm.t; return gm.p; }
-    iman = r.a; ultimoIman = r.a; return r.p;
+    guiasIman = [];
+    if (gm && (r.a === 'grilla' || r.a === 'alineado' || (gm.punto && (r.a === 'eje' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { iman = gm.punto ? 'extremo' : 'eje'; ultimoIman = gm.t; return gm.p; }
+    iman = r.a === 'extremo' || r.a === 'medio' ? 'extremo' : r.a === 'grilla' ? 'grilla' : 'eje'; ultimoIman = r.rotulo || 'grilla'; guiasIman = r.guias; return r.p;
   };
+  /** guías de la última inferencia (líneas de puntos de alineación) y los puntos del muro encadenado que se dibuja */
+  let guiasIman: GuiaInferencia[] = [];
+  let cadenaDibujo: Punto[] = [];
   let ultimoIman = '';
   /** imán al arrastrar desde un nodo: nodos del plano CAD, nodos y caras de los otros elementos, grilla */
   const pegarNodo = (ev: PointerEvent, excluir: Set<string>) => {
@@ -2606,10 +2618,21 @@ export function montarPlanta(cont: HTMLElement) {
   // lazo: en el modo «Lazo», o con Mayúsculas arrastrando el fondo en «Mover»
   // dibujar la losa a mano: cada toque agrega un vértice; tocar el primero (o Enter) la cierra
   const puntoTrazo = (ev: PointerEvent): Punto => {
-    const q = aMundo(ev); let p2 = { x: aj(q.x), y: aj(q.y) };
-    const u = trazo?.[trazo.length - 1];
-    if (u && (dc.orto || ev.shiftKey)) p2 = Math.abs(p2.x - u.x) >= Math.abs(p2.y - u.y) ? { x: p2.x, y: u.y } : { x: u.x, y: p2.y };
-    return p2;
+    // inferencias también al dibujar la losa: los vértices ya puestos (el primero, para cerrar a escuadra), las
+    // esquinas de la losa del nivel y los extremos y medios de los muros
+    const q = aMundo(ev), u = trazo?.[trazo.length - 1], tol = tolPx() / escala + 0.05;
+    const extra = [...(trazo ?? []).map((p0, k) => ({ p: p0, rotulo: k === 0 ? 'el primer vértice' : `el vértice ${k + 1}` })), ...plantaDeNivel(estado.proyecto, iNivel).silueta.map((v, k) => ({ p: { x: v.x, y: v.y }, rotulo: `la esquina ${k + 1} de la losa` }))];
+    const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
+    const ms = estado.proyecto.muros.filter(m => presenteEn(m, zN, zF, zT));
+    let r;
+    if (u && (dc.orto || ev.shiftKey)) {
+      // a 90°: el tramo manda en una coordenada y la inferencia ajusta la otra
+      const horiz = Math.abs(q.x - u.x) >= Math.abs(q.y - u.y);
+      r = inferir(horiz ? { x: q.x, y: u.y } : { x: u.x, y: q.y }, ms, tol, extra, horiz ? 'x' : 'y');
+      r.p = horiz ? { x: r.a === 'grilla' ? aj(q.x) : r.p.x, y: u.y } : { x: u.x, y: r.a === 'grilla' ? aj(q.y) : r.p.y };
+    } else { r = inferir(q, ms, tol, extra); if (r.a === 'grilla') r.p = { x: aj(q.x), y: aj(q.y) }; }
+    guiasIman = r.guias; ultimoIman = r.rotulo;
+    return r.p;
   };
   const cerrarTrazo = async () => {
     if (!trazo || trazo.length < 3) { mensaje('Hacen falta al menos tres vértices.'); return; }
@@ -2932,8 +2955,9 @@ export function montarPlanta(cont: HTMLElement) {
     // de pocos centímetros por el pulso
     if (ev.pointerType !== 'mouse' && inicio) { const l = local(ev); if (Math.hypot(l.x - (ox + inicio.x * escala), l.y - (oy - inicio.y * escala)) < (ev.pointerType === 'touch' ? 20 : 12)) { inicio = null; dibujar(); mensaje('Muro terminado.'); return; } }
     const q = pegar(ev);
-    if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; dibujar(); return; }
+    if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; cadenaDibujo = [q]; dibujar(); return; }
     muroHasta(q);
+    if (inicio) cadenaDibujo = [...cadenaDibujo, inicio as Punto].slice(-12);
   });
   /** largo tipeado mientras se dibuja un muro (Enter lo aplica en la dirección del cursor) */
   let largoTipeado = '';

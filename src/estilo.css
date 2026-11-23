@@ -1812,3 +1812,7 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .alzado-perfil .rot { font-size: 10px; fill: var(--ink2); }
 .perfil-torre .punto-perfil { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px dashed var(--rule); }
 .sigue-losa { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--hair); }
+
+/* inferencias al dibujar: guía de puntos desde el punto con el que se alinea */
+.planta .guia-inferencia { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 4; pointer-events: none; }
+.planta .guia-inferencia-punto { fill: none; stroke: var(--accent); stroke-width: 1.2; pointer-events: none; }
