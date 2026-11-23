@@ -1706,3 +1706,30 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .zoom-tunel button { min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--lienzo) 90%, transparent); color: var(--ink); cursor: pointer; font-size: 14px; line-height: 1; }
 .zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
 canvas.tunel2d.arrastrable { cursor: grab; }
+
+/* diseñador 3D del exoesqueleto (etapa 08) */
+.exo3d { display: flex; flex-direction: column; gap: 6px; }
+.exo3d-herr { flex-wrap: wrap; }
+.exo3d-kpis { display: flex; flex-wrap: wrap; gap: 6px; }
+.exo3d-kpi { display: flex; flex-direction: column; padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); font-size: 0.85em; min-width: 120px; }
+.exo3d-kpi span { color: var(--ink2); }
+.exo3d-kpi.ok b { color: var(--ok); }
+.exo3d-kpi.mal b { color: var(--mal); }
+.exo3d-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 8px; }
+.exo3d-lienzo { position: relative; height: min(72vh, 760px); min-height: 380px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--window); }
+.exo3d-lienzo canvas { display: block; touch-action: none; }
+.exo3d-etiquetas { position: absolute; inset: 0; pointer-events: none; }
+.exo3d-zona { font-size: 11px; color: var(--corte); background: var(--panel); border: 1px solid var(--corte); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.exo3d-lateral { display: flex; flex-direction: column; gap: 8px; max-height: min(72vh, 760px); overflow: auto; }
+.exo3d-caja { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; background: var(--panel); }
+.exo3d-caja > button { text-align: left; }
+.exo3d-n.traccion { color: var(--traccion); font-weight: 600; }
+.exo3d-n.compresion { color: var(--compresion); font-weight: 600; }
+.exo3d-pincel { display: flex; flex-wrap: wrap; gap: 3px; }
+.exo3d-pincel button { font-size: 0.8em; padding: 2px 5px; }
+.exo3d-zona-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-top: 1px dashed var(--rule); padding-top: 4px; }
+.exo3d-zona-fila select { max-width: 100%; }
+.exo3d-desde { flex: 1 1 100%; font-size: 0.85em; color: var(--corte); }
+@media (max-width: 900px) { .exo3d-cuerpo { grid-template-columns: 1fr; } .exo3d-lateral { max-height: none; } }
+.formulario > .nota-ancha { grid-column: 1 / -1; }
+.exo3d-lateral > button, .exo3d-caja > button { white-space: normal; text-align: left; }

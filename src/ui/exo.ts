@@ -13,6 +13,7 @@ import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
+import { disenadorExo3D } from './exo3d';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, string | number> = {}, txt?: string) => {
@@ -26,6 +27,8 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, stri
 type ModoExo = 'N' | 'M' | 'Q' | 'sigma';
 let modo: ModoExo = 'N';
 let barraSel: string | null = null;
+/** qué se ve en el centro: el alzado de una cara o el diseñador 3D */
+let vistaExo: 'alzado' | '3d' = 'alzado';
 /** agregar barras: la clase elegida y el primer nudo tocado */
 let agregando: 'diagonal' | 'viga' | 'columna' | null = null;
 let nudoA: [number, number] | null = null;
@@ -262,10 +265,11 @@ export function panelExo(c: H) {
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
   }
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
+  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; delete x.zonas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
   campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; delete x.nuevas; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  if (def.zonas?.length) fo.append(h('p', { class: 'nota aviso-loft nota-ancha' }, `Hay ${def.zonas.length} zonas en altura: cada una tiene su ficha y su módulo (se editan en «Diseño 3D», en el centro). La ficha y el módulo de acá valen para lo que no diga cada zona.`));
   campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
@@ -469,6 +473,15 @@ export function centroExo(c: H, tam: Tam) {
       h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
     return;
   }
+  // vista: el alzado de una cara (con los diagramas) o el diseñador 3D de las cuatro caras
+  const segV = h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista del exoesqueleto' });
+  ([['alzado', 'Alzado de una cara', 'El flujo de fuerzas, los diagramas y el detalle de cada barra'], ['3d', 'Diseño 3D', 'Las cuatro caras alrededor de las losas: zonas en altura, plantillas, pintar secciones y agregar barras tocando la torre']] as const).forEach(([v, t, ti]) => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(vistaExo === v), title: ti }, t);
+    b.addEventListener('click', () => { vistaExo = v; estado.avisarPanel(); });
+    segV.append(b);
+  });
+  c.append(h('div', { class: 'fila-acciones' }, segV));
+  if (vistaExo === '3d') { c.append(disenadorExo3D()); return; }
   const d = datosExo();
   if (!d) { c.append(h('p', { class: 'error' }, ultimoError ? `No se pudo calcular: ${ultimoError} Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));
