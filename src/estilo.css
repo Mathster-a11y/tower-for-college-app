@@ -1857,3 +1857,35 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .b-indic-flotante { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 2; width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--edge); background: var(--panel); font-weight: 700; color: var(--accent); }
 .b-indic-flotante[hidden] { display: none; }
 .herr-planta.seg { border-radius: 14px; }
+
+/* ── Herramientas nuevas con el mismo lenguaje que la carta Colocar ──
+   Botones-píldora chicos, títulos de sección en versalitas grises sobre una línea fina, campos en línea con la unidad
+   al lado y el modo de cada tramo como control segmentado. */
+.silueta-panel { width: 268px; }
+.silueta-panel button, .avisos-panel .aviso-item button { font-size: 11.5px; padding: 3px 8px; min-height: 26px; }
+.silueta-panel button.primario { font-weight: 600; }
+.silueta-panel .fila-acciones { gap: 4px; margin: 3px 0; }
+.silueta-panel .seg button { padding: 3px 6px; }
+.silueta-panel .sec-sub,
+.esquinas-torre > summary { margin-top: 6px; padding-top: 5px; font-weight: 600; font-size: 11.5px; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; }
+.silueta-panel .sec-sub { border-top: 1px solid var(--hair); }
+.esquinas-torre > summary { margin-top: 0; list-style-position: inside; }
+.esquinas-torre > summary:hover { color: var(--ink); }
+.esquinas-torre[open] > summary { color: var(--ink); margin-bottom: 3px; }
+.esquinas-torre .campo-esq { justify-content: flex-start; gap: 4px; flex-wrap: wrap; }
+.esquinas-torre .campo-esq input[type="text"], .sigue-losa .campo-esq input[type="text"] { width: 4.2em; padding: 2px 4px; font-size: 12px; }
+.esquinas-torre > button { width: auto; margin: 3px 4px 3px 0; }
+.sigue-losa .campo-esq { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--ink2); }
+.sigue-losa .campo-esq select { font-size: 12px; max-width: 8.5em; }
+.sigue-losa .tramo-carp { flex-direction: column; align-items: stretch; gap: 3px; }
+.sigue-losa .tramo-cab { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sigue-losa .quitar-tramo { margin-left: auto; border: 0; background: none; color: var(--ink2); padding: 0 4px; min-height: 22px; }
+.sigue-losa .quitar-tramo:hover { color: var(--ink); background: var(--tint); }
+.sigue-losa .modo-tramo { display: flex; } .sigue-losa .modo-tramo button { flex: 1; white-space: nowrap; }
+.sigue-losa .paneleria .campo-esq { display: flex; justify-content: flex-start; }
+.silueta-panel label.boton { font-size: 11.5px; padding: 3px 8px; min-height: 26px; display: inline-flex; align-items: center; }
+.corte-barra button { font-size: 12px; padding: 3px 8px; min-height: 28px; }
+@media (pointer: coarse) {
+  .silueta-panel button, .avisos-panel button, .corte-barra button { min-height: 36px; }
+  .sigue-losa .quitar-tramo { min-width: 36px; }
+}

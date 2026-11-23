@@ -704,19 +704,24 @@ export function montarPlanta(cont: HTMLElement) {
         segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por losa» va vertical de losa a losa (siempre entre las dos, sin tapas) y «continua» sigue la superficie.' }),
           boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3 }); }), 'Un tramo «por losa», metido 0,30 m, desde el nivel más bajo'));
       } else {
-        segue.append(Object.assign(document.createElement('b'), { textContent: 'Carpintería por tramos' }));
+        segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Carpintería por tramos' }));
         tramos.forEach((t, k) => {
           const fila = document.createElement('div'); fila.className = 'tramo-carp';
           const sd = document.createElement('select'); sd.setAttribute('aria-label', 'Desde qué nivel');
+          if (!nivelesFach.some(x => Math.abs(x.cota - t.desde) < 1e-6)) sd.append(new Option(`a ${String(+t.desde.toFixed(2)).replace('.', ',')} m`, String(t.desde), false, true));
           nivelesFach.forEach(x => sd.append(new Option(x.nombre, String(x.cota), false, Math.abs(x.cota - t.desde) < 1e-6)));
           sd.addEventListener('change', () => ponerTramos(ts => { ts[k].desde = +sd.value; }));
-          const sm = document.createElement('select'); sm.setAttribute('aria-label', 'Modo');
-          (Object.keys(NOMBRE_MODO) as ModoCarpinteria[]).forEach(m => sm.append(new Option(NOMBRE_MODO[m], m, false, m === t.modo)));
-          sm.addEventListener('change', () => ponerTramos(ts => { ts[k].modo = sm.value as ModoCarpinteria; }));
+          // el modo, a la vista: un control segmentado como el resto de la app
+          const sm = document.createElement('div'); sm.className = 'seg chico modo-tramo'; sm.setAttribute('role', 'group'); sm.setAttribute('aria-label', 'Modo del tramo');
+          const AYUDA_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería: la base abierta', losa: 'Vertical, de la losa de abajo a la de arriba (siempre entre las dos)', continua: 'Sigue la superficie de borde a borde de las losas' };
+          const CORTO: Record<ModoCarpinteria, string> = { sin: 'Sin', losa: 'Por losa', continua: 'Continua' };
+          (Object.keys(NOMBRE_MODO) as ModoCarpinteria[]).forEach(m => { const x = boton(CORTO[m], () => { if (m !== t.modo) ponerTramos(ts => { ts[k].modo = m; }); }, AYUDA_MODO[m]); x.setAttribute('aria-pressed', String(m === t.modo)); sm.append(x); });
           const rt = document.createElement('input'); rt.type = 'text'; rt.inputMode = 'decimal'; rt.className = 'campo-vertice'; rt.value = String(t.retiro ?? 0).replace('.', ','); rt.setAttribute('aria-label', 'Retiro desde el borde de la losa');
           rt.addEventListener('change', () => { const x = parseFloat(rt.value.replace(',', '.')); if (isFinite(x) && x >= 0) ponerTramos(ts => { ts[k].retiro = x; }); });
           const lab = (t2: string, ...h: (string | Node)[]) => { const l = document.createElement('label'); l.className = 'campo-esq'; l.append(t2, ...h); return l; };
-          fila.append(lab('desde ', sd), sm, ...(t.modo === 'sin' ? [] : [lab('metida ', rt, ' m')]), boton('✕', () => ponerTramos(ts => { ts.splice(k, 1); }), 'Sacar este tramo'));
+          const quitar = boton('✕', () => ponerTramos(ts => { ts.splice(k, 1); }), 'Sacar este tramo'); quitar.className = 'quitar-tramo'; quitar.setAttribute('aria-label', 'Sacar este tramo');
+          const arriba = document.createElement('div'); arriba.className = 'tramo-cab'; arriba.append(lab('desde ', sd), ...(t.modo === 'sin' ? [] : [lab('metida ', rt, ' m')]), quitar);
+          fila.append(arriba, sm);
           segue.append(fila);
         });
         const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
@@ -732,7 +737,7 @@ export function montarPlanta(cont: HTMLElement) {
         else {
           const r = calcularPaneleria(bandasFachada(p, prepararSecciones), pn);
           const f1 = (x: number) => x.toFixed(1).replace('.', ',');
-          pan.append(Object.assign(document.createElement('b'), { textContent: 'Panelería' }),
+          pan.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Panelería' }),
             cpn('montantes cada', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', 'distancia entre montantes por el contorno (siempre hay uno en cada esquina)'),
             cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
@@ -749,14 +754,14 @@ export function montarPlanta(cont: HTMLElement) {
         ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
         linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m${car && (Math.abs(car.a - pl.B) > 0.01 || Math.abs(car.b - pl.L) > 0.01) ? ' (distinto de la caja)' : ''}`),
         filaV, dxf,
-        boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
+        h2(boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
         ...(car ? [boton('Usar a máx y b máx como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +car.a.toFixed(2); nv.L = +car.b.toFixed(2); }), 'Escribe en este nivel B = a máx y L = b máx (es lo que lee la planilla para el viento). No se hace solo: queda a tu criterio.')] : []),
         ...(car ? [boton('Copiar a todos los niveles', async () => {
           if (!(await confirmar('Copiar la carpintería', `La carpintería de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
           estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.carpinteria = car.v.map(q => JSON.parse(JSON.stringify(q))); }); });
           mensaje(`Carpintería de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles: el viento (túneles y presiones) la usa en toda la torre.`);
         }, 'La misma carpintería en todos los pisos: lo que usan el túnel 2D, el túnel 3D y las presiones en cada piso.')] : []),
-        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'),
+        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).')),
         seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L)));
       return;
     }
@@ -768,17 +773,17 @@ export function montarPlanta(cont: HTMLElement) {
       : n.manual && generable ? [boton('Volver a atar (que la genere el perfil o el loft)', () => estado.cambiar(pp => { delete pp.niveles[iNivel].manual; }), 'Se pierde lo editado a mano en este piso')] : [];
     const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
     const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...bSoltar, linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       filaV, dxf,
-      boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
+      h2(boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
         estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.silueta = pl.silueta.map(q => JSON.parse(JSON.stringify(q))); }); });
         mensaje(`Silueta de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles.`);
       }, 'La misma silueta de losa en todos los pisos.'),
-      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'),
+      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.')),
       seccionDesdeCero(),
       seccionPerfil(),
       seccionLoft(),
@@ -793,7 +798,7 @@ export function montarPlanta(cont: HTMLElement) {
     const p = estado.proyecto, pf = p.perfilTorre ?? null;
     const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre'; det.open = pfAbierto;
     det.addEventListener('toggle', () => { pfAbierto = det.open; });
-    const sum = document.createElement('summary'); sum.textContent = `Perfil de la torre (alzado)${pf ? ' · activo' : ''}`; det.append(sum);
+    const sum = document.createElement('summary'); sum.textContent = `Perfil de la torre${pf ? ' · activo' : ''}`; det.append(sum);
     const nota = (t: string) => Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: t });
     const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
     const poner = (f: (q: PerfilTorre) => void) => estado.cambiar(pp => { const q: PerfilTorre = structuredClone(pp.perfilTorre ?? { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 1 }] }); f(q); q.puntos.sort((a, b) => a.h - b.h); pp.perfilTorre = q; });
@@ -894,7 +899,7 @@ export function montarPlanta(cont: HTMLElement) {
     det.open = dc.abierto ?? (!pl.propia || !p.muros.length);
     // (un details nuevo ya abierto también avisa «toggle»: solo cuenta si cambió, si no la carta se rearma sin fin)
     det.addEventListener('toggle', () => { if (dc.abierto === det.open) return; dc.abierto = det.open; if (!det.open && dc.previa) { dc.previa = null; pedirDibujo(); } });
-    const sum = document.createElement('summary'); sum.textContent = 'Losa desde cero: formas, a mano y balcones'; det.append(sum);
+    const sum = document.createElement('summary'); sum.textContent = 'Losa desde cero'; det.append(sum);
     const nota = (t: string) => { const x = document.createElement('p'); x.className = 'nota-losa'; x.textContent = t; return x; };
     const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
     // galería de formas con su dibujito
@@ -1064,7 +1069,7 @@ export function montarPlanta(cont: HTMLElement) {
   function seccionEsquinas(ancho: number): HTMLElement {
     const det = document.createElement('details'); det.className = 'esquinas-torre'; det.open = esq.abierto;
     det.addEventListener('toggle', () => { esq.abierto = det.open; });
-    const sum = document.createElement('summary'); sum.textContent = 'Esquinas de la torre (viento)'; det.append(sum);
+    const sum = document.createElement('summary'); sum.textContent = 'Esquinas (viento)'; det.append(sum);
     const elegir = <T extends string>(rot: string, ops: [T, string][], val: T, al: (x: T) => void) => {
       const s2 = document.createElement('select');
       ops.forEach(([v, t]) => s2.append(new Option(t, v, false, v === val)));
