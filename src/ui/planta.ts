@@ -681,7 +681,6 @@ export function montarPlanta(cont: HTMLElement) {
         guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) nv.carpinteria = v; else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
       });
     }, 'Arcos (por tres puntos o por radio), empalmes, chaflanes, dividir lados, largo y ángulo exactos, desfasar, simetría, girar, escalar y formas (círculo, polígono, elipse). El mismo editor que el contorno de los muros.');
-    cad.classList.add('primario');
     filaV.append(agregar, borrar, cad);
     if (vSel !== null) {
       const k = vSel, v0 = vs[k];
@@ -782,7 +781,12 @@ export function montarPlanta(cont: HTMLElement) {
     panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
-      filaV, dxf,
+      // primero la forma (lo que hace falta en una torre en blanco), después ajustarla, al final lo demás
+      seccionDesdeCero(),
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
+      filaV,
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
+      dxf,
       h2(boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
@@ -790,7 +794,6 @@ export function montarPlanta(cont: HTMLElement) {
         mensaje(`Silueta de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles.`);
       }, 'La misma silueta de losa en todos los pisos.'),
       boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.')),
-      seccionDesdeCero(),
       seccionPerfil(),
       seccionLoft(),
       seccionEsquinas(Math.min(caja.B, caja.L)));

@@ -570,6 +570,7 @@ $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null;
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 // proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
+$('b-torre-nueva').addEventListener('click', () => $('b-nuevo').click());
 $('b-nuevo').addEventListener('click', async () => {
   cerrarMenus();
   // documento en blanco: pisos y altura; la losa sale rectangular de 20 × 16 y se cambia en Planta → Losa → «Losa desde cero»
