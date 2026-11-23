@@ -55,8 +55,9 @@ export interface OpcionesLbm {
    */
   cuerpo?: Uint8Array;
   /**
-   * paredes exactas con la interpolación lineal en vez de la cuadrática (más estable con viscosidad de red muy baja y
-   * varios cuerpos; ver lbm3d, paredesLineales)
+   * paredes exactas con la interpolación lineal (por defecto) o la cuadrática (false). Con torres vecinas, la cuadrática
+   * se rompía a los 7 000–12 000 pasos aun con el túnel lento (Re ≈ 1 000); la lineal anduvo estable, igual que en el
+   * 3D (ver lbm3d, paredesLineales)
    */
   paredesLineales?: boolean;
 }
@@ -131,7 +132,7 @@ export class Lbm2D {
     const nE = this.enlaces.length / 2;
     this.qEnl = new Float32Array(nE).fill(0.5); this.otra = new Int32Array(nE).fill(-1); this.otra2 = new Int32Array(nE).fill(-1);
     this.delCuerpo = new Uint8Array(nE).fill(1);
-    this.lineal = !!o.paredesLineales;
+    this.lineal = o.paredesLineales ?? true;
     if (o.cuerpo) for (let k = 0; k < nE; k++) {
       const c = this.enlaces[2 * k], i = this.enlaces[2 * k + 1], x = c % this.nx, y = (c - x) / this.nx;
       let xs = x - EX[i], ys = y - EY[i];

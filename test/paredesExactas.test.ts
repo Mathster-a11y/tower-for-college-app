@@ -29,13 +29,13 @@ describe('dónde corta la pared cada enlace', () => {
 });
 
 /** canal de Poiseuille con las paredes en y0 y y1 (no caen en el borde de las celdas) */
-function canal(exactas: boolean, colision: 'bgk' | 'trt') {
+function canal(exactas: boolean, colision: 'bgk' | 'trt', cuadratica = false) {
   const nx = 4, ny = 22, nu = 0.1, gx = 1e-6, y0 = 1.8, y1 = 19.4, H = y1 - y0;
   const solido = new Uint8Array(nx * ny);
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) if (y + 0.5 < y0 || y + 0.5 > y1) solido[y * nx + x] = 1;
   const pols = [[{ x: -2, y: -2 }, { x: nx + 2, y: -2 }, { x: nx + 2, y: y0 }, { x: -2, y: y0 }], [{ x: -2, y: y1 }, { x: nx + 2, y: y1 }, { x: nx + 2, y: ny + 2 }, { x: -2, y: ny + 2 }]];
   const q = exactas ? distanciasPared(nx, ny, solido, pols, { x: true }) : undefined;
-  const m = new Lbm2D({ nx, ny, nu, periodicoX: true, fuerza: [gx, 0], solido, q, colision });
+  const m = new Lbm2D({ nx, ny, nu, periodicoX: true, fuerza: [gx, 0], solido, q, colision, paredesLineales: !cuadratica });
   for (let k = 0; k < 20000; k++) m.paso();
   const umax = (gx * H * H) / (8 * nu);
   let peor = 0;
@@ -49,10 +49,12 @@ function canal(exactas: boolean, colision: 'bgk' | 'trt') {
 
 describe('paredes exactas en un canal', () => {
   it('paredes entre celdas: en escalera el perfil se corre; exactas, error < 2 %', () => {
-    const escalera = canal(false, 'trt'), exactas = canal(true, 'trt'), exactasBgk = canal(true, 'bgk');
+    // la lineal (la de la app: más estable con viscosidad baja) da ≈ 1 %; la cuadrática, ≈ 0,3 %; la escalera, ≈ 9 %
+    const escalera = canal(false, 'trt'), exactas = canal(true, 'trt'), exactasBgk = canal(true, 'bgk'), cuadratica = canal(true, 'trt', true);
     expect(exactasBgk).toBeLessThan(0.02);
     expect(exactas).toBeLessThan(0.02);
-    expect(escalera).toBeGreaterThan(10 * exactas);
+    expect(cuadratica).toBeLessThan(0.005);
+    expect(escalera).toBeGreaterThan(5 * exactas);
   });
 });
 
