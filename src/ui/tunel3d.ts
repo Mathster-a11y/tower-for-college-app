@@ -18,7 +18,7 @@ import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../vie
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { tramosEdificio } from '../viento/contexto';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
-import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoQueLlega } from './unidadViento';
+import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
 import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
@@ -360,6 +360,21 @@ function zRef3d(): number {
 /** una velocidad (en veces el viento que llega a esa altura) en la unidad elegida */
 const tv3 = (x: number) => txtVel(x, vientoQueLlega(zRef3d()));
 
+/** arma el .zip del caso de OpenFOAM con la torre, los vecinos (si se simulan) y el viento del 102-25 a la altura de la torre */
+async function exportarOpenFOAM() {
+  const [{ casoOpenFOAM, Z0_EXPOSICION }, { default: JSZip }] = await Promise.all([import('../viento/openfoam'), import('jszip')]);
+  const p = estado.proyecto, niveles = nivelesProyecto(), H = Math.max(...niveles.map(k => k.cota));
+  const exp = datos102De(p).exposicion, Uref = vientoDisenoEn(H) ?? 40;
+  const vecinos = cfg.contexto ? (p.contexto?.edificios ?? []).map(e => ({ id: e.id, tramos: tramosEdificio(e) })) : [];
+  const nombre = (p.nombre || 'torre').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '') || 'torre';
+  const f = casoOpenFOAM({ nombre: p.nombre || 'Torre', niveles, dir: estado.dir, angulo: cfg.angulo, vecinos, Uref, z0: Z0_EXPOSICION[exp] ?? 0.03 });
+  const zip = new JSZip(), carpeta = zip.folder(`${nombre}_viento${estado.dir}`)!;
+  for (const [ruta, c] of f) carpeta.file(ruta, c, ruta.startsWith('Allrun') ? { unixPermissions: 0o755 } : {});
+  const blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${nombre}_openfoam_viento${estado.dir}.zip`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
 // ------------------------------------------------------------------------------------------------ llaves de colores
 let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
@@ -488,7 +503,11 @@ export function panelTunel3d(c: H) {
       a.href = URL.createObjectURL(b); a.download = `torre_${(estado.proyecto.nombre || 'proyecto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '')}.stl`; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     });
-    d.append(h('div', { class: 'fila-acciones' }, stl), h('p', { class: 'nota chica' }, 'Un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba: para imprimir en 3D o llevar la forma a un programa de CAD o a otro simulador de viento.'));
+    // el caso para OpenFOAM: la misma torre (y los vecinos) con el viento del 102-25, listo para correr en un laboratorio
+    const of = h('button', { type: 'button', class: 'boton' }, '⤓ Caso de OpenFOAM (.zip)');
+    of.title = 'La torre, los vecinos, la malla, la capa límite del viento y la medición del arrastre, para correr con OpenFOAM (el simulador libre de los laboratorios)';
+    of.addEventListener('click', () => { void exportarOpenFOAM().catch(e => { const m = document.getElementById('mensaje'); if (m) m.textContent = `No se pudo armar el caso: ${e instanceof Error ? e.message : String(e)}`; }); });
+    d.append(h('div', { class: 'fila-acciones' }, stl, of), h('p', { class: 'nota chica' }, 'STL: un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba, para imprimir en 3D o llevar la forma a un programa de CAD. Caso de OpenFOAM: el nivel de laboratorio (RANS k-ε con la capa límite del viento, malla de 0,2 a 1 millón de celdas); el LEAME.txt del .zip explica cómo correrlo.'));
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
   const uv = seccion('Unidades de la velocidad').cuerpo; c.append(uv.parentElement!);

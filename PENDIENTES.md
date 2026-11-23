@@ -18,7 +18,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
 10. 3D en el procesador más rápido: varios núcleos o WebAssembly
 11. ~~Niveles de fidelidad (básica → máxima)~~ (23/11: selector «Fidelidad» en los dos túneles, con la que conviene para la computadora; se recuerda)
-12. Exportar el caso a OpenFOAM (nivel de laboratorio)
+12. ~~Exportar el caso a OpenFOAM~~ (23/11: Túnel 3D → «⤓ Caso de OpenFOAM (.zip)»; probado con OpenFOAM v1912: malla OK y simpleFoam converge; Cd de un prisma de 60 m = 1,00)
 13. ~~Túnel 2D: modo «solo los muros»~~ (23/11: Planta → «solo los muros»; al menos 40 celdas por ancho y los tabiques de menos de 1,2 celdas engrosados, con aviso)
 
 ### Diseño y cálculo
@@ -222,7 +222,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
 - [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Calcar el sitio desde un PDF, los retiros y el factor de interferencia: hechos
 - [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media, el humo con estela, los anemómetros virtuales y las vistas de velocidad media y ráfagas; y la comparación lado a lado de dos grabaciones (hecho)
-- [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
+- [x] Niveles de fidelidad (básica → máxima) y exportación del caso a OpenFOAM para el nivel de laboratorio
 - [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso
 - [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2. Las cinco formas, medidas de nuevo: vivas 2,29, curva 1,67, redondeadas 1,90, sustraídas 1,92, chaflán 2,06. Con paredes lineales (las de ahora): redondeadas 1,95, chaflán 2,12, las demás iguales
 - [x] Ventana de detalle: el tamaño del recuadro manda la definición (×2 a ×16) y una banda de transición en la orilla (sin ondas ni escalón contra el túnel grueso)
