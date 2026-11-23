@@ -1845,3 +1845,4 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .corte-barra .plano-item button { padding: 1px 5px; min-height: 0; font-size: 11px; }
 .sigue-losa .tramo-carp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 0; border-top: 1px dashed var(--rule); }
 .sigue-losa .tramo-carp select { max-width: 100%; }
+.sigue-losa .paneleria { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--hair); }

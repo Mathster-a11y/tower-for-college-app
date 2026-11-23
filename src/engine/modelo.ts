@@ -311,6 +311,8 @@ export interface Proyecto {
   carpinteriaRetiro?: number | null;
   /** carpintería por tramos de altura: sin, por losa (de losa a losa) o continua (carpinteria.ts); manda sobre «carpinteriaRetiro» */
   carpinteriaTramos?: import('./carpinteria').TramoCarpinteria[];
+  /** panelería de la carpintería: montantes cada «modulo» m, antepecho opaco y travesaños intermedios (vacío = sin paneles) */
+  paneleria?: import('./carpinteria').Paneleria | null;
   /** planos que recortan las losas (la corona a 45° del Citicorp), dibujados en el corte de la torre (planos_corte.ts) */
   planosCorte?: import('./planos_corte').PlanoCorte[];
   /**

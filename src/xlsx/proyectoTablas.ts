@@ -116,6 +116,9 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Carpintería por tramos', 'desde una cota hacia arriba: «0 sin; 34,75 losa 0,3; 230 continua 0,3» (cota en m, modo sin, losa o continua, retiro en m)',
     p => (p.carpinteriaTramos?.length ? p.carpinteriaTramos.map(t => [String(t.desde).replace('.', ','), t.modo, ...(t.retiro ? [String(t.retiro).replace('.', ',')] : [])].join(' ')).join('; ') : null),
     (p, v) => { if (!txt(v)) return; const ts = txt(v).split(';').map(it => { const [d, m, r] = it.trim().split(/\s+/); const t: NonNullable<Proyecto['carpinteriaTramos']>[number] = { desde: num(d) ?? NaN, modo: (m ?? '') as 'sin' | 'losa' | 'continua' }; const rr = num(r); if (rr !== null) t.retiro = rr; return t; }).filter(t => isFinite(t.desde) && ['sin', 'losa', 'continua'].includes(t.modo)); if (ts.length) p.carpinteriaTramos = ts; }],
+  ['Panelería', 'montantes cada m; antepecho opaco m; travesaños intermedios: «1,5; 0,9; 0» (vacío = sin paneles)',
+    p => (p.paneleria ? [p.paneleria.modulo, p.paneleria.antepecho ?? 0, p.paneleria.intermedios ?? 0].map(x => String(x).replace('.', ',')).join('; ') : null),
+    (p, v) => { if (!txt(v)) return; const [m, a, i] = txt(v).split(';').map(x => num(x.trim())); if (m !== null && m !== undefined && m > 0) p.paneleria = { modulo: m, antepecho: a ?? 0, intermedios: i ?? 0 }; }],
   ['Carpintería: retiro de la losa (m)', 'la carpintería de cada nivel sigue a su losa, metida estos metros (vacío = a mano)', p => p.carpinteriaRetiro ?? null, (p, v) => { const x = num(v); if (x !== null) p.carpinteriaRetiro = x; }],
   ['Juntas entre muros', 'qué pasa en cada encuentro: «M1|M2=inglete; M3|M4=pasaA» (pasaA: pasa el primero; vacío = el convenio por defecto)', p => (p.juntas && Object.keys(p.juntas).length ? Object.entries(p.juntas).map(([k, v]) => `${k}=${v}`).join('; ') : null),
     (p, v) => { const t = txt(v); if (!t) return; const o: Record<string, 'inglete' | 'pasaA' | 'pasaB'> = {}; t.split(';').forEach(par => { const k = par.lastIndexOf('='); if (k < 0) return; const val = par.slice(k + 1).trim(); if (val === 'inglete' || val === 'pasaA' || val === 'pasaB') o[par.slice(0, k).trim()] = val; }); if (Object.keys(o).length) p.juntas = o; }],
@@ -196,7 +199,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
   p.sitio = { ...p.sitio }; p.fundacion = { ...p.fundacion };
   delete p.areasAuto;
   delete p.exo;
-  delete p.perfilTorre; delete p.carpinteriaRetiro; delete p.planosCorte; delete p.carpinteriaTramos;
+  delete p.perfilTorre; delete p.carpinteriaRetiro; delete p.planosCorte; delete p.carpinteriaTramos; delete p.paneleria;
   for (const g of leerHoja(H(T.proyecto))) {
     const d = DATOS.find(x => norm(x[0]) === norm(g('Dato')));
     if (d) d[3](p, g('Valor'));

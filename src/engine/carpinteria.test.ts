@@ -28,3 +28,30 @@ describe('carpintería por tramos', () => {
     expect(avisosDiseno(p).filter(a => a.tipo === 'carpinteria-fuera')).toEqual([]);
   });
 });
+
+import { bandasFachada, calcularPaneleria } from './carpinteria';
+import { prepararSecciones } from './loft';
+import { puntosSilueta } from './silueta';
+describe('panelería', () => {
+  it('rectángulo 20 × 16, piso de 3 m, montantes cada 1,5 m con antepecho de 0,9 m', () => {
+    const r = puntosSilueta(rectangulo(20, 16), 8);
+    const res = calcularPaneleria([{ z0: 0, z1: 3, modo: 'losa', a: r, b: r }], { modulo: 1.5, antepecho: 0.9 });
+    expect(res.montantes.length).toBe(2 * (14 + 11));               // ceil(20/1,5) = 14 y ceil(16/1,5) = 11 por cara
+    expect(res.opacos.n).toBe(50);
+    expect(res.opacos.area).toBeCloseTo(0.9 * 72, 6);
+    expect(res.vidrio.area).toBeCloseTo(2.1 * 72, 6);
+    expect(res.largoMontantes).toBeCloseTo(50 * 3, 6);
+    // dos travesaños intermedios: el vidrio en tres
+    expect(calcularPaneleria([{ z0: 0, z1: 3, modo: 'losa', a: r, b: r }], { modulo: 1.5, antepecho: 0.9, intermedios: 2 }).vidrio.n).toBe(150);
+  });
+  it('bandas: «sin» no tiene, «por losa» vertical y «continua» con los anillos alineados', () => {
+    const p = ejemploGuia();
+    const z = (nom: string) => p.niveles.find(n => n.nombre === nom)!.cota;
+    p.carpinteriaTramos = [{ desde: 0, modo: 'sin' }, { desde: z('3º'), modo: 'losa' }, { desde: z('15º'), modo: 'continua' }];
+    const b = bandasFachada(p, prepararSecciones);
+    expect(b[0].z0).toBe(z('3º'));
+    expect(b.filter(x => x.modo === 'losa').length).toBe(12);
+    expect(b.filter(x => x.modo === 'continua').length).toBe(6);
+    b.forEach(x => expect(x.a.length).toBe(x.b.length));
+  });
+});

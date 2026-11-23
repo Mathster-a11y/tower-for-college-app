@@ -9,11 +9,12 @@ import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
-import { NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
+import { bandasFachada, calcularPaneleria, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
+import { prepararSecciones } from '../engine/loft';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
 import type { TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
@@ -722,6 +723,23 @@ export function montarPlanta(cont: HTMLElement) {
         segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3 }); }), `Otro tramo desde ${sig.nombre}`)] : []),
           boton('Volver a la carpintería a mano', () => ponerTramos(ts => { ts.length = 0; }), 'Las carpinterías quedan como están ahora y se editan nivel por nivel')),
           Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por losa: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Continua: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón).' }));
+        // panelería: montantes cada «módulo» m (en las esquinas siempre), antepecho opaco y travesaños intermedios
+        const pn = p.paneleria;
+        const pan = document.createElement('div'); pan.className = 'paneleria';
+        const cpn = (rot: string, val: number, f: (x: number) => void, unidad: string, ti: string) => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(val).replace('.', ','); i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x) && x >= 0) f(x); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, unidad ? ` ${unidad}` : ''); return l; };
+        const ponerPn = (f: (q: NonNullable<typeof pn>) => void) => estado.cambiar(pp => { const q = { ...(pp.paneleria ?? { modulo: 1.5, antepecho: 0.9, intermedios: 0 }) }; f(q); pp.paneleria = q; });
+        if (!pn) pan.append(boton('Panelería: montantes y antepechos', () => ponerPn(() => { /* los valores de siempre */ }), 'Montantes cada 1,5 m (y en las esquinas), travesaño en cada losa y un antepecho opaco de 0,90 m'));
+        else {
+          const r = calcularPaneleria(bandasFachada(p, prepararSecciones), pn);
+          const f1 = (x: number) => x.toFixed(1).replace('.', ',');
+          pan.append(Object.assign(document.createElement('b'), { textContent: 'Panelería' }),
+            cpn('montantes cada', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', 'distancia entre montantes por el contorno (siempre hay uno en cada esquina)'),
+            cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
+            cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
+            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. En el 3D: capa «Fachada».` }),
+            boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), ''));
+        }
+        segue.append(pan);
         const tn = tramoEn(p, n.cota);
         panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue, linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'));
         return;

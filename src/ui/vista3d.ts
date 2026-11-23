@@ -11,9 +11,9 @@ import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { carpinteriaDeNivel, plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { prepararSecciones } from '../engine/loft';
-import { tramoEn } from '../engine/carpinteria';
+import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
@@ -365,44 +365,31 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
 
   function agregarFachada() {
     const p = estado.proyecto;
-    const nivs = p.niveles.map((n, i) => ({ n, i })).filter(({ n }) => n.cota >= -1e-6).sort((a, b) => a.n.cota - b.n.cota);
-    if (nivs.length < 2) return;
-    const contorno = (i: number) => carpinteriaDeNivel(p, i)?.v ?? plantaDeNivel(p, i).silueta;
-    const pos: number[] = [], lin: number[] = [];
-    const v3 = (q: { x: number; y: number }, z: number) => [q.x, z, -q.y];
-    const banda = (A: { x: number; y: number }[], B: { x: number; y: number }[], z0: number, z1: number) => {
-      const m = A.length;
-      for (let j = 0; j < m; j++) { const a0 = A[j], a1 = A[(j + 1) % m], b0 = B[j], b1 = B[(j + 1) % m]; pos.push(...v3(a0, z0), ...v3(a1, z0), ...v3(b1, z1), ...v3(a0, z0), ...v3(b1, z1), ...v3(b0, z1)); }
-      const paso = Math.max(1, Math.round(m / 24));
-      for (let j = 0; j < m; j += paso) lin.push(...v3(A[j], z0), ...v3(B[j], z1));
-    };
-    // cada piso según el modo de su tramo: «por losa», un prisma vertical de su carpintería hasta la losa de arriba; las
-    // tiras seguidas «continuas» se arman juntas (las costuras alineadas en toda la tira); «sin», nada
-    const modo = (z: number) => tramoEn(p, z)?.modo ?? 'continua';   // sin tramos: la piel continua de siempre
-    let k = 0;
-    while (k + 1 < nivs.length) {
-      const md = modo(nivs[k].n.cota);
-      if (md === 'sin') { k++; continue; }
-      if (md === 'losa') {
-        const pts = puntosSilueta(contorno(nivs[k].i), 8);
-        banda(pts, pts, nivs[k].n.cota, nivs[k + 1].n.cota);
-        k++; continue;
-      }
-      let f = k + 1;
-      while (f + 1 < nivs.length && modo(nivs[f].n.cota) === 'continua') f++;
-      let anillos: { x: number; y: number }[][];
-      try { anillos = prepararSecciones(nivs.slice(k, f + 1).map(x => contorno(x.i)), 400); } catch { k = f; continue; }
-      for (let j = 0; j + 1 < anillos.length; j++) banda(anillos[j], anillos[j + 1], nivs[k + j].n.cota, nivs[k + j + 1].n.cota);
-      k = f;
-    }
-    if (!pos.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.computeVertexNormals();
+    const bandas = bandasFachada(p, prepararSecciones);
+    if (!bandas.length) return;
     const vidrio = new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--dim', '#8a949e')), transparent: true, opacity: 0.28, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
-    grupo.add(new THREE.Mesh(g, vidrio));
-    const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3));
-    grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(css('--ink2', '#556')), transparent: true, opacity: 0.35 })));
+    const malla = (pos: number[], mat: THREE.Material) => { if (!pos.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); grupo.add(new THREE.Mesh(g, mat)); };
+    const lineas = (lin: number[], color: string, opacidad: number) => { if (!lin.length) return; const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3)); grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: opacidad < 1, opacity: opacidad }))); };
+    const v3 = (q: { x: number; y: number; z?: number }, z = q.z ?? 0) => [q.x, z, -q.y];
+    if (p.paneleria && p.paneleria.modulo > 0) {
+      // panelería: vidrio, antepechos opacos (gris más oscuro: no es tracción ni compresión) y montantes y travesaños
+      const r = calcularPaneleria(bandas, p.paneleria), vid: number[] = [], opa: number[] = [], lin: number[] = [];
+      r.paneles.forEach(pa => { const [a, b, c, d] = pa.p; (pa.opaco ? opa : vid).push(...v3(a), ...v3(b), ...v3(c), ...v3(a), ...v3(c), ...v3(d)); lin.push(...v3(a), ...v3(b)); });
+      r.montantes.forEach(([a, b]) => lin.push(...v3(a), ...v3(b)));
+      malla(vid, vidrio);
+      malla(opa, new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--ink2', '#5f6b76')), transparent: true, opacity: 0.6, roughness: 0.8, side: THREE.DoubleSide }));
+      lineas(lin, css('--ink', '#1f2328'), 0.55);
+      return;
+    }
+    const pos: number[] = [], lin: number[] = [];
+    bandas.forEach(bd => {
+      const m = bd.a.length;
+      for (let j = 0; j < m; j++) { const a0 = bd.a[j], a1 = bd.a[(j + 1) % m], b0 = bd.b[j], b1 = bd.b[(j + 1) % m]; pos.push(...v3(a0, bd.z0), ...v3(a1, bd.z0), ...v3(b1, bd.z1), ...v3(a0, bd.z0), ...v3(b1, bd.z1), ...v3(b0, bd.z1)); }
+      const paso = Math.max(1, Math.round(m / 24));
+      for (let j = 0; j < m; j += paso) lin.push(...v3(bd.a[j], bd.z0), ...v3(bd.b[j], bd.z1));
+    });
+    malla(pos, vidrio);
+    lineas(lin, css('--ink2', '#556'), 0.35);
   }
 
   /** torre sin deformar (trazos), eje del CR deformado y flecha curva del giro en la azotea */

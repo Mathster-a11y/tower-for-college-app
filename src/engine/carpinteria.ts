@@ -92,3 +92,93 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
   });
   return { niveles: n, aproximados: aprox };
 }
+
+// ------------------------------------------------------------------ bandas de la fachada y panelería
+export interface BandaFachada { z0: number; z1: number; modo: 'losa' | 'continua'; a: Punto[]; b: Punto[] }
+/**
+ * La fachada piso por piso: cada banda va de una losa a la de arriba, con el anillo de abajo (a) y el de arriba (b) del
+ * mismo largo y con las costuras alineadas. «Por losa»: el mismo contorno abajo y arriba (vertical). «Continua»: los
+ * contornos de las dos losas, alineados en toda la tira continua. «Sin»: no hay banda.
+ * @param preparar alinea y remuestrea secciones (prepararSecciones del loft; se pasa para no atar los módulos)
+ */
+export function bandasFachada(p: Proyecto, preparar: (vs: Vertice[][], max?: number) => Punto[][]): BandaFachada[] {
+  const nivs = p.niveles.map((n, i) => ({ n, i })).filter(({ n }) => n.cota >= -1e-6).sort((a, b) => a.n.cota - b.n.cota);
+  const contorno = (i: number): Vertice[] => {
+    const c = p.niveles[i].carpinteria;
+    if (c && c.length >= 3) return c as Vertice[];
+    return plantaDeNivel(p, i).silueta;
+  };
+  const modo = (z: number): ModoCarpinteria => tramoEn(p, z)?.modo ?? 'continua';
+  const out: BandaFachada[] = [];
+  let k = 0;
+  while (k + 1 < nivs.length) {
+    const md = modo(nivs[k].n.cota);
+    if (md === 'sin') { k++; continue; }
+    if (md === 'losa') { const pts = puntosSilueta(contorno(nivs[k].i), 8); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts }); k++; continue; }
+    let f = k + 1;
+    while (f + 1 < nivs.length && modo(nivs[f].n.cota) === 'continua') f++;
+    let anillos: Punto[][];
+    try { anillos = preparar(nivs.slice(k, f + 1).map(x => contorno(x.i)), 400); } catch { k = f; continue; }
+    for (let j = 0; j + 1 < anillos.length; j++) out.push({ z0: nivs[k + j].n.cota, z1: nivs[k + j + 1].n.cota, modo: 'continua', a: anillos[j], b: anillos[j + 1] });
+    k = f;
+  }
+  return out;
+}
+
+/** panelería: montantes cada «modulo» m por el contorno (siempre en las esquinas), travesaño en cada losa, un antepecho
+ *  opaco de «antepecho» m sobre cada losa y «intermedios» travesaños más en el vidrio */
+export interface Paneleria { modulo: number; antepecho?: number | null; intermedios?: number | null }
+export interface Panel { p: [Punto & { z: number }, Punto & { z: number }, Punto & { z: number }, Punto & { z: number }]; opaco: boolean; area: number }
+export interface ResultadoPaneleria { paneles: Panel[]; montantes: [Punto & { z: number }, Punto & { z: number }][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number }
+
+/** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
+function montantesAnillo(r: Punto[], modulo: number): number[] {
+  const n = r.length, L = r.map((q, i) => Math.hypot(r[(i + 1) % n].x - q.x, r[(i + 1) % n].y - q.y));
+  const giro = (i: number) => { const a = r[(i - 1 + n) % n], b = r[i], c = r[(i + 1) % n]; const t1 = Math.atan2(b.y - a.y, b.x - a.x), t2 = Math.atan2(c.y - b.y, c.x - b.x); let d = Math.abs(t2 - t1); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
+  let esq = r.map((_, i) => i).filter(i => giro(i) > (10 * Math.PI) / 180);
+  if (!esq.length) esq = [0];
+  const out: number[] = [];
+  esq.forEach((e, k) => {
+    const f = esq[(k + 1) % esq.length], idx: number[] = [];
+    for (let i = e; ; i = (i + 1) % n) { idx.push(i); if ((i + 1) % n === f || idx.length > n) break; }
+    const largo = idx.reduce((s, i) => s + L[i], 0), partes = Math.max(1, Math.ceil(largo / modulo - 1e-6));
+    out.push(e);
+    // puntos a largo igual dentro del tramo entre esquinas
+    for (let j = 1; j < partes; j++) {
+      let falta = (largo * j) / partes;
+      for (const i of idx) { if (falta <= L[i] + 1e-9) { out.push(i + (L[i] > 0 ? falta / L[i] : 0)); break; } falta -= L[i]; }
+    }
+  });
+  return out.sort((a, b) => a - b);
+}
+const enAnillo = (r: Punto[], t: number) => { const n = r.length, i = Math.floor(t) % n, f = t - Math.floor(t), a = r[i], b = r[(i + 1) % n]; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; };
+const area4 = (q: (Punto & { z: number })[]) => { const tri = (a: Punto & { z: number }, b: Punto & { z: number }, c: Punto & { z: number }) => { const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z; return Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2; }; return tri(q[0], q[1], q[2]) + tri(q[0], q[2], q[3]); };
+
+export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): ResultadoPaneleria {
+  const paneles: Panel[] = [], montantes: ResultadoPaneleria['montantes'] = [];
+  let largoM = 0, largoT = 0;
+  const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
+  bandas.forEach(bd => {
+    const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
+    const ts = montantesAnillo(bd.a, mod);
+    // cortes en altura de la banda (fracciones): antepecho y travesaños intermedios del vidrio
+    const fr: { t: number; opaco: boolean }[] = [];
+    const t0 = ap > 0 && ap < h - 0.3 ? ap / h : 0;
+    if (t0 > 0) fr.push({ t: 0, opaco: true });
+    for (let j = 0; j <= inter; j++) fr.push({ t: t0 + ((1 - t0) * j) / (inter + 1), opaco: false });
+    fr.push({ t: 1, opaco: false });
+    const P = (t: number, s: number) => { const a = enAnillo(bd.a, t), b = enAnillo(bd.b, t); return { x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s, z: bd.z0 + h * s }; };
+    ts.forEach((t, k) => {
+      const t2 = k + 1 < ts.length ? ts[k + 1] : ts[0] + bd.a.length;
+      const pa = P(t, 0), pb = P(t, 1);
+      montantes.push([pa, pb]); largoM += Math.hypot(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
+      for (let j = 0; j + 1 < fr.length; j++) {
+        const q: Panel['p'] = [P(t, fr[j].t), P(t2, fr[j].t), P(t2, fr[j + 1].t), P(t, fr[j + 1].t)];
+        paneles.push({ p: q, opaco: fr[j].opaco, area: area4(q) });
+        largoT += Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y, q[1].z - q[0].z);
+      }
+    });
+  });
+  const sum = (op: boolean) => paneles.filter(x => x.opaco === op).reduce((s, x) => ({ n: s.n + 1, area: s.area + x.area }), { n: 0, area: 0 });
+  return { paneles, montantes, vidrio: sum(false), opacos: sum(true), largoMontantes: largoM, largoTravesanos: largoT };
+}
