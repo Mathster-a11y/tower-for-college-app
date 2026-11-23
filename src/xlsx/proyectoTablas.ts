@@ -107,6 +107,10 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Exo: zonas en altura', 'otra tipología desde una cota: «0 D; 45 A m=6 v=2» (cota en m, ficha, m: pisos por módulo, v: vanos; vacío = toda la torre con la ficha)',
     p => (p.exo?.zonas?.length ? p.exo.zonas.map(z => [z.desde, z.tipo, z.modulo ? `m=${z.modulo}` : '', z.vanos ? `v=${z.vanos}` : ''].filter(x => x !== '').join(' ')).join('; ') : null),
     (p, v) => { if (!p.exo || !txt(v)) return; const zs = txt(v).split(';').map(it => { const [d, t, ...r] = it.trim().split(/\s+/); const z: NonNullable<NonNullable<Proyecto['exo']>['zonas']>[number] = { desde: num(d) ?? NaN, tipo: (t ?? '').toUpperCase() as TipoExo }; r.forEach(x => { const [k, w] = x.split('='); const n = num(w); if (n !== null && k === 'm') z.modulo = n; if (n !== null && k === 'v') z.vanos = n; }); return z; }).filter(z => isFinite(z.desde) && ['A', 'B', 'C', 'D', 'E', 'L'].includes(z.tipo)); if (zs.length) p.exo.zonas = zs; }],
+  ['Perfil de la torre', 'cómo cambia la planta con la altura, en JSON: base (cota), puntos (h de 0 a 1, fx, fy, dx, dy), suave, giro; vacío = sin perfil',
+    p => (p.perfilTorre ? JSON.stringify(p.perfilTorre) : null),
+    (p, v) => { if (!txt(v)) return; try { const x = JSON.parse(txt(v)); if (x && Array.isArray(x.puntos)) p.perfilTorre = x; } catch { /* texto que no es JSON: se ignora */ } }],
+  ['Carpintería: retiro de la losa (m)', 'la carpintería de cada nivel sigue a su losa, metida estos metros (vacío = a mano)', p => p.carpinteriaRetiro ?? null, (p, v) => { const x = num(v); if (x !== null) p.carpinteriaRetiro = x; }],
   ['Juntas entre muros', 'qué pasa en cada encuentro: «M1|M2=inglete; M3|M4=pasaA» (pasaA: pasa el primero; vacío = el convenio por defecto)', p => (p.juntas && Object.keys(p.juntas).length ? Object.entries(p.juntas).map(([k, v]) => `${k}=${v}`).join('; ') : null),
     (p, v) => { const t = txt(v); if (!t) return; const o: Record<string, 'inglete' | 'pasaA' | 'pasaB'> = {}; t.split(';').forEach(par => { const k = par.lastIndexOf('='); if (k < 0) return; const val = par.slice(k + 1).trim(); if (val === 'inglete' || val === 'pasaA' || val === 'pasaB') o[par.slice(0, k).trim()] = val; }); if (Object.keys(o).length) p.juntas = o; }],
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
@@ -186,6 +190,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
   p.sitio = { ...p.sitio }; p.fundacion = { ...p.fundacion };
   delete p.areasAuto;
   delete p.exo;
+  delete p.perfilTorre; delete p.carpinteriaRetiro;
   for (const g of leerHoja(H(T.proyecto))) {
     const d = DATOS.find(x => norm(x[0]) === norm(g('Dato')));
     if (d) d[3](p, g('Valor'));

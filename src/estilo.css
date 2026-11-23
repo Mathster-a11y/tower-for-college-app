@@ -1798,3 +1798,17 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .avisos-panel .aviso-item button { align-self: flex-start; }
 .avisos-panel .nota-losa { font-size: 11.5px; color: var(--ink2); line-height: 1.35; }
 .planta .muro.con-aviso polygon, .planta .muro.con-aviso rect, .planta .muro.con-aviso path { stroke: var(--revisar); stroke-width: 2.5; stroke-dasharray: 5 3; }
+
+/* perfil de la torre (alzado) y carpintería que sigue a la losa */
+.galeria-perfiles { display: flex; flex-wrap: wrap; gap: 4px; }
+.galeria-perfiles button { font-size: 11px; padding: 2px 8px; }
+.alzado-perfil { width: 100%; max-width: 280px; height: auto; align-self: center; touch-action: none; background: var(--lienzo); border: 1px solid var(--hair); border-radius: 6px; cursor: crosshair; }
+.alzado-perfil .nivel { stroke: var(--hair); stroke-width: 1; }
+.alzado-perfil .eje { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 4; }
+.alzado-perfil .torre { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; }
+.alzado-perfil .cara-y { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.alzado-perfil .punto { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: grab; }
+.alzado-perfil .punto.sel { fill: var(--accent); }
+.alzado-perfil .rot { font-size: 10px; fill: var(--ink2); }
+.perfil-torre .punto-perfil { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px dashed var(--rule); }
+.sigue-losa { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--hair); }

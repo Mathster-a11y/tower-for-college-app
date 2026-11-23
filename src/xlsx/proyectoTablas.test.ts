@@ -52,6 +52,8 @@ function completo(): Proyecto {
   p.juntas = { 'M5|M6': 'pasaA', 'M8|M9': 'inglete' };
   p.exo = { tipo: 'E', separacion: 1.5, modulo: 5, columna: { b: 0.6, e: 0.04 }, diagonal: { b: 0.35, e: 0.016 }, viga: { b: 0.45, e: 0.025 }, E: 2.1e7, sigmaAdm: 14000, limiteH: 1000,
     uniones: { columna: 'articulada', base: 'articulada' }, viento: 'fachada', pesoPropio: false, pisoInicio: 2, mastil: { b: 1.2, e: 0.05 }, barras: { C3: { relA: true, sec: { b: 0.3, e: 0.0125 } }, D2: { quitar: true } }, nuevas: [{ clase: 'diagonal', a: [-9, 6], b: [9, 12] }] };
+  p.perfilTorre = { puntos: [{ h: 0, fx: 1 }, { h: 0.5, fx: 1.1, fy: 0.9, dx: 1 }, { h: 1, fx: 0.7 }], suave: true, giro: 30 };
+  p.carpinteriaRetiro = 0.3;
   p.exo!.zonas = [{ desde: 0, tipo: 'E' }, { desde: 30, tipo: 'A', modulo: 6, vanos: 2 }];
   p.nombre = 'Torre «completa» & cía'; p.alumno = 'Ana';
   return p;

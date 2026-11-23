@@ -9,6 +9,7 @@ import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
+import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
@@ -297,6 +298,8 @@ export function montarPlanta(cont: HTMLElement) {
     /** qué se muestra en fantasma sobre la planta antes de aplicarlo (null: nada) */
     previa: null as 'forma' | 'sacar' | 'meter' | null };
   let trazo: Punto[] | null = null, trazoCursor: Punto | null = null;
+  /** perfil de la torre: la sección abierta y el punto elegido */
+  let pfAbierto = false, pfSel: number | null = null;
   const lft = { abierto: false, otra: null as number | null, medias: [] as number[], tipo: 'recto' as 'recto' | 'suave', giro: 0, bl: true };
   const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'ambas' as 'ambas' | 'losa' | 'carpinteria', todos: true };
   let calib: Punto[] = [];
@@ -689,7 +692,17 @@ export function montarPlanta(cont: HTMLElement) {
     if (editaCarp) {
       const car = carpinteriaDeNivel(p, iNivel);
       const f2 = (x: number) => x.toFixed(2).replace('.', ',');
-      panelSil.append(que, b(`Carpintería de ${n.nombre}`),
+      // carpintería que sigue a la losa: todas las carpinterías = su losa metida d metros (se recalculan solas)
+      const ret = p.carpinteriaRetiro;
+      const segue = document.createElement('div'); segue.className = 'sigue-losa';
+      const ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = ret !== null && ret !== undefined; ck.id = 'carp-sigue';
+      const dIn = document.createElement('input'); dIn.type = 'text'; dIn.inputMode = 'decimal'; dIn.className = 'campo-vertice'; dIn.value = String(ret ?? 0.3).replace('.', ',');
+      const ponerRet = () => { const x = parseFloat(dIn.value.replace(',', '.')); estado.cambiar(pp => { if (ck.checked && isFinite(x) && x >= 0) pp.carpinteriaRetiro = x; else delete pp.carpinteriaRetiro; }); };
+      ck.addEventListener('change', ponerRet); dIn.addEventListener('change', () => { if (ck.checked) ponerRet(); });
+      const lck = document.createElement('label'); lck.className = 'campo-linea'; lck.htmlFor = 'carp-sigue'; lck.append(ck, ' Que siga a la losa, metida ', dIn, ' m');
+      segue.append(lck, Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: ck.checked ? 'Activo: en todos los niveles la carpintería es el borde de la losa hacia adentro; si cambia la losa (a mano, con una forma, un loft o el perfil), la fachada la acompaña.' : 'Así la fachada acompaña a la losa en todos los pisos (también con un loft o un perfil). Si no, se dibuja a mano.' }));
+      if (ck.checked) { panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue, linea(car ? `a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²` : '')); return; }
+      panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
         linea(!car ? 'sin carpintería: arrastrá un vértice y se copia la silueta de la losa' : car.propia ? 'propia de este nivel' : 'heredada de otro nivel (de arriba o, si arriba no hay, de abajo; se copia al editarla)'),
         ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
         linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m${car && (Math.abs(car.a - pl.B) > 0.01 || Math.abs(car.b - pl.L) > 0.01) ? ' (distinto de la caja)' : ''}`),
@@ -706,8 +719,10 @@ export function montarPlanta(cont: HTMLElement) {
       return;
     }
     const delLoft = loftDeNivel(p, iNivel);
+    const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre);
+    const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
     const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, linea(delLoft ? `generada por el loft ${delLoft.id}` : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       filaV, dxf,
@@ -719,8 +734,109 @@ export function montarPlanta(cont: HTMLElement) {
       }, 'La misma silueta de losa en todos los pisos.'),
       boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'),
       seccionDesdeCero(),
+      seccionPerfil(),
       seccionLoft(),
       seccionEsquinas(Math.min(caja.B, caja.L)));
+  }
+  /**
+   * perfil de la torre (alzado): la planta de la losa base se escala, se gira y se corre con la altura. Un alzado chico
+   * con los puntos de la curva: se arrastran (a los costados cambia el ancho, arriba y abajo la altura), un toque en
+   * el alzado agrega un punto; el punto elegido se ajusta con números.
+   */
+  function seccionPerfil(): HTMLElement {
+    const p = estado.proyecto, pf = p.perfilTorre ?? null;
+    const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre'; det.open = pfAbierto;
+    det.addEventListener('toggle', () => { pfAbierto = det.open; });
+    const sum = document.createElement('summary'); sum.textContent = `Perfil de la torre (alzado)${pf ? ' · activo' : ''}`; det.append(sum);
+    const nota = (t: string) => Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: t });
+    const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
+    const poner = (f: (q: PerfilTorre) => void) => estado.cambiar(pp => { const q: PerfilTorre = structuredClone(pp.perfilTorre ?? { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 1 }] }); f(q); q.puntos.sort((a, b) => a.h - b.h); pp.perfilTorre = q; });
+    det.append(nota('El edificio entero toma la forma de la losa base y la cambia con la altura: más angosto o más ancho, girado o inclinado. Elegí un perfil y ajustalo arrastrando los puntos del alzado.'));
+    // plantillas
+    const pls = document.createElement('div'); pls.className = 'galeria-perfiles';
+    PERFILES.forEach(x => pls.append(boton(x.nombre, x.texto, () => { pfSel = null; poner(q => { q.puntos = structuredClone(x.p.puntos); q.suave = x.p.suave ?? false; q.giro = x.p.giro ?? 0; }); })));
+    det.append(pls);
+    if (!pf) return det;
+    // alzado: eje vertical = altura (0 abajo, 1 arriba), a los costados el ancho (factor 1 = la base)
+    const W = 260, H = 230, mx = W / 2, y0 = H - 16, y1 = 14, K = 62;
+    const iB = nivelBase(p, pf), zb = p.niveles[iB].cota, zt = p.niveles[0].cota;
+    const baseB = plantaDeNivel(p, iB).B || 20, kd = K / (baseB / 2);
+    const Yh = (h: number) => y0 - h * (y0 - y1), Xf = (f: number, dx: number) => mx + f * K + dx * kd;
+    const sv = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'alzado-perfil', role: 'img', 'aria-label': 'Alzado del perfil de la torre' }) as SVGSVGElement;
+    const dibujarAlzado = (q: PerfilTorre) => {
+      sv.replaceChildren();
+      // niveles
+      p.niveles.forEach((nv, i) => { if (i > iB) return; const h = (nv.cota - zb) / (zt - zb || 1); sv.append(el('line', { x1: 8, x2: W - 8, y1: Yh(h), y2: Yh(h), class: 'nivel' })); });
+      // la torre: borde derecho (fx) y el izquierdo en espejo, corridos por dx; en trazos, la cara en y (fy) si es distinta
+      const hs = Array.from({ length: 61 }, (_, k) => k / 60), vs = hs.map(h => valorPerfil(q, h));
+      const der = hs.map((h, k) => `${Xf(vs[k].fx, vs[k].dx).toFixed(1)},${Yh(h).toFixed(1)}`), izq = hs.map((h, k) => `${Xf(-vs[k].fx, vs[k].dx).toFixed(1)},${Yh(h).toFixed(1)}`).reverse();
+      sv.append(el('polygon', { points: [...der, ...izq].join(' '), class: 'torre' }));
+      if (q.puntos.some(x => x.fy !== null && x.fy !== undefined && Math.abs(x.fy - x.fx) > 1e-6)) sv.append(el('polyline', { points: hs.map((h, k) => `${Xf(vs[k].fy, vs[k].dy).toFixed(1)},${Yh(h).toFixed(1)}`).join(' '), class: 'cara-y' }));
+      sv.append(el('line', { x1: mx, x2: mx, y1: y0 + 6, y2: y1 - 6, class: 'eje' }));
+      q.puntos.forEach((x, i) => {
+        const c = el('circle', { cx: Xf(x.fx, x.dx ?? 0), cy: Yh(x.h), r: pfSel === i ? 8 : 6, class: 'punto' + (pfSel === i ? ' sel' : ''), 'data-i': i });
+        sv.append(c);
+      });
+      const t = el('text', { x: 8, y: H - 2, class: 'rot' }); t.textContent = `base: ${p.niveles[iB].nombre}`; sv.append(t);
+      const t2 = el('text', { x: 8, y: 11, class: 'rot' }); t2.textContent = p.niveles[0].nombre; sv.append(t2);
+    };
+    let q = structuredClone(pf);
+    dibujarAlzado(q);
+    // arrastrar un punto: a los costados el ancho, arriba y abajo la altura (el primero y el último quedan en la base y la azotea)
+    const aLocal = (ev: PointerEvent) => { const r = sv.getBoundingClientRect(); return { x: ((ev.clientX - r.left) / r.width) * W, y: ((ev.clientY - r.top) / r.height) * H }; };
+    let arr: { i: number; id: number; movio: boolean } | null = null;
+    sv.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      const t = (ev.target as Element).closest?.('[data-i]');
+      const l = aLocal(ev);
+      if (t) { arr = { i: +t.getAttribute('data-i')!, id: ev.pointerId, movio: false }; pfSel = arr.i; }
+      else {
+        // un toque en el alzado agrega un punto a esa altura, con el ancho que marca el toque
+        const h = Math.max(0.01, Math.min(0.99, (y0 - l.y) / (y0 - y1))), v = valorPerfil(q, h);
+        q.puntos.push({ h: +h.toFixed(3), fx: +Math.max(0.05, Math.abs(l.x - mx - v.dx * kd) / K).toFixed(3) });
+        q.puntos.sort((a, b) => a.h - b.h); pfSel = q.puntos.findIndex(x => Math.abs(x.h - h) < 1e-3);
+        arr = { i: pfSel, id: ev.pointerId, movio: true };
+      }
+      try { sv.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+      dibujarAlzado(q);
+    });
+    sv.addEventListener('pointermove', ev => {
+      if (!arr || ev.pointerId !== arr.id) return;
+      const l = aLocal(ev), x = q.puntos[arr.i], n = q.puntos.length;
+      x.fx = +Math.max(0.05, Math.min(3, (l.x - mx - (x.dx ?? 0) * kd) / K)).toFixed(3);
+      if (arr.i > 0 && arr.i < n - 1) x.h = +Math.max(q.puntos[arr.i - 1].h + 0.005, Math.min(q.puntos[arr.i + 1].h - 0.005, (y0 - l.y) / (y0 - y1))).toFixed(3);
+      arr.movio = true; dibujarAlzado(q);
+    });
+    const soltarP = () => { if (!arr) return; const m = arr.movio; arr = null; if (m) estado.cambiar(pp => { pp.perfilTorre = structuredClone(q); }); else armarPanelSil(); };
+    sv.addEventListener('pointerup', soltarP); sv.addEventListener('pointercancel', soltarP);
+    det.append(sv);
+    // forma de la curva, giro, base
+    const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Curva del perfil');
+    ([[false, 'Tramos rectos'], [true, 'Curva suave']] as const).forEach(([v, t]) => { const x = boton(t, v ? 'Curva suave que pasa por todos los puntos (sin pasarse de ellos)' : 'Rectas entre los puntos: aristas y escalones', () => poner(z => { z.suave = v; })); x.setAttribute('aria-pressed', String(!!pf.suave === v)); seg.append(x); });
+    const num = (rot: string, val: number, f: (x: number) => void, unidad: string, ti = '') => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(val).replace('.', ','); i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x)) f(x); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, ` ${unidad}`); return l; };
+    const sb = document.createElement('select'); sb.setAttribute('aria-label', 'Losa base');
+    p.niveles.forEach((nv, i) => { if (nv.cota >= -1e-6 && i > 0) sb.append(new Option(nv.nombre, String(nv.cota), false, i === iB)); });
+    sb.addEventListener('change', () => poner(z => { z.base = +sb.value; }));
+    const lb = document.createElement('label'); lb.className = 'campo-esq'; lb.append('losa base ', sb);
+    det.append(seg, lb, num('giro total', pf.giro ?? 0, x => poner(z => { z.giro = x; }), '°', 'de la base a la azotea, antihorario'));
+    // el punto elegido
+    if (pfSel !== null && pf.puntos[pfSel]) {
+      const i = pfSel, x = pf.puntos[i], alt = zb + x.h * (zt - zb);
+      const caja = document.createElement('div'); caja.className = 'punto-perfil';
+      caja.append(Object.assign(document.createElement('b'), { textContent: `Punto ${i + 1} · a ${alt.toFixed(1).replace('.', ',')} m` }),
+        num('ancho en x', +(x.fx * 100).toFixed(1), v => poner(z => { z.puntos[i].fx = v / 100; }), '%', 'respecto de la losa base'),
+        num('ancho en y', +((x.fy ?? x.fx) * 100).toFixed(1), v => poner(z => { z.puntos[i].fy = Math.abs(v / 100 - z.puntos[i].fx) < 1e-9 ? null : v / 100; }), '%', 'igual que en x si no se cambia'),
+        num('corrimiento x', x.dx ?? 0, v => poner(z => { z.puntos[i].dx = v; }), 'm', 'torre inclinada'),
+        num('corrimiento y', x.dy ?? 0, v => poner(z => { z.puntos[i].dy = v; }), 'm'));
+      if (i > 0 && i < pf.puntos.length - 1) caja.append(boton('Sacar este punto', '', () => { pfSel = null; poner(z => { z.puntos.splice(i, 1); }); }));
+      det.append(caja);
+    } else det.append(nota('Tocá un punto del alzado para ajustarlo con números; tocá en otro lado del alzado para agregar uno.'));
+    const lofts = (p.lofts ?? []).length;
+    if (lofts) det.append(nota(`Hay ${lofts} ${lofts === 1 ? 'loft' : 'lofts'}: mandan sobre los niveles que generan.`));
+    det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
+    void aplicarPerfil;
+    return det;
   }
   /**
    * losa desde cero: formas de arranque con sus medidas, dibujarla a mano vértice por vértice, y salientes (balcones,
@@ -1948,7 +2064,7 @@ export function montarPlanta(cont: HTMLElement) {
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
       // las losas que genera un loft no se editan a mano (se recalculan solas): sin manijas
-      (!editaCarp && loftDeNivel(estado.proyecto, iNivel) ? [] : vEd).forEach((v, i) => {
+      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre))) || (editaCarp && estado.proyecto.carpinteriaRetiro != null) ? [] : vEd).forEach((v, i) => {
         // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
         const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));

@@ -303,6 +303,10 @@ export interface Proyecto {
    * entre ellas salen de interpolarlas en altura (ver loft.ts); se vuelven a aplicar solos con cada cambio
    */
   lofts?: import('./loft').Loft[];
+  /** perfil de la torre en alzado: la planta de cada losa sale de la del nivel base escalada, girada y corrida (perfil_torre.ts) */
+  perfilTorre?: import('./perfil_torre').PerfilTorre | null;
+  /** la carpintería de cada nivel sigue a su losa, desfasada hacia adentro estos metros (vacío = a mano) */
+  carpinteriaRetiro?: number | null;
   /**
    * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
    * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados

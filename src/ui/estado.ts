@@ -16,6 +16,7 @@ import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type Confi
 import { Historial } from './historial';
 import { Guardado } from './guardado';
 import { aplicarLofts } from '../engine/loft';
+import { aplicarCarpinteria, aplicarPerfil } from '../engine/perfil_torre';
 
 /**
  * Hasta noviembre de 2026 el motor y el armado se recordaban en el navegador (no en el proyecto), y el mismo archivo
@@ -248,7 +249,10 @@ class Estado {
       if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
     }
     // lofts de losas: las siluetas intermedias siguen a las losas sección
+    // perfil de la torre, después los lofts (mandan sobre los niveles que generan) y la carpintería que sigue a la losa
+    if (this.proyecto.perfilTorre) aplicarPerfil(this.proyecto);
     if (this.proyecto.lofts?.length) aplicarLofts(this.proyecto);
+    if (this.proyecto.carpinteriaRetiro !== null && this.proyecto.carpinteriaRetiro !== undefined) aplicarCarpinteria(this.proyecto);
     // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
     const pa = this.proyecto;
     if (pa.areasAuto !== undefined && pa.areasAuto !== null) {
