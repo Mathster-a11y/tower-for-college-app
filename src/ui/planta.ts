@@ -292,7 +292,9 @@ export function montarPlanta(cont: HTMLElement) {
   /** lo elegido en «Esquinas de la torre» (vive mientras la página está abierta) */
   /** loft de losas en armado: la otra losa (cota), las intermedias que también mandan, tipo, giro y si escribe B y L */
   /** losa desde cero: forma y medidas elegidas, lado para salientes, y el contorno que se dibuja a mano (null: no se dibuja) */
-  const dc = { abierto: null as boolean | null, forma: 'rect' as FormaLosa, med: { ...FORMAS_LOSA.rect.def } as MedidasLosa, bl: true, lado: 0, ancho: 4, prof: 1.5, centro: null as number | null, orto: true };
+  const dc = { abierto: null as boolean | null, forma: 'rect' as FormaLosa, med: { ...FORMAS_LOSA.rect.def } as MedidasLosa, bl: true, lado: 0, ancho: 4, prof: 1.5, centro: null as number | null, orto: true,
+    /** qué se muestra en fantasma sobre la planta antes de aplicarlo (null: nada) */
+    previa: null as 'forma' | 'sacar' | 'meter' | null };
   let trazo: Punto[] | null = null, trazoCursor: Punto | null = null;
   const lft = { abierto: false, otra: null as number | null, medias: [] as number[], tipo: 'recto' as 'recto' | 'suave', giro: 0, bl: true };
   const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'ambas' as 'ambas' | 'losa' | 'carpinteria', todos: true };
@@ -323,7 +325,7 @@ export function montarPlanta(cont: HTMLElement) {
     lazo: 'Lazo: dibujá un lazo alrededor de lo que querés elegir (entra todo muro con el centro adentro). Mayúsculas suma, Alt saca, Supr borra lo elegido.',
     dibujar: 'Dibujar muros: tocá el inicio y el fin; sale horizontal o vertical y se pega a otros muros. Sigue encadenado: escribí el largo y Enter, o Esc para terminar.',
     calibrar: 'Calibrar el calco: tocá dos puntos de la imagen y escribí la distancia real entre ellos.',
-    silueta: 'Contornos: arrastrá los vértices (□) de la losa o de la carpintería; en la carta están las formas, el loft y las herramientas de CAD. Esc sale.',
+    silueta: 'Losa: arrastrá los vértices (□) de la losa o de la carpintería. En la carta: formas (con vista previa), dibujarla a mano, balcones, loft y herramientas de CAD. Esc sale.',
     insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Esc sale.',
     calar: 'Calar: tocá el muro donde va el vano (puerta, ventana o hueco). Tocá un vano hecho para moverlo o sacarlo. Esc sale.',
     colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
@@ -683,7 +685,8 @@ export function montarPlanta(cont: HTMLElement) {
     const p = estado.proyecto, n = p.niveles[iNivel], pl = plantaDeNivel(p, iNivel);
     const det = document.createElement('details'); det.className = 'esquinas-torre losa-cero';
     det.open = dc.abierto ?? (!pl.propia || !p.muros.length);
-    det.addEventListener('toggle', () => { dc.abierto = det.open; });
+    // (un details nuevo ya abierto también avisa «toggle»: solo cuenta si cambió, si no la carta se rearma sin fin)
+    det.addEventListener('toggle', () => { if (dc.abierto === det.open) return; dc.abierto = det.open; if (!det.open && dc.previa) { dc.previa = null; pedirDibujo(); } });
     const sum = document.createElement('summary'); sum.textContent = 'Losa desde cero: formas, a mano y balcones'; det.append(sum);
     const nota = (t: string) => { const x = document.createElement('p'); x.className = 'nota-losa'; x.textContent = t; return x; };
     const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
@@ -698,7 +701,7 @@ export function montarPlanta(cont: HTMLElement) {
         x.append(sv);
       }
       const t = document.createElement('span'); t.textContent = FORMAS_LOSA[f].nombre; x.append(t);
-      x.addEventListener('click', () => { dc.forma = f; dc.med = { ...FORMAS_LOSA[f].def }; armarPanelSil(); });
+      x.addEventListener('click', () => { dc.forma = f; dc.med = { ...FORMAS_LOSA[f].def }; dc.previa = 'forma'; armarPanelSil(); dibujar(); });
       gal.append(x);
     });
     det.append(nota('1 · Elegí una forma y escribí sus medidas (en metros). Queda centrada en la planta.'), gal);
@@ -706,9 +709,13 @@ export function montarPlanta(cont: HTMLElement) {
     const campos = document.createElement('div'); campos.className = 'campos-forma';
     FORMAS_LOSA[dc.forma].medidas.forEach(k => {
       const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(dc.med[k] ?? '').replace('.', ',');
-      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x)) dc.med[k] = x; });
+      i.addEventListener('input', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x)) dc.med[k] = x; dc.previa = 'forma'; avisoForma(); pedirDibujo(); });
       const l = document.createElement('label'); l.className = 'campo-esq'; l.append(ROT[k] + ' ', i, k === 'n' ? '' : ' m'); campos.append(l);
     });
+    // lo que está mal en las medidas se dice acá mismo, mientras se escribe (y la vista previa no se dibuja)
+    const errF = document.createElement('p'); errF.className = 'error-losa'; errF.setAttribute('role', 'status');
+    const avisoForma = () => { const v = formaLosa(dc.forma, dc.med); errF.textContent = 'error' in v ? v.error : dc.previa === 'forma' ? `Vista previa en la planta (línea de trazos). «Usar» la aplica.` : ''; errF.classList.toggle('mal', 'error' in v); };
+    avisoForma();
     const blc = document.createElement('input'); blc.type = 'checkbox'; blc.checked = dc.bl; blc.addEventListener('change', () => { dc.bl = blc.checked; });
     const lbl = document.createElement('label'); lbl.className = 'campo-linea'; lbl.title = 'La planilla toma de cada nivel B y L (para el viento): con esto quedan iguales a la caja de la forma'; lbl.append(blc, ' B y L de la planilla = la caja de la forma');
     const usar = (todos: boolean) => {
@@ -718,9 +725,10 @@ export function montarPlanta(cont: HTMLElement) {
         const c = cajaSilueta(v);
         (todos ? pp.niveles.map((_, k) => k) : [iNivel]).forEach(k => { pp.niveles[k].silueta = v.map(q => JSON.parse(JSON.stringify(q))); if (dc.bl) { pp.niveles[k].B = +c.B.toFixed(2); pp.niveles[k].L = +c.L.toFixed(2); } });
       });
+      dc.previa = null;
       mensaje(`${FORMAS_LOSA[dc.forma].nombre} en ${todos ? 'todos los niveles' : n.nombre}. Ajustala arrastrando los vértices o con «Herramientas CAD…».`);
     };
-    det.append(campos, lbl, h2(boton(`Usar en ${n.nombre}`, 'La losa de este nivel pasa a tener esta forma', () => usar(false), true), boton('Usar en todos los niveles', 'Todas las losas con esta forma (después se cambian de a una o con un loft)', async () => { if (await confirmar('Forma en todos los niveles', `Las losas de los ${p.niveles.length} niveles pasan a ser «${FORMAS_LOSA[dc.forma].nombre}» (se reemplazan las que tengan). Se puede deshacer.`, 'Usar')) usar(true); })));
+    det.append(campos, errF, lbl, h2(boton(`Usar en ${n.nombre}`, 'La losa de este nivel pasa a tener esta forma', () => usar(false), true), boton('Usar en todos los niveles', 'Todas las losas con esta forma (después se cambian de a una o con un loft)', async () => { if (await confirmar('Forma en todos los niveles', `Las losas de los ${p.niveles.length} niveles pasan a ser «${FORMAS_LOSA[dc.forma].nombre}» (se reemplazan las que tengan). Se puede deshacer.`, 'Usar')) usar(true); })));
     // a mano
     det.append(nota('2 · O dibujala a mano: tocá los vértices en la planta, uno por uno, y cerrala tocando el primero.'));
     const ort = document.createElement('input'); ort.type = 'checkbox'; ort.checked = dc.orto; ort.addEventListener('change', () => { dc.orto = ort.checked; });
@@ -733,18 +741,31 @@ export function montarPlanta(cont: HTMLElement) {
     det.append(nota('3 · Balcones, voladizos y retiros: un rectángulo que sale (o entra) de un lado recto.'));
     const sl = document.createElement('select'); sl.setAttribute('aria-label', 'Lado');
     lados.forEach(l => sl.append(new Option(`Lado ${l.i + 1} · mira ${l.mira} · ${l.largo.toFixed(2).replace('.', ',')} m${l.recto ? '' : ' (curvo)'}`, String(l.i), false, l.i === dc.lado)));
-    sl.addEventListener('change', () => { dc.lado = +sl.value; dibujar(); });
-    const num = (rot: string, val: number | null, f: (x: number | null) => void, ti = '') => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = val === null ? '' : String(val).replace('.', ','); i.placeholder = val === null ? 'medio' : ''; i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); f(isFinite(x) ? x : null); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, ' m'); return l; };
+    sl.addEventListener('change', () => { dc.lado = +sl.value; if (dc.previa !== 'meter') dc.previa = 'sacar'; avisoSal(); dibujar(); });
+    const num = (rot: string, val: number | null, f: (x: number | null) => void, ti = '') => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = val === null ? '' : String(val).replace('.', ','); i.placeholder = val === null ? 'medio' : ''; i.addEventListener('input', () => { const x = parseFloat(i.value.replace(',', '.')); f(isFinite(x) ? x : null); if (dc.previa !== 'meter') dc.previa = 'sacar'; avisoSal(); pedirDibujo(); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, ' m'); return l; };
+    const errS = document.createElement('p'); errS.className = 'error-losa'; errS.setAttribute('role', 'status');
+    const avisoSal = () => {
+      if (!dc.previa || dc.previa === 'forma') { errS.textContent = ''; return; }
+      const r = salienteEnLado(pl.silueta, dc.lado, dc.ancho, (dc.previa === 'meter' ? -1 : 1) * Math.abs(dc.prof), dc.centro);
+      errS.textContent = 'error' in r ? r.error : `Vista previa del ${dc.previa === 'meter' ? 'retiro' : 'balcón'} en la planta.`;
+      errS.classList.toggle('mal', 'error' in r);
+    };
+    const bSacar = boton('Sacar (balcón)', 'Agrega un rectángulo hacia afuera del lado elegido (resaltado en la planta)', () => aplicar(1), true), bMeter = boton('Meter (retiro)', 'Saca un rectángulo hacia adentro del lado elegido', () => aplicar(-1));
+    // al pasar por encima (o tocar el campo) cada botón muestra lo que haría
+    ([[bSacar, 'sacar'], [bMeter, 'meter']] as const).forEach(([b, q]) => { b.addEventListener('pointermove', () => { if (dc.previa !== q) { dc.previa = q; avisoSal(); pedirDibujo(); } }); b.addEventListener('focus', () => { dc.previa = q; avisoSal(); pedirDibujo(); }); });
+    const botonesSal = h2(bSacar, bMeter);
+    avisoSal();
     const aplicar = (signo: 1 | -1) => {
       const r = salienteEnLado(pl.silueta, dc.lado, dc.ancho, signo * Math.abs(dc.prof), dc.centro);
       if ('error' in r) { void avisar('error', signo > 0 ? 'No se puede agregar el saliente' : 'No se puede hacer el entrante', r.error); return; }
+      dc.previa = null;
       estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.silueta = r; if (dc.bl) { const c = cajaSilueta(r); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); } });
       mensaje(signo > 0 ? `Saliente de ${dc.ancho} × ${dc.prof} m en el lado ${dc.lado + 1}.` : `Entrante de ${dc.ancho} × ${dc.prof} m en el lado ${dc.lado + 1}.`);
     };
     det.append(sl,
       num('ancho', dc.ancho, x => { if (x && x > 0) dc.ancho = x; }), num('profundidad', dc.prof, x => { if (x && x > 0) dc.prof = x; }),
       num('centro a', dc.centro, x => { dc.centro = x; }, 'distancia del centro del saliente al primer vértice del lado (vacío: en el medio del lado)'),
-      h2(boton('Sacar (balcón)', 'Agrega un rectángulo hacia afuera del lado elegido (resaltado en la planta)', () => aplicar(1), true), boton('Meter (retiro)', 'Saca un rectángulo hacia adentro del lado elegido', () => aplicar(-1))));
+      errS, botonesSal);
     return det;
   }
   /** fila de botones */
@@ -2116,6 +2137,19 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'silueta' && !editaCarp) {
       // lado elegido para un saliente (resaltado) y el contorno que se dibuja a mano
       const lados = ladosLosa(pl.silueta), w = antihorario(pl.silueta);
+      // vista previa (fantasma): la forma elegida o el contorno con el balcón o el retiro, antes de aplicarlos
+      if (!trazo && dc.previa) {
+        const v = dc.previa === 'forma' ? formaLosa(dc.forma, dc.med) : salienteEnLado(pl.silueta, dc.lado, dc.ancho, (dc.previa === 'meter' ? -1 : 1) * Math.abs(dc.prof), dc.centro);
+        if (!('error' in v)) {
+          const ps = puntosSilueta(v, 6), c = cajaSilueta(v);
+          const g = el('g', { class: 'previa-losa' });
+          g.append(el('polygon', { points: ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ') }));
+          const t = el('text', { x: X(c.cx), y: Y(c.cy + c.L / 2) - 8, 'text-anchor': 'middle' });
+          t.textContent = `vista previa · ${c.B.toFixed(2).replace('.', ',')} × ${c.L.toFixed(2).replace('.', ',')} m · ${areaSilueta(v).toFixed(1).replace('.', ',')} m²`;
+          g.append(t);
+          svg.append(g);
+        }
+      }
       if (!trazo && lados[dc.lado] && (dc.abierto ?? true)) {
         const a = w[dc.lado], b2 = w[(dc.lado + 1) % w.length];
         svg.append(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b2.x), y2: Y(b2.y), class: 'lado-saliente' }));

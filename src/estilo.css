@@ -1775,3 +1775,9 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .planta .trazo-losa circle { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.5; }
 .planta .trazo-losa circle.primero { fill: var(--accent); }
 .planta .trazo-losa .medida-trazo { font-size: 11px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+.losa-cero .error-losa { margin: 2px 0; font-size: 11.5px; color: var(--ink2); min-height: 0; }
+.losa-cero .error-losa:empty { display: none; }
+.planta .previa-losa polygon { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; pointer-events: none; }
+.planta .previa-losa text { font-size: 11.5px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; pointer-events: none; }
+.losa-cero .error-losa.mal { color: var(--revisar); font-weight: 600; }
