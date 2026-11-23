@@ -88,3 +88,14 @@ describe('contexto desde un DXF', () => {
     expect(r.edificios[3].v.length).toBe(24);
   });
 });
+
+describe('isolíneas', () => {
+  it('un campo radial da un círculo del radio del nivel', async () => {
+    const { isolineas } = await import('../src/ui/campoSuave');
+    const nx = 41, ny = 41, f = new Float32Array(nx * ny);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) f[j * nx + i] = Math.hypot(i + 0.5 - 20.5, j + 0.5 - 20.5);
+    const t = isolineas(nx, ny, f, 10, null);
+    expect(t.length).toBeGreaterThan(40);
+    for (const [x0, y0] of t) expect(Math.hypot(x0 - 20.5, y0 - 20.5)).toBeCloseTo(10, 0);
+  });
+});

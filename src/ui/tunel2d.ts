@@ -21,7 +21,7 @@ import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
-import { colorTermico, coloresTermico, dibujarFlechas, divergente, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
+import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { armarEscenario, cajaDe, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
@@ -54,6 +54,8 @@ const cfg = {
   escenario: 'fila' as Escenario, separacion: 20, altoRel: 1,
   /** el Cp promedio dibujado sobre el contorno de la planta */
   cpContorno: true,
+  /** isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada): dónde y hasta dónde se acelera el aire */
+  isolineas: true,
   /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
@@ -81,6 +83,8 @@ interface Corrida {
   perim: PromedioPerimetro;
   /** salvaguardas: la velocidad media de cada celda (suma y cuadros), la más alta del último cuadro (red) y dónde se rompió */
   sumaV: Float64Array; nV: number; maxRed: number; dondeRoto: string | null; altos: PuntoAlto[];
+  /** isolíneas de la velocidad media (tramos en la red, por nivel) y la cola del humo (las últimas posiciones) */
+  isos: { nivel: number; tramos: number[][] }[]; cola: Float32Array[];
 }
 let corrida: Corrida | null = null;
 let lienzo: HTMLCanvasElement | null = null;
@@ -135,7 +139,7 @@ function iniciar() {
   const humo = new Float32Array(2 * 700);
   for (let k = 0; k < 700; k++) { humo[2 * k] = Math.random() * geo.nx; humo[2 * k + 1] = Math.random() * geo.ny; }
   corrida = { clave: claveCorrida(), geo, nu, cs: re.cs, worker, campo: null, pasos: 0, Fx: [], Fy: [], corriendo: true, esperando: false, roto: false, med: null, humo, cuadrosSinMirar: 0, nivel: ne.n.nombre, cota: ne.n.cota, perim: new PromedioPerimetro(perimetro(geo), U0),
-    sumaV: new Float64Array(geo.nx * geo.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [] };
+    sumaV: new Float64Array(geo.nx * geo.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [], isos: [], cola: [] };
   worker.onmessage = (e: MessageEvent<CuadroTunel>) => recibir(e.data);
   const exactas = cfg.paredes === 'exactas';
   worker.postMessage({ tipo: 'iniciar', nx: geo.nx, ny: geo.ny, solido: geo.solido, nu, u0: U0, cs: re.cs, q: exactas ? geo.q : undefined, colision: exactas ? 'trt' : 'bgk', cuerpo: geo.cuerpo } satisfies MensajeTunel);
@@ -190,7 +194,8 @@ function recibir(r: CuadroTunel) {
     const desde = Math.max(0, c.Fx.length - Math.min(c.Fx.length, c.pasos - Math.round((0.6 * c.geo.nx) / U0)));
     c.med = medir(c.Fx.slice(desde), c.Fy.slice(desde), U0, c.geo.D);
     c.perim.sumar(r.rho);                                             // la presión en el perímetro, pasado el arranque
-    if (SALVAGUARDAS) { for (let k = 0; k < r.ux.length; k++) c.sumaV[k] += Math.hypot(r.ux[k], r.uy[k]); c.nV++; }
+    // la velocidad media de cada celda (para los puntos de velocidad alta y las isolíneas)
+    for (let k = 0; k < r.ux.length; k++) c.sumaV[k] += Math.hypot(r.ux[k], r.uy[k]); c.nV++;
     if (det && r.det && r.det.nx === det.geo.nx && r.det.ny === det.geo.ny) {
       const d = r.det, n = d.ux.length, inst = new Float32Array(n); let mx = 0;
       for (let k = 0; k < n; k++) { const v = Math.hypot(d.ux[k], d.uy[k]); inst[k] = v; det.sumaV[k] += v; det.sumaR[k] += d.rho[k]; }
@@ -206,9 +211,13 @@ function recibir(r: CuadroTunel) {
   actualizarMediciones();
 }
 
+/** cuántas posiciones guarda la estela del humo */
+const LARGO_COLA = 8;
 /** humo: partículas llevadas por el viento (interpolación bilineal), que vuelven a entrar por la izquierda */
 function moverHumo(c: Corrida, pasos: number) {
   if (!c.campo || !cfg.humo) return;
+  // la estela: las últimas posiciones, de la más vieja a la actual
+  c.cola.push(c.humo.slice()); if (c.cola.length > LARGO_COLA) c.cola.shift();
   const { nx, ny, solido } = c.geo, { ux, uy } = c.campo, hm = c.humo;
   const sub = Math.max(1, Math.ceil(pasos / 20)), dt = pasos / sub;
   for (let k = 0; k < hm.length; k += 2) {
@@ -283,6 +292,7 @@ function dibujar() {
   // las flechas de la velocidad, en una grilla pareja de la pantalla (no se amontonan con el zoom)
   g.setTransform(1, 0, 0, 1, 0, 0);
   dibujarFlechas(g, vis, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 30, css('--ink', '#223344'), css('--lienzo', '#ffffff'), cfg.vista !== 'velocidad');
+  if (cfg.isolineas && c.isos.length) dibujarIsolineas(g, c, s);
   g.setTransform(zoom.z, 0, 0, zoom.z, -zoom.ox * zoom.z, -zoom.oy * zoom.z);
   // Cp promedio sobre el contorno: azul donde empuja (comprime), rojo donde succiona (tracciona)
   if (cfg.cpContorno && c.perim.muestras > 0) {
@@ -302,8 +312,20 @@ function dibujar() {
   }
   dibujarDetalle(c, rhoRef);
   if (cfg.humo) {
-    g.fillStyle = css('--ink2', '#556'); g.globalAlpha = 0.55;
-    const hm = c.humo;
+    // las partículas con su estela: un tramo por cada cuadro anterior, más transparente cuanto más viejo
+    const hm = c.humo, col = c.cola, tinta = css('--ink2', '#556');
+    g.strokeStyle = tinta; g.lineWidth = 1.4 / zoom.z; g.lineCap = 'round';
+    for (let a = 0; a + 1 < col.length; a++) {
+      const p0 = col[a], p1 = col[a + 1];
+      g.globalAlpha = 0.1 + (0.45 * (a + 1)) / col.length;
+      g.beginPath();
+      for (let k = 0; k < hm.length; k += 2) {
+        if (Math.abs(p1[k] - p0[k]) > 6 || Math.abs(p1[k + 1] - p0[k + 1]) > 6) continue;     // volvió a entrar: sin estela
+        g.moveTo(p0[k] * s, (ny - p0[k + 1]) * s); g.lineTo(p1[k] * s, (ny - p1[k + 1]) * s);
+      }
+      g.stroke();
+    }
+    g.fillStyle = tinta; g.globalAlpha = 0.7;
     const t = 2 / zoom.z;
     for (let k = 0; k < hm.length; k += 2) g.fillRect(hm[k] * s - t / 2, (ny - hm[k + 1]) * s - t / 2, t, t);
     g.globalAlpha = 1;
@@ -345,6 +367,36 @@ function vigilar(c: Corrida, r: CuadroTunel) {
     const k = c.geo.caja, D = c.geo.D, zona = { x0: k.x0 - D, x1: k.x1 + D, y0: k.y0 - D, y1: k.y1 + D };
     c.altos = puntosAltos(c.geo.nx, c.geo.ny, prom, solido, 1.3, 4, Math.max(3, D / 4), zona);
   }
+  if (cfg.isolineas && c.nV > 0 && c.nV % 10 === 1) {
+    const n = c.geo.nx * c.geo.ny, media = new Float32Array(n);
+    for (let k = 0; k < n; k++) media[k] = solido[k] ? NaN : c.sumaV[k] / c.nV / U0;
+    c.isos = [1.2, 1.4].map(nivel => ({ nivel, tramos: isolineas(c.geo.nx, c.geo.ny, media, nivel, solido) }));
+  }
+}
+
+/** las isolíneas de la velocidad media: 1,2 V fina y 1,4 V gruesa, con su valor en algunos lugares (sin pisarse) */
+function dibujarIsolineas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
+  const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
+  const P = (x: number, y: number) => [(x * s - zoom.ox) * zoom.z, ((ny - y) * s - zoom.oy) * zoom.z];
+  g.save(); g.lineCap = 'round';
+  const puestos: number[][] = [];
+  for (const { nivel, tramos } of c.isos) {
+    const traza = () => { g.beginPath(); for (const [x0, y0, x1, y1] of tramos) { const a = P(x0, y0), b = P(x1, y1); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); } g.stroke(); };
+    const fino = nivel < 1.3;
+    g.strokeStyle = fondo; g.lineWidth = fino ? 2.6 : 4; g.globalAlpha = 0.55; traza();
+    g.strokeStyle = tinta; g.lineWidth = fino ? 0.9 : 1.9; g.globalAlpha = fino ? 0.8 : 1; traza();
+    // el valor en unos pocos lugares separados
+    g.setLineDash([]); g.font = '600 10.5px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const t = `${fmt(nivel, 1)} V`;
+    for (let k = 0; k < tramos.length && puestos.length < 4; k += 7) {
+      const [x0, y0, x1, y1] = tramos[k], q = P((x0 + x1) / 2, (y0 + y1) / 2);
+      if (q[0] < 20 || q[1] < 20 || q[0] > (lienzo?.width ?? 0) - 20 || q[1] > (lienzo?.height ?? 0) - 20) continue;
+      if (puestos.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) < (p[2] === nivel ? 140 : 45))) continue;
+      puestos.push([q[0], q[1], nivel]);
+      g.lineWidth = 3.5; g.strokeStyle = fondo; g.strokeText(t, q[0], q[1]); g.fillStyle = tinta; g.fillText(t, q[0], q[1]);
+    }
+  }
+  g.restore();
 }
 
 /** los puntos de velocidad alta en el túnel: un anillo y la velocidad media (en veces la de entrada) */
@@ -851,7 +903,9 @@ export function panelTunel(c: H) {
   const cpc = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.cpContorno ? { checked: '' } : {}) }), ' Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)');
   cpc.querySelector('input')!.addEventListener('change', e => { cfg.cpContorno = (e.target as HTMLInputElement).checked; dibujar(); });
   d.append(cpc);
-  d.append(humo, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
+  const iso = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfg.isolineas ? { checked: '' } : {}) }), ' Isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada: dónde se acelera el aire)');
+  iso.querySelector('input')!.addEventListener('change', e => { cfg.isolineas = (e.target as HTMLInputElement).checked; dibujar(); });
+  d.append(humo, iso, h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y el humo, no.'));
   const cu = seccion('Contexto urbano (torres vecinas)').cuerpo; c.append(cu.parentElement!);
   panelContexto(cu);
   const vd = seccion('Ventana de detalle').cuerpo; c.append(vd.parentElement!);
@@ -1108,7 +1162,7 @@ function empezarRepro(g: GrabacionAbierta) {
   // la corrida «en pantalla» pasa a ser la grabación: dibujar() y las mediciones la muestran igual que en vivo
   corrida = { clave: 'grabacion', geo, nu: 0, cs: 0, worker: { terminate() {}, postMessage() {} } as unknown as Worker, campo: null, pasos: m.pasos[0] ?? 0, Fx: Array.from(g.Fx), Fy: Array.from(g.Fy), corriendo: false, esperando: false, roto: false,
     med: m.med ? { Cd: m.med.Cd, Cl: 0, ClRms: m.med.ClRms, f: null, St: m.med.St } : null, humo, cuadrosSinMirar: 0, nivel: m.nivel, cota: m.cota, perim: new PromedioPerimetro(perimetro(geo), m.u0),
-    sumaV: new Float64Array(m.nx * m.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [] };
+    sumaV: new Float64Array(m.nx * m.ny), nV: 0, maxRed: 0, dondeRoto: null, altos: [], isos: [], cola: [] };
   repro = { g, k: 0, reloj: null, video: null };
   mostrarCuadro(0);
   estado.avisarPanel();

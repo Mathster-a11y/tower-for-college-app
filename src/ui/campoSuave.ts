@@ -122,3 +122,25 @@ export const muestraVelocidad = (ux: ArrayLike<number>, uy: ArrayLike<number>, s
   for (let k = 0; k < 4; k++) { u += w[k] * ux[cs[k]]; v += w[k] * uy[cs[k]]; }
   return [u / ref, v / ref];
 };
+
+/**
+ * isolíneas de un campo (uno por celda, centros en i + ½) con «marching squares»: los tramos [x0, y0, x1, y1] en
+ * coordenadas de la red donde el campo vale «nivel». Las celdas sólidas no cuentan (la línea se corta ahí)
+ */
+export function isolineas(nx: number, ny: number, campo: ArrayLike<number>, nivel: number, solido: Uint8Array | null): number[][] {
+  const out: number[][] = [];
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const c = j * nx + i, cs = [c, c + 1, c + nx + 1, c + nx];
+    if (solido && cs.some(k => solido[k])) continue;
+    const v = cs.map(k => campo[k]);
+    if (v.some(x => !(x === x))) continue;
+    const idx = (v[0] > nivel ? 1 : 0) | (v[1] > nivel ? 2 : 0) | (v[2] > nivel ? 4 : 0) | (v[3] > nivel ? 8 : 0);
+    if (idx === 0 || idx === 15) continue;
+    // los puntos de corte en cada lado del cuadrado (0: abajo, 1: derecha, 2: arriba, 3: izquierda)
+    const x = i + 0.5, y = j + 0.5, t = (a: number, b: number) => (nivel - a) / (b - a || 1e-9);
+    const P = [[x + t(v[0], v[1]), y], [x + 1, y + t(v[1], v[2])], [x + t(v[3], v[2]), y + 1], [x, y + t(v[0], v[3])]];
+    const TR: Record<number, number[][]> = { 1: [[3, 0]], 2: [[0, 1]], 3: [[3, 1]], 4: [[1, 2]], 5: [[3, 2], [0, 1]], 6: [[0, 2]], 7: [[3, 2]], 8: [[2, 3]], 9: [[0, 2]], 10: [[0, 3], [1, 2]], 11: [[1, 2]], 12: [[1, 3]], 13: [[0, 1]], 14: [[0, 3]] };
+    for (const [a, b] of TR[idx]) out.push([P[a][0], P[a][1], P[b][0], P[b][1]]);
+  }
+  return out;
+}
