@@ -1283,7 +1283,7 @@ function resultadosPisos(c: H, ancho: number) {
   csv.addEventListener('click', () => descargarCSV(`piso_por_piso_viento${estado.dir}.csv`,
     ['Nivel', 'z (m)', 'ancho (m)', 'h influencia (m)', 'Cd simulado', 'Cl eficaz', 'Strouhal', 'coeficiente 102-25', 'F simulada (t)', 'F 102-25 (t)', ...(fi.length ? ['Cd sola', 'factor de interferencia', 'F sola (t)'] : [])],
     f.map(k => { const x = fi.find(y => y.nivel === k.nivel); return [k.nivel, k.z, k.ancho, k.hInf, k.Cd, k.ClRms, k.St, k.Creg, k.Fsim, k.Freg, ...(fi.length ? [x?.CdSin ?? NaN, x?.factor ?? NaN, x?.FSin ?? NaN] : [])]; }), 3));
-  c.append(h('div', { class: 'fila-acciones' }, csv));
+  c.append(h('div', { class: 'fila-acciones' }, csv, botonLibroTunel()));
 }
 
 // ---------------------------------------------------------------------------------------------- grabar y reproducir
@@ -1547,7 +1547,38 @@ function armarCp() {
   });
   el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Cp promedio a lo largo del perímetro · ${c.nivel} · ${pr.muestras} muestras`), h('div', { class: 'leyenda' }, h('span', {}, h('i', { class: 'caja', style: 'background: var(--compresion)' }), 'empuja (comprime)'), h('span', {}, h('i', { class: 'caja', style: 'background: var(--traccion)' }), 'succiona (tracciona)'),
     ...(ex.max ? [h('span', {}, `● empuje máximo ${fmt(ex.max.cp, 2)} a ${fmt(ex.max.s, 1)} m`)] : []), ...(ex.min ? [h('span', {}, `● succión pico ${fmt(ex.min.cp, 2)} a ${fmt(ex.min.s, 1)} m`)] : [])),
-    svg, h('p', { class: 'nota chica' }, 'Desde el punto de barlovento (donde choca el viento), en sentido antihorario; las líneas punteadas son las esquinas.'), h('div', { class: 'fila-acciones' }, csv)));
+    svg, h('p', { class: 'nota chica' }, 'Desde el punto de barlovento (donde choca el viento), en sentido antihorario; las líneas punteadas son las esquinas.'), h('div', { class: 'fila-acciones' }, csv, botonLibroTunel())));
+}
+
+/** «⤓ Excel»: un libro con piso por piso (si se simuló), la interferencia y el Cp del perímetro del corte a la vista */
+function botonLibroTunel(): H {
+  const b = h('button', { type: 'button', class: 'mini' }, '⤓ Excel (.xlsx)');
+  b.title = 'Un libro con las hojas «Piso por piso» (con la fuerza como fórmula y gráficos), «Interferencia» y «Cp del perímetro»';
+  b.addEventListener('click', () => { void descargarLibroTunel().catch(e => mensajeTunel(`No se pudo armar el Excel: ${e instanceof Error ? e.message : String(e)}`)); });
+  return b;
+}
+async function descargarLibroTunel() {
+  const { libroTunel } = await import('../xlsx/libros/libroTunel');
+  const r = pisos && pisos.clave === clavePisos() ? pisos : null;
+  let pisosF: (ReturnType<typeof fuerzasPorPiso>[number] & { qz: number })[] = [], interf: ReturnType<typeof interferencia> = [];
+  if (r && r.res.size) {
+    try {
+      const v = vientoCirsoc()[estado.dir], qz = new Map(v.niveles.map(n => [n.nivel, n.qz]));
+      const f = fuerzasPorPiso(v, r.grupos, r.res);
+      pisosF = f.map(x => ({ ...x, qz: qz.get(x.nivel) ?? NaN }));
+      if (r.aisladas.length) interf = interferencia(f, fuerzasPorPiso(v, r.aisladas, r.res));
+    } catch { /* sin datos del 102-25 */ }
+  }
+  const c = corrida, pr = c?.perim;
+  const cp = c && pr && pr.muestras >= 5 ? { nivel: c.nivel, puntos: pr.tramos(240) } : null;
+  if (!pisosF.length && !cp) { mensajeTunel('Todavía no hay resultados para el Excel: simulá la torre piso por piso o esperá a que se promedie el Cp del perímetro.'); return; }
+  const config = `Reynolds ${RE[cfg.re].Re}, resolución ${cfg.res}, paredes ${cfg.paredes}, canal ${cfg.canal}${cfg.angulo ? `, viento girado ${cfg.angulo}°` : ''}${cfg.contexto && edificiosVecinos().length ? `, con ${edificiosVecinos().length} edificios vecinos` : ''}`;
+  const bytes = await libroTunel({ proyecto: estado.proyecto.nombre || 'Torre', dir: estado.dir, pisos: pisosF, interferencia: interf, cp, config }).xlsx();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `tunel_viento${estado.dir}.xlsx`;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 let ultimaMed = 0;
