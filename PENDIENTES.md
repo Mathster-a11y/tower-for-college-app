@@ -2,6 +2,38 @@
 
 Se tacha cada ítem cuando está hecho, probado y subido.
 
+## Lo que falta (lista viva, noviembre 2026)
+
+Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fecha.
+
+### Simulador de viento
+1. ~~Anemómetros virtuales en el túnel 2D~~ (23/11)
+2. ~~Vistas «velocidad media» y «ráfagas» en el 2D y en la ventana de detalle~~ (23/11)
+3. ~~Medir de nuevo las cinco formas con paredes lineales y actualizar el diagnóstico~~ (23/11)
+4. Comparar dos grabaciones lado a lado (por ejemplo, aislada y con contexto, o dos esquinas)
+5. Factor de interferencia por piso: torre aislada contra torre con contexto, en la tabla de «Torre piso por piso»
+6. Contexto urbano: edificios con retiros (más de una altura por edificio)
+7. Contexto urbano: calcar el sitio desde un PDF
+8. Cp y fuerza por piso del túnel también como hoja del Excel (hoy van en CSV)
+9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
+10. 3D en el procesador más rápido: varios núcleos o WebAssembly
+11. Niveles de fidelidad (básico → máximo) para computadoras de pocos recursos y de laboratorio
+12. Exportar el caso a OpenFOAM (nivel de laboratorio)
+13. Túnel 2D: modo «solo los muros» (la planta de muros en vez de la silueta)
+
+### Diseño y cálculo
+14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)
+15. Revisar la matemática de «Flex comp PB paralelos» en el desglose por hoja
+
+### Esperan una decisión tuya
+16. Documento particular del contexto urbano (cuando lo pases)
+17. Exoesqueletos nuevos (diagrid, tubo arriostrado, megapórtico, torre inclinada): qué tipos van primero
+18. Elegir la carta principal (A, B, C, D o una combinación)
+19. Medir el 3D en una notebook típica de estudiante (necesita tu computadora)
+
+### Esperan a la cátedra
+20. Las preguntas abiertas de «Esperando a la cátedra» y de la revisión de la rototraslación (más abajo)
+
 ## Hecho
 - [x] Motor que reproduce la planilla original (probado contra el ejemplo 20-10-26)
 - [x] Escritura de la planilla virgen (solo celdas de datos y hoja T3D), verificada con LibreOffice
@@ -146,7 +178,7 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] Importar muros desde DXF (no solo líneas en CSV), con capas
 - [x] Calcar un PDF directamente (sin exportarlo antes como imagen)
 - [x] Planta con zoom: rueda, pellizcar con dos dedos, arrastrar el fondo y botones + − ⤢
-- [ ] Vista en corte (alzado) para editar «desde» y «hasta» de cada muro arrastrando
+- [x] Vista en corte (alzado) para editar «desde» y «hasta» de cada muro arrastrando (Diseño → Niveles)
 
 ### Para entender (didáctica)
 - [x] Recorrido guiado para la primera vez (Mostrar ▾ → Recorrido guiado)
@@ -186,8 +218,8 @@ Se tacha cada ítem cuando está hecho, probado y subido.
 - [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
 - [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
 - [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Falta: calcar el sitio desde un PDF, edificios con retiros (más de una altura) y el factor de interferencia por piso lado a lado
-- [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media y el humo con estela; faltan anemómetros virtuales, vista promedio/ráfagas y comparación lado a lado de dos grabaciones
+- [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media, el humo con estela, los anemómetros virtuales y las vistas de velocidad media y ráfagas; falta la comparación lado a lado de dos grabaciones
 - [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
 - [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso
-- [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2. Las cinco formas, medidas de nuevo: vivas 2,29, curva 1,67, redondeadas 1,90, sustraídas 1,92, chaflán 2,06
+- [x] TRT con piso de ω− = 1,5 (2D y 3D): a Re ≈ 1 000 el ruido en damero bajaba a 0,06 (como BGK) desde 2,2. Las cinco formas, medidas de nuevo: vivas 2,29, curva 1,67, redondeadas 1,90, sustraídas 1,92, chaflán 2,06. Con paredes lineales (las de ahora): redondeadas 1,95, chaflán 2,12, las demás iguales
 - [x] Ventana de detalle: el tamaño del recuadro manda la definición (×2 a ×16) y una banda de transición en la orilla (sin ondas ni escalón contra el túnel grueso)
