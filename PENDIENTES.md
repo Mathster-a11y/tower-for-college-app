@@ -23,7 +23,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 
 ### Diseño y cálculo
 14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)
-15. Revisar la matemática de «Flex comp PB paralelos» en el desglose por hoja · ~~revisión y explicación~~ (23/11, `docs/flexocompresion_planilla/`); falta: a) sumar la hoja al desglose, b) rótulos de O y P en Controles, c) mostrar #DIV/0!; y las preguntas nuevas a la cátedra (W de las asimétricas, rotación que resta, viento B)
+15. ~~Revisar la matemática de «Flex comp PB paralelos»: revisión, hoja 7 del desglose, rótulos de O y P y #DIV/0! en Controles~~ (23/11, `docs/flexocompresion_planilla/`)
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
@@ -151,6 +151,9 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 
 ## Esperando a la cátedra
 - [x] Rototraslación, bloque «USAR SOLAMENTE PARA DOS TABIQUES» (filas 28–29): resuelto (usuario, noviembre 2026). Se usa cuando dos muros perpendiculares al viento están cerca uno del otro: trabajan juntos y se oponen mejor a la rotación; va en vez del bloque general. En la app se eligen a mano en Rototraslación («Dos tabiques perpendiculares»); la planilla toma B28/B29 (J), H28/H29 (posición), brazos desde el punto medio (J28), y al exportar B31:B50 de esa hoja van en 0 (son vínculos: única fórmula que se reemplaza, con aviso en el diálogo). Verificado con LibreOffice (dos planillas, par en los dos vientos)
+- [ ] Flex comp PB: piezas asimétricas, ¿cada fibra con su propio W (J/y sup y J/y inf)? Hoy la hoja divide por la mitad de la altura
+- [ ] Flex comp PB: ¿una pieza puede tomar menos momento que la traslación sola por la rotación, o se toma el mayor de los dos sentidos del giro?
+- [ ] Flex comp PB: ¿hay que agregar la flexocompresión del viento B (la hoja solo tiene la cara mayor)?
 - [ ] Planilla anterior: ¿B51 e I51 de «Rototrasl. cara menor» deberían sumar hasta la fila 50, como L51, M51 y la planilla 2025? (hoy cortan en la 38)
 - [ ] Filas de las piezas 8 y 9 de «J Tabiques paralelos»: faltan fórmulas en la planilla virgen
 - [ ] «Flex comp PB paralelos» D13:D20 = 0,01 fijo: las piezas 10 a 17 no suman su peso propio
@@ -171,7 +174,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - [x] Prueba de punta a punta: torre con una C de la biblioteca y la pieza de la cátedra (alas intermedias, más de dos almas), escrita y recalculada en LibreOffice: 91 de 91 celdas iguales (tools/escribir_prueba.ts y tools/comparar_libreoffice.py)
 - [ ] Elegir la carta principal (A, B, C, D o una combinación)
 - [x] Viento en PB: criterio C (mixto) elegido — la franja expuesta de PB (0 a medio entrepiso, Kz de 5 m) entra en la carga total, el vuelco y el suelo, pero no en el corte de los tabiques
-- [x] Desglose por hoja en PDF y PowerPoint: temas de cada hoja y cálculo analítico paso por paso al lado del Excel, con los controles verificados con los dos (Exportar ▾). Falta: revisar la matemática de «Flex comp PB paralelos»
+- [x] Desglose por hoja en PDF y PowerPoint: temas de cada hoja y cálculo analítico paso por paso al lado del Excel, con los controles verificados con los dos (Exportar ▾). La matemática de «Flex comp PB paralelos» quedó revisada (hoja 7 del desglose)
 
 ### Para armar la torre más rápido
 - [x] Biblioteca de piezas tipo para insertar con medidas: tabique, L, T, C, U, doble T, núcleo (tubo), columna, con su J a la vista (planta → «Insertar pieza…»)

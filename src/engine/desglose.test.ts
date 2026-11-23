@@ -15,7 +15,7 @@ describe('desglose analítico', () => {
   for (const [nombre, p] of [['guía', ejemploGuia()], ['anexo', ejemploAsimetrico()]] as const) {
     it(`ejemplo ${nombre}: cada hoja coincide salvo las diferencias explicadas`, () => {
       const hs = desglosar(entrada(p));
-      expect(hs.map(h => h.hoja)).toEqual(['viento', 'M,NyQ', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'Rototrasl. cara mayor', 'Rototrasl. cara menor']);
+      expect(hs.map(h => h.hoja)).toEqual(['viento', 'M,NyQ', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'Flex comp PB paralelos']);
       for (const h of hs) {
         const r = resumenHoja(h);
         const malos = h.pasos.filter(x => comparar(x.analitico, x.excel) === 'difiere').map(x => `${x.titulo}: ${x.analitico} vs ${x.excel}`);
@@ -36,6 +36,16 @@ describe('desglose analítico', () => {
     expect(diferencia(100, 90)).toMatchObject({ nivel: 'rojo', pct: 10, delta: -10 });
     expect(diferencia(0, 2)).toMatchObject({ nivel: 'rojo', pct: null, delta: 2 });
     expect(diferencia(5, null)).toBeNull();
+  });
+  it('flexocompresión: sin rotación, el momento, Ng y Nq coinciden con la hoja; las tensiones difieren por las cargas cruzadas', () => {
+    const fx = desglosar(entrada(ejemploGuia()))[6];
+    const paso = (t: string) => fx.pasos.find(p => p.titulo.startsWith(t))!;
+    expect(comparar(paso('Momento en PB').analitico, paso('Momento en PB').excel)).toBe('coincide');
+    expect(comparar(paso('N descargado').analitico, paso('N descargado').excel)).toBe('coincide');
+    expect(comparar(paso('Tracción máxima').analitico, paso('Tracción máxima').excel)).toBe('difiere');
+    expect(fx.diferencias.some(d => d.startsWith('Combinaciones'))).toBe(true);
+    // T5 y T6 (asimétricas) en filas de simétricas: la hoja da #DIV/0!
+    expect(fx.diferencias.some(d => d.includes('#DIV/0!'))).toBe(true);
   });
   it('rototraslación: el momento total M tras + Q rot · hW coincide con O cuando no hay rotación', () => {
     const r = desglosar(entrada(ejemploGuia()))[4];

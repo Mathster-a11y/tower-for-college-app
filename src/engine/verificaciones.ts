@@ -108,14 +108,19 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
         const comp = v.muros.reduce((m2, x) => (x.compresion < m2.compresion ? x : m2), v.muros[0]);
         if (!peor) return;
         const As = Math.max(...v.muros.map(x => Math.max(x.As, x.AsMin)));
+        // lo que hay que saber del número de la planilla: con qué carga lo calcula (cruza Ng y Nq) y si dividió por cero
+        const tipoFila = i < 20 ? TIPO_FILA_PARALELOS[i] : 'simétrica';
+        const div0 = enPlanilla && !Number.isFinite(r.flex.O[i]) ? `La planilla da #DIV/0! en la fila ${i + 4} de «Flex comp PB paralelos»: es una fila para piezas ${tipoFila === 'circular' ? 'circulares' : tipoFila === 'asimétrica' ? 'asimétricas' : 'simétricas'} y lee el W de un molde que esta pieza no usa.` : '';
+        const notaP = enPlanilla && !div0 ? 'Planilla: columna P = (−Nq/F + M/W), con la carga del edificio cargado (la hoja cruza las cargas; la tracción decide con el descargado).' : '';
+        const notaO = enPlanilla && !div0 ? 'Planilla: columna O = (−Ng/F − M/W), con la carga del edificio descargado (la compresión decide con el cargado).' : '';
         // armado como la guía (5): cada muro en dos capas, vertical y horizontal (1/5)
         const repetido = (id: string) => v.muros.filter(x => x.id === id).length > 1;   // un tabique con abertura se verifica en partes
         const armado = v.muros.map((x, k) => { const a = armarTabique(x.As, x.AsMin, Math.max(x.b, x.h)); const nom = repetido(x.id) ? `${x.id} (parte ${v.muros.slice(0, k + 1).filter(y => y.id === x.id).length})` : x.id; return `${nom}: ${textoBarras(a.vertical)}, horizontal ${textoBarras(a.horizontal)}`; }).join(' · ');
         out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: tracción (descargado)`, criterio: 'σ ≤ 0; si no, armadura (T = σ·b·x/2)', fuente: 'guía 5',
           planilla: enPlanilla ? r.flex.P[i] : null, guia: peor.traccion, unidad: 'kg/cm²', estado: peor.traccion > 0 ? 'atención' : 'verifica',
-          nota: [peor.traccion > 0 ? `Lleva armadura: muro ${peor.id}, As = ${peor.As.toFixed(1)} cm² (mínima ${peor.AsMin.toFixed(1)} cm²).` : '', difiere ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : '', v.muros.length > 1 ? `Peor muro: ${peor.id}.` : ''].filter(Boolean).join(' ') || undefined });
+          nota: [peor.traccion > 0 ? `Lleva armadura: muro ${peor.id}, As = ${peor.As.toFixed(1)} cm² (mínima ${peor.AsMin.toFixed(1)} cm²).` : '', difiere && !div0 ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : '', div0, notaP, v.muros.length > 1 ? `Peor muro: ${peor.id}.` : ''].filter(Boolean).join(' ') || undefined });
         out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: compresión (cargado)`, criterio: `|σ| ≤ ${adm} kg/cm² (${hormigon})`, fuente: 'guía 5',
-          planilla: enPlanilla ? r.flex.O[i] : null, guia: comp.compresion, unidad: 'kg/cm²', estado: est(v.verifica), nota: `${v.muros.length > 1 ? `Peor muro: ${comp.id}. Armadura mínima de la pieza: ${As.toFixed(1)} cm². ` : ''}Armado (guía): ${armado}.` || undefined });
+          planilla: enPlanilla ? r.flex.O[i] : null, guia: comp.compresion, unidad: 'kg/cm²', estado: est(v.verifica), nota: `${div0 ? `${div0} ` : notaO ? `${notaO} ` : ''}${v.muros.length > 1 ? `Peor muro: ${comp.id}. Armadura mínima de la pieza: ${As.toFixed(1)} cm². ` : ''}Armado (guía): ${armado}.` });
       });
     }
   }

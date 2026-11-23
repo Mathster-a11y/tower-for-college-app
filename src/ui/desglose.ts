@@ -1,7 +1,7 @@
 /**
  * Desglose por hoja de la planilla, en PDF (diálogo de impresión, como el informe) y en PowerPoint (.pptx):
  * los temas de cada hoja y el cálculo analítico paso por paso al lado del resultado de la planilla (Excel),
- * con los controles verificados con los dos. La última hoja (flexocompresión) queda afuera: se revisa aparte.
+ * con los controles verificados con los dos. Las siete hojas, de «viento» a «Flex comp PB paralelos».
  */
 import { estado } from './estado';
 import { AUTOR, AVISO } from '../autoria';
@@ -18,15 +18,6 @@ export function entradaDesglose(): EntradaDesglose {
     BPB: p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.B ?? v, null) ?? 0,
   };
 }
-
-/** lo que se sabe de la última hoja (queda fuera del desglose) */
-export const PENDIENTE_FLEX = [
-  'D13:D20 tienen 0,01 fijo en lugar de B · C: las piezas 10 a 17 no suman su peso propio.',
-  'El módulo resistente de cada fila está fijo (simétrica, asimétrica o circular según la fila), no según la pieza.',
-  'Combina el peso con la compresión y la sobrecarga con la tracción; el caso más desfavorable es al revés.',
-  'Verifica la pieza entera (N / área total); la guía separa almas y alas, cada una con su N.',
-  'Lee el momento de la columna O de la rototraslación, que suma momento (tm) con corte (t).',
-];
 
 const cumple = (b: boolean | null) => (b === null ? '—' : b ? '✓ verifica' : '✗ no verifica');
 const fecha = () => new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -49,7 +40,6 @@ export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): 
     t.append(h('tr', {}, h('td', {}, `${i + 1} · ${hj.hoja}`), h('td', { class: 'n' }, String(r.total)), h('td', { class: 'n sem-verde' }, String(r.coinciden)), h('td', { class: `n ${r.amarillos ? 'sem-amarillo' : ''}` }, String(r.amarillos)), h('td', { class: `n ${r.rojos ? 'sem-rojo' : ''}` }, String(r.rojos)),
       h('td', {}, cumple(r.verificaAnalitico)), h('td', {}, cumple(r.verificaExcel))));
   });
-  t.append(h('tr', {}, h('td', {}, '7 · Flex comp PB paralelos'), h('td', { colspan: '6' }, 'Fuera del desglose: su matemática se revisa aparte (ver la última página).')));
   intro.append(t);
   doc.append(intro);
   hojas.forEach((hj, i) => {
@@ -63,12 +53,7 @@ export function armarDesglose(hojas: HojaDesglose[], dibujos: Dibujo[][] = []): 
     }
     doc.append(sec);
   });
-  const s7 = h('section', { class: 'inf-hoja' }, h('h2', { class: 'banda' }, h('span', { class: 'chip' }, '07'), 'Hoja «Flex comp PB paralelos»: pendiente de revisión'));
-  s7.style.setProperty('--c', '#AD1457');
-  s7.append(h('p', {}, 'Esta hoja no entra en el desglose: la matemática no está terminada. Lo que se sabe hasta ahora:'));
-  s7.append(h('ul', {}, ...PENDIENTE_FLEX.map(x => h('li', {}, x))));
-  s7.append(h('p', { class: 'inf-pie' }, `Desglose generado con Torre 3D (${AVISO}). Valores de la planilla: los de Excel con estos datos (la app usa sus mismas fórmulas, comprobadas celda por celda contra LibreOffice).`));
-  doc.append(s7);
+  doc.append(h('p', { class: 'inf-pie' }, `Desglose generado con Torre 3D (${AVISO}). Valores de la planilla: los de Excel con estos datos (la app usa sus mismas fórmulas, comprobadas celda por celda contra LibreOffice). La revisión completa de «Flex comp PB paralelos» está en docs/flexocompresion_planilla.`));
   return doc;
 }
 
@@ -146,7 +131,7 @@ const META = [
   { corto: 'J ortogonales', color: '8A5F00', etapa: '05 Rigidez · viento B', pregunta: '¿Cuánta rigidez aporta cada pieza paralela al viento B?', recibe: 'las piezas del proyecto y W, h (M,NyQ)', entrega: 'el J de cada pieza → rototraslación cara menor' },
   { corto: 'Roto. mayor', color: '6A3D9A', etapa: '06 Rototrasl. · viento A', pregunta: '¿Cómo se reparte el corte del viento A entre las piezas?', recibe: 'Q y Mv (M,NyQ) y los J (hojas J)', entrega: 'el momento de cada pieza → flexocompresión' },
   { corto: 'Roto. menor', color: '6A3D9A', etapa: '06 Rototrasl. · viento B', pregunta: '¿Cómo se reparte el corte del viento B entre las piezas?', recibe: 'Q y Mv (M,NyQ, columnas N y O) y los J', entrega: 'el momento de cada pieza (viento B)' },
-  { corto: 'Flexocomp.', color: 'AD1457', etapa: '07 Flexión', pregunta: '¿Cada muro resiste la compresión y la tracción?', recibe: 'el momento de cada pieza y su peso', entrega: '— (pendiente de revisión)' },
+  { corto: 'Flexocomp.', color: 'AD1457', etapa: '07 Flexión', pregunta: '¿Cada muro resiste la compresión y la tracción?', recibe: 'el momento de cada pieza y su peso', entrega: 'las tensiones de cada pieza → armadura (Controles)' },
 ];
 
 /** arma el .pptx (pptxgenjs se carga recién al usarlo) y devuelve el archivo */
@@ -242,7 +227,6 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string, d
   const sr = nueva(-1, 'Resumen', 'Resultado por hoja', 'Valores comparados entre el cálculo analítico y Excel, y si los controles verifican con cada uno.', true);
   const filas = [[cab('Hoja'), cab('En la app'), cab('Comparados'), cab('Verde'), cab('Amarillo'), cab('Rojo'), cab('Analítico'), cab('Excel')]];
   hojas.forEach((hj, i) => { const r = resumenHoja(hj); filas.push([celda(`${i + 1} · ${hj.hoja}`, { bold: true, color: META[i].color }), celda(META[i].etapa, { fontSize: 10, color: GRIS }), celda(String(r.total), { align: 'right' }), celda(String(r.coinciden), { align: 'right', color: SEM.verde.c, fill: { color: SEM.verde.f } }), celda(String(r.amarillos), { align: 'right', color: r.amarillos ? SEM.amarillo.c : GRIS, fill: r.amarillos ? { color: SEM.amarillo.f } : undefined }), celda(String(r.rojos), { align: 'right', color: r.rojos ? SEM.rojo.c : GRIS, fill: r.rojos ? { color: SEM.rojo.f } : undefined }), verifica(r.verificaAnalitico), verifica(r.verificaExcel)]); });
-  filas.push([celda('7 · Flex comp PB paralelos', { bold: true, color: META[6].color }), celda(META[6].etapa, { fontSize: 10, color: GRIS }), celda('pendiente: la matemática se revisa aparte', { colspan: 6, color: GRIS, italic: true })] as never);
   sr.addTable(filas as never, { x: 0.4, y: 1.6, w: 12.5, colW: [3.1, 2.3, 1.15, 1.0, 1.0, 1.0, 1.5, 1.45], border: { type: 'solid', pt: 0.5, color: 'D0D7DE' }, rowH: 0.44 });
 
   hojas.forEach((hj, i) => {
@@ -342,13 +326,10 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string, d
     sc.addShape('rect', { x: 0.4, y: 5.95, w: 12.53, h: 0.75, fill: { color: m.color }, line: { color: m.color } });
     txt(sc, [{ text: 'PASA A LA HOJA SIGUIENTE   ', options: { bold: true, fontSize: 9.5, charSpacing: 1 } }, { text: m.entrega, options: { fontSize: 13, bold: true } }], { x: 0.6, y: 5.95, w: 12.2, h: 0.75, color: 'FFFFFF', valign: 'middle' });
   });
-  // ---------------------------------------------------------------- hoja 7 y cierre
-  const s7 = nueva(6, 'Pendiente', '7 · Flex comp PB paralelos', 'Fuera del desglose: la matemática de esta hoja no está terminada y se revisa aparte');
-  txt(s7, 'Lo que se sabe hasta ahora', { x: 0.4, y: 1.6, w: 12, h: 0.35, fontSize: 13, bold: true, color: META[6].color });
-  txt(s7, PENDIENTE_FLEX.map(x => ({ text: x, options: { bullet: true, breakLine: true } })), { x: 0.4, y: 2.05, w: 12.5, h: 4.6, fontSize: 15, valign: 'top', paraSpaceAfter: 10 });
+  // ---------------------------------------------------------------- cierre
   const sx = nueva(-1, 'Cierre', 'Conclusiones', 'Qué dice cada hoja y dónde hay que mirar');
   hojas.forEach((hj, i) => {
-    const r = resumenHoja(hj), y = 1.6 + i * 0.78;
+    const r = resumenHoja(hj), y = 1.55 + i * 0.75;
     sx.addShape('rect', { x: 0.4, y, w: 0.12, h: 0.62, fill: { color: META[i].color }, line: { color: META[i].color } });
     txt(sx, `${i + 1} · ${hj.hoja}`, { x: 0.65, y, w: 3.2, h: 0.32, fontSize: 12, bold: true, color: META[i].color });
     chips(sx, i, 0.65, y + 0.33, 0.8);
