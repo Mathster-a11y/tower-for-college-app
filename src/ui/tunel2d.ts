@@ -20,6 +20,7 @@ import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
 import { seccionPruebaGpu } from './pruebaGpu';
 import TunelWorker from '../viento/tunel.worker?worker&inline';
+import { controlUnidadViento, enUnidad, vientoDisenoEn, nombreUnidad, textoReferencia, txtPct, txtVel, txtVelLargo, vientoQueLlega } from './unidadViento';
 import { llaveEnLienzo, simbolosEnLienzo, type Llave, type Simbolo } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
@@ -364,9 +365,9 @@ function dibujar() {
   if (verRecuadroArriba && det && cfg.ventana && copiaDet && copiaDet.width > 0 && c.campo.det) recuadroArriba(g, cv, nx, ny, s);
   if (cfg.simbolos) simbolosEnLienzo(g, 'Símbolos del dibujo', simbolos2d(c, s * zoom.z), cv.width - 8, cv.height - 8, css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   if (!cfg.llave) return;
-  const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  const l1 = llaveEnLienzo(g, llaveVista(c.geo.D), 8, cv.height - 8, Math.min(280, cv.width * 0.42), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   const lf = llaveFlechas();
-  if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(280, cv.width * 0.42), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
 }
 
 /** qué quiere decir cada marca del túnel 2D que está a la vista (pxCelda: píxeles por celda, con el zoom) */
@@ -376,9 +377,9 @@ function simbolos2d(c: Corrida, pxCelda: number): Simbolo[] {
     const cada = `una cada ≈ ${fmt(metros(30), metros(30) < 10 ? 1 : 0)} m`;
     if (cfg.flechas === 'fijas') r.push({ forma: 'flecha', color: esVelocidad(cfg.vista) ? undefined : '#9a5aa8', texto: 'Flecha: hacia dónde va el aire en ese punto',
       nota: esVelocidad(cfg.vista) ? `todas del mismo largo; la velocidad la da el fondo · ${cada}` : `todas del mismo largo; el color da la velocidad · ${cada}` });
-    else { r.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en ese punto', nota: `más larga, más rápido (una separación = 1,6 V) · ${cada}` }); r.push({ forma: 'flechaCorta', texto: 'Flecha corta: aire lento' }); }
+    else { r.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en ese punto', nota: `más larga, más rápido (una separación = ${tv(1.6)}) · ${cada}` }); r.push({ forma: 'flechaCorta', texto: 'Flecha corta: aire lento' }); }
   }
-  if (cfg.isolineas && c.isos.length) { r.push({ forma: 'linea', texto: 'Línea fina: la velocidad media vale 1,2 V' }); r.push({ forma: 'lineaGruesa', texto: 'Línea gruesa: la velocidad media vale 1,4 V' }); }
+  if (cfg.isolineas && c.isos.length) { r.push({ forma: 'linea', texto: `Línea fina: el viento medio va a ${tv(1.2)}`, nota: '20 % más rápido que el que llega' }); r.push({ forma: 'lineaGruesa', texto: `Línea gruesa: el viento medio va a ${tv(1.4)}`, nota: '40 % más rápido que el que llega' }); }
   if (SALVAGUARDAS && cfg.altos && c.altos.length) r.push({ forma: 'anillo', texto: 'Anillo numerado: velocidad alta', nota: 'media en ≈ 1 m², cerca de la torre' });
   if (cfg.humo) r.push({ forma: 'humo', texto: 'Puntos: humo que lleva el viento' });
   if (sondas.length) r.push({ forma: 'sonda', color: colSonda(0), texto: 'Cuadrado con letra: anemómetro', nota: 'su gráfico va debajo del túnel' });
@@ -387,8 +388,8 @@ function simbolos2d(c: Corrida, pxCelda: number): Simbolo[] {
 
 /** la llave de las flechas, si hace falta una aparte (con el color de fondo de velocidad, la del fondo sirve) */
 function llaveFlechas(): Llave | null {
-  if (cfg.flechas === 'fijas' && !esVelocidad(cfg.vista)) return { titulo: 'Flechas: dirección; el color, la velocidad', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
-  if (cfg.flechas === 'proporcionales') return { titulo: 'Flechas: el largo dice la velocidad', colores: [css('--lienzo', '#ffffff'), css('--ink', '#223344')], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
+  if (cfg.flechas === 'fijas' && !esVelocidad(cfg.vista)) return { titulo: 'Flechas: dirección; el color, la velocidad', colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv(1)} (llega)`], [1, `≥ ${tv(1.6)}`]] };
+  if (cfg.flechas === 'proporcionales') return { titulo: 'Flechas: el largo dice la velocidad', colores: [css('--lienzo', '#ffffff'), css('--ink', '#223344')], marcas: [[0, 'corta: lenta'], [1, `una separación: ${tv(1.6)}`]] };
   return null;
 }
 
@@ -420,7 +421,7 @@ function vigilar(c: Corrida, r: CuadroTunel) {
   }
 }
 
-/** las isolíneas de la velocidad media: 1,2 V fina y 1,4 V gruesa, con su valor en algunos lugares (sin pisarse) */
+/** las isolíneas del viento medio: 20 % más rápido que el que llega (fina) y 40 % (gruesa), con su valor en algunos lugares (sin pisarse) */
 function dibujarIsolineas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
   const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
   const P = (x: number, y: number) => [(x * s - zoom.ox) * zoom.z, ((ny - y) * s - zoom.oy) * zoom.z];
@@ -433,7 +434,7 @@ function dibujarIsolineas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
     g.strokeStyle = tinta; g.lineWidth = fino ? 0.9 : 1.9; g.globalAlpha = fino ? 0.8 : 1; traza();
     // el valor en unos pocos lugares separados
     g.setLineDash([]); g.font = '600 10.5px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const t = `${fmt(nivel, 1)} V`;
+    const t = tv(nivel);
     for (let k = 0; k < tramos.length && puestos.length < 4; k += 7) {
       const [x0, y0, x1, y1] = tramos[k], q = P((x0 + x1) / 2, (y0 + y1) / 2);
       if (q[0] < 20 || q[1] < 20 || q[0] > (lienzo?.width ?? 0) - 20 || q[1] > (lienzo?.height ?? 0) - 20) continue;
@@ -492,7 +493,7 @@ function armarSondas(forzar = false) {
   const t0 = Math.min(...todas.map(q => q.t[0])), t1 = Math.max(...todas.map(q => q.t[q.t.length - 1])), vmax = Math.max(1.6, ...todas.map(q => Math.max(...q.v)));
   const X = (t: number) => mi + ((t - t0) / (t1 - t0 || 1)) * (W - mi - md), Y = (v: number) => ms + (1 - v / vmax) * (Hh - ms - mb);
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, width: W, height: Hh, class: 'grafico', role: 'img', 'aria-label': 'Velocidad en el tiempo en cada anemómetro' });
-  [0, 0.5, 1, 1.5].filter(v => v <= vmax).forEach(v => { svg.append(svgEl('line', { x1: mi, x2: W - md, y1: Y(v), y2: Y(v), class: v === 1 ? 'd-cero' : 'd-grilla' })); svg.append(svgEl('text', { x: mi - 6, y: Y(v) + 4, class: 'd-eje', 'text-anchor': 'end' }, `${fmt(v, 1)} V`)); });
+  [0, 0.5, 1, 1.5].filter(v => v <= vmax).forEach(v => { svg.append(svgEl('line', { x1: mi, x2: W - md, y1: Y(v), y2: Y(v), class: v === 1 ? 'd-cero' : 'd-grilla' })); svg.append(svgEl('text', { x: mi - 6, y: Y(v) + 4, class: 'd-eje', 'text-anchor': 'end' }, tv(v))); });
   sondas.forEach((q, k) => {
     if (q.t.length < 2) return;
     const paso = Math.max(1, Math.floor(q.t.length / 600));
@@ -501,23 +502,23 @@ function armarSondas(forzar = false) {
   });
   svg.append(svgEl('text', { x: mi, y: Hh - 8, class: 'd-eje' }, `${fmt(t0, 0)}`), svgEl('text', { x: W - md, y: Hh - 8, class: 'd-eje', 'text-anchor': 'end' }, `${fmt(t1, 0)} pasadas`));
   svg.append(svgEl('text', { x: (mi + W - md) / 2, y: Hh - 8, class: 'd-eje', 'text-anchor': 'middle' }, 'tiempo (pasadas del aire por el ancho de la torre)'));
-  const V = estimarV(), m = 1 / c.geo.escala, cx = (c.geo.caja.x0 + c.geo.caja.x1 + 1) / 2, cy = (c.geo.caja.y0 + c.geo.caja.y1 + 1) / 2;
+  const R = refV(), m = 1 / c.geo.escala, cx = (c.geo.caja.x0 + c.geo.caja.x1 + 1) / 2, cy = (c.geo.caja.y0 + c.geo.caja.y1 + 1) / 2;
   const filas = sondas.map((q, k) => {
     const e = estadSonda(q);
     return h('tr', {}, h('td', {}, h('b', { style: `color: ${colSonda(k)}` }, LETRAS[k])), h('td', {}, `${fmt((q.x - cx) * m, 0)}; ${fmt((q.y - cy) * m, 0)} m`),
-      h('td', { class: 'n' }, e ? `${fmt(e.media, 2)} V` : '…'), h('td', { class: 'n' }, e ? `${fmt(e.pico, 2)} V ≈ ${fmt(e.pico * V, 0)} m/s` : '…'),
+      h('td', { class: 'n' }, e ? `${tv(e.media)} (${txtPct(e.media)})` : '…'), h('td', { class: 'n' }, e ? `${tv(e.pico)} (${txtPct(e.pico)})` : '…'),
       h('td', { class: 'n' }, e ? `${fmt(100 * e.it, 0)} %` : '…'), h('td', { class: 'n' }, e ? fmt(e.cp, 2) : '…'));
   });
   const csv = h('button', { type: 'button', class: 'mini' }, '⤓ Anemómetros (CSV)');
   csv.addEventListener('click', () => {
-    const n = Math.max(...sondas.map(q => q.t.length)), cab = ['t (pasadas)', ...sondas.flatMap((_, k) => [`${LETRAS[k]} velocidad (× V)`, `${LETRAS[k]} Cp`])];
-    const filasCsv = Array.from({ length: n }, (_, i) => [sondas[0]?.t[i] ?? NaN, ...sondas.flatMap(q => [q.v[i] ?? NaN, q.cp[i] ?? NaN])]);
+    const n = Math.max(...sondas.map(q => q.t.length)), cab = ['t (pasadas)', ...sondas.flatMap((_, k) => [`${LETRAS[k]} velocidad (${nombreUnidad(R)})`, `${LETRAS[k]} Cp`])];
+    const filasCsv = Array.from({ length: n }, (_, i) => [sondas[0]?.t[i] ?? NaN, ...sondas.flatMap(q => [q.v[i] !== undefined ? enUnidad(q.v[i], R) : NaN, q.cp[i] ?? NaN])]);
     descargarCSV(`anemometros_${c.nivel}_viento${estado.dir}.csv`, cab, filasCsv, 4);
   });
-  el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Anemómetros: la velocidad en el tiempo (en veces la de entrada, V ≈ ${fmt(V, 0)} m/s)`),
+  el.replaceChildren(h('figure', { class: 'diagrama' }, h('figcaption', {}, `Anemómetros: la velocidad en el tiempo (con ${textoReferencia(zCorte())}; la línea gris es ese viento)`),
     svg,
     h('table', { class: 'tabla' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Dónde (x; y desde el centro de la torre)'), h('th', { class: 'n' }, 'Media'), h('th', { class: 'n' }, 'Pico (ráfaga)'), h('th', { class: 'n' }, 'Turbulencia'), h('th', { class: 'n' }, 'Cp medio'))), h('tbody', {}, ...filas)),
-    h('p', { class: 'nota chica' }, 'x en el sentido del viento, y a lo ancho (en metros). Turbulencia: cuánto se aparta la velocidad de su media (σ / media). El pico de un punto depende de la grilla: es para comparar lugares, no un valor de diseño.'),
+    h('p', { class: 'nota chica' }, 'Los porcentajes comparan con el viento que llega. x en el sentido del viento, y a lo ancho (en metros). Turbulencia: cuánto se aparta la velocidad de su media (σ / media). El pico de un punto depende de la grilla: es para comparar lugares, no un valor de diseño.'),
     h('div', { class: 'fila-acciones' }, csv)));
 }
 
@@ -532,7 +533,7 @@ function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number, conAnil
     const x = (p.x * s - zoom.ox) * zoom.z, y = ((ny - p.y) * s - zoom.oy) * zoom.z;
     if (x < -20 || y < -20 || x > (lienzo?.width ?? 0) + 20 || y > (lienzo?.height ?? 0) + 20) return;
     for (const [col, w] of [[fondo, 4], [tinta, 1.6]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI); g.stroke(); }
-    const t = conValor ? `${i + 1} · ${fmt(p.valor, 2)} V` : `${i + 1}`, w = g.measureText(t).width;
+    const t = conValor ? `${i + 1} · ${tv(p.valor)}` : `${i + 1}`, w = g.measureText(t).width;
     let tx = x + 13, ty = y;
     for (let k = 0; k < 8 && puestos.some(r => tx < r.x1 && tx + w > r.x0 && ty - 7 < r.y1 && ty + 7 > r.y0); k++) ty += 15;
     puestos.push({ x0: tx, y0: ty - 7, x1: tx + w, y1: ty + 7 });
@@ -567,9 +568,10 @@ function llaveVista(D: number): Llave {
   const cp = cfg.cpContorno ? [{ color: css('--compresion', '#378add'), texto: 'empuja', forma: 'punto' as const }, { color: css('--traccion', '#e24b4a'), texto: 'succiona (Cp en el contorno)', forma: 'punto' as const }] : [];
   if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...vec, ...cp] };
   const sinProm = !corrida || corrida.nV === 0 ? ' (todavía sin promedio: la instantánea)' : '';
-  if (cfg.vista === 'media') return { titulo: `Velocidad media en el tiempo${sinProm}`, colores: coloresTermico(), marcas: [[0, 'quieto'], [0.25, '0,4 V'], [0.5, '0,8 V'], [0.75, '1,2 V'], [1, '≥ 1,6 V']], extras: [torre, ...vec, ...cp] };
-  if (cfg.vista === 'rafagas') return { titulo: `Ráfagas: cuánto se aparta la velocidad de su media${sinProm}`, colores: coloresTermico(), marcas: [[0, 'parejo'], [0.5, '0,25 V'], [1, '≥ 0,5 V']], extras: [torre, ...vec, ...cp] };
-  if (cfg.vista === 'velocidad') return { titulo: 'Velocidad (V: viento de entrada)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.25, '0,4 V'], [0.5, '0,8 V'], [0.75, '1,2 V'], [1, '≥ 1,6 V']], extras: [torre, ...vec, ...cp] };
+  const escalaV: [number, string][] = [[0, 'quieto'], [1 / 1.6, `${tv(1)} (llega)`], [1, `≥ ${tv(1.6)}`]];
+  if (cfg.vista === 'media') return { titulo: `Viento medio en el tiempo${sinProm}`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
+  if (cfg.vista === 'rafagas') return { titulo: `Ráfagas: cuánto se aparta la velocidad de su media${sinProm}`, colores: coloresTermico(), marcas: [[0, 'parejo'], [0.5, `± ${tv(0.25)}`], [1, `≥ ± ${tv(0.5)}`]], extras: [torre, ...vec, ...cp] };
+  if (cfg.vista === 'velocidad') return { titulo: `Velocidad del viento (el que llega: ${tv(1)})`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
   void D;
   return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...vec, ...cp.length ? [cp[0], cp[1]] : []] };
 }
@@ -667,7 +669,7 @@ function dibujarDetalle(c: Corrida, rhoRef: number) {
   if (copiaDet.width !== cv.width || copiaDet.height !== cv.height) { copiaDet.width = cv.width; copiaDet.height = cv.height; }
   copiaDet.getContext('2d')!.drawImage(cv, 0, 0);
   dibujarFlechas(g, { W: cv.width, H: cv.height, x0: 0, dx: nx / cv.width, y0: ny, dy: ny / cv.height }, cfg.flechas, muestraVelocidad(ux, uy, solido, nx, ny, U0), 28, css('--ink', '#223344'), css('--lienzo', '#ffffff'), !esVelocidad(cfg.vista));
-  if (cfg.llave) llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(170, cv.width * 0.4), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+  if (cfg.llave) llaveEnLienzo(g, llaveVista(c.geo.D), 6, cv.height - 6, Math.min(260, cv.width * 0.5), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   actualizarLecturaDetalle(c);
 }
 
@@ -698,12 +700,11 @@ function actualizarLecturaDetalle(c: Corrida) {
     if (pared[q] && cpA[q] < cpMin) cpMin = cpA[q];
   }
   const viva = SALVAGUARDAS && esquinaVivaCerca(pVmax, det.geo.contornos, 3 * det.geo.r);
-  const V = estimarV();
   el.replaceChildren(h('div', { class: 'kpis' },
-    kpi('Viento medio más alto', `${fmt(vMax, 2)} × V`, `≈ ${fmt(vMax * V, 0)} m/s con V = ${fmt(V, 0)} m/s`),
-    kpi('Pico (remolinos)', `${fmt(det.maxInst, 2)} × V`, `≈ ${fmt(det.maxInst * V, 0)} m/s`),
+    kpi('Viento medio más alto', tv(vMax), `${txtPct(vMax)} que el viento que llega`),
+    kpi('Pico (remolinos)', tv(det.maxInst), `${txtPct(det.maxInst)} que el viento que llega`),
     ...(isFinite(cpMin) ? [kpi('Succión más fuerte en la pared', `Cp ${fmt(cpMin, 2)}`, 'promedio en el tiempo')] : [])),
-    h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros${lado > 1 ? `, y cada valor promediado en un cuadrado de ${fmt(lado / (c.geo.escala * det.geo.r), 1)} m de lado (el de una celda crece al afinar la grilla)` : ''}. V es la velocidad de diseño del CIRSOC 102 a la altura del corte, usada solo como escala: la simulación tiene otro Reynolds.`),
+    h('p', { class: 'nota chica' }, `Promedio de ${n} cuadros${lado > 1 ? `, y cada valor promediado en un cuadrado de ${fmt(lado / (c.geo.escala * det.geo.r), 1)} m de lado (el de una celda crece al afinar la grilla)` : ''}. Las velocidades salen de multiplicar lo que mide la simulación por ${textoReferencia(zCorte())}.`),
     ...(viva ? [h('p', { class: 'nota chica' }, 'La velocidad más alta está junto a una esquina viva: ahí la velocidad teórica es infinita y el pico de la simulación depende de la grilla. Redondear o chaflanar la esquina lo baja de verdad.')] : []));
 }
 
@@ -730,7 +731,7 @@ function armarCapas(el: H) {
   el.append(
     h('div', { class: 'fila-acciones' }, h('span', { class: 'nota chica' }, 'Encima del color de fondo:'), bTodo, bNada),
     capa('Flechas de la velocidad', cfg.flechas !== 'no', x => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; }, estilo),
-    capa('Isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada)', cfg.isolineas, x => { cfg.isolineas = x; }),
+    capa('Isolíneas del viento medio (20 % y 40 % más rápido que el que llega)', cfg.isolineas, x => { cfg.isolineas = x; }),
     capa('Humo (partículas que lleva el viento)', cfg.humo, x => { cfg.humo = x; }),
     ...(cfg.humo ? [h('div', { class: 'capa-sub' }, capa('con estela', cfg.estelas, x => { cfg.estelas = x; }))] : []),
     capa('Presión sobre el contorno (Cp promedio: azul empuja, rojo succiona)', cfg.cpContorno, x => { cfg.cpContorno = x; }),
@@ -999,7 +1000,7 @@ export function centroTunel(c: H, tam: Tam) {
   lienzo.width = Math.round(ancho); lienzo.height = Math.round((ancho * cr.geo.ny) / cr.geo.nx);
   lienzo.setAttribute('role', 'img');
   lienzo.setAttribute('aria-label', `Túnel de viento 2D: la planta de ${cr.nivel} con el viento ${estado.dir} de izquierda a derecha`);
-  const reRed = (U0 * cr.geo.D) / cr.nu, reReal = (estimarV() * cr.geo.anchoM) / 1.5e-5;
+  const reRed = (U0 * cr.geo.D) / cr.nu, reReal = ((vientoDisenoEn(zCorte()) ?? 40) * cr.geo.anchoM) / 1.5e-5;
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
     ...(() => {
@@ -1011,7 +1012,7 @@ export function centroTunel(c: H, tam: Tam) {
     })(),
     h('div', { class: 'tunel-marco' }, lienzo, botonesZoom(lienzo)),
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (1,6 veces la de entrada o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (60 % más rápido que el viento que llega, o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
   if (det) {
     // la ventana fina: al menos 360 px de ancho, o el doble del recuadro en el túnel
@@ -1036,7 +1037,15 @@ export function centroTunel(c: H, tam: Tam) {
   dibujar();
 }
 
-function estimarV(): number { try { return vientoCirsoc().V; } catch { return 40; } }
+/** la altura del corte sobre PB (m): la del túnel a la vista o, sin corrida, 10 m */
+function zCorte(): number {
+  const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
+  return Math.max(0, (corrida?.cota ?? zPB + 10) - zPB);
+}
+/** el viento que llega al túnel (m/s), con la referencia elegida; las velocidades se muestran como múltiplos de este */
+const refV = () => vientoQueLlega(zCorte());
+/** una velocidad (en veces el viento que llega) en la unidad elegida */
+const tv = (x: number) => txtVel(x, refV());
 
 // ---------------------------------------------------------------------------------------------------- panel
 export function panelTunel(c: H) {
@@ -1070,6 +1079,8 @@ export function panelTunel(c: H) {
     sel('Color', [['vorticidad', 'giro del aire (remolinos)'], ['velocidad', 'velocidad (instantánea)'], ['media', 'velocidad media en el tiempo'], ['rafagas', 'ráfagas (cuánto varía la velocidad)'], ['presion', 'presión (Cp)']], cfg.vista, x => { cfg.vista = x; }),
   ));
   d.append(h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. Cambiar el corte, el giro, el Reynolds, la resolución, las ochavas o la otra torre empieza la simulación de nuevo; el color y lo que se dibuja (abajo), no.'));
+  const uv = seccion('Unidades de la velocidad').cuerpo; c.append(uv.parentElement!);
+  uv.append(controlUnidadViento(zCorte(), () => { dibujar(); armarSondas(true); estado.avisarPanel(); }));
   const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
   armarCapas(qd);
   const an = seccion('Anemómetros').cuerpo; c.append(an.parentElement!);
@@ -1390,9 +1401,9 @@ function dibujarComparada(t: number) {
   });
   dibujarFlechas(g, vis, cfg.flechas, muestraVelocidad(f.ux, f.uy, solido, nx, ny, u0), 30, css('--ink', '#223344'), css('--lienzo', '#ffffff'), vista !== 'velocidad');
   if (cfg.llave) {
-    const l1 = llaveEnLienzo(g, llaveVista(m.D), 8, cv.height - 8, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+    const l1 = llaveEnLienzo(g, llaveVista(m.D), 8, cv.height - 8, Math.min(280, cv.width * 0.42), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
     const lf = llaveFlechas();
-    if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(190, cv.width * 0.3), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
+    if (lf) llaveEnLienzo(g, lf, 8, cv.height - 14 - l1.alto, Math.min(280, cv.width * 0.42), css('--lienzo', '#ffffff'), css('--ink', '#223344'));
   }
   const txt = cv.parentElement?.parentElement?.querySelector<HTMLElement>('.comp-txt');
   if (txt) txt.textContent = `cuadro ${k + 1} de ${m.cuadros} · ${fmt((m.pasos[k] * m.u0) / m.D, 0)} pasadas`;
@@ -1496,7 +1507,7 @@ function centroRepro(c: H, tam: Tam) {
     : marcoA;
   const avisoComp = comparada && Math.abs(comparada.g.meta.u0 - m.u0) > 1e-9 ? [h('p', { class: 'nota chica' }, 'Las dos grabaciones se hicieron con distinta velocidad de entrada en la red (una con el túnel «lento»): los colores se leen igual porque cada una se escala con la suya.')] : [];
   c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, vistaTunel, ...avisoComp,
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (1,6 veces la de entrada o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (60 % más rápido que el viento que llega, o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
   cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900);
   mostrarCuadro(r.k);
 }
@@ -1559,14 +1570,14 @@ function actualizarMediciones() {
       kpi('Strouhal St', St ? fmt(St, 3) : 'midiendo…', 'St = f · B / V (f: remolinos por segundo)'),
     ),
     h('p', { class: 'nota' }, St && isFinite(Vcr)
-      ? `Con la frecuencia propia de la torre (n1 = ${fmt(n1, 2)} Hz, del ${estado.config.metodo === 'fem' ? 'FEM' : '102-25'}) y B = ${fmt(c.geo.anchoM, 1)} m, los remolinos se desprenden a la frecuencia de la torre con un viento de V = n1 · B / St = ${fmt(Vcr, 1)} m/s. El viento de diseño es ${fmt(V, 1)} m/s: ${Vcr < V ? 'la resonancia puede aparecer por debajo del viento de diseño; en una torre real se estudia en túnel de viento.' : 'la resonancia quedaría por encima del viento de diseño.'} Es una estimación didáctica.`
+      ? `Con la frecuencia propia de la torre (n1 = ${fmt(n1, 2)} Hz, del ${estado.config.metodo === 'fem' ? 'FEM' : '102-25'}) y B = ${fmt(c.geo.anchoM, 1)} m, los remolinos se desprenden a la frecuencia de la torre con un viento de V = n1 · B / St = ${fmt(Vcr, 1)} m/s (${fmt(Vcr * 3.6, 0)} km/h). El viento de diseño es ${fmt(V, 1)} m/s (${fmt(V * 3.6, 0)} km/h): ${Vcr < V ? 'la resonancia puede aparecer por debajo del viento de diseño; en una torre real se estudia en túnel de viento.' : 'la resonancia quedaría por encima del viento de diseño.'} Es una estimación didáctica.`
       : 'El Strouhal aparece cuando la estela oscila con claridad (en un cuadrado, después de unas 40 a 80 pasadas). Sirve para estimar la velocidad crítica de desprendimiento con la n1 de la torre.'),
-    ...(SALVAGUARDAS ? salvaguardasPanel(c, V) : []),
+    ...(SALVAGUARDAS ? salvaguardasPanel(c) : []),
   );
 }
 
 /** guardia de estabilidad y lista de puntos de velocidad alta, en «Lo que se mide» */
-function salvaguardasPanel(c: Corrida, V: number): H[] {
+function salvaguardasPanel(c: Corrida): H[] {
   const out: H[] = [];
   if (c.roto || c.maxRed > AVISO_RED) {
     const b = h('button', { type: 'button', class: 'boton' }, cfg.lento ? 'Empezar de nuevo' : 'Usar el túnel lento y empezar de nuevo');
@@ -1576,11 +1587,11 @@ function salvaguardasPanel(c: Corrida, V: number): H[] {
       : `El aire llega a ${fmt(c.maxRed, 2)} en unidades de la red (${c.maxRed > CRITICO_RED ? 'muy cerca del' : 'cerca del'} límite del método, ≈ ${fmt(CRITICO_RED, 2)}): puede volverse inestable.`), b);
   }
   if (c.altos.length) {
-    const m = 1 / c.geo.escala, sv = isFinite(V) ? V : null;
+    const m = 1 / c.geo.escala;
     const algunaViva = c.altos.some(p => esquinaVivaCerca(p, c.geo.contornos, 3));
     out.push(h('div', { class: 'altos' },
       h('b', {}, 'Velocidad alta (media en el tiempo, promedio en 1 m²)'),
-      h('ol', {}, ...c.altos.map(p => h('li', {}, `${fmt(p.valor, 2)} V${sv ? ` ≈ ${fmt(p.valor * sv, 0)} m/s` : ''} · ${dondeRespectoTorre(p, c.geo.caja, m)}${esquinaVivaCerca(p, c.geo.contornos, 3) ? ' · junto a una esquina viva' : ''}`))),
+      h('ol', {}, ...c.altos.map(p => h('li', {}, `${txtVelLargo(p.valor, refV())} · ${dondeRespectoTorre(p, c.geo.caja, m)}${esquinaVivaCerca(p, c.geo.contornos, 3) ? ' · junto a una esquina viva' : ''}`))),
       ...(algunaViva ? [h('p', { class: 'nota chica' }, 'En una esquina viva la velocidad teórica es infinita: el aire se despega y deja una capa delgada muy rápida, y su pico crece al afinar la grilla. Por eso acá va promediado en 1 m². Redondear o chaflanar la esquina baja el pico de verdad.')] : [])));
   }
   return out;

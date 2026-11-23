@@ -16,6 +16,7 @@ import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
+import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoQueLlega } from './unidadViento';
 import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 
@@ -346,6 +347,14 @@ function vigilar3d(c: Corrida): boolean {
   return true;
 }
 
+/** la altura (m) del viento de referencia: la del corte horizontal (o la vereda); sin corte horizontal, la de la torre */
+function zRef3d(): number {
+  const g = corrida?.geo; if (!g) return 10;
+  return cfg.vereda ? 1.5 : cfg.horizontal ? Math.max(1.5, cfg.zRel * g.H) : g.H;
+}
+/** una velocidad (en veces el viento que llega a esa altura) en la unidad elegida */
+const tv3 = (x: number) => txtVel(x, vientoQueLlega(zRef3d()));
+
 // ------------------------------------------------------------------------------------------------ llaves de colores
 let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
@@ -356,21 +365,21 @@ function armarLlaves3d() {
   const caras: Llave = { titulo: 'Caras de la torre: Cp promedio', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] };
   let corte: Llave | null = null;
   if (cfg.vereda && cfg.lawson) corte = { titulo: 'Vereda (1,5 m): confort Lawson', colores: LAWSON_LDDC.map(k => COL_LAWSON[k.codigo]), marcas: [[0, 'A sentarse'], [0.5, 'C parado'], [1, 'E incómodo']] };
-  else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): viento / campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, '0'], [1 / 1.6, '1 (igual)'], [1, '1,6 más']] };
+  else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): el viento comparado con el del campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, 'quieto'], [1 / 1.6, 'igual'], [1, '+60 % o más']] };
   else if (cfg.horizontal || cfg.vertical) corte = cfg.color === 'cp'
     ? { titulo: 'Cortes: presión (Cp)', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] }
-    : { titulo: 'Cortes: velocidad (V a la altura de la torre)', colores: coloresTermico(), marcas: [[0, 'quieto'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
+    : { titulo: `Cortes: velocidad del viento (el que llega a ${Math.round(zRef3d())} m: ${tv3(1)})`, colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
   // las flechas: si el corte ya va en velocidad, su llave sirve; si no, una aparte arriba a la derecha
   const conCortes = cfg.horizontal || cfg.vertical || cfg.vereda;
   let flechas: Llave | null = null;
-  if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: 'Flechas: el color dice la velocidad', colores: coloresTermico(), marcas: [[0, 'quieta'], [0.5, '0,8 V'], [1, '≥ 1,6 V']] };
-  else if (conCortes && cfg.flechas === 'proporcionales') flechas = { titulo: 'Flechas: el largo dice la velocidad', colores: ['#f4f4f4', '#1d1d24'], marcas: [[0, 'corta: lenta'], [1, 'una separación: 1,6 V']] };
+  if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: 'Flechas: el color dice la velocidad', colores: coloresTermico(), marcas: [[0, 'quieta'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
+  else if (conCortes && cfg.flechas === 'proporcionales') flechas = { titulo: 'Flechas: el largo dice la velocidad', colores: ['#f4f4f4', '#1d1d24'], marcas: [[0, 'corta: lenta'], [1, `una separación: ${tv3(1.6)}`]] };
   const lf = flechas ? llaveHtml(flechas) : null; lf?.classList.add('derecha');
   // qué quiere decir cada marca: las flechas, las líneas de corriente y los anillos
   const sim: Simbolo[] = [];
   if (conCortes && cfg.flechas === 'fijas') sim.push({ forma: 'flecha', color: cfg.vereda || cfg.color === 'cp' ? '#9a5aa8' : undefined, texto: 'Flecha: hacia dónde va el aire en el corte',
     nota: cfg.vereda || cfg.color === 'cp' ? 'todas del mismo largo; el color da la velocidad' : 'todas del mismo largo; la velocidad la da el color del corte' });
-  else if (conCortes && cfg.flechas === 'proporcionales') sim.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en el corte', nota: 'más larga, más rápido (una separación = 1,6 V)' });
+  else if (conCortes && cfg.flechas === 'proporcionales') sim.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en el corte', nota: `más larga, más rápido (una separación = ${tv3(1.6)})` });
   if (conCortes && cfg.flechas !== 'no') sim.push({ forma: 'flechaCorta', texto: 'Solo se ve lo que va por el plano del corte', nota: 'el aire que lo atraviesa no aparece en la flecha' });
   if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire' });
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
@@ -408,7 +417,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : 'Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (1,6 veces la de la altura de la torre o más).'} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
   dibujar();
 }
 
@@ -469,6 +478,8 @@ export function panelTunel3d(c: H) {
     d.append(h('div', { class: 'fila-acciones' }, stl), h('p', { class: 'nota chica' }, 'Un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba: para imprimir en 3D o llevar la forma a un programa de CAD o a otro simulador de viento.'));
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
+  const uv = seccion('Unidades de la velocidad').cuerpo; c.append(uv.parentElement!);
+  uv.append(controlUnidadViento(zRef3d(), () => { armarLlaves3d(); estado.avisarPanel(); }));
   const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
   {
     const estilo = h('select', { 'aria-label': 'Estilo de las flechas' }) as HTMLSelectElement;
@@ -512,7 +523,7 @@ function actualizarPanel(forzar = false) {
   if (c.campo) {
     const z = zVereda(g); let max = 0;
     for (let y = 0; y < g.ny; y++) for (let x = 2; x < g.nx - 2; x++) { const cel = (z * g.ny + y) * g.nx + x; if (g.solido[cel]) continue; max = Math.max(max, Math.hypot(c.campo[4 * cel], c.campo[4 * cel + 1], c.campo[4 * cel + 2]) / (c.uIn[z] || UH)); }
-    vereda = `En la vereda (1,5 m), el viento llega a ${fmt(max, 2)} veces el del campo abierto a esa altura (esquinas y bajada por la cara de barlovento).`;
+    vereda = `En la vereda (1,5 m), donde más sopla el viento va ${txtPct(max)} que en el campo abierto a esa altura (${fmt(max * 100, 0)} %: esquinas y bajada por la cara de barlovento).`;
     if (cfg.vereda && cfg.lawson) {
       // confort: qué parte de la vereda (alrededor de la torre) cae en cada categoría Lawson LDDC
       const cuenta: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, E: 0 }; let n = 0;
