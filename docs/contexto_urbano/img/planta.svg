@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 714 754" font-family="system-ui,sans-serif" font-size="13">
+<rect width="714" height="754" fill="#f6f4ef"/>
+<defs><marker id="m" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M5 0 L5 10" stroke="#7a5a12" stroke-width="2"/></marker><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#1d1d24"/></marker></defs>
+<line x1="21.0" y1="714.0" x2="21.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="693.0" x2="714.0" y2="693.0" stroke="#e2ded4"/>
+<line x1="105.0" y1="714.0" x2="105.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="609.0" x2="714.0" y2="609.0" stroke="#e2ded4"/>
+<line x1="189.0" y1="714.0" x2="189.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="525.0" x2="714.0" y2="525.0" stroke="#e2ded4"/>
+<line x1="273.0" y1="714.0" x2="273.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="441.0" x2="714.0" y2="441.0" stroke="#e2ded4"/>
+<line x1="357.0" y1="714.0" x2="357.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="357.0" x2="714.0" y2="357.0" stroke="#e2ded4"/>
+<line x1="441.0" y1="714.0" x2="441.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="273.0" x2="714.0" y2="273.0" stroke="#e2ded4"/>
+<line x1="525.0" y1="714.0" x2="525.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="189.0" x2="714.0" y2="189.0" stroke="#e2ded4"/>
+<line x1="609.0" y1="714.0" x2="609.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="105.0" x2="714.0" y2="105.0" stroke="#e2ded4"/>
+<line x1="693.0" y1="714.0" x2="693.0" y2="0.0" stroke="#e2ded4"/><line x1="0.0" y1="21.0" x2="714.0" y2="21.0" stroke="#e2ded4"/>
+<rect x="214.2" y="575.4" width="134.4" height="84.0" fill="#9a9ca3" stroke="#55565c"/>
+<text x="281.4" y="615.4" text-anchor="middle" font-weight="600" fill="#1d1d24">V1</text><text x="281.4" y="631.4" text-anchor="middle" fill="#1d1d24">112 m</text>
+<rect x="474.6" y="550.2" width="100.8" height="100.8" fill="#9a9ca3" stroke="#55565c"/>
+<text x="525.0" y="598.6" text-anchor="middle" font-weight="600" fill="#1d1d24">V2</text><text x="525.0" y="614.6" text-anchor="middle" fill="#1d1d24">96 m</text>
+<rect x="96.6" y="264.6" width="84.0" height="151.2" fill="#9a9ca3" stroke="#55565c"/>
+<text x="138.6" y="338.2" text-anchor="middle" font-weight="600" fill="#1d1d24">V3</text><text x="138.6" y="354.2" text-anchor="middle" fill="#1d1d24">124 m</text>
+<rect x="525.0" y="302.4" width="92.4" height="126.0" fill="#9a9ca3" stroke="#55565c"/>
+<text x="571.2" y="363.4" text-anchor="middle" font-weight="600" fill="#1d1d24">V4</text><text x="571.2" y="379.4" text-anchor="middle" fill="#1d1d24">104 m</text>
+<rect x="298.2" y="75.6" width="168.0" height="92.4" fill="#9a9ca3" stroke="#55565c"/>
+<text x="382.2" y="119.8" text-anchor="middle" font-weight="600" fill="#1d1d24">V5</text><text x="382.2" y="135.8" text-anchor="middle" fill="#1d1d24">116 m</text>
+<rect x="54.6" y="554.4" width="84.0" height="75.6" fill="#cfcbc1" stroke="#55565c"/>
+<text x="96.6" y="590.2" text-anchor="middle" font-weight="600" fill="#1d1d24">B1</text><text x="96.6" y="606.2" text-anchor="middle" fill="#1d1d24">24 m</text>
+<rect x="588.0" y="84.0" width="75.6" height="75.6" fill="#cfcbc1" stroke="#55565c"/>
+<text x="625.8" y="119.8" text-anchor="middle" font-weight="600" fill="#1d1d24">B2</text><text x="625.8" y="135.8" text-anchor="middle" fill="#1d1d24">24 m</text>
+<rect x="84.0" y="96.6" width="92.4" height="67.2" fill="#cfcbc1" stroke="#55565c"/>
+<text x="130.2" y="128.2" text-anchor="middle" font-weight="600" fill="#1d1d24">B3</text><text x="130.2" y="144.2" text-anchor="middle" fill="#1d1d24">21 m</text>
+<polygon points="272.8,380.7 272.9,382.7 273.3,384.6 273.9,386.5 274.8,388.3 275.9,389.9 277.2,391.4 278.7,392.7 280.4,393.8 282.1,394.7 284.0,395.3 285.9,395.7 287.9,395.8 357.0,395.8 426.1,395.8 428.1,395.7 430.0,395.3 431.9,394.7 433.6,393.8 435.3,392.7 436.8,391.4 438.1,389.9 439.2,388.3 440.1,386.5 440.7,384.6 441.1,382.7 441.2,380.7 441.2,333.3 441.1,331.3 440.7,329.4 440.1,327.5 439.2,325.7 438.1,324.1 436.8,322.6 435.3,321.3 433.6,320.2 431.9,319.3 430.0,318.7 428.1,318.3 426.1,318.1 287.9,318.1 285.9,318.3 284.0,318.7 282.1,319.3 280.4,320.2 278.7,321.3 277.2,322.6 275.9,324.1 274.8,325.7 273.9,327.5 273.3,329.4 272.9,331.3 272.8,333.3" fill="#1d1d24"/>
+<text x="357.0" y="355.0" text-anchor="middle" font-weight="700" fill="#fdf2b8">Torre del proyecto</text><text x="357.0" y="371.0" text-anchor="middle" fill="#fdf2b8">118,8 m · 40,1 × 18,5 m</text>
+<line x1="180.6" y1="340.2" x2="272.8" y2="340.2" stroke="#7a5a12" stroke-width="1.5" marker-start="url(#m)" marker-end="url(#m)"/><text x="226.7" y="334.2" text-anchor="middle" fill="#7a5a12" font-size="12">22 m</text>
+<line x1="441.2" y1="365.4" x2="525.0" y2="365.4" stroke="#7a5a12" stroke-width="1.5" marker-start="url(#m)" marker-end="url(#m)"/><text x="483.1" y="359.4" text-anchor="middle" fill="#7a5a12" font-size="12">20 m</text>
+<line x1="315.0" y1="575.4" x2="315.0" y2="395.8" stroke="#7a5a12" stroke-width="1.5" marker-start="url(#m)" marker-end="url(#m)"/><text x="315.0" y="485.6" text-anchor="middle" fill="#7a5a12" font-size="12">43 m</text>
+<line x1="399.0" y1="318.1" x2="399.0" y2="168.0" stroke="#7a5a12" stroke-width="1.5" marker-start="url(#m)" marker-end="url(#m)"/><text x="399.0" y="243.1" text-anchor="middle" fill="#7a5a12" font-size="12">36 m</text>
+<line x1="29.4" y1="693.0" x2="29.4" y2="588.0" stroke="#1d1d24" stroke-width="3" marker-end="url(#f)"/><text x="42.0" y="651.0" fill="#1d1d24" font-weight="600">viento A</text>
+<text x="10" y="730" fill="#1d1d24">Planta del ejemplo (m, grilla de 20 m). Gris oscuro: torres vecinas;</text><text x="10" y="747" fill="#1d1d24">gris claro: edificios bajos (solo cuentan en el corte de 12 m).</text>
+</svg>

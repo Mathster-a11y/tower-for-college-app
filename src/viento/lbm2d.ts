@@ -49,6 +49,11 @@ export interface OpcionesLbm {
    * equilibrio de la celda de adentro (extrapolación de Guo, Zheng y Shi, 2002)
    */
   marco?: boolean;
+  /**
+   * celdas sólidas del cuerpo al que se le mide la fuerza (Fx, Fy); sin esto, la fuerza es la de todos los sólidos.
+   * Con torres vecinas, para medir solo la torre del proyecto
+   */
+  cuerpo?: Uint8Array;
 }
 /** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
 export const LAMBDA_TRT = 3 / 16;
@@ -71,6 +76,8 @@ export class Lbm2D {
   private enlaces: Int32Array;
   /** por enlace: q (dónde está la pared, 0,5 = mitad de camino) y la celda de aire del otro lado (−1 si no hay) */
   private qEnl: Float32Array; private otra: Int32Array; private otra2: Int32Array;
+  /** por enlace: 1 si el sólido del enlace es del cuerpo que se mide */
+  private delCuerpo: Uint8Array;
   readonly trt: boolean;
   readonly exactas: boolean;
   readonly ommMin: number;
@@ -117,6 +124,14 @@ export class Lbm2D {
     this.exactas = !!o.q;
     const nE = this.enlaces.length / 2;
     this.qEnl = new Float32Array(nE).fill(0.5); this.otra = new Int32Array(nE).fill(-1); this.otra2 = new Int32Array(nE).fill(-1);
+    this.delCuerpo = new Uint8Array(nE).fill(1);
+    if (o.cuerpo) for (let k = 0; k < nE; k++) {
+      const c = this.enlaces[2 * k], i = this.enlaces[2 * k + 1], x = c % this.nx, y = (c - x) / this.nx;
+      let xs = x - EX[i], ys = y - EY[i];
+      if (ys < 0) ys += this.ny; else if (ys >= this.ny) ys -= this.ny;
+      if (xs < 0 || xs >= this.nx) xs = (xs + this.nx) % this.nx;
+      this.delCuerpo[k] = o.cuerpo[ys * this.nx + xs] ? 1 : 0;
+    }
     for (let k = 0; k < nE; k++) {
       const c = this.enlaces[2 * k], i = this.enlaces[2 * k + 1];
       if (o.q && o.q[i * this.N + c] > 0) this.qEnl[k] = o.q[i * this.N + c];
@@ -241,7 +256,7 @@ export class Lbm2D {
         else vuelve = fo / (2 * q) + ((2 * q - 1) / (2 * q)) * f[i * N + c];
       }
       g[i * N + c] = vuelve;
-      Fx -= (fo + vuelve) * EX[i]; Fy -= (fo + vuelve) * EY[i];
+      if (this.delCuerpo[n]) { Fx -= (fo + vuelve) * EX[i]; Fy -= (fo + vuelve) * EY[i]; }
     }
     // --- entrada (equilibrio a u0) y salida (gradiente nulo)
     if (this.borde) this.orillas(g);
