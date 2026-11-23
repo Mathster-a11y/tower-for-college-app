@@ -55,3 +55,47 @@ describe('panelería', () => {
     b.forEach(x => expect(x.a.length).toBe(x.b.length));
   });
 });
+
+import { facetar, facetasDe } from './carpinteria';
+import { aplicarPerfil } from './perfil_torre';
+describe('carpintería plana (facetas)', () => {
+  // círculo de 10 m de radio con cuatro cuartos de círculo (bulge tan 22,5°)
+  const k = Math.tan(Math.PI / 8), circulo = () => [{ x: 10, y: 0, b: k }, { x: 0, y: 10, b: k }, { x: -10, y: 0, b: k }, { x: 0, y: -10, b: k }];
+  it('los lados curvos pasan a facetas rectas de a lo sumo el módulo, con los vértices sobre la curva', () => {
+    const n = facetasDe(circulo(), 1.5);
+    expect(n).toEqual([11, 11, 11, 11]);                             // π·10/2 / 1,5 = 10,5 → 11 por cuarto
+    const f = facetar(circulo(), 1.5);
+    expect(f.length).toBe(44);
+    f.forEach(q => { expect(Math.hypot(q.x, q.y)).toBeCloseTo(10, 3); expect(q.b).toBeUndefined(); });
+    f.forEach((q, i) => { const r = f[(i + 1) % f.length]; expect(Math.hypot(r.x - q.x, r.y - q.y)).toBeLessThanOrEqual(1.5 + 1e-6); });
+  });
+  it('por losa plana: la carpintería es un polígono y todos los paños son planos', () => {
+    const p = ejemploGuia();
+    p.niveles.forEach(n => { n.silueta = circulo(); });
+    p.carpinteriaTramos = [{ desde: 0, modo: 'losa', retiro: 0.3, forma: 'plana' }];
+    p.paneleria = { modulo: 1.5, antepecho: 0.9 };
+    aplicarCarpinteriaTramos(p);
+    p.niveles.filter(n => n.cota >= 0).forEach(n => expect(n.carpinteria!.some(q => q.b || q.c1)).toBe(false));
+    const r = calcularPaneleria(bandasFachada(p, prepararSecciones), p.paneleria);
+    expect(r.alabeados).toBe(0);
+    expect(r.montantes.length).toBe(44 * bandasFachada(p, prepararSecciones).length);   // un montante en cada faceta
+  });
+  it('continua plana en una torre ahusada: las facetas de un piso y las del de arriba son paralelas (paños planos)', () => {
+    const p = ejemploGuia();
+    p.niveles.forEach(n => { n.silueta = null; });
+    const iPB = p.niveles.findIndex(n => n.nombre === 'PB');
+    p.niveles[iPB].silueta = [{ x: -10, y: -6 }, { x: 10, y: -6, b: 0.4 }, { x: 10, y: 6 }, { x: -10, y: 6 }];
+    p.perfilTorre = { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 0.6 }] };
+    aplicarPerfil(p);
+    p.carpinteriaTramos = [{ desde: 0, modo: 'continua', forma: 'plana' }];
+    p.paneleria = { modulo: 1.5 };
+    aplicarCarpinteriaTramos(p);
+    const b = bandasFachada(p, prepararSecciones);
+    expect(b.every(x => x.plana)).toBe(true);
+    expect(calcularPaneleria(b, p.paneleria).alabeados).toBe(0);
+    // la curva, en cambio, no queda en facetas
+    p.carpinteriaTramos = [{ desde: 0, modo: 'continua' }];
+    aplicarCarpinteriaTramos(p);
+    expect(p.niveles[iPB].carpinteria!.some(q => q.b)).toBe(true);
+  });
+});

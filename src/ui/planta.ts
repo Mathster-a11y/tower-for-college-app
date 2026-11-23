@@ -9,7 +9,7 @@ import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
-import { bandasFachada, calcularPaneleria, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
+import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
@@ -702,7 +702,7 @@ export function montarPlanta(cont: HTMLElement) {
       const nivelesFach = p.niveles.filter(x => x.cota >= -1e-6).sort((x, y) => x.cota - y.cota);
       if (!tramos.length) {
         segue.append(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'La carpintería se dibuja a mano, nivel por nivel. Por tramos, sigue sola a las losas: «por losa» va vertical de losa a losa (siempre entre las dos, sin tapas) y «continua» sigue la superficie.' }),
-          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3 }); }), 'Un tramo «por losa», metido 0,30 m, desde el nivel más bajo'));
+          boton('Armar por tramos', () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo: 'losa', retiro: 0.3, forma: 'plana' }); }), 'Un tramo «por losa», plano, metido 0,30 m, desde el nivel más bajo'));
       } else {
         segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Carpintería por tramos' }));
         tramos.forEach((t, k) => {
@@ -721,13 +721,19 @@ export function montarPlanta(cont: HTMLElement) {
           const lab = (t2: string, ...h: (string | Node)[]) => { const l = document.createElement('label'); l.className = 'campo-esq'; l.append(t2, ...h); return l; };
           const quitar = boton('✕', () => ponerTramos(ts => { ts.splice(k, 1); }), 'Sacar este tramo'); quitar.className = 'quitar-tramo'; quitar.setAttribute('aria-label', 'Sacar este tramo');
           const arriba = document.createElement('div'); arriba.className = 'tramo-cab'; arriba.append(lab('desde ', sd), ...(t.modo === 'sin' ? [] : [lab('metida ', rt, ' m')]), quitar);
-          fila.append(arriba, sm);
+          // la forma: plana (facetas rectas, un paño plano por faceta) o curva (sigue los arcos de la losa)
+          const sf = document.createElement('div'); sf.className = 'seg chico forma-tramo'; sf.setAttribute('role', 'group'); sf.setAttribute('aria-label', 'Forma de los paños');
+          const forma = t.forma === 'plana' ? 'plana' : 'curva';
+          ([['plana', 'Plana', `Paños planos: los lados curvos de la losa pasan a facetas rectas de hasta ${String(moduloFacetas(p)).replace('.', ',')} m (el módulo de la panelería)`], ['curva', 'Curva', 'Sigue los arcos y las curvas de la losa (vidrio curvo)']] as const).forEach(([f2, nom, ti]) => {
+            const x = boton(nom, () => { if (f2 !== forma) ponerTramos(ts => { ts[k].forma = f2; }); }, ti); x.setAttribute('aria-pressed', String(f2 === forma)); sf.append(x);
+          });
+          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf]));
           segue.append(fila);
         });
         const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
-        segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3 }); }), `Otro tramo desde ${sig.nombre}`)] : []),
+        segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3, forma: ult.forma ?? 'plana' }); }), `Otro tramo desde ${sig.nombre}`)] : []),
           boton('Volver a la carpintería a mano', () => ponerTramos(ts => { ts.length = 0; }), 'Las carpinterías quedan como están ahora y se editan nivel por nivel')),
-          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por losa: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Continua: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón).' }));
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por losa: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Continua: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón). Plana: los lados curvos pasan a facetas rectas, cada una un paño plano; Curva: vidrio que sigue la curva.' }));
         // panelería: montantes cada «módulo» m (en las esquinas siempre), antepecho opaco y travesaños intermedios
         const pn = p.paneleria;
         const pan = document.createElement('div'); pan.className = 'paneleria';
@@ -741,7 +747,7 @@ export function montarPlanta(cont: HTMLElement) {
             cpn('montantes cada', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', 'distancia entre montantes por el contorno (siempre hay uno en cada esquina)'),
             cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
-            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. En el 3D: capa «Fachada».` }),
+            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.alabeados ? ` · ${r.alabeados} paños alabeados (no planos): para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por losa».` : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
             boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), ''));
         }
         segue.append(pan);

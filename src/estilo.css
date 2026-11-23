@@ -1889,3 +1889,4 @@ canvas.tunel2d.arrastrable { cursor: grab; }
   .silueta-panel button, .avisos-panel button, .corte-barra button { min-height: 36px; }
   .sigue-losa .quitar-tramo { min-width: 36px; }
 }
+.sigue-losa .forma-tramo { display: flex; } .sigue-losa .forma-tramo button { flex: 1; }

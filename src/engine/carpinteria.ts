@@ -17,7 +17,10 @@ import { adentro } from './avisos';
 import { areaSilueta, plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
 
 export type ModoCarpinteria = 'sin' | 'losa' | 'continua';
-export interface TramoCarpinteria { desde: number; modo: ModoCarpinteria; retiro?: number | null }
+/** «plana»: los lados curvos de la losa pasan a facetas rectas (un paño plano por faceta); «curva» (o vacío): sigue la curva */
+export type FormaCarpinteria = 'plana' | 'curva';
+export interface TramoCarpinteria { desde: number; modo: ModoCarpinteria; retiro?: number | null; forma?: FormaCarpinteria | null }
+export const esPlana = (t: TramoCarpinteria | null | undefined) => t?.forma === 'plana';
 export const NOMBRE_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería', losa: 'Por losa (de losa a losa)', continua: 'Continua (sigue la superficie)' };
 
 /** los tramos del proyecto (si solo había «carpintería que sigue a la losa», un tramo continuo desde PB) */
@@ -67,6 +70,40 @@ export function comunLosas(a: Vertice[], b: Vertice[]): { v: Vertice[]; exacto: 
   return { v: areaSilueta(a) <= areaSilueta(b) ? a : b, exacto: false };
 }
 
+// ------------------------------------------------------------------ facetas: la carpintería plana
+const curvo = (q: Vertice) => !!(q.c1 && q.c2) || Math.abs(q.b ?? 0) > 1e-9;
+/** largo de un lado (con su arco o su Bézier) */
+function largoLado(v: Vertice[], i: number): number {
+  const pts = puntosSilueta([v[i], { x: v[(i + 1) % v.length].x, y: v[(i + 1) % v.length].y }], 2).slice(0, -1);
+  pts.push(v[(i + 1) % v.length]);
+  let l = 0; for (let k = 0; k + 1 < pts.length; k++) l += Math.hypot(pts[k + 1].x - pts[k].x, pts[k + 1].y - pts[k].y);
+  return l;
+}
+/** puntos de un lado curvo a largo de curva parejo (n facetas: n − 1 puntos interiores) */
+function puntosEnLado(v: Vertice[], i: number, n: number): Punto[] {
+  const b = v[(i + 1) % v.length];
+  const fino = puntosSilueta([v[i], { x: b.x, y: b.y }], 1); fino.splice(fino.length - 1, 1); fino.push({ x: b.x, y: b.y });
+  // el lado de vuelta (de b a v[i]) también lo dibuja puntosSilueta; lo que importa es el tramo de v[i] a b
+  const ac = [0]; for (let k = 1; k < fino.length; k++) ac.push(ac[k - 1] + Math.hypot(fino[k].x - fino[k - 1].x, fino[k].y - fino[k - 1].y));
+  const L = ac[ac.length - 1], out: Punto[] = [];
+  for (let j = 1; j < n; j++) {
+    const s = (L * j) / n; let k = 1; while (k < ac.length - 1 && ac[k] < s) k++;
+    const t = ac[k] > ac[k - 1] ? (s - ac[k - 1]) / (ac[k] - ac[k - 1]) : 0;
+    out.push({ x: +(fino[k - 1].x + (fino[k].x - fino[k - 1].x) * t).toFixed(4), y: +(fino[k - 1].y + (fino[k].y - fino[k - 1].y) * t).toFixed(4) });
+  }
+  return out;
+}
+/** cuántas facetas lleva cada lado (1 en los rectos): las que hagan falta para que ninguna pase de «modulo» m */
+export const facetasDe = (v: Vertice[], modulo: number) => v.map((q, i) => (curvo(q) ? Math.max(2, Math.ceil(largoLado(v, i) / modulo - 1e-6)) : 1));
+/** el contorno con los lados curvos pasados a facetas rectas (polígono: cada faceta es un paño plano en el 3D) */
+export function facetar(v: Vertice[], modulo: number, n = facetasDe(v, modulo)): Vertice[] {
+  const out: Vertice[] = [];
+  v.forEach((q, i) => { out.push({ x: q.x, y: q.y }); if (curvo(q)) out.push(...puntosEnLado(v, i, n[i] ?? 2)); });
+  return out;
+}
+/** ancho de las facetas: el módulo de la panelería (si hay) o 1,5 m */
+export const moduloFacetas = (p: Proyecto) => Math.max(0.3, p.paneleria?.modulo ?? 1.5);
+
 /** escribe la carpintería de cada nivel según los tramos; devuelve los niveles donde lo común no salió exacto */
 export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproximados: number[] } {
   const tramos = tramosCarpinteria(p);
@@ -75,6 +112,7 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
   const orden = p.niveles.map((n, i) => ({ n, i })).sort((x, y) => x.n.cota - y.n.cota);
   const sil = new Map(orden.map(({ i }) => [i, plantaDeNivel(p, i).silueta]));
   let n = 0; const aprox: number[] = [];
+  const hecho = new Map<number, Vertice[]>();
   orden.forEach(({ n: nv, i }, k) => {
     const t = tramoEn(p, nv.cota);
     if (!t) return;                                            // debajo del primer tramo: a mano
@@ -87,14 +125,26 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
     }
     const v = d > 0 ? desfasarAnillo(base, -d) : base;
     if ('error' in v) return;
-    nv.carpinteria = (v as Vertice[]).map(q => ({ ...q }));
-    n++;
+    hecho.set(i, (v as Vertice[]).map(q => ({ ...q })));
   });
+  // carpintería plana: ya metida, los lados curvos pasan a facetas. En un mismo tramo, si las carpinterías tienen los
+  // mismos lados (una torre ahusada o con perfil), cada lado lleva las mismas facetas en todos los pisos: así las
+  // facetas de un piso y las del de arriba son paralelas y los paños de la piel continua quedan planos.
+  const mod = moduloFacetas(p);
+  tramos.forEach(t => {
+    if (!esPlana(t) || t.modo === 'sin') return;
+    const idx = orden.filter(({ n: nv, i }) => tramoEn(p, nv.cota) === t && hecho.has(i)).map(({ i }) => i);
+    const vs = idx.map(i => hecho.get(i)!), forma = (v: Vertice[]) => v.map(q => (curvo(q) ? 'c' : 'r')).join('');
+    const iguales = vs.length > 1 && vs.every(v => forma(v) === forma(vs[0]));
+    const nf = iguales ? vs.map(v => facetasDe(v, mod)).reduce((x, y) => x.map((c, k) => Math.max(c, y[k]))) : null;
+    idx.forEach((i, k) => hecho.set(i, facetar(vs[k], mod, nf ?? undefined)));
+  });
+  hecho.forEach((v, i) => { p.niveles[i].carpinteria = v; n++; });
   return { niveles: n, aproximados: aprox };
 }
 
 // ------------------------------------------------------------------ bandas de la fachada y panelería
-export interface BandaFachada { z0: number; z1: number; modo: 'losa' | 'continua'; a: Punto[]; b: Punto[] }
+export interface BandaFachada { z0: number; z1: number; modo: 'losa' | 'continua'; a: Punto[]; b: Punto[]; /** facetas planas: un montante en cada vértice */ plana?: boolean }
 /**
  * La fachada piso por piso: cada banda va de una losa a la de arriba, con el anillo de abajo (a) y el de arriba (b) del
  * mismo largo y con las costuras alineadas. «Por losa»: el mismo contorno abajo y arriba (vertical). «Continua»: los
@@ -114,14 +164,33 @@ export function bandasFachada(p: Proyecto, preparar: (vs: Vertice[][], max?: num
   while (k + 1 < nivs.length) {
     const md = modo(nivs[k].n.cota);
     if (md === 'sin') { k++; continue; }
-    if (md === 'losa') { const pts = puntosSilueta(contorno(nivs[k].i), 8); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts }); k++; continue; }
+    const plana = esPlana(tramoEn(p, nivs[k].n.cota));
+    if (md === 'losa') { const pts = puntosSilueta(contorno(nivs[k].i), 8); out.push({ z0: nivs[k].n.cota, z1: nivs[k + 1].n.cota, modo: 'losa', a: pts, b: pts, plana }); k++; continue; }
     let f = k + 1;
-    while (f + 1 < nivs.length && modo(nivs[f].n.cota) === 'continua') f++;
+    while (f + 1 < nivs.length && modo(nivs[f].n.cota) === 'continua' && esPlana(tramoEn(p, nivs[f].n.cota)) === plana) f++;
+    const cs = nivs.slice(k, f + 1).map(x => contorno(x.i));
+    // plana: si los pisos tienen los mismos vértices (facetas iguales), se unen vértice con vértice y cada paño es plano
+    const poli = plana ? anillosPoligonales(cs) : null;
     let anillos: Punto[][];
-    try { anillos = preparar(nivs.slice(k, f + 1).map(x => contorno(x.i)), 400); } catch { k = f; continue; }
-    for (let j = 0; j + 1 < anillos.length; j++) out.push({ z0: nivs[k + j].n.cota, z1: nivs[k + j + 1].n.cota, modo: 'continua', a: anillos[j], b: anillos[j + 1] });
+    if (poli) anillos = poli; else { try { anillos = preparar(cs, 400); } catch { k = f; continue; } }
+    for (let j = 0; j + 1 < anillos.length; j++) out.push({ z0: nivs[k + j].n.cota, z1: nivs[k + j + 1].n.cota, modo: 'continua', a: anillos[j], b: anillos[j + 1], plana: !!poli });
     k = f;
   }
+  return out;
+}
+
+/** polígonos con la misma cantidad de vértices, antihorarios y con la costura alineada piso a piso; null si no se puede */
+function anillosPoligonales(cs: Vertice[][]): Punto[][] | null {
+  if (cs.some(v => v.some(curvo)) || cs.some(v => v.length !== cs[0].length)) return null;
+  const out: Punto[][] = [];
+  cs.forEach(v => {
+    const r = ccw(v.map(q => ({ x: q.x, y: q.y })));
+    if (!out.length) { out.push(r); return; }
+    const prev = out[out.length - 1], n = r.length;
+    let mejor = 0, dm = Infinity;
+    for (let s = 0; s < n; s++) { let d = 0; for (let i = 0; i < n; i++) { const a = prev[i], b = r[(i + s) % n]; d += (a.x - b.x) ** 2 + (a.y - b.y) ** 2; } if (d < dm) { dm = d; mejor = s; } }
+    out.push(r.map((_, i) => r[(i + mejor) % n]));
+  });
   return out;
 }
 
@@ -129,13 +198,13 @@ export function bandasFachada(p: Proyecto, preparar: (vs: Vertice[][], max?: num
  *  opaco de «antepecho» m sobre cada losa y «intermedios» travesaños más en el vidrio */
 export interface Paneleria { modulo: number; antepecho?: number | null; intermedios?: number | null }
 export interface Panel { p: [Punto & { z: number }, Punto & { z: number }, Punto & { z: number }, Punto & { z: number }]; opaco: boolean; area: number }
-export interface ResultadoPaneleria { paneles: Panel[]; montantes: [Punto & { z: number }, Punto & { z: number }][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number }
+export interface ResultadoPaneleria { paneles: Panel[]; montantes: [Punto & { z: number }, Punto & { z: number }][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number }
 
 /** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
-function montantesAnillo(r: Punto[], modulo: number): number[] {
+function montantesAnillo(r: Punto[], modulo: number, plana = false): number[] {
   const n = r.length, L = r.map((q, i) => Math.hypot(r[(i + 1) % n].x - q.x, r[(i + 1) % n].y - q.y));
   const giro = (i: number) => { const a = r[(i - 1 + n) % n], b = r[i], c = r[(i + 1) % n]; const t1 = Math.atan2(b.y - a.y, b.x - a.x), t2 = Math.atan2(c.y - b.y, c.x - b.x); let d = Math.abs(t2 - t1); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
-  let esq = r.map((_, i) => i).filter(i => giro(i) > (10 * Math.PI) / 180);
+  let esq = r.map((_, i) => i).filter(i => giro(i) > ((plana ? 0.05 : 10) * Math.PI) / 180);
   if (!esq.length) esq = [0];
   const out: number[] = [];
   esq.forEach((e, k) => {
@@ -154,13 +223,19 @@ function montantesAnillo(r: Punto[], modulo: number): number[] {
 const enAnillo = (r: Punto[], t: number) => { const n = r.length, i = Math.floor(t) % n, f = t - Math.floor(t), a = r[i], b = r[(i + 1) % n]; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; };
 const area4 = (q: (Punto & { z: number })[]) => { const tri = (a: Punto & { z: number }, b: Punto & { z: number }, c: Punto & { z: number }) => { const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z; return Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2; }; return tri(q[0], q[1], q[2]) + tri(q[0], q[2], q[3]); };
 
+/** cuánto se sale del plano un paño de cuatro puntos: distancia del cuarto al plano de los otros tres (m) */
+export function alabeo(q: (Punto & { z: number })[]): number {
+  const [a, b, c, d] = q, ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+  const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nn = Math.hypot(nx, ny, nz);
+  return nn < 1e-12 ? 0 : Math.abs((d.x - a.x) * nx + (d.y - a.y) * ny + (d.z - a.z) * nz) / nn;
+}
 export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): ResultadoPaneleria {
   const paneles: Panel[] = [], montantes: ResultadoPaneleria['montantes'] = [];
   let largoM = 0, largoT = 0;
   const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
   bandas.forEach(bd => {
     const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
-    const ts = montantesAnillo(bd.a, mod);
+    const ts = montantesAnillo(bd.a, mod, !!bd.plana);
     // cortes en altura de la banda (fracciones): antepecho y travesaños intermedios del vidrio
     const fr: { t: number; opaco: boolean }[] = [];
     const t0 = ap > 0 && ap < h - 0.3 ? ap / h : 0;
@@ -180,5 +255,5 @@ export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): Result
     });
   });
   const sum = (op: boolean) => paneles.filter(x => x.opaco === op).reduce((s, x) => ({ n: s.n + 1, area: s.area + x.area }), { n: 0, area: 0 });
-  return { paneles, montantes, vidrio: sum(false), opacos: sum(true), largoMontantes: largoM, largoTravesanos: largoT };
+  return { paneles, montantes, vidrio: sum(false), opacos: sum(true), largoMontantes: largoM, largoTravesanos: largoT, alabeados: paneles.filter(x => alabeo(x.p) > 0.005).length };
 }
