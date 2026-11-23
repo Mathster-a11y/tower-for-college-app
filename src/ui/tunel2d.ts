@@ -23,7 +23,8 @@ import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { llaveEnLienzo, type Llave } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
-import { armarEscenario, cajaDe, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
+import { armarEscenario, cajaDe, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
+import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
 import type { EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
@@ -606,10 +607,52 @@ function panelContexto(el: H) {
     catch { mensajeTunel('El archivo no tiene edificios: tiene que ser un contexto exportado por la app o uno como docs/contexto_urbano/contexto_ejemplo.json.'); }
   });
   const imp = h('label', { class: 'boton' }, '⤒ Importar…', inp);
+  // plano del sitio en DXF: cada polilínea cerrada o círculo es un edificio; la altura, del número de la capa
+  const inpDxf = h('input', { type: 'file', accept: '.dxf', hidden: '' }) as HTMLInputElement;
+  inpDxf.addEventListener('change', async () => {
+    const f = inpDxf.files?.[0]; if (!f) return;
+    try { const d = leerDXFCompleto(await f.text()); if (!d.entidades.length) throw new Error(); dxfSitio = { d, nombre: f.name }; estado.avisarPanel(); }
+    catch { mensajeTunel('No se pudo leer el DXF (tiene que ser un DXF de texto, como el que guarda AutoCAD).'); }
+  });
+  const impDxf = h('label', { class: 'boton' }, '⤒ Plano del sitio (DXF)…', inpDxf);
   const quitar = h('button', { type: 'button', class: 'boton' }, 'Quitar todos');
   quitar.addEventListener('click', () => poner(null, 'Contexto quitado: la torre vuelve a estar aislada. Ctrl+Z deshace.'));
   if (!eds.length) quitar.setAttribute('disabled', '');
-  el.append(h('div', { class: 'fila-acciones' }, imp, exp, quitar));
+  el.append(h('div', { class: 'fila-acciones' }, imp, impDxf, exp, quitar));
+  if (dxfSitio) el.append(armarDxfSitio(eds, t, poner));
+}
+
+/** el DXF del sitio elegido, esperando que se confirme cómo se importa */
+let dxfSitio: { d: DibujoCAD; nombre: string } | null = null;
+const opDxf = { altura: 30, dx: 0, dy: 0 };
+function armarDxfSitio(eds: EdificioVecino[], t: { pol: { x: number; y: number }[] }, poner: (n: EdificioVecino[] | null, m: string) => void): H {
+  const { d, nombre } = dxfSitio!, u = factorUnidad(d);
+  const prueba = contextoDesdeCAD(d.entidades, u.factor, opDxf.dx, opDxf.dy, opDxf.altura, t.pol.length >= 3 ? cajaDe(t.pol) : null);
+  const num = (rot: string, v: number, al: (x: number) => void, positivo = false) => {
+    const i = h('input', { type: 'text', inputmode: 'decimal', value: fmt(v, 2), class: 'n' }) as HTMLInputElement;
+    i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.').replace('−', '-')); if (isFinite(x) && (!positivo || x > 0)) { al(x); estado.avisarPanel(); } else i.value = fmt(v, 2); });
+    return h('label', { class: 'campo' }, h('span', {}, rot), i);
+  };
+  const capasConAltura = [...new Set(prueba.edificios.map(e => e.nombre))].filter(c => /\d/.test(c));
+  const usar = (reemplazar: boolean) => {
+    const nuevos = prueba.edificios.map((e, k) => ({ ...e, id: `D${(reemplazar ? 0 : eds.length) + k + 1}` }));
+    dxfSitio = null; cfg.contexto = true;
+    poner(reemplazar ? nuevos : [...eds, ...nuevos], `Plano del sitio: ${nuevos.length} edificios${prueba.omitidos ? ` (se dejó afuera el contorno de la torre)` : ''}. Ctrl+Z deshace.`);
+  };
+  const agregar = h('button', { type: 'button', class: 'boton primario' }, `Agregar ${prueba.edificios.length}`);
+  agregar.addEventListener('click', () => usar(false));
+  const reemplazar = h('button', { type: 'button', class: 'boton' }, 'Reemplazar los vecinos');
+  reemplazar.addEventListener('click', () => usar(true));
+  const cancelar = h('button', { type: 'button', class: 'boton' }, 'Cancelar');
+  cancelar.addEventListener('click', () => { dxfSitio = null; estado.avisarPanel(); });
+  if (!prueba.edificios.length) { agregar.setAttribute('disabled', ''); reemplazar.setAttribute('disabled', ''); }
+  return h('div', { class: 'dxf-sitio' },
+    h('b', { class: 'col-sub' }, `Plano del sitio: ${nombre}`),
+    h('p', { class: 'nota chica' }, `Unidades: ${u.unidad}${d.unidad === 'desconocida' ? ' (adivinadas por el tamaño del dibujo)' : ''}. ${prueba.edificios.length} edificios (polilíneas cerradas y círculos)${prueba.omitidos ? `; ${prueba.omitidos} contorno${prueba.omitidos > 1 ? 's' : ''} que coincide${prueba.omitidos > 1 ? 'n' : ''} con la torre se deja${prueba.omitidos > 1 ? 'n' : ''} afuera` : ''}. ${capasConAltura.length ? `La altura sale del número de la capa (${capasConAltura.slice(0, 4).join(', ')}${capasConAltura.length > 4 ? '…' : ''}); ` : ''}${prueba.sinAltura ? `${prueba.sinAltura} sin número en la capa van con la altura de abajo.` : ''}`),
+    h('div', { class: 'grilla2' }, num('Altura si la capa no dice (m)', opDxf.altura, x => { opDxf.altura = x; }, true), h('span', {}),
+      num('Correr en x (m)', opDxf.dx, x => { opDxf.dx = x; }), num('Correr en y (m)', opDxf.dy, x => { opDxf.dy = x; })),
+    h('p', { class: 'nota chica' }, 'El plano tiene que estar en las mismas coordenadas que la planta del proyecto; si no, corrélo hasta que la torre del plano caiga sobre la del proyecto (el plano chico de arriba se actualiza después de agregar).'),
+    h('div', { class: 'fila-acciones' }, agregar, ...(eds.length ? [reemplazar] : []), cancelar));
 }
 
 /** lee un contexto: el que exporta la app ({ edificios: [{ v, altura }] }) o el del documento ({ vecinos: [{ cx, cy, ancho, largo, altura }] }) */

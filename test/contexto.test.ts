@@ -67,3 +67,24 @@ describe('túnel 3D con contexto', () => {
     expect(sola.vecinos).toHaveLength(0);
   });
 });
+
+describe('contexto desde un DXF', () => {
+  it('polilíneas cerradas y círculos son edificios; la altura sale de la capa; la torre se deja afuera', async () => {
+    const { contextoDesdeCAD } = await import('../src/viento/contexto');
+    const { leerDXFCompleto } = await import('../src/engine/cad');
+    const poli = (capa: string, pts: number[][]) => ['0', 'LWPOLYLINE', '8', capa, '90', String(pts.length), '70', '1', ...pts.flatMap(([x, y]) => ['10', String(x), '20', String(y)])];
+    const dxf = ['0', 'SECTION', '2', 'ENTITIES',
+      ...poli('EDIF_45', [[-60, -10], [-40, -10], [-40, 10], [-60, 10]]),
+      ...poli('torres 120 m', [[40, -10], [60, -10], [60, 10], [40, 10]]),
+      ...poli('VECINOS', [[-10, 40], [10, 40], [10, 60], [-10, 60]]),
+      ...poli('TORRE', [[-20, -9], [20, -9], [20, 9], [-20, 9]]),
+      '0', 'CIRCLE', '8', 'TANQUE_30', '10', '0', '20', '-50', '40', '6',
+      ...['0', 'LINE', '8', 'EJES', '10', '0', '20', '0', '11', '10', '21', '0'],
+      '0', 'ENDSEC', '0', 'EOF'].join('\n');
+    const d = leerDXFCompleto(dxf);
+    const r = contextoDesdeCAD(d.entidades, 1, 0, 0, 25, { x0: -20, x1: 20, y0: -9, y1: 9 });
+    expect(r.edificios.map(e => e.altura)).toEqual([45, 120, 25, 30]);
+    expect(r.omitidos).toBe(1); expect(r.sinAltura).toBe(1);
+    expect(r.edificios[3].v.length).toBe(24);
+  });
+});

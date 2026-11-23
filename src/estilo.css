@@ -1714,3 +1714,4 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .tabla-contexto input { padding: 2px 4px; font-size: 12px; }
 .plano-contexto-fig { margin: 6px 0; }
 .plano-contexto { background: var(--lienzo); border: 1px solid var(--edge); border-radius: 6px; max-width: 100%; height: auto; }
+.dxf-sitio { margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--edge); border-radius: 6px; }

@@ -4,6 +4,7 @@
  * Los edificios viven en el proyecto (Proyecto.contexto); solo los usan los túneles, nunca los métodos de cálculo.
  */
 import type { EdificioVecino } from '../engine/modelo';
+import { puntosSilueta } from '../engine/silueta';
 
 export interface P { x: number; y: number }
 export interface Caja { x0: number; x1: number; y0: number; y1: number }
@@ -63,4 +64,32 @@ export const vecinosEnCorte = (eds: EdificioVecino[], z: number): P[][] => eds.f
 export function pisaLaTorre(e: EdificioVecino, torre: Caja): boolean {
   const c = cajaDe(e.v);
   return c.x0 < torre.x1 && c.x1 > torre.x0 && c.y0 < torre.y1 && c.y1 > torre.y0;
+}
+
+/**
+ * edificios vecinos desde un plano del sitio en DXF: cada polilínea cerrada (con sus arcos) o círculo es un edificio.
+ * La altura sale del número que tenga el nombre de la capa («EDIF_45», «h=30», «torres 120 m»); si la capa no tiene
+ * número, «alturaPorDefecto». Las medidas ya en metros («factor» del dibujo) y corridas «dx, dy» para que coincida con
+ * la planta del proyecto. Lo que se pisa con la torre (el plano del sitio suele traerla dibujada) se deja afuera
+ */
+export function contextoDesdeCAD(ents: import('../engine/cad').Entidad[], factor: number, dx: number, dy: number, alturaPorDefecto: number, torre: Caja | null):
+  { edificios: EdificioVecino[]; sinAltura: number; omitidos: number } {
+  const out: EdificioVecino[] = []; let sinAltura = 0, omitidos = 0;
+  const altura = (capa: string) => { const m = /(\d+(?:[.,]\d+)?)/.exec(capa); const h = m ? parseFloat(m[1].replace(',', '.')) : NaN; if (h > 0 && h < 1000) return h; sinAltura++; return alturaPorDefecto; };
+  for (const e of ents) {
+    let v: P[] | null = null;
+    if (e.t === 'poli' && e.cerrada && e.v.length >= 3) v = puntosSilueta(e.v, 8).map(q => ({ x: q.x, y: q.y }));
+    else if (e.t === 'circulo' && e.r > 0) v = Array.from({ length: 24 }, (_, k) => ({ x: e.c.x + e.r * Math.cos((2 * Math.PI * k) / 24), y: e.c.y + e.r * Math.sin((2 * Math.PI * k) / 24) }));
+    if (!v) continue;
+    const pts = v.map(q => ({ x: +(q.x * factor + dx).toFixed(3), y: +(q.y * factor + dy).toFixed(3) }));
+    const c = cajaDe(pts);
+    if (c.x1 - c.x0 < 0.5 || c.y1 - c.y0 < 0.5) continue;               // demasiado chico para ser un edificio
+    // la torre misma (o algo que la pise mucho): afuera
+    if (torre && c.x0 < torre.x1 && c.x1 > torre.x0 && c.y0 < torre.y1 && c.y1 > torre.y0) {
+      const t = (Math.min(c.x1, torre.x1) - Math.max(c.x0, torre.x0)) * (Math.min(c.y1, torre.y1) - Math.max(c.y0, torre.y0));
+      if (t > 0.3 * (torre.x1 - torre.x0) * (torre.y1 - torre.y0)) { omitidos++; continue; }
+    }
+    out.push({ id: `D${out.length + 1}`, nombre: e.capa, v: pts, altura: altura(e.capa) });
+  }
+  return { edificios: out, sinAltura, omitidos };
 }
