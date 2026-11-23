@@ -16,6 +16,7 @@ import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
+import { tramosEdificio } from '../viento/contexto';
 import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoQueLlega } from './unidadViento';
 import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
@@ -63,7 +64,8 @@ let panelEstado: H | null = null;
 // ------------------------------------------------------------------------------------------------ corrida
 function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento, cfg.contexto]); }
 /** los vecinos del contexto urbano que van al túnel (si se eligió usarlos) */
-const vecinos3d = () => (cfg.contexto ? (estado.proyecto.contexto?.edificios ?? []).map(e => ({ pol: e.v, altura: e.altura })) : []);
+// cada tramo de cada vecino (con sus retiros) es un prisma de su altura «desde» a su «altura»
+const vecinos3d = () => (cfg.contexto ? (estado.proyecto.contexto?.edificios ?? []).flatMap(e => tramosEdificio(e).map(t => ({ pol: t.v, desde: t.desde, altura: t.hasta }))) : []);
 const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
@@ -186,8 +188,8 @@ function armarVista(cont: HTMLElement) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x9a9ca3, roughness: 1 });
     for (const v of g.vecinos) {
       const forma = new THREE.Shape(v.pol.map(q => new THREE.Vector2((q.x - g.nx / 2) / g.escala, (q.y - g.ny / 2) / g.escala)));
-      const m = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: v.altura, bevelEnabled: false }), mat);
-      m.rotation.x = -Math.PI / 2; esc.add(m);
+      const m = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: v.altura - v.desde, bevelEnabled: false }), mat);
+      m.rotation.x = -Math.PI / 2; m.position.y = v.desde; esc.add(m);
     }
   }
   const lineas = new THREE.Group(); esc.add(lineas);

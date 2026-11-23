@@ -24,7 +24,7 @@ import { controlUnidadViento, enUnidad, vientoDisenoEn, nombreUnidad, textoRefer
 import { llaveEnLienzo, simbolosEnLienzo, type Llave, type Simbolo } from './llaveColor';
 import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
-import { armarEscenario, cajaDe, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
+import { agregarRetiro, armarEscenario, cajaDe, tramosEdificio, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
 import type { EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
@@ -751,6 +751,8 @@ function torreParaContexto() {
 }
 
 /** el contexto urbano: usarlo o no, escenarios armados, la lista de vecinos, agregar, importar y exportar */
+/** el retiro que agrega «＋ retiro»: cuánto hacia adentro (por lado) y cuánto más alto (m) */
+const opRetiro = { d: 3, h: 15 };
 function panelContexto(el: H) {
   const eds = edificiosVecinos(), t = torreParaContexto(), enCorte = vecinosEnCorte(eds, t.z).length;
   const poner = (nuevos: EdificioVecino[] | null, msj: string) => {
@@ -765,16 +767,33 @@ function panelContexto(el: H) {
     if (cfg.contexto && enCorte) el.append(h('p', { class: 'nota chica' }, 'Con vecinos el canal es más grande y usa la velocidad lenta (en las calles el aire se acelera): tarda más. La fuerza (Cd, Cl) se mide solo sobre la torre.'));
     const pisan = eds.filter(e => pisaLaTorre(e, cajaDe(t.pol)));
     if (pisan.length) el.append(h('p', { class: 'aviso-linea' }, `${pisan.map(e => e.id).join(', ')} se pisa${pisan.length > 1 ? 'n' : ''} con la torre: movelo${pisan.length > 1 ? 's' : ''} o borralo${pisan.length > 1 ? 's' : ''}.`));
-    // la lista: altura editable y borrar
+    const num = (rot: string, v: number, al: (x: number) => void) => {
+      const i = h('input', { type: 'text', inputmode: 'decimal', value: fmt(v, 1), class: 'n' }) as HTMLInputElement;
+      i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (x > 0) al(x); else i.value = fmt(v, 1); });
+      return h('label', { class: 'campo' }, h('span', {}, rot), i);
+    };
+    // la lista: altura editable, retiros y borrar
     const filas = eds.map((e, k) => {
+      const tr = tramosEdificio(e), tope = tr[tr.length - 1].hasta;
+      const mas = h('button', { type: 'button', class: 'mini', title: `Agregar un retiro: ${fmt(opRetiro.d, 1)} m hacia adentro y ${fmt(opRetiro.h, 0)} m más alto` }, '＋ retiro');
+      mas.addEventListener('click', () => {
+        const r = agregarRetiro(e, opRetiro.d, tope + opRetiro.h);
+        if ('error' in r) { mensajeTunel(`${e.id}: ${r.error}`); return; }
+        poner(eds.map((q, j) => (j === k ? r : q)), `${e.id}: retiro de ${fmt(opRetiro.d, 1)} m hasta ${fmt(tope + opRetiro.h, 0)} m. Ctrl+Z deshace.`);
+      });
+      const menos = h('button', { type: 'button', class: 'mini', title: 'Sacar el último retiro' }, '−');
+      menos.addEventListener('click', () => poner(eds.map((q, j) => (j === k ? { ...q, retiros: (q.retiros ?? []).slice(0, -1) } : q)), `${e.id}: sin el último retiro.`));
+      const retiros = h('td', { class: 'nota chica' }, tr.length > 1 ? tr.slice(1).map(t => `↑ ${fmt(t.hasta, 0)} m`).join(' ') + ' ' : '', mas, ...(tr.length > 1 ? [menos] : []));
       const alt = h('input', { type: 'text', inputmode: 'decimal', value: fmt(e.altura, 1), class: 'n', style: 'width: 56px' }) as HTMLInputElement;
-      alt.addEventListener('change', () => { const x = parseFloat(alt.value.replace(',', '.')); if (x > 0) poner(eds.map((q, j) => (j === k ? { ...q, altura: x } : q)), `${e.id}: ${fmt(x, 1)} m de alto.`); else alt.value = fmt(e.altura, 1); });
+      alt.addEventListener('change', () => { const x = parseFloat(alt.value.replace(',', '.')); if (x > 0) poner(eds.map((q, j) => (j === k ? { ...q, altura: x, retiros: (q.retiros ?? []).filter(r => r.altura > x) } : q)), `${e.id}: basamento de ${fmt(x, 1)} m${(e.retiros ?? []).some(r => r.altura <= x) ? ' (los retiros más bajos se sacaron)' : ''}.`); else alt.value = fmt(e.altura, 1); });
       const borrar = h('button', { type: 'button', class: 'mini', title: `Borrar ${e.id}`, 'aria-label': `Borrar ${e.id}` }, '✕');
       borrar.addEventListener('click', () => poner(eds.filter((_, j) => j !== k), `${e.id} borrado. Ctrl+Z deshace.`));
       const c0 = cajaDe(e.v);
-      return h('tr', {}, h('td', {}, h('b', {}, e.id)), h('td', {}, e.nombre || '—'), h('td', { class: 'n' }, `${fmt(c0.x1 - c0.x0, 0)} × ${fmt(c0.y1 - c0.y0, 0)}`), h('td', {}, alt, ' m'), h('td', {}, borrar));
+      return h('tr', {}, h('td', {}, h('b', {}, e.id)), h('td', {}, e.nombre || '—'), h('td', { class: 'n' }, `${fmt(c0.x1 - c0.x0, 0)} × ${fmt(c0.y1 - c0.y0, 0)}`), h('td', {}, alt, ' m'), retiros, h('td', {}, borrar));
     });
-    el.append(h('table', { class: 'tabla tabla-contexto' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Edificio'), h('th', { class: 'n' }, 'Planta (m)'), h('th', {}, 'Alto'), h('th', {}, ''))), h('tbody', {}, ...filas)));
+    el.append(h('table', { class: 'tabla tabla-contexto' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Edificio'), h('th', { class: 'n' }, 'Planta (m)'), h('th', {}, 'Alto (basamento)'), h('th', {}, 'Retiros'), h('th', {}, ''))), h('tbody', {}, ...filas)),
+      h('div', { class: 'grilla2' }, num('Retiro: hacia adentro (m)', opRetiro.d, x => { opRetiro.d = x; }), num('Retiro: cuánto más alto (m)', opRetiro.h, x => { opRetiro.h = x; })),
+      h('p', { class: 'nota chica' }, 'Un retiro es un tramo de arriba más chico (una torre sobre su basamento): «＋ retiro» achica la planta de arriba del edificio esos metros por cada lado y la sube esa altura. En el DXF del sitio, un contorno adentro de otro y más alto (por su capa) entra solo como retiro.'));
   }
   // armar un escenario
   const sel = h('select', {}) as HTMLSelectElement;
@@ -874,7 +893,13 @@ function armarDxfSitio(eds: EdificioVecino[], t: { pol: { x: number; y: number }
 function leerContexto(x: unknown): EdificioVecino[] {
   const o = x as { edificios?: EdificioVecino[]; vecinos?: { id?: string; nombre?: string; cx: number; cy: number; ancho: number; largo: number; altura: number }[] };
   const ok = (n: unknown) => typeof n === 'number' && isFinite(n);
-  if (Array.isArray(o.edificios)) return o.edificios.filter(e => ok(e.altura) && e.altura > 0 && Array.isArray(e.v) && e.v.length >= 3 && e.v.every(q => ok(q.x) && ok(q.y))).map((e, i) => ({ id: String(e.id || `E${i + 1}`), nombre: String(e.nombre ?? ''), v: e.v.map(q => ({ x: q.x, y: q.y })), altura: e.altura }));
+  const polOk = (v: unknown): v is { x: number; y: number }[] => Array.isArray(v) && v.length >= 3 && v.every(q => q && ok(q.x) && ok(q.y));
+  if (Array.isArray(o.edificios)) return o.edificios.filter(e => ok(e.altura) && e.altura > 0 && polOk(e.v)).map((e, i) => {
+    // los retiros: con contorno y cada uno más alto que el anterior
+    let tope = e.altura;
+    const retiros = (Array.isArray(e.retiros) ? e.retiros : []).filter(r => { const bien = r && ok(r.altura) && r.altura > tope && polOk(r.v); if (bien) tope = r.altura; return bien; }).map(r => ({ v: r.v.map(q => ({ x: q.x, y: q.y })), altura: r.altura }));
+    return { id: String(e.id || `E${i + 1}`), nombre: String(e.nombre ?? ''), v: e.v.map(q => ({ x: q.x, y: q.y })), altura: e.altura, ...(retiros.length ? { retiros } : {}) };
+  });
   if (Array.isArray(o.vecinos)) return o.vecinos.filter(v => [v.cx, v.cy, v.ancho, v.largo, v.altura].every(ok) && v.ancho > 0 && v.largo > 0 && v.altura > 0).map((v, i) => ({
     id: String(v.id || `E${i + 1}`), nombre: String(v.nombre ?? ''), altura: v.altura,
     v: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => ({ x: v.cx + (a * v.ancho) / 2, y: v.cy + (b * v.largo) / 2 })) }));
@@ -888,7 +913,8 @@ function planoContexto(torre: { x: number; y: number }[], eds: EdificioVecino[],
   const X = (x: number) => m + (x - c.x0) * k, Y = (y: number) => Hh - m - (y - c.y0) * k;
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, width: W, height: Hh, class: 'plano-contexto', role: 'img', 'aria-label': 'Plano del contexto urbano' });
   const pol = (pts: { x: number; y: number }[], fill: string) => svg.append(svgEl('polygon', { points: pts.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), fill, stroke: '#555', 'stroke-width': 0.6 }));
-  eds.forEach(e => { pol(e.v, e.altura > z ? GRIS_VECINO : '#cfcbc1'); const cc = cajaDe(e.v); svg.append(svgEl('text', { x: X((cc.x0 + cc.x1) / 2), y: Y((cc.y0 + cc.y1) / 2) + 3, 'text-anchor': 'middle', 'font-size': 9, fill: '#1d1d24' }, e.id)); });
+  // cada tramo (el basamento y sus retiros, uno encima del otro): más oscuro si llega al corte
+  eds.forEach(e => { tramosEdificio(e).forEach(t => pol(t.v, t.hasta > z && t.desde <= z ? GRIS_VECINO : t.hasta > z ? '#b4b1a8' : '#cfcbc1')); const cc = cajaDe(e.v); svg.append(svgEl('text', { x: X((cc.x0 + cc.x1) / 2), y: Y((cc.y0 + cc.y1) / 2) + 3, 'text-anchor': 'middle', 'font-size': 9, fill: '#1d1d24' }, e.id)); });
   if (torre.length >= 3) pol(torre, css('--ink', '#223344'));
   // el viento: A hacia +y, B hacia +x
   const [x1, y1, x2, y2] = estado.dir === 'A' ? [W - 16, Hh - 14, W - 16, Hh - 44] : [W - 50, Hh - 14, W - 20, Hh - 14];

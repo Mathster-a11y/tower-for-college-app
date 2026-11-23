@@ -8,6 +8,7 @@
  * azotea ni el del pie, por eso su Cd es mayor que el de una torre real de altura finita. Sirve para comparar plantas
  * y pisos entre sí, no como carga de diseño.
  */
+import { contornoEdificioEn } from './contexto';
 import type { EdificioVecino, Proyecto } from '../engine/modelo';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { KN_POR_T, type Direccion102 } from '../engine/cargas/cirsoc102';
@@ -37,7 +38,8 @@ export function plantasDistintas(p: Proyecto, vecinos: EdificioVecino[] = []): G
     const c = contornoAlViento(p, i);
     const pol = puntosSilueta(c.v, 12).map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4) }));
     if (pol.length < 3) return;
-    const llegan = vecinos.filter(e => e.altura > n.cota - zPB && e.v.length >= 3);
+    // los vecinos que llegan a este nivel, con el contorno de su tramo (un retiro cambia la planta del vecino)
+    const llegan = vecinos.flatMap(e => { const t = contornoEdificioEn(e, n.cota - zPB); return t ? [{ id: `${e.id}#${t.k}`, v: t.v }] : []; });
     const clave = JSON.stringify(pol) + (llegan.length ? '|' + llegan.map(e => e.id).join(',') : '');
     const g = grupos.get(clave) ?? { clave, pol, de: c.de, niveles: [], vecinos: llegan.map(e => e.v) };
     g.niveles.push({ i, nombre: n.nombre, cota: n.cota - zPB });

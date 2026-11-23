@@ -317,7 +317,14 @@ export interface Proyecto {
   contexto?: { edificios: EdificioVecino[] } | null;
 }
 /** edificio vecino: su contorno en planta (m, en las coordenadas de la planta del proyecto) y su altura sobre PB (m) */
-export interface EdificioVecino { id: string; nombre: string; v: { x: number; y: number }[]; altura: number }
+export interface EdificioVecino {
+  id: string; nombre: string; v: { x: number; y: number }[]; altura: number;
+  /**
+   * retiros: los tramos de arriba, de abajo hacia arriba. Cada uno va desde la altura del anterior (el primero, desde
+   * «altura») hasta la suya, con su propio contorno (normalmente más chico). Sin retiros, un prisma.
+   */
+  retiros?: { v: { x: number; y: number }[]; altura: number }[];
+}
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }
 /** el hueco está en la losa del nivel de cota z */

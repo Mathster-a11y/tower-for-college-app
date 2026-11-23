@@ -5,6 +5,8 @@
  */
 import type { EdificioVecino } from '../engine/modelo';
 import { puntosSilueta } from '../engine/silueta';
+import { desfasarAnillo } from '../engine/contorno';
+import { dentro } from './geometria2d';
 
 export interface P { x: number; y: number }
 export interface Caja { x0: number; x1: number; y0: number; y1: number }
@@ -57,8 +59,29 @@ export function armarEscenario(tipo: Escenario, caja: Caja, H: number, dir: 'A' 
   return out;
 }
 
-/** los contornos de los edificios que llegan al corte a la altura z (m sobre PB) */
-export const vecinosEnCorte = (eds: EdificioVecino[], z: number): P[][] => eds.filter(e => e.altura > z && e.v.length >= 3).map(e => e.v);
+/** los tramos de un edificio, de abajo hacia arriba: desde, hasta (m sobre PB) y su contorno */
+export function tramosEdificio(e: EdificioVecino): { desde: number; hasta: number; v: P[]; k: number }[] {
+  const out = [{ desde: 0, hasta: e.altura, v: e.v, k: 0 }];
+  (e.retiros ?? []).forEach((r, i) => { const d = out[out.length - 1].hasta; if (r.altura > d && r.v.length >= 3) out.push({ desde: d, hasta: r.altura, v: r.v, k: i + 1 }); });
+  return out;
+}
+/** la altura total del edificio (con sus retiros) */
+export const alturaEdificio = (e: EdificioVecino) => Math.max(e.altura, ...(e.retiros ?? []).map(r => r.altura));
+/** el contorno del edificio a la altura z (m sobre PB) y de qué tramo es; null si no llega */
+export function contornoEdificioEn(e: EdificioVecino, z: number): { v: P[]; k: number } | null {
+  const t = tramosEdificio(e).find(x => z >= x.desde - 1e-9 && z < x.hasta);
+  return t && t.v.length >= 3 ? { v: t.v, k: t.k } : null;
+}
+/** los contornos de los edificios que llegan al corte a la altura z (m sobre PB), con su retiro si lo tienen */
+export const vecinosEnCorte = (eds: EdificioVecino[], z: number): P[][] => eds.flatMap(e => { const c = contornoEdificioEn(e, z); return c ? [c.v] : []; });
+/** un retiro: el contorno de arriba del edificio desplazado hacia adentro «d» metros (por cada lado), hasta la altura h */
+export function agregarRetiro(e: EdificioVecino, d: number, h: number): EdificioVecino | { error: string } {
+  const top = tramosEdificio(e).at(-1)!;
+  if (!(h > top.hasta)) return { error: `El retiro tiene que llegar más alto que ${top.hasta} m.` };
+  const r = desfasarAnillo(top.v.map(q => ({ x: q.x, y: q.y })), -Math.abs(d));
+  if ('error' in r) return r;
+  return { ...e, retiros: [...(e.retiros ?? []), { v: r.map(q => ({ x: +q.x.toFixed(3), y: +q.y.toFixed(3) })), altura: h }] };
+}
 
 /** ¿algún vecino se pisa con la torre? (para avisar antes de simular) */
 export function pisaLaTorre(e: EdificioVecino, torre: Caja): boolean {
@@ -91,5 +114,18 @@ export function contextoDesdeCAD(ents: import('../engine/cad').Entidad[], factor
     }
     out.push({ id: `D${out.length + 1}`, nombre: e.capa, v: pts, altura: altura(e.capa) });
   }
-  return { edificios: out, sinAltura, omitidos };
+  // un contorno adentro de otro y más alto: es un retiro del de afuera (una torre sobre su basamento)
+  const area = (v: P[]) => Math.abs(v.reduce((s, q, i) => { const r = v[(i + 1) % v.length]; return s + q.x * r.y - r.x * q.y; }, 0)) / 2;
+  const orden = out.slice().sort((a, b) => area(b.v) - area(a.v));
+  const usados = new Set<EdificioVecino>();
+  for (const chico of orden.slice().reverse()) {
+    const madre = orden.find(g => g !== chico && !usados.has(g) && area(g.v) > area(chico.v) && chico.v.every(q => dentro(g.v, q.x, q.y)));
+    if (!madre || usados.has(chico)) continue;
+    if (chico.altura <= madre.altura) continue;                           // más bajo que el basamento: es otro edificio
+    madre.retiros = [...(madre.retiros ?? []), { v: chico.v, altura: chico.altura }];
+    usados.add(chico);
+  }
+  out.forEach(e => e.retiros?.sort((a, b) => a.altura - b.altura));
+  const final = out.filter(e => !usados.has(e)).map((e, i) => ({ ...e, id: `D${i + 1}` }));
+  return { edificios: final, sinAltura, omitidos };
 }

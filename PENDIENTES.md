@@ -12,7 +12,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 3. ~~Medir de nuevo las cinco formas con paredes lineales y actualizar el diagnóstico~~ (23/11)
 4. ~~Comparar dos grabaciones lado a lado~~ (23/11: Grabar y reproducir → «⇆ Comparar con otra grabación…», sincronizadas por el tiempo)
 5. ~~Factor de interferencia por piso~~ (23/11: «Torre piso por piso» con vecinos simula también cada planta sola; gráfico, tabla y CSV)
-6. Contexto urbano: edificios con retiros (más de una altura por edificio)
+6. ~~Contexto urbano: edificios con retiros~~ (23/11: «＋ retiro» en la tabla, JSON, DXF con contornos anidados; 2D, piso por piso y 3D)
 7. Contexto urbano: calcar el sitio desde un PDF
 8. ~~Cp y fuerza por piso del túnel como hoja del Excel~~ (23/11: «⤓ Excel (.xlsx)» con Piso por piso, Interferencia y Cp del perímetro, fórmulas y gráficos)
 9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
@@ -220,7 +220,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
 - [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
 - [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
-- [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Falta: calcar el sitio desde un PDF, edificios con retiros (más de una altura) y el factor de interferencia por piso (hecho)
+- [x] Contexto urbano en la app (Viento → Túnel 2D → «Contexto urbano»): vecinos guardados en el proyecto, escenarios armados, rectángulos, importar/exportar JSON y plano del sitio en DXF (altura por la capa); 2D (cada corte y cada grupo de pisos con los que llegan; fuerza solo sobre la torre) y 3D (prismas). Falta: calcar el sitio desde un PDF (los retiros y el factor de interferencia están hechos)
 - [ ] Visualización del túnel: hechas las flechas, los puntos de velocidad alta, la guardia de estabilidad, las isolíneas de la velocidad media, el humo con estela, los anemómetros virtuales y las vistas de velocidad media y ráfagas; y la comparación lado a lado de dos grabaciones (hecho)
 - [ ] Niveles de fidelidad (básico → máximo) y exportación del caso a OpenFOAM para el nivel de laboratorio
 - [x] Dibujar la torre del túnel 3D con su contorno real (con paredes exactas) y exportarla en STL, un prisma por piso

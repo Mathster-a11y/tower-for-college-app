@@ -206,7 +206,14 @@ export function leerProyecto(x: unknown): Lectura {
       cx.edificios = (cx.edificios as unknown[]).filter(e => esObj(e) && num(e.altura) && (e.altura as number) > 0 && Array.isArray(e.v) && (e.v as unknown[]).length >= 3
         && (e.v as unknown[]).every(p => esObj(p) && num(p.x) && num(p.y))).map((e, i) => {
         const o = e as Record<string, unknown>;
-        return { id: typeof o.id === 'string' && o.id ? o.id : `E${i + 1}`, nombre: typeof o.nombre === 'string' ? o.nombre : '', v: o.v, altura: o.altura };
+        // retiros: los que tienen contorno y son más altos que el tramo de abajo (los demás se sacan)
+        let tope = o.altura as number;
+        const retiros = Array.isArray(o.retiros) ? (o.retiros as unknown[]).filter(r => {
+          const ok = esObj(r) && num(r.altura) && (r.altura as number) > tope && Array.isArray(r.v) && (r.v as unknown[]).length >= 3 && (r.v as unknown[]).every(p => esObj(p) && num(p.x) && num(p.y));
+          if (ok) tope = (r as Record<string, number>).altura;
+          return ok;
+        }) : [];
+        return { id: typeof o.id === 'string' && o.id ? o.id : `E${i + 1}`, nombre: typeof o.nombre === 'string' ? o.nombre : '', v: o.v, altura: o.altura, ...(retiros.length ? { retiros } : {}) };
       });
       const fuera = antes - (cx.edificios as unknown[]).length;
       if (fuera) avisos.push(`${fuera === 1 ? 'Un edificio vecino' : `${fuera} edificios vecinos`} del contexto urbano no tenía${fuera === 1 ? '' : 'n'} contorno o altura válidos: se sacó.`);

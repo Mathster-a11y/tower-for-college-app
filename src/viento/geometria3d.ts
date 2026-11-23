@@ -21,7 +21,8 @@ export interface OpcionesGeo3 {
    * contexto urbano: los edificios vecinos (contorno en planta, m, en las coordenadas del proyecto, y altura sobre PB),
    * como prismas. La fuerza y el Cp siguen siendo solo de la torre
    */
-  contexto?: { pol: P[]; altura: number }[] | null;
+  /** vecinos: prismas de «desde» (0 si falta) a «altura» (m sobre PB); un edificio con retiros va en varios */
+  contexto?: { pol: P[]; altura: number; desde?: number }[] | null;
 }
 
 export interface Geometria3D {
@@ -43,7 +44,7 @@ export interface Geometria3D {
   tramos: { h0: number; h1: number; pol: P[] }[];
   /** con contexto: las celdas sólidas de la torre (las caras y el Cp son solo de ella) y los vecinos en la red */
   cuerpo?: Uint8Array;
-  vecinos: { pol: P[]; altura: number }[];
+  vecinos: { pol: P[]; altura: number; desde: number }[];
 }
 
 /**
@@ -133,7 +134,7 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   const yMin = Math.min(...todos.map(q => q.y)), yMax = Math.max(...todos.map(q => q.y));
   const B = yMax - yMin, L = xMax - xMin;
   // el contexto, girado igual; el grupo entero (torre + vecinos) tiene que entrar en el dominio
-  const ctx = (o.contexto ?? []).filter(c => c.pol.length >= 3 && c.altura > 0).map(c => ({ altura: c.altura, pol: c.pol.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
+  const ctx = (o.contexto ?? []).filter(c => c.pol.length >= 3 && c.altura > (c.desde ?? 0)).map(c => ({ desde: c.desde ?? 0, altura: c.altura, pol: c.pol.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
   const gx = [xMin, xMax, ...ctx.flatMap(c => c.pol.map(q => q.x))], gy = [yMin, yMax, ...ctx.flatMap(c => c.pol.map(q => q.y))];
   const gx0 = Math.min(...gx), gx1 = Math.max(...gx), gy0 = Math.min(...gy), gy1 = Math.max(...gy);
   const Hmax = Math.max(H, ...ctx.map(c => c.altura));
@@ -172,17 +173,17 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   }
   // los vecinos: prismas desde el suelo (después de la torre: no cuentan en su caja ni en sus celdas)
   let cuerpo: Uint8Array | undefined;
-  const vecinos = ctx.map(c => ({ altura: c.altura, pol: c.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
+  const vecinos = ctx.map(c => ({ desde: c.desde, altura: c.altura, pol: c.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
   if (vecinos.length) {
     cuerpo = solido.slice(); for (let k = 0; k < nx * ny; k++) cuerpo[k] = 0;        // sin el suelo
     for (const v of vecinos) {
       const bx0 = Math.max(0, Math.floor(Math.min(...v.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...v.pol.map(q => q.x))));
       const by0 = Math.max(0, Math.floor(Math.min(...v.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...v.pol.map(q => q.y))));
-      for (let z = 1; z < nz && (z - 0.5) / escala <= v.altura; z++) for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (dentro(v.pol, x + 0.5, y + 0.5)) solido[(z * ny + y) * nx + x] = 1;
+      for (let z = 1; z < nz && (z - 0.5) / escala <= v.altura; z++) if ((z - 0.5) / escala >= v.desde) for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (dentro(v.pol, x + 0.5, y + 0.5)) solido[(z * ny + y) * nx + x] = 1;
     }
   }
   // planos donde cambia la planta (en coordenadas de la red: la altura h está en z = h·escala + 1) y la azotea (y las de los vecinos)
-  const planos = [...new Set([...pols.map(q => q.cota), ...vecinos.map(v => v.altura)])].map(h => h * escala + 1);
+  const planos = [...new Set([...pols.map(q => q.cota), ...vecinos.flatMap(v => (v.desde > 0 ? [v.desde, v.altura] : [v.altura]))])].map(h => h * escala + 1);
   // los tramos: cada nivel rige de su cota a la del siguiente (el primero, desde el suelo); el último es la azotea
   const tramos = pols.slice(0, -1).map((n, k) => ({ h0: k === 0 ? 0 : n.cota, h1: pols[k + 1].cota, pol: n.pol })).filter(t => t.h1 > t.h0 + 1e-9);
   return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos, cuerpo, vecinos };

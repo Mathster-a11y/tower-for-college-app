@@ -99,3 +99,56 @@ describe('isolíneas', () => {
     for (const [x0, y0] of t) expect(Math.hypot(x0 - 20.5, y0 - 20.5)).toBeCloseTo(10, 0);
   });
 });
+
+describe('vecinos con retiros', () => {
+  it('tramos, contorno a cada altura y «＋ retiro»', async () => {
+    const { agregarRetiro, alturaEdificio, contornoEdificioEn, tramosEdificio } = await import('../src/viento/contexto');
+    const base = { id: 'E1', nombre: 'torre con basamento', v: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }, { x: 0, y: 30 }], altura: 12 };
+    const r = agregarRetiro(base, 5, 60);
+    if ('error' in r) throw new Error(r.error);
+    expect(tramosEdificio(r).map(t => [t.desde, t.hasta])).toEqual([[0, 12], [12, 60]]);
+    expect(alturaEdificio(r)).toBe(60);
+    expect(contornoEdificioEn(r, 5)!.v).toEqual(base.v);
+    const arriba = contornoEdificioEn(r, 30)!.v, c = cajaDe(arriba);
+    expect([c.x0, c.x1, c.y0, c.y1]).toEqual([5, 35, 5, 25]);
+    expect(contornoEdificioEn(r, 61)).toBeNull();
+    expect(vecinosEnCorte([r], 30)).toEqual([arriba]);
+    expect('error' in agregarRetiro(r, 20, 90)).toBe(true);           // más grande que la planta
+    expect('error' in agregarRetiro(r, 2, 50)).toBe(true);            // más bajo que el tope
+  });
+  it('el lector guarda los retiros y saca los que no suben', () => {
+    const p = ejemploGuia();
+    const v = [{ x: 30, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 20 }, { x: 30, y: 20 }];
+    (p as unknown as { contexto: unknown }).contexto = { edificios: [{ id: 'A', nombre: '', v, altura: 10, retiros: [{ v, altura: 40 }, { v, altura: 30 }, { v: [], altura: 80 }] }] };
+    const l = leerProyecto(JSON.parse(JSON.stringify(p)));
+    if (!('proyecto' in l) || !l.proyecto) throw new Error('no abrió');
+    expect(l.proyecto.contexto!.edificios[0].retiros!.map(r => r.altura)).toEqual([40]);
+  });
+  it('3D: cada tramo es un prisma de su «desde» a su altura', async () => {
+    const { geometria3D } = await import('../src/viento/geometria3d');
+    const torre = [{ x: -10, y: -10 }, { x: 10, y: -10 }, { x: 10, y: 10 }, { x: -10, y: 10 }];
+    const niveles = [0, 60].map(c => ({ cota: c, silueta: torre }));
+    const ancho = [{ x: 30, y: -15 }, { x: 60, y: -15 }, { x: 60, y: 15 }, { x: 30, y: 15 }], chico = [{ x: 40, y: -5 }, { x: 50, y: -5 }, { x: 50, y: 5 }, { x: 40, y: 5 }];
+    const g = geometria3D({ niveles, dir: 'A', nx: 96, ny: 48, nz: 40, contexto: [{ pol: ancho, altura: 15 }, { pol: chico, desde: 15, altura: 50 }] });
+    expect(g.vecinos.map(v => v.desde)).toEqual([0, 15]);
+    // a 30 m: sólido solo en la parte chica del vecino
+    const z = Math.round(30 * g.escala + 0.5), cuenta = (pol: { x: number; y: number }[]) => { let n = 0; for (let y = 0; y < g.ny; y++) for (let x = 0; x < g.nx; x++) if (g.solido[(z * g.ny + y) * g.nx + x] && !g.cuerpo![(z * g.ny + y) * g.nx + x]) { const pp = { x: x + 0.5, y: y + 0.5 }; if (pol.length && pp) n++; } return n; };
+    const vecinasA30 = cuenta(g.vecinos[1].pol), area = (10 * g.escala) ** 2;
+    expect(vecinasA30).toBeGreaterThan(0.6 * area); expect(vecinasA30).toBeLessThan(1.6 * area);
+  });
+  it('DXF: un contorno adentro de otro y más alto es un retiro', async () => {
+    const { contextoDesdeCAD } = await import('../src/viento/contexto');
+    const { leerDXFCompleto } = await import('../src/engine/cad');
+    const poli = (capa: string, pts: number[][]) => ['0', 'LWPOLYLINE', '8', capa, '90', String(pts.length), '70', '1', ...pts.flatMap(([x, y]) => ['10', String(x), '20', String(y)])];
+    const dxf = ['0', 'SECTION', '2', 'ENTITIES',
+      ...poli('BASAMENTO 12', [[40, -20], [100, -20], [100, 20], [40, 20]]),
+      ...poli('TORRE 80', [[55, -10], [85, -10], [85, 10], [55, 10]]),
+      ...poli('REMATE 95', [[65, -5], [75, -5], [75, 5], [65, 5]]),
+      ...poli('OTRO 30', [[-80, -10], [-60, -10], [-60, 10], [-80, 10]]),
+      '0', 'ENDSEC', '0', 'EOF'].join('\n');
+    const r = contextoDesdeCAD(leerDXFCompleto(dxf).entidades, 1, 0, 0, 25, null);
+    expect(r.edificios.length).toBe(2);
+    const b = r.edificios.find(e => e.altura === 12)!;
+    expect(b.retiros!.map(x => x.altura)).toEqual([80, 95]);
+  });
+});
