@@ -47,7 +47,7 @@ const cfg = {
   paredes: 'exactas' as 'exactas' | 'escalera',
   /** canal ancho (12 anchos de alto: bloquea ≈ 8 %) o angosto (7 anchos: ≈ 14 %, más rápido) */
   canal: 'ancho' as 'ancho' | 'angosto',
-  segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: true,
+  segunda: 'no' as 'no' | 'detras' | 'lado', distancia: 2, vista: 'vorticidad' as Vista, humo: false,
   /** túnel «lento»: la entrada a 0,06 en vez de 0,1 de la red (más estable, más pasos por pasada) */
   lento: false,
   /** contexto urbano: simular con los edificios vecinos del proyecto (los que llegan a la altura del corte) */
@@ -55,15 +55,15 @@ const cfg = {
   /** el armador de escenarios: tipo, ancho de las calles (m) y alto de los vecinos (en veces la torre) */
   escenario: 'fila' as Escenario, separacion: 20, altoRel: 1,
   /** el Cp promedio dibujado sobre el contorno de la planta */
-  cpContorno: true,
+  cpContorno: false,
   /** isolíneas de la velocidad media (1,2 y 1,4 veces la de entrada): dónde y hasta dónde se acelera el aire */
-  isolineas: true,
+  isolineas: false,
   /** flechas de la velocidad: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
   /** el estilo de las flechas que se usa al volver a prenderlas */
   estiloFlechas: 'fijas' as 'fijas' | 'proporcionales',
   /** la estela del humo, los puntos de velocidad alta y la llave de colores */
-  estelas: true, altos: true, llave: true, simbolos: true,
+  estelas: false, altos: false, llave: true, simbolos: false,
   /** ventana de detalle: el recuadro (celdas del túnel) y cuántas veces más fina */
   ventana: null as Ventana | null, fino: 'auto' as 'auto' | 2 | 4 | 8,
 };

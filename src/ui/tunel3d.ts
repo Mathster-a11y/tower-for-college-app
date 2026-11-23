@@ -14,7 +14,7 @@ import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
-import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
+import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
 import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
@@ -43,7 +43,7 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
   /** el estilo de las flechas al volver a prenderlas, los puntos de velocidad alta y las llaves de colores */
-  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', altos: true, llave: true, simbolos: true };
+  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', llave: true, simbolos: false };
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
 const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ffe082', D: '#ffb74d', E: '#8d6e63' };
 
@@ -200,7 +200,7 @@ function armarVista(cont: HTMLElement) {
  * celdas (sin pixelado; el borde de la torre queda suave porque las celdas sólidas entran con su color en la mezcla)
  */
 const rgbS = { r: 0, g: 0, b: 0 };
-function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean, vel?: (i: number, j: number) => [number, number] | null, marcas: PuntoAlto[] = []) {
+function textura(ancho: number, alto: number, pintar: (i: number, j: number, out: THREE.Color) => boolean, vel?: (i: number, j: number) => [number, number] | null) {
   const n = ancho * alto, R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), aire = new Uint8Array(n), col = new THREE.Color();
   for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) {
     const c = j * ancho + i;
@@ -229,16 +229,6 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
     const VA = new Float32Array(n), VB = new Float32Array(n), sol = new Uint8Array(n);
     for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) { const c = j * ancho + i, m = vel(i, j); if (m) { VA[c] = m[0]; VB[c] = m[1]; } else sol[c] = 1; }
     dibujarFlechas(g, { W, H, x0: 0, dx: 1 / k, y0: alto, dy: 1 / k }, cfg.flechas, muestraVelocidad(VA, VB, sol, ancho, alto, 1), Math.max(18, Math.round(W / 32)), '#1d1d24', '#f4f4f4', cfg.vereda || cfg.color === 'cp');
-  }
-  // los puntos de velocidad alta (salvaguarda A): un anillo y cuántas veces la velocidad de esa altura
-  if (marcas.length) {
-    const rr = Math.max(10, W / 60);
-    g.font = `600 ${Math.round(rr * 1.1)}px system-ui, sans-serif`; g.textBaseline = 'middle';
-    marcas.forEach((p, i) => {
-      const x = p.x * k, y = H - p.y * k, t = `${i + 1} · ${p.valor.toFixed(2).replace('.', ',')} V`;
-      for (const [col, w] of [['#f4f4f4', rr * 0.45], ['#1d1d24', rr * 0.18]] as const) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, rr, 0, 2 * Math.PI); g.stroke(); }
-      g.lineWidth = rr * 0.4; g.strokeStyle = '#f4f4f4'; g.strokeText(t, x + rr * 1.4, y); g.fillStyle = '#1d1d24'; g.fillText(t, x + rr * 1.4, y);
-    });
   }
   const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -279,8 +269,7 @@ function actualizarCampo() {
   v.planoH = v.planoV = null;
   const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
   if (cfg.horizontal || cfg.vereda) {
-    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; },
-      SALVAGUARDAS && cfg.altos && !(cfg.vereda && cfg.lawson) ? altosDelCorte(c, zc) : []);
+    const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = (zc - 0.5) / g.escala; v.esc.add(m); v.planoH = m;
   }
@@ -357,14 +346,6 @@ function vigilar3d(c: Corrida): boolean {
   return true;
 }
 
-/** los puntos de velocidad alta del corte horizontal (salvaguarda A), en celdas del corte */
-function altosDelCorte(c: Corrida, z: number): PuntoAlto[] {
-  const g = c.geo, F = c.campo!, n = g.nx * g.ny, v = new Float32Array(n), sol = new Uint8Array(n), ref = c.uIn[z] || UH;
-  for (let k = 0; k < n; k++) { const cel = z * n + k; sol[k] = g.solido[cel]; if (!sol[k]) v[k] = Math.hypot(F[4 * cel], F[4 * cel + 1], F[4 * cel + 2]) / ref; }
-  const B = g.caja.y1 - g.caja.y0, k = g.caja;
-  return puntosAltos(g.nx, g.ny, v, sol, 1.5, 4, Math.max(3, B / 4), { x0: k.x0 - B, x1: k.x1 + B, y0: k.y0 - B, y1: k.y1 + B });
-}
-
 // ------------------------------------------------------------------------------------------------ llaves de colores
 let llaves3d: H | null = null;
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
@@ -392,7 +373,6 @@ function armarLlaves3d() {
   else if (conCortes && cfg.flechas === 'proporcionales') sim.push({ forma: 'flecha', texto: 'Flecha: hacia dónde va el aire en el corte', nota: 'más larga, más rápido (una separación = 1,6 V)' });
   if (conCortes && cfg.flechas !== 'no') sim.push({ forma: 'flechaCorta', texto: 'Solo se ve lo que va por el plano del corte', nota: 'el aire que lo atraviesa no aparece en la flecha' });
   if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire' });
-  if (SALVAGUARDAS && cfg.altos && cfg.horizontal && !(cfg.vereda && cfg.lawson)) sim.push({ forma: 'anillo', texto: 'Anillo: velocidad alta en el corte horizontal' });
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
   llaves3d.replaceChildren(...(cfg.llave ? [llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
 }
@@ -499,14 +479,13 @@ export function panelTunel3d(c: H) {
       const l = chk(rot, val, x => { al(x); if (corrida) corrida.ultimasLineas = 0; estado.avisarPanel(); });
       return extra ? h('div', { class: 'capa-con-opcion' }, l, extra) : l;
     };
-    const todo = (x: boolean) => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.lineas = x; cfg.horizontal = x; cfg.vertical = x; cfg.altos = x; cfg.llave = x; cfg.simbolos = x; if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); estado.avisarPanel(); };
+    const todo = (x: boolean) => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; cfg.lineas = x; cfg.horizontal = x; cfg.vertical = x; cfg.llave = x; cfg.simbolos = x; if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); estado.avisarPanel(); };
     const bTodo = h('button', { type: 'button', class: 'mini' }, 'Todo'), bNada = h('button', { type: 'button', class: 'mini' }, 'Nada');
     bTodo.addEventListener('click', () => todo(true)); bNada.addEventListener('click', () => todo(false));
     qd.append(h('div', { class: 'fila-acciones' }, bTodo, bNada),
       capa('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), capa('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
       capa('Flechas de la velocidad en los cortes', cfg.flechas !== 'no', x => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; }, estilo),
       capa('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; }),
-      ...(SALVAGUARDAS ? [capa('Puntos de velocidad alta en el corte horizontal', cfg.altos, x => { cfg.altos = x; })] : []),
       capa('Llaves de colores sobre la vista', cfg.llave, x => { cfg.llave = x; }),
       capa('Símbolos del dibujo (qué es cada flecha, línea y marca)', cfg.simbolos, x => { cfg.simbolos = x; }),
       h('p', { class: 'nota chica' }, 'Prender o apagar capas no vuelve a simular.'));
