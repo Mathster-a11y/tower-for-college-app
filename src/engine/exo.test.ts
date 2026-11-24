@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger } from './exo';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger, columnasEfectivas } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -374,6 +374,17 @@ describe('exoesqueleto · núcleo con outriggers (ficha F)', () => {
     // y en el CIRSOC 301 las diagonales de los brazos no ven D
     const c301 = (x: ExoDef) => Math.max(...cirsoc301(x, zs, W, () => EI, 2 * d, [-5, 5], 3e6).filter(b => b.clase === 'diagonal').map(b => b.ratio));
     expect(c301(def)).toBeLessThan(c301({ ...def, brazosDesdeElPrincipio: true }));
+  });
+  it('cinturón con shear lag: muy rígido trabajan todas las columnas de la mitad; flojo, casi solo la del brazo', () => {
+    const def = (viga: { b: number; e: number }): ExoDef => ({ ...EXO_POR_DEFECTO, tipo: 'F', columnasCara: 6, columna: { b: 0.5, e: 0.025 }, viga });
+    const rigido = columnasEfectivas(def({ b: 3, e: 1.5 }), 30, 4, [10], zs).porPlano, flojo = columnasEfectivas(def({ b: 0.1, e: 0.004 }), 30, 4, [10], zs).porPlano;
+    const medio = columnasEfectivas(def({ b: 0.4, e: 0.02 }), 30, 4, [10], zs).porPlano;
+    expect(rigido).toBeGreaterThan(2.95); expect(rigido).toBeLessThanOrEqual(3 + 1e-9);   // 6 columnas, 3 por plano
+    expect(flojo).toBeLessThan(1.3);
+    expect(medio).toBeGreaterThan(flojo); expect(medio).toBeLessThan(rigido);
+    // las más lejanas del brazo trabajan menos
+    const ps = columnasEfectivas(def({ b: 0.4, e: 0.02 }), 30, 4, [10], zs).psi.filter(q => q.y > 0).sort((a, b) => Math.abs(a.y - 4) - Math.abs(b.y - 4));
+    for (let i = 1; i < ps.length; i++) expect(ps[i].psi).toBeLessThanOrEqual(ps[i - 1].psi + 1e-12);
   });
   it('las losas cargan las columnas del perímetro, no el núcleo', () => {
     const def = base({ b: 0.5, e: 0.025 }, { losas: { franja: 4 } });

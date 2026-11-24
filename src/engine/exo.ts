@@ -171,6 +171,31 @@ export interface Cara {
  * @param ancho distancia entre las columnas de esquina, en el sentido del viento (m)
  * @param zs cotas de los pisos sobre PB, de abajo hacia arriba; zs[0] = PB (base)
  */
+/**
+ * ficha F, cinturón con «shear lag»: cuántas columnas de la cara perpendicular trabajan con cada brazo. Las columnas van
+ * repartidas a lo ancho de la cara (a⊥); cada plano de brazos (a ± c, en las caras del núcleo) toma las de su mitad. El
+ * cinturón es un reticulado de un piso de alto con los cordones del brazo (EI = E·A·h²/2) y lleva la fuerza desde el brazo
+ * hasta cada columna como una ménsula: k_b = 3·EI/x³ (x: distancia de la columna al brazo). La columna resiste con su
+ * rigidez axial de la base al brazo, k_c = E·A/z. Cada una trabaja ψ = k_b / (k_b + k_c) (1 si está en el brazo). Es una
+ * aproximación: con un cinturón muy rígido trabajan todas (la cota de antes), con uno flojo solo la del brazo.
+ */
+export function columnasEfectivas(def: ExoDef, anchoPerp: number, c: number, kOut: number[], zs: number[]): { porPlano: number; psi: { y: number; psi: number }[] } {
+  const nc = Math.max(1, Math.round(def.columnasCara ?? 4));
+  const ys = nc === 1 ? [0] : Array.from({ length: nc }, (_, i) => -anchoPerp / 2 + (i * anchoPerp) / (nc - 1));
+  const pc = propsSeccion(def.columna), pv = propsSeccion(def.viga);
+  // promedio sobre los brazos (cada uno con su alto de piso y su altura sobre la base)
+  const niveles = kOut.length ? kOut : [Math.max(1, Math.round((zs.length - 1) / 2))];
+  const psiDe = (y: number) => niveles.reduce((sm, k) => {
+    const x = Math.abs(y - c), h = zs[k] - zs[k - 1], z = Math.max(zs[k] - zs[0], 1e-6);
+    if (x < 1e-6) return sm + 1;
+    const kb = (3 * def.E * pv.A * h * h / 2) / x ** 3, kc = (def.E * pc.A) / z;
+    return sm + kb / (kb + kc);
+  }, 0) / niveles.length;
+  // las columnas de la mitad de este plano (la del medio, si cae en 0, se reparte entre los dos)
+  const psi = ys.map(y => ({ y, psi: psiDe(y) }));
+  const porPlano = Math.max(1, psi.reduce((sm, q) => sm + (Math.abs(q.y) < 1e-6 ? 0.5 : q.y > 0 ? 1 : 0) * q.psi, 0));
+  return { porPlano, psi };
+}
 /** ficha F: niveles (índices de zs, ≥ 1) del cordón de arriba de cada brazo; sin cotas, el piso más cerca de media altura */
 export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
   const n = zs.length - 1;
@@ -178,7 +203,7 @@ export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
   const pedidos = def.outriggers?.length ? def.outriggers.map(cerca) : [cerca((zs[0] + zs[n]) / 2)];
   return [...new Set(pedidos.filter(k => k >= 1 && k <= n))].sort((a, b) => a - b);
 }
-export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[], op: { /** ficha F: sin los brazos (todavía no conectados) */ sinBrazos?: boolean } = {}): Cara {
+export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[], op: { /** ficha F: sin los brazos (todavía no conectados) */ sinBrazos?: boolean; /** ficha F: ancho de la cara perpendicular (la del cinturón) */ anchoPerp?: number } = {}): Cara {
   const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
   /**
    * centro de la cara en el nivel k: en una torre inclinada o corrida (Diseño → Perfil) cada nivel se corre respecto
@@ -364,7 +389,10 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     const kOut = op.sinBrazos ? [] : nivelesOutrigger(def, zs);
     const nucleoNudo = (s: number, k: number) => { const id = nudo(s, k); nudos[id].nucleo = true; return id; };
     for (let k = 0; k < n; k++) barras.push({ id: `K${k + 1}`, clase: 'columna', a: nucleoNudo(0, k), b: nucleoNudo(0, k + 1), A: 100, I: 1, sec: { b: 1, e: 0.5 }, relA: false, relB: false, borde: false, nucleo: true });
-    const sinCint = def.cinturon === false, fr = sinCint ? 1 : Math.max(1, def.columnasCara ?? 4) / 2;
+    // con cinturón, las columnas de la cara perpendicular que toma cada brazo, cada una según cuánto la carga el cinturón
+    // (shear lag): sin cinturón, solo la columna que toca el brazo
+    const sinCint = def.cinturon === false;
+    const fr = sinCint ? 1 : columnasEfectivas(def, op.anchoPerp ?? anchoK(0), c, kOut.length ? kOut : nivelesOutrigger(def, zs), zs).porPlano;
     const rel = un.columna === 'articulada';
     for (const lado of [S0, S1]) for (let k = 0; k < n; k++) {
       const s0 = tramo('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1), def.columna), pk = propsSeccion(s0);
@@ -786,7 +814,8 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
   }
   const Kt = rigidezTabiques(zs, EJ);
   const qLosa = op.qLosa ?? (def.losas ? (def.losas.qD ?? LOSA_QD) + (def.losas.qL ?? LOSA_QL) : 0);
-  const dPerp = tCaras.length > 1 ? Math.max(...tCaras) - Math.min(...tCaras) : anchoCara;
+  // (ficha F: los planos pasan por el núcleo; la cara perpendicular es la del perímetro: si no viene, cuadrada)
+  const dPerp = def.tipo === 'F' ? op.anchosPerp?.[0] ?? anchoCara : tCaras.length > 1 ? Math.max(...tCaras) - Math.min(...tCaras) : anchoCara;
   const losa: CargaLosa | undefined = def.losas && qLosa > 0 ? {
     q: qLosa, franja: def.losas.franja, ancho: k => (anchos && anchos[k] > 0 ? anchos[k] : anchoCara),
     centro: k => (def.tipo !== 'E' && corr ? corr[k] ?? 0 : 0), anchoPerp: k => op.anchosPerp?.[k] ?? dPerp,
@@ -794,7 +823,7 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
   const F = def.tipo === 'F';
   // ficha F: el núcleo está dentro de cada plano (cada uno con su parte del EJ de los tabiques); la ménsula sola no se suma
   const conNucleo = (c: Cara): Cara => (F ? { ...c, barras: c.barras.map(b => (b.nucleo && b.clase === 'columna' ? { ...b, I: Math.max(EJ((c.nudos[b.a].z + c.nudos[b.b].z) / 2) || 0, 1e-6) / (def.E * tCaras.length) } : b)) } : c);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr, { sinBrazos: op.sinBrazos })), def, zs, W, losa, op.pesoSoloBrazos), def.E, n) }));
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr, { sinBrazos: op.sinBrazos, anchoPerp: op.anchosPerp?.[0] })), def, zs, W, losa, op.pesoSoloBrazos), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
@@ -869,13 +898,13 @@ export const CATALOGO_HORMIGON: Seccion[] = Array.from({ length: 18 }, (_, i) =>
 const catalogo = (def: ExoDef) => (def.material === 'hormigon' ? CATALOGO_HORMIGON : CATALOGO_TUBOS);
 
 /** lo que necesita calcularExo para un viento */
-export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[] }
+export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[] }
 
 /** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
   return entradas.reduce((s, en, i) => {
-    const c = armarCara(def, en.ancho, en.zs, 'cara', en.anchos, en.corr);
+    const c = armarCara(def, en.ancho, en.zs, 'cara', en.anchos, en.corr, { anchoPerp: en.anchosPerp?.[0] });
     const anchoEn = (k: number) => (c.nudos[k].piso >= 0 ? en.anchos?.[c.nudos[k].piso] ?? en.ancho : en.ancho);
     const centroEn = (k: number) => (c.nudos[k].piso >= 0 && def.tipo !== 'E' ? en.corr?.[c.nudos[k].piso] ?? 0 : 0);
     const esquina = (b: Barra) => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s - centroEn(k)) - anchoEn(k) / 2) < 1e-6);
@@ -908,13 +937,13 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
     const falla = { columna: false, diagonal: false, viga: false };
     let flecha = false;
     entradas.forEach(en => {
-      const r = calcularExo(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr);
+      const r = calcularExo(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
       r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
     // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
-      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { corr: en.corr }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
+      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
     (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
@@ -956,7 +985,7 @@ export function barridoModulo(base: ExoDef, entradas: EntradaExo[], modulos?: nu
   return ms.map(m => {
     const def: ExoDef = { ...base, modulo: m, cortes: undefined, barras: undefined, nuevas: undefined };
     const r = dimensionarExo(def, entradas);
-    const flecha = Math.max(...entradas.map(en => { const c = calcularExo(r.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr); return c.u[c.u.length - 1] / (en.h / (base.limiteH ?? 500)); }));
+    const flecha = Math.max(...entradas.map(en => { const c = calcularExo(r.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp }); return c.u[c.u.length - 1] / (en.h / (base.limiteH ?? 500)); }));
     return { modulo: m, angulos: entradas.map(en => anguloDiagonal(def, en.ancho, m * hp)), peso: r.peso, verifica: r.verifica, motivo: r.motivo, def: r.def, flecha };
   });
 }
@@ -1080,12 +1109,12 @@ export const limitesPared = (E: number, Fy: number, costura = true) => { const k
  *  - pared del tubo: b/t ≤ 1,40·√(E/Fy) (si no, la pared abolla antes: se avisa como que no verifica).
  */
 export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24,
-  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** torre inclinada: corrimiento de la cara en cada cota */ corr?: number[] } = {}): Cirsoc301Barra[] {
+  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** torre inclinada: corrimiento de la cara en cada cota */ corr?: number[]; /** ancho de la cara perpendicular en cada cota */ anchosPerp?: number[] } = {}): Cirsoc301Barra[] {
   const losas = !!def.losas && def.losas.franja > 0;
   const combos = (losas ? combosConLosas(op.combos ?? COMBOS_CURSO) : op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
-  const anchosPerp = op.otro ? op.otro.zs.map((_, k) => op.otro!.anchos?.[k] ?? op.otro!.ancho) : undefined;
-  const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: 0 });
-  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0 })) : null;
+  const anchosPerp = op.anchosPerp ?? (op.otro ? op.otro.zs.map((_, k) => op.otro!.anchos?.[k] ?? op.otro!.ancho) : undefined);
+  const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: 0, anchosPerp });
+  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0, anchosPerp: op.otro.anchosPerp ?? zs.map((_, k) => anchos?.[k] ?? ancho) })) : null;
   // D: el peso propio y el peso de las losas; L: la sobrecarga de las losas (si apoyan en el exo)
   // ficha F con los brazos conectados al final: D baja sin pasar por ellos (salvo el peso de los propios brazos)
   const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: def.losas?.qD ?? LOSA_QD, anchosPerp, casoD: true });

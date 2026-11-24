@@ -8,7 +8,7 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, nivelesOutrigger, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, nivelesOutrigger, columnasEfectivas, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -191,9 +191,11 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const corrido = (f: (nv: typeof p.niveles[number]) => number | null | undefined) => { const v = zs.map(z => { const nv = nivEn(z); return (nv && f(nv)) || 0; }); return v.some(x => Math.abs(x) > 1e-9) ? v : undefined; };
     const corr = corrido(nv => (A ? nv.dy : nv.dx)), tc = corrido(nv => (A ? nv.dx : nv.dy));
     // con las losas en el exo, la tensión admisible del curso va con peso y sobrecarga (0,9 t/m², el «cargado» de la planilla)
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp: ts?.map(x => 2 * x) });
+    // la cara perpendicular: la del cinturón en la ficha F (sus planos pasan por el núcleo)
+    const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
+    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
     const h0 = zs[zs.length - 1] - zPB;
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr } };
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr, anchosPerp } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
 let ultimoError = '';
@@ -209,7 +211,7 @@ export function verif301(d: DatosExo & { entrada: EntradaExo }) {
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
   const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
-  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, corr: en.corr });
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, corr: en.corr, anchosPerp: en.anchosPerp });
 }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
 export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {
@@ -428,7 +430,15 @@ export function panelExo(c: H) {
     cbp2.addEventListener('change', () => set(x => { x.brazosDesdeElPrincipio = cbp2.checked ? undefined : true; }));
     bp.append(cbp2, ' Brazos conectados al terminar la obra gruesa (el peso no pasa por ellos; la sobrecarga y el viento, sí)');
     fo.append(bp);
-    if (def.cinturon !== false) campo(fo, 'Columnas en cada cara perpendicular', 'exo-colcara', def.columnasCara ?? 4, nu((x, v) => (x.columnasCara = Math.max(1, Math.round(v)))), { tipo: 'number', ayuda: 'columnas del perímetro en cada cara perpendicular al viento que el cinturón suma al par de fuerzas (sin «shear lag»: cota superior)' });
+    if (def.cinturon !== false) {
+      campo(fo, 'Columnas en cada cara perpendicular', 'exo-colcara', def.columnasCara ?? 4, nu((x, v) => (x.columnasCara = Math.max(1, Math.round(v)))), { tipo: 'number', ayuda: 'columnas del perímetro en cada cara perpendicular al viento, repartidas a lo ancho; el cinturón las hace trabajar según su rigidez (shear lag)' });
+      const dF = datosExo();
+      if (dF && zsF.length) {
+        const c0 = Math.max(0.5, (def.nucleo ?? dF.ancho / 3) / 2), ce = columnasEfectivas(def, dF.entrada.anchosPerp?.[0] ?? dF.ancho, c0, kOut, zsF);
+        const nc = Math.max(1, Math.round(def.columnasCara ?? 4)), mitad = ce.psi.filter(q => q.y >= -1e-6);
+        fo.append(h('p', { class: 'nota chica' }, `Con el cinturón de cordones ${fmt(def.viga.b * 1000, 0)}×${fmt(def.viga.e * 1000, 1)} trabajan ${fmt(ce.porPlano, 2)} columnas por plano de brazos (de ${fmt(nc / 2, 1)}): ${mitad.map(q => `${fmt(q.psi * 100, 0)} %`).join(', ')}, de la más cerca del centro a la de la esquina. Un cinturón más rígido (cordones más grandes) las hace trabajar a todas; uno flojo, casi solo a la que toca el brazo.`));
+      }
+    }
   }
   sec(def.tipo === 'F' ? 'Columna del perímetro' : 'Columna', 'columna'); sec(def.tipo === 'F' ? 'Diagonal del brazo' : 'Diagonal', 'diagonal'); sec(def.tipo === 'F' ? 'Cordón del brazo' : 'Viga / cinturón', 'viga');
   if (def.tipo === 'E') {
