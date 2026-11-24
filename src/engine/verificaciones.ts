@@ -24,6 +24,8 @@ const nf = (x: number, d: number) => x.toLocaleString('es-AR', { minimumFraction
 export const TENSION_ADM = (hormigon: string) => (parseFloat(hormigon.replace(/[^\d.]/g, '')) || 30) * 10; // H30 → 300 kg/cm²
 
 import { profundidadEstudio, sigmaAdmDe } from './fundaciones';
+import { esPerfilVariable } from './perfilTorre';
+import { protocoloDelCalculo } from './perfilVariable';
 export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: ResultadoCorregido, hormigon: string, piezas: PiezaEquivalente[] = [], filaNivel: number[] = []): Control[] {
   const out: Control[] = [];
   const m = r.mnyq, g = c.guia.mnyq;
@@ -149,6 +151,23 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
             nota: `Qj = ${nf(cd.Qj, 2)} t · S = ${nf(cd.S, 4)} m³ · J = ${nf(cd.J, 3)} m⁴ → t = ${nf(cd.t, 2)} t/m; T = t · ${nf(cd.hPiso, 2)} m = ${nf(cd.T, 2)} t; dintel de ${nf(cd.hDintel, 2)} m.${hormigon.replace(/\s/g, '').toUpperCase() !== 'H30' ? ' τ adm proporcional a la de la guía para H30 (24 kg/cm²): confirmar con la cátedra.' : ''}` });
         }));
       });
+    }
+  }
+  // torre de perfil variable (Diseño → Perfil): peso corrido, viento excéntrico y P-Δ (propuesta del exo, pág. 14)
+  if (esPerfilVariable(p) && filaNivel.length && piezas.length) {
+    for (const dir of ['A', 'B'] as const) {
+      const pr = protocoloDelCalculo(p, c.guia, piezas, filaNivel, hormigon, dir);
+      if (!(pr.Mv > 0)) continue;
+      out.push({ grupo: 'Estabilidad', nombre: `Efecto P-Δ, viento ${dir}`, criterio: 'θ = M_PΔ / Mv ≤ 0,10 (se desprecia) · < 0,25', fuente: 'protocolo de perfil variable, paso 7',
+        planilla: null, guia: pr.theta, unidad: '', estado: pr.theta <= 0.1 ? 'verifica' : pr.theta < 0.25 ? 'atención' : 'no verifica',
+        nota: pr.theta <= 0.1 ? undefined : pr.theta < 0.25 ? `Hay que sumarlo: el momento del viento sube ${nf(pr.MPD, 0)} tm (amplificación ${nf(pr.amp, 2)}).` : 'La torre es demasiado flexible: rigidizala (más J) o achicá el corrimiento.' });
+      if (dir === 'A') {
+        const Me = g.K99, f = pr.Mtotal > 0 ? Me / pr.Mtotal : NaN;
+        out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con el perfil (peso corrido y P-Δ)', criterio: 'Me / (Mv + |M_G| + M_PΔ) ≥ 1,5', fuente: 'guía 2.2 + protocolo de perfil variable, pasos 4 y 7',
+          planilla: null, guia: f, unidad: '', estado: est(f >= 1.5), nota: `Mv = ${nf(pr.Mv, 0)} tm · M_G = ${nf(pr.MG, 0)} tm · M_PΔ = ${nf(pr.MPD, 0)} tm: el vuelco sube ${nf(pr.aumento * 100, 0)} %.` });
+      }
+      if (Math.abs(pr.MtExtra) > 1e-6) out.push({ grupo: 'Estabilidad', nombre: `Torsor por el viento excéntrico, viento ${dir}`, criterio: 'Mt = Σ W_i · c_i (se suma al Q · e de la planilla)', fuente: 'protocolo de perfil variable, paso 5',
+        planilla: null, guia: pr.MtExtra, unidad: 'tm', estado: 'informativo', nota: 'El viento de cada nivel pasa por el medio de su fachada, corrida a lo ancho respecto de PB.' });
     }
   }
   return out;

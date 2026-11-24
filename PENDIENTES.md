@@ -28,10 +28,11 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 ### Diseño y cálculo
 14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)
 15. ~~Revisar la matemática de «Flex comp PB paralelos»: revisión, hoja 7 del desglose, rótulos de O y P y #DIV/0! en Controles~~ (23/11, `docs/flexocompresion_planilla/`)
+21. ~~Editor del perfil de la torre y torre inclinada~~ (24/11): Diseño → Perfil, con dos alzados, manijas, fichas de forma (prisma, ahusada, panza, reloj de arena, escalonada, inclinada), polilínea, Bézier y spline con tensión y sesgo. «Aplicar a los niveles» escribe B, L y el corrimiento (dx, dy) de cada nivel, avisa los muros que quedan afuera y el 3D corre cada nivel. En Estabilidad, «Perfil variable» calcula la fachada inclinada, el peso corrido, el viento excéntrico y el P-Δ (pasos 2, 4, 5 y 7 del protocolo), con controles θ y vuelco con el perfil
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
-17. Exoesqueletos nuevos (diagrid, tubo arriostrado, megapórtico, torre inclinada): qué tipos van primero
+17. Exoesqueletos nuevos (diagrid, tubo arriostrado, megapórtico): qué tipos van primero (la torre inclinada ya está: punto 21)
 18. Elegir la carta principal (A, B, C, D o una combinación)
 19. Medir el 3D en una notebook típica de estudiante (necesita tu computadora)
 

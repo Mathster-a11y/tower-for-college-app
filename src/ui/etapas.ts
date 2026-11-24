@@ -16,7 +16,10 @@ import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { rototraslacionAnimada } from './rotoAnimada';
 import { centroCorte } from './corte';
+import { centroPerfil, panelPerfil } from './perfilEditor';
 import { centroEcuaciones, panelEcuaciones, METODOS_ECUACIONES } from './ecuaciones/vista';
+import { esPerfilVariable } from '../engine/perfilTorre';
+import { protocoloDelCalculo } from '../engine/perfilVariable';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
 import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
@@ -163,19 +166,20 @@ function selectorNivel(alt: PuntoAltura[], clave: string): H {
 
 // ------------------------------------------------------------------ 01 Diseño
 const diseno: Etapa = {
-  id: 'diseno', nro: '01', nombre: 'Diseño', rol: '--r-diseno', sub: ['Proyecto', 'Niveles', 'Muros', 'Piezas'],
+  id: 'diseno', nro: '01', nombre: 'Diseño', rol: '--r-diseno', sub: ['Proyecto', 'Niveles', 'Perfil', 'Muros', 'Piezas'],
   icono: '<rect x="4" y="4" width="18" height="16" rx="2"/><path d="M4 12h9M13 4v16"/>',
   globo: 'Diseño|Los datos de la torre: niveles, muros y piezas. Cada muro va en una pieza por dirección; la app arma con ellas los perfiles de las hojas J.',
   panel(c, sub) {
     recuadroJ(c);
     if (sub === 'Niveles') panelNiveles(c);
+    else if (sub === 'Perfil') panelPerfil(c);
     else if (sub === 'Muros') panelMuros(c);
     else if (sub === 'Piezas') panelPiezas(c);
     else panelProyecto(c);
   },
   // en «Niveles», el corte: desde dónde hasta dónde llega cada muro (se edita arrastrando)
-  get centro() { return estado.sub.diseno === 'Niveles' ? (c: H, tam: Tam) => centroCorte(c, tam) : 'planta' as const; },
-  nombreCentro: () => (estado.sub.diseno === 'Niveles' ? 'Corte · altura de cada muro' : 'Planta'),
+  get centro() { return estado.sub.diseno === 'Niveles' ? (c: H, tam: Tam) => centroCorte(c, tam) : estado.sub.diseno === 'Perfil' ? (c: H, tam: Tam) => centroPerfil(c, tam) : 'planta' as const; },
+  nombreCentro: () => (estado.sub.diseno === 'Niveles' ? 'Corte · altura de cada muro' : estado.sub.diseno === 'Perfil' ? 'Perfil de la torre · los dos alzados' : 'Planta'),
   estado() {
     const { asig, error } = estado.calculo;
     if (error) return 'no verifica';
@@ -273,6 +277,29 @@ const fuerzas: Etapa = {
 };
 
 // ------------------------------------------------------------------ 04 Estabilidad
+/** Estabilidad con una torre de perfil variable (Diseño → Perfil): los pasos 2, 4, 5 y 7 del protocolo */
+function panelPerfilVariable(c: HTMLElement, d: ReturnType<typeof datos>) {
+  const pr = protocoloDelCalculo(d.p, d.R, d.asig.piezas, d.asig.filaNivel, d.p.hormigon || 'H30', d.dir);
+  const s = seccion(`Perfil variable · viento ${d.dir}`);
+  const inclinadas = pr.niveles.some(x => Math.abs(x.beta) > 1e-4);
+  const okT = pr.theta <= 0.1, malT = pr.theta >= 0.25;
+  s.cuerpo.append(
+    h('p', { class: 'nota' }, 'La torre no es un prisma: los niveles cambian de medida o se corren. La planilla ya usa el B, el peso y el J de cada nivel; esto suma lo que le falta: la fachada inclinada, el peso corrido, el viento excéntrico y el efecto P-Δ (el peso de la torre empujando cuando el viento la corre).'),
+    h('div', { class: 'kpis' },
+      kpi('Índice θ (P-Δ)', fmt(pr.theta, 3), okT ? '≤ 0,10 · se desprecia' : malT ? '≥ 0,25 · demasiado flexible' : 'entre 0,10 y 0,25 · se suma', colorEstado(okT ? true : malT ? false : null)),
+      kpi('Momento total en PB', `${fmt(pr.Mtotal, 0)} tm`, `${pr.aumento >= 0 ? '+' : ''}${fmt(pr.aumento * 100, 0)} % sobre el Mv en PB = ${fmt(pr.Mv, 0)} tm`, colorEstado(pr.aumento < 0.1 ? true : null))),
+  );
+  s.cuerpo.append(
+    ...(inclinadas ? [formula('2 · Fachada inclinada: el viento empuja normal a la fachada', `${v('W', 'h')}${op('=')}Σ ${v('W')} · cos ${v('β')}${op('=')}${r(pr.Wh, 1, 't')}  ·  ${v('W', 'v')}${op('=')}Σ ${v('W')} · sen ${v('β')}${op('=')}${r(pr.Wv, 1, 't')}`, `de W = ${fmt(pr.W, 1)} t; Wv > 0 empuja hacia abajo (alivia el vuelco), Wv < 0 levanta`)] : []),
+    formula('4 · Peso corrido: cada nivel pesa donde está', `${v('M', 'G')}${op('=')}Σ ${v('P', 'i')} · ${v('e', 'i')}${op('=')}${r(pr.MG, 0, 'tm')}`, 'P = 0,7 t/m² · B · L · pisos; e = corrimiento del nivel en el sentido del viento'),
+    formula('5 · Viento excéntrico: torsor que se suma', `${v('M', 't')}${op('=')}Σ ${v('W', 'i')} · ${v('c', 'i')}${op('=')}${r(pr.MtExtra, 1, 'tm')}`, 'c = corrimiento del nivel a lo ancho (la planilla ya suma Q · e)'),
+    formula('7 · P-Δ: el peso sobre la torre deformada', `${v('θ')}${op('=')}Σ ${v('P', 'i')} · ${v('δ', 'i')} / ${v('M', 'v')}${op('=')}${n(pr.MPD1, 1)} / ${n(pr.Mv, 0)}${op('=')}${r(pr.theta, 3)}  ·  ${v('M', 'PΔ')}${op('=')}${n(pr.MPD1, 1)} / (1 − ${n(pr.theta, 3)})${op('=')}${r(pr.MPD, 1, 'tm')}`, 'δ = la deformada de la etapa Rigidez (con el J de cada nivel)', okT ? 'verifica' : malT ? 'no verifica' : undefined),
+  );
+  const t = tablaValores(['Nivel', 'z (m)', 'ancho (m)', 'e (m)', 'c (m)', 'β (°)', 'P (t)', 'W (t)', 'δ (mm)'],
+    [...pr.niveles].reverse().map(x => [x.nivel, x.z, x.ancho, x.e, x.c, (x.beta * 180) / Math.PI, x.P, x.W, x.delta * 1000]), [0, 1, 2, 2, 2, 1, 0, 2, 1]);
+  s.cuerpo.append(t);
+  c.append(s.el);
+}
 const estabilidad: Etapa = {
   id: 'estabilidad', nro: '04', nombre: 'Estabilidad', rol: '--r-estabilidad', dependeDir: true, conFuente: true,
   icono: '<path d="M10 3h7v14h-7zM4 21h19M13.5 17l-4 4M13.5 17l4 4"/>',
@@ -295,6 +322,7 @@ const estabilidad: Etapa = {
       formula(`Excentricidad, viento ${d.dir}`, `${v('e')}${op('=')}${v('M', 'v')} / ${v('P')}${op('=')}${n(fg.Mv, 0)} / ${n(fg.G, 0)}${op('=')}${r(fg.e, 2, 'm')}${op(okE ? '≤' : '>')}${v('b')}/6${op('=')}${r(fg.tercio, 2, 'm')}`, d.dir === 'A' ? 'M,NyQ!M99 y N99' : `con a1 = ${fmt(a1, 2)} m (la planilla no verifica el viento B)`, okE ? 'verifica' : 'no verifica'),
       formula('Tensión en el suelo (con sobrecarga, 0,9 t/m²)', `${v('σ')}${op('=')}−${v('N')}/${v('F')} ± ${v('M', 'v')}/${v('W')}${op('=')}${n(m.N86, 2)} ∓ ${n(Math.abs(m.N87), 2)}${op('=')}${r(m.N89, 2, 'kg/cm²')}`, 'M,NyQ!N89 (máx.) · N90 (mín., sin sobrecarga)'),
     );
+    if (esPerfilVariable(d.p) && d.asig.piezas.length) panelPerfilVariable(c, d);
     c.append(seccion('Controles', tablaControles(grupoControles(['Estabilidad', 'Funicular']))).el, h('p', { class: 'nota' }, fuenteTxt()));
   },
   centro(c, tam) {

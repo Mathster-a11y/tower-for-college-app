@@ -1775,3 +1775,16 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .guia-impresion table.glosario tbody tr:nth-child(even) td { background: #f7f8fa; }
 .guia-impresion table.glosario tr { break-inside: avoid; page-break-inside: avoid; }
 .guia-impresion table.glosario td.sim { color: color-mix(in srgb, var(--r-ayuda) 70%, var(--ink)); }
+/* Diseño → Perfil: fichas de forma y el editor en los dos alzados */
+.fichas-forma { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ficha-forma { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card, #fff); cursor: pointer; font-size: 12px; }
+.ficha-forma[aria-pressed="true"] { border-color: var(--r-diseno); box-shadow: 0 0 0 2px color-mix(in srgb, var(--r-diseno) 30%, transparent); }
+.fila-rango { display: flex; gap: 8px; align-items: center; } .fila-rango input { flex: 1; }
+.perfil-torre { display: block; max-width: 100%; height: auto; touch-action: none; user-select: none; }
+.perfil-torre .pf-tit { font: 600 13px var(--fuente); fill: var(--ink); }
+.perfil-torre .pf-niv, .perfil-torre .pf-med { font: 11px var(--fuente); fill: var(--ink2); }
+.perfil-torre .pf-med { font-weight: 600; fill: var(--ink); }
+.perfil-torre .pf-borde { cursor: copy; }
+.perfil-torre .pf-manija { fill: var(--lienzo, #fff); stroke: var(--r-diseno); stroke-width: 2; cursor: grab; }
+.perfil-torre .pf-manija.sel { fill: var(--r-diseno); }
+.perfil-torre .pf-tangente { fill: #ef9f27; stroke: #fff; stroke-width: 1; cursor: grab; }

@@ -83,6 +83,7 @@ export function leerProyecto(x: unknown): Lectura {
       else if (typeof n.nombre !== 'string') n.nombre = String(n.nombre);
       if (!num(n.cota)) error(`${quien} («${n.nombre}»): la cota tiene que ser un número.`);
       for (const k of ['B', 'L', 'pisos'] as const) if (!nulo(n[k]) && !(num(n[k]) && (n[k] as number) > 0)) error(`${quien} («${n.nombre}»): «${k}» tiene que ser un número mayor que 0 o quedar vacío.`);
+      for (const k of ['dx', 'dy'] as const) if (!nulo(n[k]) && !num(n[k])) error(`${quien} («${n.nombre}»): «${k}» (cuánto se corre el nivel) tiene que ser un número o quedar vacío.`);
       for (const k of ['silueta', 'carpinteria'] as const) if (!nulo(n[k]) && !contornoValido(n[k], 0)) error(`${quien} («${n.nombre}»): la ${k === 'silueta' ? 'silueta' : 'carpintería'} está dañada.`);
     });
     if (!errores.length) {
@@ -195,6 +196,14 @@ export function leerProyecto(x: unknown): Lectura {
         c.metodo = 'planilla';
       }
     }
+  }
+
+  // --- perfil de la torre (editor del perfil): si está dañado se saca, con aviso (los niveles guardan sus medidas igual)
+  if (!nulo(q.perfil)) {
+    const pf = q.perfil as Record<string, unknown>, borde = (v: unknown) => Array.isArray(v) && v.length >= 2 && v.every(x => esObj(x) && num((x as Record<string, unknown>).z) && num((x as Record<string, unknown>).x));
+    const vista = (v: unknown) => esObj(v) && borde((v as Record<string, unknown>).izq) && borde((v as Record<string, unknown>).der);
+    if (!esObj(pf) || !['polilinea', 'bezier', 'spline'].includes(pf.modo as string) || !vista(pf.A) || !vista(pf.B)) { delete q.perfil; avisos.push('El perfil de la torre estaba dañado: se sacó (las medidas de los niveles quedan como estaban).'); }
+    else { if (!num(pf.tension)) pf.tension = 0; if (!num(pf.sesgo)) pf.sesgo = 0; }
   }
 
   // --- contexto urbano (solo para los simuladores): lo que no sirve se saca, con aviso; nunca impide abrir el proyecto

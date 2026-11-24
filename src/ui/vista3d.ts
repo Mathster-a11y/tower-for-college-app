@@ -24,6 +24,13 @@ const css = (v: string, def: string) => getComputedStyle(document.documentElemen
 export { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 
+/** el corrimiento (dx, dy) del nivel que contiene la altura z: el de cota más alta que no pasa z (0 sin perfil) */
+let corrimientoActual: (z: number) => P2 = () => ({ x: 0, y: 0 });
+function corrimientoDe(p: { niveles: { cota: number; dx?: number | null; dy?: number | null }[] }): (z: number) => P2 {
+  const ns = [...p.niveles].sort((a, b) => a.cota - b.cota);
+  if (!ns.some(n => n.dx || n.dy)) return () => ({ x: 0, y: 0 });
+  return z => { let r = { x: 0, y: 0 }; for (const n of ns) if (n.cota <= z + 1e-6) r = { x: n.dx ?? 0, y: n.dy ?? 0 }; return r; };
+}
 /**
  * Prisma deformable: una planta (polígono) repetida en varias cotas. Las posiciones se recalculan con mover()
  * sin rehacer la geometría (sirve para animar).
@@ -31,11 +38,16 @@ import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './de
 class Prisma {
   malla: THREE.Mesh; bordes: THREE.LineSegments; conBordes = true;
   private base: number[] = []; private baseB: number[] = [];
-  constructor(pol: P2[], zs: number[], mat: THREE.Material, matB: THREE.LineBasicMaterial, private zMover?: number, huecos: P2[][] = []) {
-    const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => this.base.push(...a, ...b, ...c);
+  constructor(pol: P2[], zs: number[], mat: THREE.Material, matB: THREE.LineBasicMaterial, private zMover?: number, huecos: P2[][] = [], corr: (z: number) => P2 = corrimientoActual) {
+    // torre con perfil (Diseño → Perfil): cada tramo se corre lo que se corre su nivel respecto de PB
+    const cs = zs.slice(0, -1).map((z, k) => corr((z + zs[k + 1]) / 2));
+    const csz = (z: number) => corr(z === zs[0] ? (zs[0] + zs[1]) / 2 : (zs[zs.length - 2] + zs[zs.length - 1]) / 2);
+    let dk: P2 = { x: 0, y: 0 };
+    const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => this.base.push(a[0] + dk.x, a[1] + dk.y, a[2], b[0] + dk.x, b[1] + dk.y, b[2], c[0] + dk.x, c[1] + dk.y, c[2]);
     const n = pol.length;
     for (const anillo of [pol, ...huecos]) for (let k = 0; k + 1 < zs.length; k++) for (let i = 0; i < anillo.length; i++) {
       const p = anillo[i], q = anillo[(i + 1) % anillo.length], z0 = zs[k], z1 = zs[k + 1];
+      dk = cs[k];
       tri([p.x, p.y, z0], [q.x, q.y, z0], [q.x, q.y, z1]);
       tri([p.x, p.y, z0], [q.x, q.y, z1], [p.x, p.y, z1]);
     }
@@ -43,14 +55,14 @@ class Prisma {
     const todos = [...pol, ...huecos.flat()];
     const tris = n <= 4 && !huecos.length ? Array.from({ length: n - 2 }, (_, i) => [0, i + 1, i + 2]) : THREE.ShapeUtils.triangulateShape(pol.map(p => new THREE.Vector2(p.x, p.y)), huecos.map(h => h.map(p => new THREE.Vector2(p.x, p.y))));
     const horario = THREE.ShapeUtils.isClockWise(pol.map(p => new THREE.Vector2(p.x, p.y)));
-    for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) tris.forEach(([i0, i1, i2]) => {
+    for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) { dk = csz(z); tris.forEach(([i0, i1, i2]) => {
       const a: [number, number, number] = [todos[i0].x, todos[i0].y, z], b: [number, number, number] = [todos[i1].x, todos[i1].y, z], c: [number, number, number] = [todos[i2].x, todos[i2].y, z];
       if (arriba !== horario) tri(a, c, b); else tri(a, b, c);
-    });
+    }); }
     // bordes: contorno arriba y abajo y, si es un rectángulo, las aristas verticales piso por piso
-    const seg = (a: number[], b: number[]) => this.baseB.push(...a, ...b);
-    for (const anillo of [pol, ...huecos]) for (const z of [zs[0], zs[zs.length - 1]]) for (let i = 0; i < anillo.length; i++) seg([anillo[i].x, anillo[i].y, z], [anillo[(i + 1) % anillo.length].x, anillo[(i + 1) % anillo.length].y, z]);
-    if (n <= 8) for (let k = 0; k + 1 < zs.length; k++) for (const p of pol) seg([p.x, p.y, zs[k]], [p.x, p.y, zs[k + 1]]);
+    const seg = (a: number[], b: number[]) => this.baseB.push(a[0] + dk.x, a[1] + dk.y, a[2], b[0] + dk.x, b[1] + dk.y, b[2]);
+    for (const anillo of [pol, ...huecos]) for (const z of [zs[0], zs[zs.length - 1]]) for (let i = 0; i < anillo.length && ((dk = csz(z)), true); i++) seg([anillo[i].x, anillo[i].y, z], [anillo[(i + 1) % anillo.length].x, anillo[(i + 1) % anillo.length].y, z]);
+    if (n <= 8) for (let k = 0; k + 1 < zs.length; k++) for (const p of pol) (dk = cs[k]), seg([p.x, p.y, zs[k]], [p.x, p.y, zs[k + 1]]);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.base.length), 3));
     const gb = new THREE.BufferGeometry();
@@ -197,6 +209,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     prismas = []; extras = [];
     const p = estado.proyecto;
     if (!p.niveles.length) return;
+    corrimientoActual = corrimientoDe(p);
     const top = p.niveles[0].cota;
     const fondoCota = p.niveles[p.niveles.length - 1].cota;
     const def = op.deformada();
@@ -218,7 +231,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (!estado.capas.losas) return;
       const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 12);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
-      prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs));
+      const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
+      prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN));
     });
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};

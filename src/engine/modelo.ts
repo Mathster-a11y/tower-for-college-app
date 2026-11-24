@@ -46,6 +46,11 @@ export interface Nivel {
    * (ancho) y el b máx (largo) del perfil al que se le aplica el viento; B y L se cargan a mano.
    */
   carpinteria?: VerticeContorno[] | null;
+  /**
+   * torre de perfil variable (editor del perfil): cuánto se corre el nivel entero respecto de PB, en x y en y (m).
+   * La planta (muros y contornos) sigue en sus coordenadas; el nivel se corre como un todo (torre inclinada). Vacío = 0
+   */
+  dx?: number | null; dy?: number | null;
 }
 
 /** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */
@@ -298,6 +303,8 @@ export interface Proyecto {
   clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
+  /** el perfil de la torre dibujado en el editor (Diseño → Perfil); los niveles guardan lo que escribió (B, L, dx, dy) */
+  perfil?: import('./perfilTorre').PerfilTorre | null;
   /**
    * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
    * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados
