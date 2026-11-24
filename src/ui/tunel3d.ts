@@ -19,10 +19,11 @@ import { avisoArcoiris, textoEspectro, coloresTermico, dibujarFlechas, espectroV
 import { tramosEdificio } from '../viento/contexto';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
-import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
+import { llaveEnLienzo, llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
+import { CAMARAS, camara, centroTorre, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
 import { alCambiarFachada, cfgFachada, colorCp, llaveFachada, seccionFachada, valorTrozo } from './tunel3dFachada';
 import { vientoCirsoc } from './cirsoc102';
 import { KN_POR_T } from '../engine/cargas/cirsoc102';
@@ -39,7 +40,11 @@ let UH = 0.08;
 const RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
-const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, colorLineas: 'velocidad' as 'velocidad' | 'uno', vereda: false, horizontal: true, vertical: false,
+const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, colorLineas: 'velocidad' as 'velocidad' | 'uno',
+  /** etapa 3: líneas o tubos, partículas, de dónde salen (rastrillo), escala de la velocidad y modo maqueta */
+  estiloLineas: 'lineas' as 'lineas' | 'tubos', particulas: false, rastrillo: 'grilla' as 'grilla' | 'vertical' | 'horizontal', rastPos: 0.5, rastAlto: 0.6, rastN: 14,
+  escalaVel: 'fija' as 'fija' | 'auto', maqueta: false,
+  vereda: false, horizontal: true, vertical: false,
   /** confort del peatón: viento medio anual a 10 m del lugar (m/s, de una estación meteorológica) y si se pinta Lawson */
   vientoMedio: 4, lawson: true,
   /** motor: la placa de video (WebGPU) o el procesador (sin placa, más lento y con la grilla gruesa) */
@@ -68,7 +73,8 @@ interface Corrida {
 }
 let corrida: Corrida | null = null;
 let soporteGpu: string | null | undefined;                    // undefined: todavía no se preguntó
-let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam: THREE.PerspectiveCamera; ctl: OrbitControls; torre: THREE.Mesh | null; trozos: { desde: number; n: number; caras: number[] }[]; planoH: THREE.Mesh | null; planoV: THREE.Mesh | null; lineas: THREE.Group; clave: string } | null = null;
+let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam: THREE.PerspectiveCamera; ctl: OrbitControls; torre: THREE.Mesh | null; trozos: { desde: number; n: number; caras: number[] }[]; planoH: THREE.Mesh | null; planoV: THREE.Mesh | null; lineas: THREE.Group; clave: string;
+  particulas: Particulas | null; sol: THREE.DirectionalLight; suelo: THREE.Mesh; vecinos: THREE.Mesh[] } | null = null;
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
@@ -158,10 +164,14 @@ const verde = () => new THREE.Color(css('--deformada', '#1d9e75')), blanco = new
 /** la velocidad con el espectro térmico (el mismo del túnel 2D): 0 quieto, 1,6 veces la de la altura de la torre o más */
 /** tramo del espectro térmico que usan las líneas de corriente (sin el amarillo más claro, que no se ve sobre blanco) */
 // (el arcoíris no tiene tramo claro: se usa entero)
+/** el tope de la escala de la velocidad, en veces la de la red a la altura de la torre: fija (1,6) o la de lo que se ve */
+let escalaV = 1.6;
 const tramoLinea = () => (espectroVel === 'arcoiris' ? [0, 1] : [0.06, 0.82]);
-const colLinea = (s: number, out: THREE.Color) => { const [t0, t1] = tramoLinea(), L = lutVelocidad(), t = t0 + (t1 - t0) * Math.max(0, Math.min(1, s / (1.6 * UH))), i = 3 * Math.round(t * 255); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
+const colLinea = (s: number, out: THREE.Color) => { const [t0, t1] = tramoLinea(), L = lutVelocidad(), t = t0 + (t1 - t0) * Math.max(0, Math.min(1, s / (escalaV * UH))), i = 3 * Math.round(t * 255); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
 const coloresLinea = () => { const [t0, t1] = tramoLinea(), L = lutVelocidad(); return Array.from({ length: 6 }, (_, k) => { const i = 3 * Math.round((t0 + ((t1 - t0) * k) / 5) * 255); return `rgb(${L[i]},${L[i + 1]},${L[i + 2]})`; }); };
-const colVel = (s: number, out: THREE.Color) => { const L = lutVelocidad(), i = 3 * Math.max(0, Math.min(255, Math.round((s / (1.6 * UH)) * 255))); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
+const colVel = (s: number, out: THREE.Color) => { const L = lutVelocidad(), i = 3 * Math.max(0, Math.min(255, Math.round((s / (escalaV * UH)) * 255))); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
+/** las marcas de una llave de velocidad con la escala en uso */
+const marcasVel = (quieto = 'quieto'): [number, string][] => [[0, quieto], ...(1 / escalaV <= 0.72 ? [[1 / escalaV, `${tv3(1)} (llega)`] as [number, string]] : []), [1, `≥ ${tv3(escalaV)}`]];
 function colCp(cp: number, out: THREE.Color) {
   // convención de la app: empuje (comprime) azul, succión (tracciona) rojo
   if (!isFinite(cp)) return out.set(0xcfd4d9);
@@ -186,8 +196,13 @@ function armarVista(cont: HTMLElement) {
   const ctl = new OrbitControls(cam, ren.domElement); ctl.target.set(Lx * 0.05, Hm * 0.3, 0); ctl.update();
   esc.add(new THREE.HemisphereLight(0xffffff, 0x99aabb, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.1); sol.position.set(-60, 120, 80); esc.add(sol);
+  // sombras (modo maqueta): el sol cubre todo el túnel
+  ren.shadowMap.type = THREE.PCFSoftShadowMap;
+  const lado = Math.max(Lx, Ly, Hm) * 0.8, sc = sol.shadow.camera as THREE.OrthographicCamera;
+  sc.left = -lado; sc.right = lado; sc.top = lado; sc.bottom = -lado; sc.near = 1; sc.far = 4 * lado + 300; sol.shadow.mapSize.set(2048, 2048); sol.shadow.bias = -0.0005;
+  sol.target.position.copy(centroTorre(g)); esc.add(sol.target);
   const suelo = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshStandardMaterial({ color: 0xeef0f2 }));
-  suelo.rotation.x = -Math.PI / 2; esc.add(suelo);
+  suelo.rotation.x = -Math.PI / 2; suelo.receiveShadow = true; esc.add(suelo);
   // la torre: con paredes exactas, su contorno real piso por piso (la superficie, coloreada con el Cp de la celda de
   // cara más cercana); en escalera, una cara por celda de cara, como la ve la simulación
   const pos: number[] = [], trozos: { desde: number; n: number; caras: number[] }[] = [];
@@ -211,16 +226,19 @@ function armarVista(cont: HTMLElement) {
   const torre = new THREE.Mesh(gt, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }));
   esc.add(torre);
   // los vecinos del contexto urbano: prismas grises (no se miden)
+  const vecinos: THREE.Mesh[] = [];
   if (g.vecinos.length) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x9a9ca3, roughness: 1 });
     for (const v of g.vecinos) {
       const forma = new THREE.Shape(v.pol.map(q => new THREE.Vector2((q.x - g.nx / 2) / g.escala, (q.y - g.ny / 2) / g.escala)));
       const m = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: v.altura - v.desde, bevelEnabled: false }), mat);
-      m.rotation.x = -Math.PI / 2; m.position.y = v.desde; esc.add(m);
+      m.rotation.x = -Math.PI / 2; m.position.y = v.desde; m.castShadow = m.receiveShadow = true; esc.add(m); vecinos.push(m);
     }
   }
   const lineas = new THREE.Group(); esc.add(lineas);
-  vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave };
+  torre.castShadow = true;
+  vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave, particulas: null, sol, suelo, vecinos };
+  aplicarMaqueta();
   cont.append(ren.domElement);
   ctl.addEventListener('change', () => dibujar());
 }
@@ -298,6 +316,9 @@ function actualizarCampo() {
   v.planoV && (v.esc.remove(v.planoV), (v.planoV.material as THREE.MeshBasicMaterial).map?.dispose());
   v.planoH = v.planoV = null;
   const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
+  const antes = escalaV;
+  escalaV = cfg.escalaVel === 'auto' ? escalaAutomatica(c, zc) : 1.6;
+  if (Math.abs(antes - escalaV) > 0.05) armarLlaves3d();
   if (cfg.horizontal || cfg.vereda) {
     const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
@@ -310,16 +331,47 @@ function actualizarCampo() {
     m.position.set(0, g.nz / g.escala / 2, -((yc + 0.5) - g.ny / 2) / g.escala); v.esc.add(m); v.planoV = m;
   }
   // líneas de corriente, cada tanto
-  if (cfg.lineas && performance.now() - c.ultimasLineas > 3000) { c.ultimasLineas = performance.now(); lineasDeCorriente(); }
-  if (!cfg.lineas) v.lineas.clear();
+  if ((cfg.lineas || cfg.particulas) && performance.now() - c.ultimasLineas > 3000) { c.ultimasLineas = performance.now(); lineasDeCorriente(); }
+  if (!cfg.lineas && !cfg.particulas) v.lineas.clear();
   dibujar();
 }
 
+/** modo maqueta: torre blanca, vecinos gris claro y sombras suaves; el color queda solo para el aire */
+function aplicarMaqueta() {
+  const v = vista;
+  if (!v) return;
+  v.ren.shadowMap.enabled = cfg.maqueta; v.sol.castShadow = cfg.maqueta;
+  const mt = v.torre!.material as THREE.MeshStandardMaterial;
+  mt.vertexColors = !cfg.maqueta; mt.color.set(cfg.maqueta ? 0xf7f7f5 : 0xffffff); mt.needsUpdate = true;
+  for (const m of v.vecinos) { const mm = m.material as THREE.MeshStandardMaterial; mm.color.set(cfg.maqueta ? 0xd9dcdf : 0x9a9ca3); mm.needsUpdate = true; }
+  (v.suelo.material as THREE.MeshStandardMaterial).needsUpdate = true; mt.needsUpdate = true;
+}
+/** escala automática: el tope es la velocidad que supera el 98 % del aire que se ve (los cortes, o todo el túnel) */
+function escalaAutomatica(c: Corrida, zc: number): number {
+  const g = c.geo, F = c.campo!, vs: number[] = [];
+  const mirar = (cel: number) => { if (!g.solido[cel]) vs.push(Math.hypot(F[4 * cel], F[4 * cel + 1], F[4 * cel + 2])); };
+  if (cfg.horizontal || cfg.vertical) {
+    if (cfg.horizontal) for (let j = 0; j < g.ny; j++) for (let i = 2; i < g.nx - 2; i++) mirar((zc * g.ny + j) * g.nx + i);
+    if (cfg.vertical) { const yc = Math.max(0, Math.min(g.ny - 1, Math.round(cfg.yRel * (g.ny - 1)))); for (let k = 1; k < g.nz; k++) for (let i = 2; i < g.nx - 2; i++) mirar((k * g.ny + yc) * g.nx + i); }
+  } else for (let cel = 0; cel < g.nx * g.ny * g.nz; cel += 7) mirar(cel);
+  if (!vs.length) return 1.6;
+  vs.sort((a, b) => a - b);
+  return Math.max(0.3, Math.min(3, vs[Math.floor(0.98 * (vs.length - 1))] / UH));
+}
 const zVereda = (g: Geometria3D) => Math.max(1, Math.ceil(1.5 * g.escala));
 
-function lineasDeCorriente() {
-  const c = corrida!, v = vista!, g = c.geo, F = c.campo!;
-  v.lineas.children.forEach(o => (o as THREE.Line).geometry.dispose()); v.lineas.clear();
+/** las semillas de las líneas: la grilla de siempre o un rastrillo vertical u horizontal (en celdas de la red) */
+function semillas(g: Geometria3D): number[][] {
+  const bC = g.caja.y1 - g.caja.y0 + 1, x0 = Math.max(2, g.caja.x0 - bC), yc = (g.caja.y0 + g.caja.y1 + 1) / 2, n = Math.max(3, Math.round(cfg.rastN));
+  if (cfg.rastrillo === 'vertical') { const y = yc + (cfg.rastPos - 0.5) * 2.6 * bC; return Array.from({ length: n }, (_, k) => [x0, y, (0.04 + (1.25 * k) / (n - 1)) * g.hC + 0.5]); }
+  if (cfg.rastrillo === 'horizontal') { const z = Math.max(0.03, cfg.rastAlto) * g.hC + 0.5; return Array.from({ length: n }, (_, k) => [x0, yc + (-1.3 + (2.6 * k) / (n - 1)) * bC, z]); }
+  const out: number[][] = [];
+  for (const zr of [0.15, 0.4, 0.65, 0.9, 1.1]) for (let s2 = -1; s2 <= 1.001; s2 += 0.25) out.push([x0, yc + s2 * bC * 0.95, zr * g.hC + 0.5]);
+  return out;
+}
+/** las líneas de corriente del campo (puntos en metros, velocidad de la red y tiempo de la red en cada punto) */
+function trazosDeCorriente(): Trazo[] {
+  const c = corrida!, g = c.geo, F = c.campo!;
   const vel = (x: number, y: number, z: number): [number, number, number] | null => {
     if (x < 0 || x >= g.nx - 1 || z < 1 || z >= g.nz - 1 || y < 0 || y >= g.ny - 1) return null;
     const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z), fx = x - i, fy = y - j, fz = z - k;
@@ -331,29 +383,52 @@ function lineasDeCorriente() {
     }
     return [su, sv, sw];
   };
-  // color: la velocidad con el espectro térmico, sin el tramo más claro (se perdería contra el fondo blanco)
-  const porVel = cfg.colorLineas === 'velocidad';
-  const mat = porVel ? new THREE.LineBasicMaterial({ vertexColors: true }) : new THREE.LineBasicMaterial({ color: new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6) });
-  const colL = new THREE.Color();
-  const bC = g.caja.y1 - g.caja.y0 + 1, x0 = Math.max(2, g.caja.x0 - bC);
-  for (const zr of [0.15, 0.4, 0.65, 0.9, 1.1]) for (let s = -1; s <= 1.001; s += 0.25) {
-    let p = [x0, (g.caja.y0 + g.caja.y1 + 1) / 2 + s * bC * 0.95, zr * g.hC + 0.5];
-    const pts = [aMundo(g, p[0], p[1], p[2])], cols: number[] = [];
-    const ponerColor = (m: number) => { if (porVel) { colLinea(m, colL); cols.push(colL.r, colL.g, colL.b); } };
-    ponerColor(Math.hypot(...(vel(p[0], p[1], p[2]) ?? [0, 0, 0])));
+  return semillas(g).map(p0 => {
+    let p = p0.slice(), t = 0;
+    const a0 = vel(p[0], p[1], p[2]);
+    const tr: Trazo = { pts: [aMundo(g, p[0], p[1], p[2])], vel: [a0 ? Math.hypot(...a0) : 0], t: [0] };
     for (let n = 0; n < 1200; n++) {
       const a = vel(p[0], p[1], p[2]); if (!a) break;
       const m = Math.hypot(...a); if (m < 1e-6) break;
       const hh = 0.6 / m, mid = [p[0] + 0.5 * hh * a[0], p[1] + 0.5 * hh * a[1], p[2] + 0.5 * hh * a[2]];
       const b = vel(mid[0], mid[1], mid[2]); if (!b) break;
-      p = [p[0] + hh * b[0], p[1] + hh * b[1], p[2] + hh * b[2]];
-      if (n % 2 === 0) { pts.push(aMundo(g, p[0], p[1], p[2])); ponerColor(m); }
+      p = [p[0] + hh * b[0], p[1] + hh * b[1], p[2] + hh * b[2]]; t += hh;
+      if (n % 2 === 0) { tr.pts.push(aMundo(g, p[0], p[1], p[2])); tr.vel.push(m); tr.t.push(t); }
     }
-    if (pts.length > 3) {
-      const geom = new THREE.BufferGeometry().setFromPoints(pts);
-      if (porVel) geom.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-      v.lineas.add(new THREE.Line(geom, mat));
+    return tr;
+  }).filter(tr => tr.pts.length > 3);
+}
+function lineasDeCorriente() {
+  const c = corrida!, v = vista!, g = c.geo;
+  v.lineas.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
+  v.lineas.clear(); v.particulas = null;
+  if (!cfg.lineas && !cfg.particulas) return;
+  const trazos = trazosDeCorriente();
+  const porVel = cfg.colorLineas === 'velocidad', uno = new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6);
+  const color = (m: number, out: THREE.Color) => (porVel ? colLinea(m, out) : out.copy(uno));
+  if (cfg.lineas) {
+    if (cfg.estiloLineas === 'tubos') v.lineas.add(grupoTubos(trazos, color, 0.16 / g.escala + 0.12));
+    else {
+      const mat = new THREE.LineBasicMaterial({ vertexColors: true }), cc = new THREE.Color();
+      for (const tr of trazos) {
+        const geom = new THREE.BufferGeometry().setFromPoints(tr.pts);
+        geom.setAttribute('color', new THREE.Float32BufferAttribute(tr.vel.flatMap(m => { color(m, cc); return [cc.r, cc.g, cc.b]; }), 3));
+        v.lineas.add(new THREE.Line(geom, mat));
+      }
     }
+  }
+  // el rastrillo a la vista (ámbar): de dónde salen las líneas
+  if (cfg.rastrillo !== 'grilla') {
+    const ss = semillas(g), a = ss[0], b = ss[ss.length - 1];
+    const r = new THREE.Line(new THREE.BufferGeometry().setFromPoints([aMundo(g, a[0], a[1], a[2]), aMundo(g, b[0], b[1], b[2])]), new THREE.LineBasicMaterial({ color: new THREE.Color(css('--elegido', '#ef9f27')) }));
+    v.lineas.add(r);
+  }
+  // partículas: cruzan el túnel en unos 8 segundos al viento que llega a la altura de la torre
+  if (cfg.particulas) {
+    // más claras que las líneas y más gruesas que los tubos: se ven aunque viajen por adentro
+    const blancoP = new THREE.Color(1, 1, 1), colP = (m: number, out: THREE.Color) => color(m, out).lerp(blancoP, 0.45);
+    const p = new Particulas(trazos, colP, 8, Math.max(2.5, 1.8 / g.escala), g.nx / UH / 8000);
+    v.lineas.add(p.obj); v.particulas = p;
   }
 }
 
@@ -362,6 +437,7 @@ function dibujar() {
   if (!v || !v.cont.isConnected) return;
   const w = Math.max(320, v.cont.clientWidth), hh = Math.round(w * 0.58);
   if (v.ren.domElement.width !== Math.round(w * v.ren.getPixelRatio())) { v.ren.setSize(w, hh); v.cam.aspect = w / hh; v.cam.updateProjectionMatrix(); }
+  v.particulas?.avanzar(performance.now());
   v.ren.render(v.esc, v.cam);
 }
 
@@ -410,6 +486,8 @@ async function exportarOpenFOAM() {
 
 // ------------------------------------------------------------------------------------------------ llaves de colores
 let llaves3d: H | null = null;
+/** las llaves que se ven (para dibujarlas dentro del video) */
+let llavesVisibles: Llave[] = [];
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
 function armarLlaves3d() {
   if (!llaves3d) return;
@@ -422,7 +500,7 @@ function armarLlaves3d() {
   else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): el viento comparado con el del campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, 'quieto'], [1 / 1.6, 'igual'], [1, '+60 % o más']] };
   else if (cfg.horizontal || cfg.vertical) corte = cfg.color === 'cp'
     ? { titulo: 'Cortes: presión (Cp)', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] }
-    : { titulo: `Cortes: velocidad del viento (el que llega a ${Math.round(zRef3d())} m: ${tv3(1)})${avisoArcoiris()}`, colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
+    : { titulo: `Cortes: velocidad del viento (el que llega a ${Math.round(zRef3d())} m: ${tv3(1)})${avisoArcoiris()}`, colores: coloresTermico(), marcas: marcasVel() };
   // las flechas: si el corte ya va en velocidad, su llave sirve; si no, una aparte arriba a la derecha
   const conCortes = cfg.horizontal || cfg.vertical || cfg.vereda;
   let flechas: Llave | null = null;
@@ -439,9 +517,110 @@ function armarLlaves3d() {
   if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: cfg.colorLineas === 'velocidad' ? coloresLinea()[3] : new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire', nota: cfg.colorLineas === 'velocidad' ? 'el color dice la velocidad' : undefined });
   // las líneas usan la escala de la velocidad: si el corte o las flechas ya la muestran, no hace falta otra llave
   const corteVel = (cfg.horizontal || cfg.vertical) && !cfg.vereda && cfg.color !== 'cp';
-  const llLineas: Llave | null = cfg.lineas && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: `Líneas de corriente: velocidad${avisoArcoiris()}`, colores: coloresLinea(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] } : null;
+  const llLineas: Llave | null = (cfg.lineas || cfg.particulas) && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: `${cfg.particulas && !cfg.lineas ? 'Partículas' : 'Líneas de corriente'}: velocidad${avisoArcoiris()}`, colores: coloresLinea(), marcas: marcasVel() } : null;
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
-  llaves3d.replaceChildren(...(cfg.llave ? [llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(llLineas ? [(() => { const e = llaveHtml(llLineas); e.classList.add('derecha'); return e; })()] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
+  llavesVisibles = cfg.llave ? [...(cfg.maqueta ? [] : [caras]), ...(corte ? [corte] : []), ...(llLineas ? [llLineas] : []), ...(flechas ? [flechas] : [])] : [];
+  llaves3d.replaceChildren(...(cfg.llave ? [...(cfg.maqueta ? [] : [llaveHtml(caras)]), ...(corte ? [llaveHtml(corte)] : []), ...(llLineas ? [(() => { const e = llaveHtml(llLineas); e.classList.add('derecha'); return e; })()] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
+}
+
+// ------------------------------------------------------------------------------------------------ vista y grabación (etapa 3)
+let camaraGuardada: { pos: THREE.Vector3; mira: THREE.Vector3 } | null = null;
+let grabando: { parar: () => void } | null = null;
+const cfgGrab = { recorrido: 'orbita' as Recorrido, segundos: 15 };
+function ponerCamara(p: { pos: THREE.Vector3; mira: THREE.Vector3 }) {
+  const v = vista; if (!v) return;
+  v.cam.position.copy(p.pos); v.ctl.target.copy(p.mira); v.ctl.update(); dibujar();
+}
+function seccionVista(): HTMLElement {
+  const s = seccion('Vista, cámaras y grabación'), d = s.cuerpo;
+  const cambiar = (f: () => void, lineas = true) => { f(); if (lineas && corrida) corrida.ultimasLineas = 0; aplicarMaqueta(); actualizarCampo(); armarLlaves3d(); estado.avisarPanel(); };
+  const chk = (rot: string, val: boolean, al: (x: boolean) => void, ayuda?: string) => {
+    const l = h('label', { class: 'campo-linea', ...(ayuda ? { title: ayuda } : {}) }, h('input', { type: 'checkbox', ...(val ? { checked: '' } : {}) }), ` ${rot}`);
+    l.querySelector('input')!.addEventListener('change', e => cambiar(() => al((e.target as HTMLInputElement).checked)));
+    return l;
+  };
+  const sel = <T extends string>(rot: string, op: [T, string][], v: T, al: (x: T) => void) => {
+    const e = h('select', {}) as HTMLSelectElement; op.forEach(([k, t]) => e.append(new Option(t, k, false, k === v)));
+    e.addEventListener('change', () => cambiar(() => al(e.value as T)));
+    return h('label', { class: 'campo' }, h('span', {}, rot), e);
+  };
+  const rango = (rot: string, v: number, min: number, max: number, paso: number, al: (x: number) => void) => {
+    const i = h('input', { type: 'range', min: String(min), max: String(max), step: String(paso), value: String(v) }) as HTMLInputElement;
+    i.addEventListener('change', () => cambiar(() => al(+i.value)));
+    return h('label', { class: 'campo' }, h('span', {}, rot), i);
+  };
+  d.append(
+    chk('Modo maqueta (torre blanca y sombras)', cfg.maqueta, x => { cfg.maqueta = x; }, 'Como una maqueta en un túnel: la torre y los vecinos sin color, con sombras; el color queda para el aire'),
+    h('div', { class: 'grilla2' },
+      sel('Líneas de corriente', [['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']], cfg.estiloLineas, x => { cfg.estiloLineas = x; }),
+      sel('Escala de la velocidad', [['fija', 'fija (hasta 1,6 veces el que llega)'], ['auto', 'automática (lo que se ve)']], cfg.escalaVel, x => { cfg.escalaVel = x; })),
+    chk('Partículas que viajan con el aire (como tinta)', cfg.particulas, x => { cfg.particulas = x; }, 'Puntos que recorren las líneas de corriente a la velocidad del aire: donde se separan el aire acelera, donde se juntan se frena'),
+    h('div', { class: 'grilla2' },
+      sel('De dónde salen', [['grilla', 'una grilla delante de la torre'], ['vertical', 'un rastrillo vertical'], ['horizontal', 'un rastrillo horizontal']], cfg.rastrillo, x => { cfg.rastrillo = x; }),
+      ...(cfg.rastrillo === 'vertical' ? [rango('Rastrillo: de costado', cfg.rastPos, 0, 1, 0.02, x => { cfg.rastPos = x; })] : cfg.rastrillo === 'horizontal' ? [rango('Rastrillo: altura', cfg.rastAlto, 0.03, 1.3, 0.01, x => { cfg.rastAlto = x; })] : []),
+      ...(cfg.rastrillo !== 'grilla' ? [rango('Cantidad de líneas', cfg.rastN, 4, 40, 1, x => { cfg.rastN = x; })] : [])),
+    h('p', { class: 'nota chica' }, `El rastrillo es la raya ámbar de la vista: de ahí salen las líneas. ${cfg.escalaVel === 'auto' ? 'Con la escala automática los colores aprovechan todo el espectro, pero dos vistas no se comparan: para comparar, fija.' : 'Con la escala fija dos corridas o dos grabaciones se comparan con los mismos colores.'}`));
+  // cámaras
+  const fila = h('div', { class: 'fila-acciones' });
+  CAMARAS.forEach(([k, t]) => { const b = h('button', { type: 'button', class: 'mini' }, t); b.addEventListener('click', () => { if (corrida) ponerCamara(camara(k as NombreCamara, corrida.geo)); }); fila.append(b); });
+  const bG = h('button', { type: 'button', class: 'mini', title: 'Recuerda dónde está la cámara ahora' }, '★ Guardar esta');
+  bG.addEventListener('click', () => { const v = vista; if (v) { camaraGuardada = { pos: v.cam.position.clone(), mira: v.ctl.target.clone() }; estado.avisarPanel(); } });
+  fila.append(bG);
+  if (camaraGuardada) { const bV = h('button', { type: 'button', class: 'mini' }, '↺ La guardada'); bV.addEventListener('click', () => camaraGuardada && ponerCamara(camaraGuardada)); fila.append(bV); }
+  d.append(h('span', { class: 'nota chica' }, 'Cámaras: siempre las mismas para la misma torre, así las imágenes de dos proyectos se comparan.'), fila);
+  // grabación
+  const rec = h('select', {}) as HTMLSelectElement;
+  ([['quieta', 'cámara quieta'], ['orbita', 'una vuelta alrededor de la torre'], ['vuelo', 'vuelo: del peatón a la vista de arriba']] as [Recorrido, string][]).forEach(([k, t]) => rec.append(new Option(t, k, false, k === cfgGrab.recorrido)));
+  rec.addEventListener('change', () => { cfgGrab.recorrido = rec.value as Recorrido; });
+  const dur = h('select', {}) as HTMLSelectElement;
+  [10, 15, 30, 60].forEach(n => dur.append(new Option(`${n} s`, String(n), false, n === cfgGrab.segundos)));
+  dur.addEventListener('change', () => { cfgGrab.segundos = +dur.value; });
+  const bR = h('button', { type: 'button', class: grabando ? 'boton' : 'primario' }, grabando ? '■ Parar' : '● Grabar video');
+  bR.addEventListener('click', () => { if (grabando) { grabando.parar(); return; } grabarVideo(); });
+  d.append(h('div', { class: 'grilla2' }, h('label', { class: 'campo' }, h('span', {}, 'Recorrido'), rec), h('label', { class: 'campo' }, h('span', {}, 'Duración'), dur)),
+    h('div', { class: 'fila-acciones' }, bR),
+    h('p', { class: 'nota chica' }, 'Graba la vista en un video (WebM) con la llave de colores, el tiempo real simulado y el gráfico de las fuerzas en la base, que corre junto con la imagen. La simulación sigue mientras se graba.'));
+  return s.el;
+}
+function grabarVideo() {
+  const v = vista, c = corrida;
+  if (!v || !c) return;
+  const g = c.geo, p0 = v.cam.position.clone(), m0 = v.ctl.target.clone();
+  const desde = camara('peaton', g), hasta = camara('arriba', g);
+  const suave = (t: number) => t * t * (3 - 2 * t);
+  const tinta = css('--ink', '#223344'), colA = css('--carga', '#d85a30'), colL = css('--corte', '#7f77dd');
+  const msg = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+  v.ctl.enabled = false;
+  grabando = grabar({
+    lienzo: v.ren.domElement, segundos: cfgGrab.segundos,
+    alCuadro: t => {
+      if (cfgGrab.recorrido === 'orbita') {
+        const r = p0.clone().sub(m0), a = 2 * Math.PI * t;
+        v.cam.position.set(m0.x + r.x * Math.cos(a) - r.z * Math.sin(a), p0.y, m0.z + r.x * Math.sin(a) + r.z * Math.cos(a)); v.cam.lookAt(m0);
+      } else if (cfgGrab.recorrido === 'vuelo') {
+        const k = suave(t); v.cam.position.lerpVectors(desde.pos, hasta.pos, k); v.cam.lookAt(new THREE.Vector3().lerpVectors(desde.mira, hasta.mira, k));
+      }
+      dibujar();
+    },
+    encima: (gx, W, H) => {
+      // las llaves arriba a la izquierda, el tiempo arriba a la derecha y las fuerzas abajo
+      let y = 10;
+      for (const ll of llavesVisibles) { const alto = 46; llaveEnLienzo(gx, ll, 10, y + alto, Math.min(300, W * 0.36), '#ffffff', tinta); y += alto + 6; }
+      const seg = c.gpu ? c.gpu.pasos * (isFinite(c.dtPaso) ? c.dtPaso : 0) : 0;
+      gx.save(); gx.font = '600 13px system-ui, sans-serif'; gx.textAlign = 'right'; gx.fillStyle = 'rgba(255,255,255,0.85)'; gx.fillRect(W - 220, 8, 212, 40);
+      gx.fillStyle = tinta; gx.fillText(`viento ${estado.dir} · ${fmt(seg, 0)} s simulados`, W - 16, 26); gx.font = '11px system-ui, sans-serif'; gx.fillText('Torre 3D · túnel de viento (didáctico)', W - 16, 41); gx.restore();
+      if (c.fz && c.fz.serie.length > 1) graficoEnLienzo(gx, c.fz.serie, 10, H - 110, Math.min(420, W * 0.45), 100, { arrastre: colA, lateral: colL, tinta });
+    },
+    alTerminar: (blob, error) => {
+      grabando = null; v.ctl.enabled = true; v.cam.position.copy(p0); v.ctl.target.copy(m0); v.ctl.update(); dibujar(); estado.avisarPanel();
+      if (!blob) { msg(error ?? 'No se pudo grabar.'); return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `tunel3d_viento${estado.dir}.webm`;
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      msg(`Video listo (${fmt(blob.size / 1e6, 1)} MB).`);
+    },
+  });
+  if (grabando) msg(`Grabando ${cfgGrab.segundos} s…`);
+  estado.avisarPanel();
 }
 
 // ------------------------------------------------------------------------------------------------ centro y panel
@@ -576,6 +755,7 @@ export function panelTunel3d(c: H) {
       capa('Símbolos del dibujo (qué es cada flecha, línea y marca)', cfg.simbolos, x => { cfg.simbolos = x; }),
       h('p', { class: 'nota chica' }, 'Prender o apagar capas no vuelve a simular.'));
   }
+  c.append(seccionVista());
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);
   const sf = seccion('Fuerzas: base y piso por piso').cuerpo; c.append(sf.parentElement!);
