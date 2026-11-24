@@ -241,7 +241,7 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
       }
     } else {
       // curva: los montantes arrancan en la losa de abajo y suben al punto más cercano de cada losa
-      let pts = montantesAnillo(rs[0], mod).map(t => enAnillo(rs[0], t));
+      let pts = montantesAnillo(rs[0], { ...(p.paneleria ?? {}), modulo: mod }).map(t => enAnillo(rs[0], t));
       for (let j = 0; j + 1 < rs.length; j++) {
         const sig = pts.map(q => cercano(q, rs[j + 1]));
         // sin cruces: los que se vuelven para atrás se sacan
@@ -259,13 +259,42 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
 
 /** panelería: montantes cada «modulo» m (siempre en las esquinas), travesaño en cada losa, un antepecho opaco de
  *  «antepecho» m sobre cada losa y «intermedios» travesaños más en el vidrio */
-export interface Paneleria { modulo: number; antepecho?: number | null; intermedios?: number | null }
+export interface Paneleria {
+  modulo: number; antepecho?: number | null; intermedios?: number | null;
+  /** cómo se reparten los montantes en cada cara: «maximo» parejo, sin pasar del módulo (vacío); «fijo» cada módulo exacto */
+  regla?: 'maximo' | 'fijo' | null;
+  /** con módulo fijo, dónde arranca la modulación: al inicio de la cara, centrada (vacío) o al final; el sobrante va al otro lado */
+  origen?: 'inicio' | 'centro' | 'fin' | null;
+  /** corrimiento de la modulación (m) desde el origen */
+  desfase?: number | null;
+}
+/** lo que hace falta para repartir montantes en un largo */
+export type Reparto = Pick<Paneleria, 'modulo' | 'regla' | 'origen' | 'desfase'>;
+/**
+ * dónde van los montantes en un largo L (de 0 a L, los dos bordes incluidos). Parejo: tantas partes iguales como hagan
+ * falta para no pasar del módulo. Fijo: cada módulo exacto desde el origen (inicio, centro o fin) más el desfase; el
+ * sobrante queda en los extremos (como la «justificación» de las grillas de muro cortina).
+ */
+export function divisiones(L: number, rep: Reparto): number[] {
+  const mod = Math.max(0.3, rep.modulo);
+  if (L <= 1e-9) return [0];
+  if ((rep.regla ?? 'maximo') !== 'fijo') { const n = Math.max(1, Math.ceil(L / mod - 1e-6)); return Array.from({ length: n + 1 }, (_, k) => (L * k) / n); }
+  const org = rep.origen ?? 'centro', d = rep.desfase ?? 0;
+  // un punto de la grilla: al inicio, al final, o de modo que el sobrante quede repartido igual a los dos lados
+  const n = Math.floor(L / mod + 1e-9), sobra = L - n * mod;
+  const base = org === 'inicio' ? 0 : org === 'fin' ? L : sobra / 2;
+  const x0 = (((base + d) % mod) + mod) % mod;
+  const out = [0];
+  for (let x = x0; x < L - 1e-6; x += mod) if (x > 1e-6) out.push(+x.toFixed(9));
+  out.push(L);
+  return out;
+}
 /** un paño: polígono plano (3 o más puntos; en las caras planas, recortado por el borde de la cara) */
 export interface Panel { p: P3[]; opaco: boolean; area: number }
 export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
 
 /** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
-function montantesAnillo(r: Punto[], modulo: number): number[] {
+function montantesAnillo(r: Punto[], rep: Reparto): number[] {
   const n = r.length, L = r.map((q, i) => Math.hypot(r[(i + 1) % n].x - q.x, r[(i + 1) % n].y - q.y));
   const giro = (i: number) => { const a = r[(i - 1 + n) % n], b = r[i], c = r[(i + 1) % n]; const t1 = Math.atan2(b.y - a.y, b.x - a.x), t2 = Math.atan2(c.y - b.y, c.x - b.x); let d = Math.abs(t2 - t1); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
   let esq = r.map((_, i) => i).filter(i => giro(i) > (10 * Math.PI) / 180);
@@ -274,10 +303,10 @@ function montantesAnillo(r: Punto[], modulo: number): number[] {
   esq.forEach((e, k) => {
     const f = esq[(k + 1) % esq.length], idx: number[] = [];
     for (let i = e; ; i = (i + 1) % n) { idx.push(i); if ((i + 1) % n === f || idx.length > n) break; }
-    const largo = idx.reduce((s, i) => s + L[i], 0), partes = Math.max(1, Math.ceil(largo / modulo - 1e-6));
+    const largo = idx.reduce((s, i) => s + L[i], 0), ds = divisiones(largo, rep);
     out.push(e);
-    for (let j = 1; j < partes; j++) {
-      let falta = (largo * j) / partes;
+    for (const dj of ds.slice(1, -1)) {
+      let falta = dj;
       for (const i of idx) { if (falta <= L[i] + 1e-9) { out.push(i + (L[i] > 0 ? falta / L[i] : 0)); break; } falta -= L[i]; }
     }
   });
@@ -328,7 +357,7 @@ const clave = (a: P3, b: P3) => { const r = (x: number) => Math.round(x * 1000) 
  * horizontales en cada losa, el antepecho y los intermedios. Cada paño es el rectángulo de la grilla recortado por el
  * borde de la cara (en un borde inclinado queda un trapecio o un triángulo): siempre plano.
  */
-function paneleriaPlana(bandas: BandaFachada[], mod: number, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>) {
+function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>) {
   type Cara = { q: P3[]; bd: BandaFachada };
   type Grupo = { n: { x: number; y: number; z: number }; d: number; caras: Cara[] };
   const grupos: Grupo[] = [];
@@ -357,7 +386,7 @@ function paneleriaPlana(bandas: BandaFachada[], mod: number, ap: number, inter: 
     const aSZ = (p: P3): SZ => ({ s: p.x * h.x + p.y * h.y, z: p.z });
     const a3 = (q: SZ): P3 => { const t = (g.d - g.n.z * q.z) / n2; return { x: q.s * h.x + t * m2.x, y: q.s * h.y + t * m2.y, z: q.z }; };
     const todas = g.caras.flatMap(c => c.q.map(aSZ)), smin = Math.min(...todas.map(q => q.s)), smax = Math.max(...todas.map(q => q.s));
-    const partes = Math.max(1, Math.ceil((smax - smin) / mod - 1e-6)), cols = Array.from({ length: partes + 1 }, (_, k) => smin + ((smax - smin) * k) / partes);
+    const cols = divisiones(smax - smin, rep).map(x => smin + x);
     // bordes de la cara que no comparte con otra del mismo plano: las esquinas y las aristas inclinadas son montantes
     const usos = new Map<string, number>();
     g.caras.forEach(c => c.q.forEach((p, i) => { const k = clave(p, c.q[(i + 1) % c.q.length]); usos.set(k, (usos.get(k) ?? 0) + 1); }));
@@ -388,10 +417,11 @@ export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): Result
   const res: ResultadoPaneleria = { paneles: [], montantes: [], vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
   const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
   const vistos = new Set<string>();
-  paneleriaPlana(bandas.filter(b => b.plana), mod, ap, inter, res, vistos);
+  const rep: Reparto = { ...pn, modulo: mod };
+  paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos);
   bandas.filter(b => !b.plana).forEach(bd => {
     const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
-    const ts = bd.montantes ? bd.a.map((_, i) => i) : montantesAnillo(bd.a, mod);
+    const ts = bd.montantes ? bd.a.map((_, i) => i) : montantesAnillo(bd.a, rep);
     const fr = filas(h, ap, inter);
     const P = (t: number, s: number): P3 => { const a = enAnillo(bd.a, t), b = enAnillo(bd.b, t); return { x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s, z: bd.z0 + h * s }; };
     ts.forEach((t, k) => {

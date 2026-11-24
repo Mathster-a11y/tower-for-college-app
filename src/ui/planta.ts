@@ -772,7 +772,21 @@ export function montarPlanta(cont: HTMLElement) {
           const r = calcularPaneleria(bandasFachada(p, prepararSecciones), pn);
           const f1 = (x: number) => x.toFixed(1).replace('.', ',');
           pan.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Panelería' }),
-            cpn('montantes cada', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', 'distancia entre montantes por el contorno (siempre hay uno en cada esquina)'),
+            cpn(pn.regla === 'fijo' ? 'módulo' : 'montantes cada (máx.)', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', pn.regla === 'fijo' ? 'ancho exacto de cada paño; el sobrante queda en los bordes de la cara' : 'ancho máximo de los paños: cada cara se reparte en partes iguales (siempre hay un montante en cada esquina)'),
+            ...(() => {
+              // reglas de la grilla: parejo (sin pasar del módulo) o módulo fijo, desde dónde arranca y un desfase
+              const seg = (rot: string, ops: [string, string, string][], val: string, f: (v: string) => void) => {
+                const w = document.createElement('div'); w.className = 'campo-esq regla-grilla';
+                const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', rot);
+                ops.forEach(([v, t, ti]) => { const x = boton(t, () => { if (v !== val) f(v); }, ti); x.setAttribute('aria-pressed', String(v === val)); sg.append(x); });
+                w.append(rot + ' ', sg); return w;
+              };
+              const out: HTMLElement[] = [seg('reparto', [['maximo', 'Parejo', 'Partes iguales en cada cara, sin pasar del módulo'], ['fijo', 'Módulo fijo', 'Cada módulo exacto; el sobrante queda en los bordes']], pn.regla === 'fijo' ? 'fijo' : 'maximo', v => ponerPn(q => { if (v === 'fijo') q.regla = 'fijo'; else { delete q.regla; delete q.origen; delete q.desfase; } }))];
+              if (pn.regla === 'fijo') out.push(
+                seg('desde', [['inicio', 'Inicio', 'La modulación arranca en el comienzo de cada cara'], ['centro', 'Centro', 'Centrada: el sobrante se reparte igual en los dos bordes'], ['fin', 'Fin', 'La modulación arranca en el final de cada cara']], pn.origen ?? 'centro', v => ponerPn(q => { q.origen = v as 'inicio' | 'centro' | 'fin'; })),
+                cpn('desfase', pn.desfase ?? 0, x => ponerPn(q => { if (x) q.desfase = x; else delete q.desfase; }), 'm', 'corre la modulación desde el origen (por ejemplo, para que un montante caiga sobre el eje de un tabique)'));
+              return out;
+            })(),
             cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
             Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.alabeados ? ` · ${r.alabeados} paños alabeados (no planos): para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),

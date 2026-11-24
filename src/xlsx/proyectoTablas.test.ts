@@ -54,7 +54,7 @@ function completo(): Proyecto {
     uniones: { columna: 'articulada', base: 'articulada' }, viento: 'fachada', pesoPropio: false, pisoInicio: 2, mastil: { b: 1.2, e: 0.05 }, barras: { C3: { relA: true, sec: { b: 0.3, e: 0.0125 } }, D2: { quitar: true } }, nuevas: [{ clase: 'diagonal', a: [-9, 6], b: [9, 12] }] };
   p.perfilTorre = { puntos: [{ h: 0, fx: 1 }, { h: 0.5, fx: 1.1, fy: 0.9, dx: 1 }, { h: 1, fx: 0.7 }], suave: true, giro: 30 };
   p.carpinteriaRetiro = 0.3;
-  p.paneleria = { modulo: 1.5, antepecho: 0.9, intermedios: 1 };
+  p.paneleria = { modulo: 1.5, antepecho: 0.9, intermedios: 1, regla: 'fijo', origen: 'inicio', desfase: 0.25 };
   p.niveles[2].carpManual = true; p.niveles[2].carpVoladizo = true;
   p.carpinteriaFija = true;
   p.carpinteriaTramos = [{ desde: 0, modo: 'sin' }, { desde: 3, modo: 'losa', retiro: 0.3, forma: 'plana' }, { desde: 40, modo: 'continua', retiro: 0.25, forma: 'curva' }];

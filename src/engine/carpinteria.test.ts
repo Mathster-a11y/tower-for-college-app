@@ -169,3 +169,25 @@ describe('grilla a plomo en la corona recortada a 45° (como el Citicorp)', () =
     ys.forEach((y, i) => i && expect(y - ys[i - 1]).toBeCloseTo(16 / Math.ceil(16 / 1.5), 2));
   });
 });
+
+import { divisiones } from './carpinteria';
+describe('grilla por reglas (reparto de montantes)', () => {
+  const anchos = (xs: number[]) => xs.slice(1).map((x, i) => +(x - xs[i]).toFixed(6));
+  it('parejo: partes iguales sin pasar del módulo', () => {
+    expect(anchos(divisiones(14, { modulo: 1.5 }))).toEqual(Array(10).fill(1.4));
+  });
+  it('fijo desde el inicio, centrado y desde el final', () => {
+    expect(anchos(divisiones(14, { modulo: 1.5, regla: 'fijo', origen: 'inicio' }))).toEqual([...Array(9).fill(1.5), 0.5]);
+    expect(anchos(divisiones(14, { modulo: 1.5, regla: 'fijo', origen: 'fin' }))).toEqual([0.5, ...Array(9).fill(1.5)]);
+    expect(anchos(divisiones(14, { modulo: 1.5, regla: 'fijo', origen: 'centro' }))).toEqual([0.25, ...Array(9).fill(1.5), 0.25]);
+  });
+  it('fijo con desfase: la modulación se corre', () => {
+    expect(anchos(divisiones(6, { modulo: 1.5, regla: 'fijo', origen: 'inicio', desfase: 0.5 }))).toEqual([0.5, 1.5, 1.5, 1.5, 1]);
+  });
+  it('en la panelería: una cara de 20 m con módulo fijo centrado de 1,5 m', () => {
+    const r = puntosSilueta(rectangulo(20, 16), 8);
+    const res = calcularPaneleria([{ z0: 0, z1: 3, modo: 'losa', a: r, b: r }], { modulo: 1.5, regla: 'fijo', origen: 'centro' });
+    // 20 = 13 × 1,5 + 0,5 → 15 paños por cara de 20 m; 16 = 10 × 1,5 + 1 → 12 por cara de 16 m
+    expect(res.paneles.length).toBe(2 * (15 + 12));
+  });
+});
