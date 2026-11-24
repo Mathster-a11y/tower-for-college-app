@@ -6,6 +6,7 @@
  */
 import { h, type H } from '../comp';
 import { simbolo, type CapituloGrafo, type Grafo } from '../grafo';
+import { ILUSTRACION_PASO } from './ilustraciones';
 
 // ---------------------------------------------------------------------------------------------------- unidades
 export interface Unidad { lee: string; es: string; equivale?: string }
@@ -124,22 +125,32 @@ export function tablaVariables(es: EntradaGlosario[], otras: Map<string, { nombr
   return h('table', { class: 'tabla chica glosario' }, h('thead', {}, h('tr', {}, ...['símbolo', 'qué es', 'unidad', 'dónde aparece'].map(x => h('th', {}, x)))), tb);
 }
 /** la tabla de las unidades (las que se pasan; todas si no) */
+/** las unidades como fichas: el símbolo grande, cómo se lee, qué mide y cuánto vale en otras */
 export function tablaUnidades(us: string[] = Object.keys(UNIDADES)): H {
-  const tb = h('tbody');
+  const grilla = h('div', { class: 'fichas-unidad' });
   [...new Set(us)].filter(u => UNIDADES[u]).sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b, 'es'))).forEach(u => {
     const x = UNIDADES[u];
-    tb.append(h('tr', {}, h('td', { class: 'sim' }, u || '—'), h('td', {}, h('b', {}, x.lee), ': ', x.es), h('td', { class: 'nota' }, x.equivale ?? '')));
+    grilla.append(h('div', { class: 'ficha-unidad' },
+      h('div', { class: 'fu-sim' }, u || '—'),
+      h('div', { class: 'fu-txt' }, h('b', {}, x.lee), h('p', {}, x.es), ...(x.equivale ? [h('span', { class: 'fu-eq' }, x.equivale)] : []))));
   });
-  return h('table', { class: 'tabla chica glosario' }, h('thead', {}, h('tr', {}, ...['unidad', 'cómo se lee y qué mide', 'equivale a'].map(x => h('th', {}, x)))), tb);
+  return grilla;
 }
 /** «cómo funciona la simulación»: los pasos y el diccionario */
 export function seccionesSimulacion(): H[] {
   return [
     h('section', { class: 'guia-cap' }, h('h2', {}, 'Cómo funciona un simulador de fluidos, paso a paso'),
-      h('p', {}, 'Un túnel de viento numérico hace con cuentas lo que un túnel de verdad hace con aire y una maqueta. Estos son los pasos, de lo más simple a lo más fino.'),
-      ...SIMULACION_PASOS.flatMap(p => [h('h3', {}, p.titulo), h('p', {}, p.texto)])),
+      h('p', { class: 'guia-intro' }, 'Un túnel de viento numérico hace con cuentas lo que un túnel de verdad hace con aire y una maqueta. Estos son los pasos, de lo más simple a lo más fino; los dibujos muestran la idea de cada uno.'),
+      ...SIMULACION_PASOS.map((p, k) => {
+        const m = /^(\d+)\.\s*(.*)$/.exec(p.titulo), n = m ? +m[1] : k + 1, dib = ILUSTRACION_PASO[n];
+        return h('div', { class: `sim-paso${dib ? '' : ' sin-dibujo'}` },
+          h('div', { class: 'sp-num' }, String(n)),
+          h('div', { class: 'sp-txt' }, h('h3', {}, m ? m[2] : p.titulo), h('p', {}, p.texto)),
+          ...(dib ? [h('figure', { class: 'sp-dib' }, dib() as unknown as H)] : []));
+      })),
     h('section', { class: 'guia-cap' }, h('h2', {}, 'Diccionario de la simulación'),
-      h('dl', { class: 'glosario-dl' }, ...SIMULACION_TERMINOS.flatMap(([t, d]) => [h('dt', {}, t), h('dd', {}, d)]))),
+      h('p', { class: 'guia-intro' }, 'Las palabras que aparecen en los túneles de viento de la app, en orden alfabético.'),
+      h('div', { class: 'dicc' }, ...SIMULACION_TERMINOS.map(([t, d]) => h('div', { class: 'dicc-item' }, h('b', {}, t), h('p', {}, d))))),
   ];
 }
 /** las unidades de la simulación (para la guía de Flujo, además de las del grafo) */

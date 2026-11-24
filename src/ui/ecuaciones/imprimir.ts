@@ -126,6 +126,7 @@ export async function abrirGuiaImprimible(metodo: MetodoEc, imprimir = true): Pr
   // ---- el glosario del método: sus variables (avisando si otro método usa la misma letra para otra cosa) y sus unidades
   raiz.append(...seccionesGlosario(metodo, g));
 
+  mantenerTitulos(raiz);
   document.body.classList.add('con-guia');
   document.body.append(raiz);
   // cada esquema se acomoda y se achica para entrar en el ancho de la hoja
@@ -183,7 +184,7 @@ export async function abrirGlosario(imprimir = true): Promise<void> {
   bCer.addEventListener('click', cerrar);
   raiz.append(h('div', { class: 'guia-barra' }, h('strong', {}, 'Glosario y unidades'), bImp, bCer));
   const dir = estado.dir, pieza = estado.calculo.asig.piezas.find(x => x.dir === dir && x.filaHoja !== null)?.nombre ?? '';
-  raiz.append(h('section', { class: 'guia-portada' },
+  raiz.append(h('section', { class: 'guia-portada portada-glosario' },
     h('p', { class: 'guia-sobre' }, 'Torre 3D · guía de cálculo'),
     h('h1', {}, 'Glosario y unidades'),
     h('p', { class: 'guia-sub' }, 'Cada unidad, cada letra de las cuentas y cómo funciona la simulación del viento, punto por punto.'),
@@ -200,9 +201,29 @@ export async function abrirGlosario(imprimir = true): Promise<void> {
     raiz.append(h('section', { class: 'guia-cap' }, h('h2', {}, `Variables del método ${m}`), h('p', {}, TEXTOS_METODO[m].subtitulo),
       tablaVariables(glosarioDe(g), simbolosDeOtros(m, dir, pieza))));
   }
+  mantenerTitulos(raiz);
   document.body.classList.add('con-guia');
   document.body.append(raiz);
   await new Promise(res => setTimeout(res, 200));
   raiz.dataset.listo = '1';
   if (imprimir) window.print();
+}
+
+/**
+ * Que ningún título quede solo al pie de una hoja: cada título (h2, h3) va en un bloque que no se corta junto con lo
+ * que explica, hasta unas tres oraciones (o dos párrafos o una lista o una tabla corta). Lo largo (un esquema, una
+ * tabla grande, las fichas) sigue suelto, con el título pegado por «break-after: avoid».
+ */
+export function mantenerTitulos(raiz: HTMLElement) {
+  const oraciones = (t: string) => (t.match(/[.!?…](\s|$)/g) ?? []).length || 1;
+  const largo = (e: Element) => e.matches('.guia-tablero, .fichas-unidad, .dicc, .guia-diagrama') || (e.matches('table') && e.querySelectorAll('tr').length > 14) || (e.matches('ul, ol') && e.children.length > 8);
+  raiz.querySelectorAll('h2, h3').forEach(t => {
+    if (t.closest('.guia-paso, .sim-paso, .mantener, .ficha-unidad, .dicc-item')) return;
+    const juntos: Element[] = [t];
+    let n = 0, sig = t.nextElementSibling;
+    while (sig && !sig.matches('h2, h3') && !largo(sig) && juntos.length < 3 && n < 3) { juntos.push(sig); n += sig.matches('p') ? oraciones(sig.textContent ?? '') : 3; sig = sig.nextElementSibling; }
+    if (juntos.length < 2) return;
+    const b = document.createElement('div'); b.className = 'mantener';
+    t.before(b); juntos.forEach(e => b.append(e));
+  });
 }
