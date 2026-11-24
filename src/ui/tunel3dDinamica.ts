@@ -21,6 +21,8 @@ export interface InfoDinamica {
   B: number; H: number; VH: number; V23: number;
   /** frecuencia propia (Hz) en el sentido del viento y de costado (CIRSOC 102-25) */
   n1Viento: number; n1Costado: number;
+  /** de dónde sale n₁ de costado y las otras estimaciones del CIRSOC (1.9-4 y la de la guía 2005), para comparar */
+  metodoN1: string; n1Otros: number; n1Guia: number;
   /** masa de cada nivel (t) y su altura sobre PB (m) */
   masas: { z: number; m: number }[];
   /** viento de 5 y 10 años sobre el de diseño (velocidades) */
@@ -74,6 +76,7 @@ export function seccionDinamica(cont: HTMLElement, fz: Fuerzas3D | null, info: I
       kpi('Velocidad crítica', isFinite(Vcr) ? `${fmt(Vcr * 3.6, 0)} km/h` : '—', `n₁ = ${fmt(info.n1Costado, 2)} Hz de costado · diseño a 2/3 h: ${fmt(info.V23 * 3.6, 0)} km/h${isFinite(margen) ? ` (${margen > 1.3 ? 'lejos: no entra en resonancia' : margen > 1 ? 'cerca: revisar' : 'la supera: resonancia posible'})` : ''}`, colorEstado(isFinite(margen) ? (margen > 1.3 ? true : margen > 1 ? null : false) : null)),
       kpi('Aceleración en la azotea', `${fmt(peor10, 1)} mili-g`, `la peor con vientos de hasta 10 años${barrido.pico >= Math.max(lat10.pico, vie10.pico) - 1e-9 ? `: de costado, con ${fmt(barrido.f * info.VH * 3.6, 0)} km/h en la azotea` : ''} · con el de 10 años: de costado ${fmt(lat10.pico, 1)}, en el sentido del viento ${fmt(vie10.pico, 1)} · 5 años: ${fmt(lat5.pico, 1)} · referencia ${cfgDin.uso}: ${lim} mili-g`, colorEstado(fueraRango ? null : peor10 <= lim)),
       kpi('Deriva entre pisos', hSobre(peorD(dSim)), `con el viento de servicio, la peor · CIRSOC ${hSobre(peorD(dReg))} · límite h/${info.limD}`, colorEstado(peorD(dSim) <= 1 / info.limD && peorD(dReg) <= 1 / info.limD))),
+    ...(info.metodoN1.includes('1.9-5') && info.n1Guia > 2 * info.n1Costado ? [h('p', { class: 'aviso-linea' }, `La frecuencia de costado (${fmt(info.n1Costado, 2)} Hz) sale de la fórmula 1.9-5 de tabiques, que con tabiques esbeltos da valores bajos: con la 1.9-4 sería ${fmt(info.n1Otros, 2)} Hz y con la de la guía 2005, ${fmt(info.n1Guia, 2)} Hz. La velocidad crítica y la aceleración cambian mucho con ella: elegí el método en Viento → CIRSOC 102-25 o usá la del análisis modal (método FEM).`)] : []),
     ...(fueraRango ? [h('p', { class: 'aviso-linea' }, `El muestreo de la simulación no llega a la frecuencia de la torre (${fmt(info.n1Costado, 2)} Hz): la aceleración queda sin dato confiable. Con la placa de video y una grilla más fina se muestrea más seguido.`)] : []),
     h('figure', { class: 'diagrama' }, h('figcaption', {}, 'Con qué ritmo empuja el viento de costado (espectro de la fuerza lateral)'), graficoEspectro(eY, fs, info.n1Costado / info.f10, Math.max(320, Math.min(460, (cont.clientWidth || 380) - 10))),
       h('p', { class: 'nota chica' }, 'Cada barra es cuánta energía tiene la fuerza lateral en esa frecuencia. El pico violeta son los remolinos que se desprenden de un costado y del otro. La raya verde es la frecuencia de la torre llevada al viento de 10 años: si cae cerca del pico, la torre se mece al ritmo de los remolinos.')),

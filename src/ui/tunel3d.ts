@@ -120,6 +120,7 @@ function datosDinamica(geo: Geometria3D, infoFz: Corrida['infoFz']): InfoDinamic
   const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
   return {
     dir, B: geo.B, H: geo.H, VH, V23, n1Viento: w[dir].n1, n1Costado: w[otra].n1, masas,
+    metodoN1: w[otra].metodoFrecuencia, n1Otros: w[otra].n1Otros, n1Guia: w[otra].n1Guia2005,
     f5: (FACTOR_SERVICIO[5] * w.V50) / w.V, f10: (FACTOR_SERVICIO[10] * w.V50) / w.V,
     regl: [{ z: 0, F: w[dir].WPB }, ...niv.map(n => ({ z: n.z, F: n.W }))], servicio: w.servicio.relacion,
     EJ: z => E * ((Jniv.find(q => q.z >= z + zPB - 1e-6)?.J ?? rg.J) || rg.J), limD: datos201De(p).limiteDeriva,

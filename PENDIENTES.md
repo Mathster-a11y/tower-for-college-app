@@ -36,7 +36,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 26. ~~Túnel 3D, etapa 5: varias direcciones y rosa de vientos~~ (24/11): rosa de vientos de la estación (rumbo, % del tiempo y viento medio) con el norte del proyecto; la app simula una dirección por rumbo y junta el confort de la vereda (o de una terraza, a la altura que se elija) con todos los rumbos, con Lawson LDDC o 2001 (se cambia sin volver a simular) y la ráfaga peligrosa rayada; y la envolvente de la fachada (peor empuje y peor succión de todas las direcciones) contra componentes y revestimientos del CIRSOC
 28. ~~Túnel 3D, etapas 6 y 7: lámina «Estudio de viento» y archivo de la corrida; remolinos~~ (24/11): lámina imprimible (o PDF) con una hoja por bloque (portada con la vista 3D, estructura, fachada, confort en la torre, calle); archivo .torreviento3d que se reabre sin simular; remolinos como superficies violetas con el criterio Q. **La propuesta de resultados del túnel 3D quedó completa (etapas 1 a 7)**
 29. Pedir a la cátedra la rosa de vientos de la estación de cada sitio (Servicio Meteorológico Nacional) para el confort
-27. Preguntar a la cátedra: amortiguamiento (1 o 2 %), criterio de aceleración (código de Canadá o ISO 10137) y si la frecuencia de costado del ejemplo (0,18 Hz, del CIRSOC) es la que esperan
+27. Preguntar a la cátedra: amortiguamiento (1 o 2 %), criterio de aceleración (código de Canadá o ISO 10137) y qué frecuencia propia usar: en el ejemplo la 1.9-5 de tabiques da 0,17 Hz (Cw = 0,008, tabiques esbeltos), la 1.9-4 da 0,36 Hz y la de la guía 2005, 0,87 a 1,0 Hz; la dinámica del túnel 3D lo avisa
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
