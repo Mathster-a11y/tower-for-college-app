@@ -244,3 +244,21 @@ describe('exoesqueleto · barras agregadas a mano', () => {
     r1.Ftab.forEach((f, i) => expect(f + r1.Fexo[i]).toBeCloseTo(W[i], 6));
   });
 });
+
+describe('torsión con el exoesqueleto', async () => {
+  const { torsionConExo } = await import('./exo');
+  const { calcRoto } = await import('./planilla');
+  it('el centro de rigidez se acerca al medio, el torsor baja y la rigidez a la torsión sube', () => {
+    // dos tabiques paralelos de J 10 y 2 a x = −5 y +5 (CR corrido a la izquierda) y dos perpendiculares de J 4 a ±6
+    const par = [10, 2], per = [4, 4], H: (number | null)[] = new Array(46).fill(null);
+    H[0] = -5; H[1] = 5; H[26] = -6; H[27] = 6;
+    const r = calcRoto(par, per, H, 100, 2000, false, true);
+    const t = torsionConExo(r, 8, 12, 8, 10);
+    expect(r.J7).toBeCloseTo((10 * -5 + 2 * 5) / 12, 6);
+    expect(Math.abs(t.crCon)).toBeLessThan(Math.abs(t.crSin));
+    expect(Math.abs(t.mtCon)).toBeLessThan(Math.abs(t.mtSin));
+    expect(t.kCon).toBeGreaterThan(t.kSin);
+    expect(t.giro).toBeGreaterThan(0); expect(t.giro).toBeLessThan(1);
+    expect(t.parteExo).toBeGreaterThan(0.5);
+  });
+});

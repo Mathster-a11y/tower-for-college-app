@@ -8,7 +8,7 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { anguloDiagonal, barridoModulo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -252,6 +252,30 @@ export function estadoExo(): EstadoChip {
   return ds.every(d => (reglamento ? verif301(d!).every(x => x.verifica) : d!.r.controles.every(c => c.estado === 'verifica')) && flechaExo(d!).u <= flechaExo(d!).lim) ? 'verifica' : 'no verifica';
 }
 
+// ------------------------------------------------------------------ torsión con el exo
+/** la rototraslación del viento elegido con las caras del exo como dos piezas más en cada sentido */
+function seccionTorsion(def: ExoDef): HTMLElement | null {
+  const dir = estado.dir, otra = dir === 'A' ? 'B' : 'A', dp = datosExo(dir, def), dq = datosExo(otra, def);
+  const r = dir === 'A' ? estado.calculo.valores.rotA : estado.calculo.valores.rotB;
+  if (!dp || !dq || !r) return null;
+  const t = torsionConExo(r, dp.r.caras[0]?.Jeq ?? 0, dp.tCaras[1], dq.r.caras[0]?.Jeq ?? 0, dq.tCaras[1]);
+  if (!(t.kSin > 0)) return null;
+  const simetrica = !isFinite(t.giro) || Math.abs(t.mtSin) < 1e-6;
+  // con un mismo torsor (el viento corrido de los casos 2 y 4 del CIRSOC, o uno oblicuo) el giro baja como la rigidez
+  const giroMismo = t.kSin / t.kCon;
+  const s = seccion('Torsión con el exo');
+  s.cuerpo.append(
+    h('p', { class: 'nota' }, `Las caras del exo están lejos del centro: aunque tengan menos J que los tabiques, a la torsión ayudan mucho (Σ J · d², con d grande). Con el método de la rototraslación de la planilla, entran como dos piezas más en cada sentido, a ±${fmt(dp.tCaras[1], 2)} m, con su J equivalente de ${fmt(dp.r.caras[0]?.Jeq ?? 0, 1)} m⁴ por cara.`),
+    h('div', { class: 'kpis' },
+      kpi('Centro de rigidez', `${fmt(t.crSin, 2)} → ${fmt(t.crCon, 2)} m`, 'desde el eje de la torre: el exo lo acerca al medio'),
+      kpi('Torsor Q · e', `${fmt(t.mtSin, 0)} → ${fmt(t.mtCon, 0)} tm`, 'baja porque el centro de rigidez se acerca a donde actúa el viento'),
+      simetrica ? kpi('Giro con un mismo torsor', `${fmt(giroMismo * 100, 0)} %`, 'del que tiene sin el exo: la torre es simétrica y con el viento de frente no hay torsor, pero con el viento corrido (casos 2 y 4 del CIRSOC) o de cuarto sí', colorEstado(true))
+        : kpi('Giro de la planta', `${fmt(t.giro * 100, 0)} %`, `del que tiene sin el exo (torsor / rigidez a la torsión); con un mismo torsor, ${fmt(giroMismo * 100, 0)} %`, colorEstado(t.giro < 1)),
+      kpi('Torsión que toma el exo', `${fmt(t.parteExo * 100, 0)} %`, `rigidez a la torsión: ${fmt(t.kSin, 0)} → ${fmt(t.kCon, 0)} m⁶`)),
+    h('p', { class: 'nota chica' }, 'Es una cuenta aparte: la planilla de la cátedra sigue con los tabiques solos. Si el giro baja mucho, la corrección por torsión de cada tabique (columna N de la rototraslación) baja en la misma proporción.'));
+  return s.el;
+}
+
 // ------------------------------------------------------------------ qué módulo conviene
 let barrido: { clave: string; filas: FilaModulo[] } | null = null;
 /** el último barrido vale mientras no cambie el exo ni el proyecto (sin contar el módulo, que es lo que se barre) */
@@ -363,6 +387,7 @@ export function panelExo(c: H) {
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
+    const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });
   campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });

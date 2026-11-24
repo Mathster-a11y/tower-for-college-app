@@ -17,6 +17,7 @@
  *      N(x) = Na − ∫p,  V(x) = Va + ∫q,  M(x) = Ma + Va·x + ∫∫q   (M parabólica o cúbica si hay carga en la barra)
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
+import type { RotoRes } from './planilla';
 
 export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
@@ -918,4 +919,40 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
     out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
   }));
   return out;
+}
+
+// ------------------------------------------------------------------ torsión con el exoesqueleto
+export interface TorsionExo {
+  /** centro de rigidez (posición, m) y torsor Q · e (tm), sin y con el exo */
+  crSin: number; crCon: number; mtSin: number; mtCon: number;
+  /** rigidez a la torsión Σ J · d² (m⁶), sin y con el exo, y la parte de los tabiques con el exo */
+  kSin: number; kCon: number; kTabCon: number;
+  /** el giro de la planta con el exo sobre el giro sin él, y la parte del torsor que toma el exo */
+  giro: number; parteExo: number;
+}
+/**
+ * Torsión con el exoesqueleto, con el método de la rototraslación de la planilla: las caras del exo entran como dos
+ * piezas más en cada sentido, a ±t del centro, con su J equivalente (el de la etapa 08, en hormigón). El centro de
+ * rigidez se acerca al medio, el torsor Q · e baja y la rigidez a la torsión Σ J · d² sube mucho (las caras están lejos).
+ * No cambia la planilla: es la cuenta aparte que muestra cuánto ayuda el exo a la torsión.
+ * @param r la rototraslación de la planilla del viento elegido; JeqPar y tPar: las caras paralelas a ese viento (J de una
+ *   cara, m⁴, y su distancia al centro, m); JeqPer y tPer: las del otro viento
+ */
+export function torsionConExo(r: RotoRes, JeqPar: number, tPar: number, JeqPer: number, tPer: number): TorsionExo {
+  const par: { J: number; h: number }[] = [], per: { J: number; h: number }[] = [];
+  r.B.forEach((J, i) => {
+    if (!(J > 0) || !isFinite(r.K[i])) return;
+    if (i < r.nP) par.push({ J, h: r.K[i] + r.J7 });
+    else if (i >= r.oO) per.push({ J, h: r.K[i] + r.J38 });
+    else per.push({ J, h: r.K[i] + r.J28 });
+  });
+  const sumJ = (xs: { J: number }[]) => xs.reduce((s, x) => s + x.J, 0), sumJh = (xs: { J: number; h: number }[]) => xs.reduce((s, x) => s + x.J * x.h, 0);
+  const crCon = (sumJh(par) + JeqPar * (tPar - tPar)) / (sumJ(par) + 2 * JeqPar);
+  const crPerCon = per.length || JeqPer > 0 ? sumJh(per) / (sumJ(per) + 2 * JeqPer) : 0;
+  const polar = (xs: { J: number; h: number }[], c: number) => xs.reduce((s, x) => s + x.J * (x.h - c) ** 2, 0);
+  const kTabCon = polar(par, crCon) + polar(per, crPerCon);
+  const kCon = kTabCon + JeqPar * ((tPar - crCon) ** 2 + (-tPar - crCon) ** 2) + JeqPer * ((tPer - crPerCon) ** 2 + (-tPer - crPerCon) ** 2);
+  const mtSin = r.J15, mtCon = r.D5 * crCon, kSin = r.M51;
+  const giro = mtSin && kSin ? (mtCon / kCon) / (mtSin / kSin) : NaN;
+  return { crSin: r.J7, crCon, mtSin, mtCon, kSin, kCon, kTabCon, giro, parteExo: kCon > 0 ? 1 - kTabCon / kCon : 0 };
 }
