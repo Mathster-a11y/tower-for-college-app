@@ -17,6 +17,8 @@ export interface VistaToma {
   lineas: 'no' | 'lineas' | 'tubos'; colorLineas: 'velocidad' | 'uno'; particulas: boolean;
   vortices: boolean; umbralQ: number;
   flechas: 'no' | 'fijas' | 'proporcionales';
+  /** cantidad de flechas: veces las de siempre (con más, trazo más fino) */
+  densidadFlechas: number;
   horizontal: boolean; vertical: boolean; zRel: number; yRel: number;
   color: 'velocidad' | 'cp'; espectro: 'termico' | 'arcoiris'; escalaVel: 'fija' | 'auto';
   rastrillo: 'grilla' | 'vertical' | 'horizontal'; verRastrillo: boolean; rastN: number;
@@ -37,7 +39,7 @@ export interface ExportarTomas { resolucion: '1280x720' | '1920x1080'; mp4: bool
 
 export const VISTA_BASE: VistaToma = {
   maqueta: false, torreCp: true, suelo: true, lineas: 'lineas', colorLineas: 'velocidad', particulas: false, vortices: false, umbralQ: 0.3,
-  flechas: 'fijas', horizontal: true, vertical: false, zRel: 0.5, yRel: 0.5, color: 'velocidad', espectro: 'termico', escalaVel: 'fija',
+  flechas: 'fijas', densidadFlechas: 1, horizontal: true, vertical: false, zRel: 0.5, yRel: 0.5, color: 'velocidad', espectro: 'termico', escalaVel: 'fija',
   rastrillo: 'grilla', verRastrillo: true, rastN: 14, vereda: false, lawson: true,
 };
 export const SIM_BASE: SimToma = { tam: 'liviano', paredes: 'exactas', angulo: 0, lento: false, ajustado: false, banda: false, bandaCota: NaN, bandaPisos: 3 };
@@ -79,7 +81,7 @@ export function describirToma(t: Toma, nombresTam: Record<string, string>): stri
   if (v.horizontal) que.push(`corte horizontal (${Math.round(v.zRel * 100)} % de la altura)`);
   if (v.vertical) que.push('corte vertical');
   if (v.horizontal || v.vertical) que.push(v.color === 'cp' ? 'el corte con la presión (Cp)' : 'el corte con la velocidad');
-  if (v.flechas !== 'no' && (v.horizontal || v.vertical || v.vereda)) que.push(v.flechas === 'fijas' ? 'flechas del mismo largo' : 'flechas proporcionales');
+  if (v.flechas !== 'no' && (v.horizontal || v.vertical || v.vereda)) que.push(`${v.flechas === 'fijas' ? 'flechas del mismo largo' : 'flechas proporcionales'}${v.densidadFlechas !== 1 ? ` (×${String(v.densidadFlechas).replace('.', ',')} de cantidad)` : ''}`);
   if (v.lineas !== 'no') que.push(v.lineas === 'tubos' ? 'líneas de corriente en tubos' : 'líneas de corriente');
   if (v.particulas) que.push('partículas');
   if (v.vortices) que.push('remolinos (criterio Q)');

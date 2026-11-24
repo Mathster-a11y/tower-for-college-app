@@ -108,7 +108,8 @@ export type ModoFlechas = 'no' | 'fijas' | 'proporcionales';
  * Siempre con un borde del color del fondo, para que se lean sobre cualquier mapa de colores. Con colorear = false (el
  * fondo ya es la velocidad), las fijas van en tinta: solo dicen la dirección.
  */
-export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: ModoFlechas, muestra: (X: number, Y: number) => [number, number] | null, paso: number, tinta: string, borde: string, colorear = true) {
+/** grosor: factor del trazo y de la punta (con más flechas, más finas, para que no se empasten) */
+export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: ModoFlechas, muestra: (X: number, Y: number) => [number, number] | null, paso: number, tinta: string, borde: string, colorear = true, grosor = 1) {
   if (modo === 'no') return;
   g.save();
   g.lineCap = 'round'; g.lineJoin = 'round';
@@ -122,12 +123,12 @@ export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: Modo
     if (L < 2) continue;
     const ux = m[0] / s, uy = -m[1] / s;                               // en pantalla, y hacia abajo
     const x0 = fx - (ux * L) / 2, y0 = fy - (uy * L) / 2, x1 = fx + (ux * L) / 2, y1 = fy + (uy * L) / 2;
-    const cab = Math.min(6, Math.max(3, L * 0.32)), ax = -ux * cab, ay = -uy * cab, nx = -uy * cab * 0.6, ny = ux * cab * 0.6;
+    const cab = Math.min(6 * grosor, Math.max(3 * grosor, L * 0.32)), ax = -ux * cab, ay = -uy * cab, nx = -uy * cab * 0.6, ny = ux * cab * 0.6;
     let color = tinta;
     if (modo === 'fijas' && colorear) { colorTermico(Math.min(1, s / 1.6), px, 0); color = `rgb(${px[0]},${px[1]},${px[2]})`; }
     const trazo = () => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.moveTo(x1 + ax + nx, y1 + ay + ny); g.lineTo(x1, y1); g.lineTo(x1 + ax - nx, y1 + ay - ny); g.stroke(); };
-    g.strokeStyle = borde; g.lineWidth = 3.4; g.globalAlpha = 0.75; trazo();
-    g.strokeStyle = color; g.lineWidth = 1.6; g.globalAlpha = 1; trazo();
+    g.strokeStyle = borde; g.lineWidth = 3.4 * grosor; g.globalAlpha = 0.75; trazo();
+    g.strokeStyle = color; g.lineWidth = 1.6 * grosor; g.globalAlpha = 1; trazo();
   }
   g.restore();
 }

@@ -29,7 +29,7 @@ import { criterioQ, isosuperficie, umbralQ } from '../viento/vortices';
 import { alMuestrear, cfgRosa, factorEval, seccionRosa, zEval, type CtxRosa } from './tunel3dRosa';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
-import { acercar, CAMARAS, camara, centroTorre, formatoVideo, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
+import { acercar, sacarAfuera, CAMARAS, camara, centroTorre, formatoVideo, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
 import { cargarTomas, describirToma, guardarTomas, nuevoId, PLANTILLAS, type ExportarTomas, type Toma } from './tunel3dTomas';
 import { alCambiarFachada, cfgFachada, colorCp, llaveFachada, seccionFachada, valorTrozo } from './tunel3dFachada';
 import { vientoCirsoc } from './cirsoc102';
@@ -78,7 +78,9 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** dominio de la torre entera: alto de 1,5 H (normal) o 1,25 H (ajustado: más celdas en la torre, el techo más cerca) */
   ajustado: false,
   /** lo que también se puede apagar para las grabaciones: los colores de Cp de la torre, el suelo y la raya del rastrillo */
-  torreCp: true, suelo: true, verRastrillo: true };
+  torreCp: true, suelo: true, verRastrillo: true,
+  /** cantidad de flechas en los cortes: veces las de siempre (unas 32 a lo ancho); con más, el trazo se afina */
+  densidadFlechas: 1 };
 // la fidelidad elegida antes (si hay) arma las opciones de entrada
 { const f = fidelidadGuardada(); if (f) Object.assign(cfg, FIDELIDAD[f].d3); }
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -345,7 +347,8 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
     if (!pintar(i, j, col)) { R[c] = 52 / 255; G[c] = 58 / 255; B[c] = 70 / 255; continue; }
     col.getRGB(rgbS, THREE.SRGBColorSpace); R[c] = rgbS.r; G[c] = rgbS.g; B[c] = rgbS.b; aire[c] = 1;
   }
-  const k = Math.max(1, Math.min(6, Math.floor(2048 / ancho))), W = ancho * k, H = alto * k;
+  // con muchas flechas la imagen se hace más fina (hasta 4096 px), para que el trazo fino no se pixele
+  const k = Math.max(1, Math.min(8, Math.floor((vel && cfg.flechas !== 'no' && cfg.densidadFlechas >= 2 ? 4096 : 2048) / ancho))), W = ancho * k, H = alto * k;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!, img = g.createImageData(W, H), d = img.data;
   for (let fila = 0; fila < H; fila++) {
@@ -366,7 +369,9 @@ function textura(ancho: number, alto: number, pintar: (i: number, j: number, out
   if (vel && cfg.flechas !== 'no') {
     const VA = new Float32Array(n), VB = new Float32Array(n), sol = new Uint8Array(n);
     for (let j = 0; j < alto; j++) for (let i = 0; i < ancho; i++) { const c = j * ancho + i, m = vel(i, j); if (m) { VA[c] = m[0]; VB[c] = m[1]; } else sol[c] = 1; }
-    dibujarFlechas(g, { W, H, x0: 0, dx: 1 / k, y0: alto, dy: 1 / k }, cfg.flechas, muestraVelocidad(VA, VB, sol, ancho, alto, 1), Math.max(18, Math.round(W / 32)), '#1d1d24', '#f4f4f4', cfg.vereda || cfg.color === 'cp');
+    // densidad: n veces más flechas (la separación baja como 1/n) y el trazo se afina como 1/√n (no menos de un tercio)
+    const dens = Math.max(0.25, cfg.densidadFlechas), paso = Math.max(6, Math.round(W / (32 * dens))), grosor = Math.max(0.33, Math.min(1.2, 1 / Math.sqrt(dens))) * Math.max(1, W / 2048);
+    dibujarFlechas(g, { W, H, x0: 0, dx: 1 / k, y0: alto, dy: 1 / k }, cfg.flechas, muestraVelocidad(VA, VB, sol, ancho, alto, 1), paso, '#1d1d24', '#f4f4f4', cfg.vereda || cfg.color === 'cp', grosor);
   }
   const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -412,7 +417,7 @@ function actualizarCampo() {
   if (cfg.horizontal || cfg.vereda) {
     const t = textura(g.nx, g.ny, (i, j, o) => pintarCelda((zc * g.ny + j) * g.nx + i, o, zc), (i, j) => { const cel = (zc * g.ny + j) * g.nx + i; return g.solido[cel] ? null : [F[4 * cel] / UH, F[4 * cel + 1] / UH]; });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2; m.position.y = (zc - 0.5) / g.escala; v.esc.add(m); v.planoH = m;
+    m.rotation.x = -Math.PI / 2; m.position.y = (zc + (g.banda ? 0.5 : -0.5)) / g.escala; v.esc.add(m); v.planoH = m;
   }
   if (cfg.vertical) {
     const yc = Math.max(0, Math.min(g.ny - 1, Math.round(cfg.yRel * (g.ny - 1))));
@@ -479,8 +484,12 @@ function semillas(g: Geometria3D): number[][] {
 /** las líneas de corriente del campo (puntos en metros, velocidad de la red y tiempo de la red en cada punto) */
 function trazosDeCorriente(): Trazo[] {
   const c = corrida!, g = c.geo, F = c.campo!;
-  const vel = (x: number, y: number, z: number): [number, number, number] | null => {
-    if (x < 0 || x >= g.nx - 1 || z < 1 || z >= g.nz - 1 || y < 0 || y >= g.ny - 1) return null;
+  // las coordenadas de los puntos son las de la planta en la red (como el dibujo de la torre): el centro de la celda i
+  // está en i + ½ y la altura de la celda k en k − ½ (con suelo) o k + ½ (banda). La velocidad se interpola entre centros
+  const dz = g.banda ? -0.5 : 0.5;
+  const vel = (x0: number, y0: number, z0: number): [number, number, number] | null => {
+    const x = x0 - 0.5, y = y0 - 0.5, z = z0 + dz;
+    if (x < 0 || x >= g.nx - 1 || z < (g.banda ? 0 : 1) || z >= g.nz - 1 || y < 0 || y >= g.ny - 1) return null;
     const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z), fx = x - i, fy = y - j, fz = z - k;
     let su = 0, sv = 0, sw = 0;
     for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) for (let d = 0; d < 2; d++) {
@@ -490,17 +499,29 @@ function trazosDeCorriente(): Trazo[] {
     }
     return [su, sv, sw];
   };
+  // la torre (y los vecinos) como se dibujan: la planta exacta de cada tramo. Una línea no puede entrar: si cae adentro
+  // (o a menos del grosor del tubo del borde) se la saca hasta el borde más cercano, o arriba de la azotea si está más
+  // cerca. En la grilla una celda es sólida si su centro está adentro: sin esto, en las esquinas la línea pasaba por
+  // celdas «de aire» que en el dibujo ya son torre
+  const margen = (cfg.lineas && cfg.estiloLineas === 'tubos' ? 0.16 + 0.12 * g.escala : 0.1) + 0.2;
+  const cuerpos = [...g.tramos.map(t2 => ({ pol: t2.pol, h0: t2.h0, h1: t2.h1 })), ...g.vecinos.map(v2 => ({ pol: v2.pol, h0: v2.desde, h1: v2.altura }))];
+  const fuera = (p: number[]) => sacarAfuera(p, cuerpos, g.escala, margen);
   return semillas(g).map(p0 => {
-    let p = p0.slice(), t = 0;
+    let p = p0.slice(), t = 0, cerca = 0;
+    fuera(p);
     const a0 = vel(p[0], p[1], p[2]);
     const tr: Trazo = { pts: [aMundo(g, p[0], p[1], p[2])], vel: [a0 ? Math.hypot(...a0) : 0], t: [0] };
-    for (let n = 0; n < 1200; n++) {
+    for (let n = 0; n < 1600; n++) {
       const a = vel(p[0], p[1], p[2]); if (!a) break;
       const m = Math.hypot(...a); if (m < 1e-6) break;
-      const hh = 0.6 / m, mid = [p[0] + 0.5 * hh * a[0], p[1] + 0.5 * hh * a[1], p[2] + 0.5 * hh * a[2]];
+      // cerca de la torre, pasos más cortos (el aire dobla en poco lugar)
+      const hh = (cerca > 0 ? 0.3 : 0.6) / m, mid = [p[0] + 0.5 * hh * a[0], p[1] + 0.5 * hh * a[1], p[2] + 0.5 * hh * a[2]];
+      fuera(mid);
       const b = vel(mid[0], mid[1], mid[2]); if (!b) break;
       p = [p[0] + hh * b[0], p[1] + hh * b[1], p[2] + hh * b[2]]; t += hh;
-      if (n % 2 === 0) { tr.pts.push(aMundo(g, p[0], p[1], p[2])); tr.vel.push(m); tr.t.push(t); }
+      if (fuera(p)) cerca = 6; else if (cerca > 0) cerca--;
+      // cerca de la torre se guardan todos los puntos (si no, la curva suavizada corta la esquina)
+      if (cerca > 0 || n % 2 === 0) { tr.pts.push(aMundo(g, p[0], p[1], p[2])); tr.vel.push(m); tr.t.push(t); }
     }
     return tr;
   }).filter(tr => tr.pts.length > 3);
@@ -763,7 +784,7 @@ function tomaActual(): Toma {
     vista: {
       maqueta: cfg.maqueta, torreCp: cfg.torreCp, suelo: cfg.suelo, lineas: cfg.lineas ? cfg.estiloLineas : 'no', colorLineas: cfg.colorLineas, particulas: cfg.particulas,
       vortices: cfg.vortices, umbralQ: cfg.umbralQ, flechas: cfg.flechas, horizontal: cfg.horizontal, vertical: cfg.vertical, zRel: cfg.zRel, yRel: cfg.yRel,
-      color: cfg.color, espectro: espectroVel, escalaVel: cfg.escalaVel, rastrillo: cfg.rastrillo, verRastrillo: cfg.verRastrillo, rastN: cfg.rastN, vereda: cfg.vereda, lawson: cfg.lawson,
+      densidadFlechas: cfg.densidadFlechas, color: cfg.color, espectro: espectroVel, escalaVel: cfg.escalaVel, rastrillo: cfg.rastrillo, verRastrillo: cfg.verRastrillo, rastN: cfg.rastN, vereda: cfg.vereda, lawson: cfg.lawson,
     },
     camara: v ? 'guardada' : 'esquina', ...(v ? { pos: v.cam.position.toArray(), mira: v.ctl.target.toArray() } : {}),
     acercar: 1, recorrido: cfgGrab.recorrido, segundos: cfgGrab.segundos, calentar: 1.5, llaves: 'costado', simbolos: cfg.simbolos, grafico: true, rotulo: true,
@@ -778,7 +799,7 @@ function aplicarVistaToma(t: Toma) {
   const v = t.vista;
   Object.assign(cfg, {
     maqueta: v.maqueta, torreCp: v.torreCp, suelo: v.suelo, lineas: v.lineas !== 'no', estiloLineas: v.lineas === 'tubos' ? 'tubos' : 'lineas', colorLineas: v.colorLineas,
-    particulas: v.particulas, vortices: v.vortices, umbralQ: v.umbralQ, flechas: v.flechas, horizontal: v.horizontal, vertical: v.vertical, zRel: v.zRel, yRel: v.yRel,
+    particulas: v.particulas, vortices: v.vortices, umbralQ: v.umbralQ, flechas: v.flechas, densidadFlechas: v.densidadFlechas, horizontal: v.horizontal, vertical: v.vertical, zRel: v.zRel, yRel: v.yRel,
     color: v.color, escalaVel: v.escalaVel, rastrillo: v.rastrillo, verRastrillo: v.verRastrillo, rastN: v.rastN, vereda: v.vereda, lawson: v.lawson,
     llave: true, simbolos: t.simbolos,
   });
@@ -1015,6 +1036,7 @@ function seccionTomas(): HTMLElement {
           fNum('Altura del corte horizontal (0 a 1)', v, 'zRel', 0, 1.3, 0.05), fNum('Posición del corte vertical (0 a 1)', v, 'yRel', 0, 1, 0.05),
           fSel('Color de los cortes', v, 'color', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']]),
           fSel('Flechas en los cortes', v, 'flechas', [['no', 'sin flechas'], ['fijas', 'del mismo largo (color = velocidad)'], ['proporcionales', 'el largo dice la velocidad']]),
+          ...(v.flechas !== 'no' ? [fSel('Cantidad de flechas (más: trazo más fino)', v, 'densidadFlechas', [['0.5', 'la mitad'], ['1', 'normal'], ['1.5', '1,5 veces'], ['2', 'el doble'], ['3', 'el triple'], ['4', '4 veces'], ['6', '6 veces']], true)] : []),
           fSel('Líneas de corriente', v, 'lineas', [['no', 'sin líneas'], ['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']]),
           fSel('Color de las líneas', v, 'colorLineas', [['velocidad', 'la velocidad'], ['uno', 'un solo color']]),
           fChk('Partículas (como tinta)', v, 'particulas'), fChk('Nubes de turbulencia (remolinos, criterio Q)', v, 'vortices'),
@@ -1301,6 +1323,12 @@ export function panelTunel3d(c: H) {
     qd.append(h('div', { class: 'fila-acciones' }, bTodo, bNada),
       capa('Corte horizontal', cfg.horizontal, x => { cfg.horizontal = x; }), capa('Corte vertical', cfg.vertical, x => { cfg.vertical = x; }),
       capa('Flechas de la velocidad en los cortes', cfg.flechas !== 'no', x => { cfg.flechas = x ? cfg.estiloFlechas : 'no'; }, estilo),
+      ...(cfg.flechas !== 'no' ? [(() => {
+        const sd = h('select', { 'aria-label': 'Cantidad de flechas' }) as HTMLSelectElement;
+        ([[0.5, 'la mitad'], [1, 'normal (unas 32 a lo ancho)'], [1.5, '1,5 veces'], [2, 'el doble'], [3, 'el triple'], [4, '4 veces'], [6, '6 veces']] as [number, string][]).forEach(([v2, t2]) => sd.append(new Option(t2, String(v2), false, v2 === cfg.densidadFlechas)));
+        sd.addEventListener('change', () => { cfg.densidadFlechas = +sd.value; actualizarCampo(); });
+        return h('label', { class: 'campo', title: 'Con más flechas el trazo se afina, para que no se empasten y se lea el detalle' }, h('span', {}, 'Cantidad de flechas (vectores)'), sd);
+      })()] : []),
       capa('Líneas de corriente', cfg.lineas, x => { cfg.lineas = x; }, (() => {
         const sel = h('select', { 'aria-label': 'Color de las líneas de corriente' }) as HTMLSelectElement;
         sel.append(new Option('color: la velocidad', 'velocidad', false, cfg.colorLineas === 'velocidad'), new Option('de un solo color', 'uno', false, cfg.colorLineas === 'uno'));

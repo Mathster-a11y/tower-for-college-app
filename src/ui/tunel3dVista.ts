@@ -18,7 +18,8 @@ export function grupoTubos(trazos: Trazo[], color: (v: number, out: THREE.Color)
   const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.05 }), c = new THREE.Color(), radial = 6;
   for (const tr of trazos) {
     if (tr.pts.length < 4) continue;
-    const curva = new THREE.CatmullRomCurve3(tr.pts), seg = Math.min(400, tr.pts.length * 2);
+    // centrípeta: no se pasa de largo en las vueltas cerradas (en las esquinas la curva no se mete en la torre)
+    const curva = new THREE.CatmullRomCurve3(tr.pts, false, 'centripetal'), seg = Math.min(900, tr.pts.length * 2);
     const geo = new THREE.TubeGeometry(curva, seg, r, radial, false);
     // el color de cada anillo: la velocidad interpolada en la misma fracción del largo
     const largo: number[] = [0];
@@ -35,6 +36,49 @@ export function grupoTubos(trazos: Trazo[], color: (v: number, out: THREE.Color)
     g.add(new THREE.Mesh(geo, mat));
   }
   return g;
+}
+
+/** el punto del borde de un polígono más cercano a (x, y), con la normal hacia afuera del lado donde cae */
+export function bordeMasCercano(pol: { x: number; y: number }[], x: number, y: number): { x: number; y: number; nx: number; ny: number } {
+  let mejor = { x: pol[0].x, y: pol[0].y, nx: 1, ny: 0 }, d2 = Infinity;
+  // sentido del polígono (para que la normal mire afuera)
+  const area = pol.reduce((a, q, i) => { const r = pol[(i + 1) % pol.length]; return a + q.x * r.y - r.x * q.y; }, 0), sg = area >= 0 ? 1 : -1;
+  for (let i = 0; i < pol.length; i++) {
+    const a = pol[i], b = pol[(i + 1) % pol.length], ex = b.x - a.x, ey = b.y - a.y, L2 = ex * ex + ey * ey || 1;
+    const u = Math.max(0, Math.min(1, ((x - a.x) * ex + (y - a.y) * ey) / L2)), qx = a.x + u * ex, qy = a.y + u * ey, dd = (x - qx) ** 2 + (y - qy) ** 2;
+    if (dd < d2) { d2 = dd; const L = Math.sqrt(L2); mejor = { x: qx, y: qy, nx: (sg * ey) / L, ny: (-sg * ex) / L }; }
+  }
+  return mejor;
+}
+export function dentroPol(p: { x: number; y: number }[], x: number, y: number): boolean {
+  let s2 = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const a = p[i], b = p[j]; if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) s2 = !s2; }
+  return s2;
+}
+/**
+ * saca un punto (coordenadas de la red: x, y de la planta; z con altura z/escala en m) de la torre o de un vecino: si
+ * está adentro de la planta exacta de un tramo, o a menos de «margen» celdas de su fachada, va al borde más cercano más
+ * el margen (o arriba de la azotea, si está más cerca). Devuelve si lo movió
+ */
+export function sacarAfuera(p: number[], cuerpos: { pol: { x: number; y: number }[]; h0: number; h1: number }[], escala: number, margen: number): boolean {
+  const h = p[2] / escala, mz = margen / escala;
+  let movido = false;
+  for (const b of cuerpos) {
+    if (h < b.h0 - mz || h > b.h1 + mz) continue;
+    const q = bordeMasCercano(b.pol, p[0], p[1]), adentro = dentroPol(b.pol, p[0], p[1]);
+    const dxy = Math.hypot(p[0] - q.x, p[1] - q.y);
+    if (!adentro && dxy >= margen) continue;
+    // adentro y más cerca del techo que de la fachada: arriba de la azotea
+    if (adentro && (b.h1 - h) * escala < dxy) { p[2] = b.h1 * escala + margen; movido = true; continue; }
+    // fuera de la altura del tramo (encima de la azotea, dentro del margen): no se toca la planta
+    if (h > b.h1) continue;
+    let nx = p[0] - q.x, ny = p[1] - q.y;
+    if (adentro) { nx = -nx; ny = -ny; }
+    const L = Math.hypot(nx, ny);
+    if (L < 1e-9) { nx = q.nx; ny = q.ny; } else { nx /= L; ny /= L; }
+    p[0] = q.x + nx * margen; p[1] = q.y + ny * margen; movido = true;
+  }
+  return movido;
 }
 
 // ------------------------------------------------------------------------------------------------ partículas
