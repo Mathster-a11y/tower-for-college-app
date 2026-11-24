@@ -23,7 +23,7 @@ import TunelWorker from '../viento/tunel.worker?worker&inline';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe2D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, enUnidad, vientoDisenoEn, nombreUnidad, textoReferencia, txtPct, txtVel, txtVelLargo, vientoQueLlega } from './unidadViento';
 import { llaveEnLienzo, simbolosEnLienzo, type Llave, type Simbolo } from './llaveColor';
-import { colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
+import { avisoArcoiris, textoEspectro, colorTermico, coloresTermico, dibujarFlechas, divergente, isolineas, muestraVelocidad, pintarSuave, type ModoFlechas, type Vista as VistaPx } from './campoSuave';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { agregarRetiro, armarEscenario, cajaDe, tramosEdificio, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
@@ -420,7 +420,7 @@ function simbolos2d(c: Corrida, pxCelda: number): Simbolo[] {
 
 /** la llave de las flechas, si hace falta una aparte (con el color de fondo de velocidad, la del fondo sirve) */
 function llaveFlechas(): Llave | null {
-  if (cfg.flechas === 'fijas' && !esVelocidad(cfg.vista)) return { titulo: 'Flechas: dirección; el color, la velocidad', colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv(1)} (llega)`], [1, `≥ ${tv(1.6)}`]] };
+  if (cfg.flechas === 'fijas' && !esVelocidad(cfg.vista)) return { titulo: `Flechas: dirección; el color, la velocidad${avisoArcoiris()}`, colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv(1)} (llega)`], [1, `≥ ${tv(1.6)}`]] };
   if (cfg.flechas === 'proporcionales') return { titulo: 'Flechas: el largo dice la velocidad', colores: [css('--lienzo', '#ffffff'), css('--ink', '#223344')], marcas: [[0, 'corta: lenta'], [1, `una separación: ${tv(1.6)}`]] };
   return null;
 }
@@ -601,9 +601,9 @@ function llaveVista(D: number): Llave {
   if (cfg.vista === 'vorticidad') return { titulo: 'Giro del aire (remolinos)', colores: [css('--corte', '#7f77dd'), fondo, css('--carga', '#d85a30')], marcas: [[0, 'horario'], [0.5, '0'], [1, 'antihorario']], extras: [torre, ...vec, ...cp] };
   const sinProm = !corrida || corrida.nV === 0 ? ' (todavía sin promedio: la instantánea)' : '';
   const escalaV: [number, string][] = [[0, 'quieto'], [1 / 1.6, `${tv(1)} (llega)`], [1, `≥ ${tv(1.6)}`]];
-  if (cfg.vista === 'media') return { titulo: `Viento medio en el tiempo${sinProm}`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
+  if (cfg.vista === 'media') return { titulo: `Viento medio en el tiempo${sinProm}${avisoArcoiris()}`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
   if (cfg.vista === 'rafagas') return { titulo: `Ráfagas: cuánto se aparta la velocidad de su media${sinProm}`, colores: coloresTermico(), marcas: [[0, 'parejo'], [0.5, `± ${tv(0.25)}`], [1, `≥ ± ${tv(0.5)}`]], extras: [torre, ...vec, ...cp] };
-  if (cfg.vista === 'velocidad') return { titulo: `Velocidad del viento (el que llega: ${tv(1)})`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
+  if (cfg.vista === 'velocidad') return { titulo: `Velocidad del viento (el que llega: ${tv(1)})${avisoArcoiris()}`, colores: coloresTermico(), marcas: escalaV, extras: [torre, ...vec, ...cp] };
   void D;
   return { titulo: 'Presión (Cp)', colores: [css('--traccion', '#e24b4a'), fondo, css('--compresion', '#378add')], marcas: [[0, '≤ −1,6 succiona'], [1.6 / 2.6, '0'], [1, '+1 empuja']], extras: [torre, ...vec, ...cp.length ? [cp[0], cp[1]] : []] };
 }
@@ -1071,7 +1071,7 @@ export function centroTunel(c: H, tam: Tam) {
     })(),
     h('div', { class: 'tunel-marco' }, lienzo, botonesZoom(lienzo)),
     h('p', { class: 'nota' }, `Planta de ${cr.nivel} (${fmt(cr.cota, 2)} m) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} de izquierda a derecha · ancho de la torre ${fmt(cr.geo.anchoM, 1)} m = ${cr.geo.D} celdas · canal de ${cr.geo.nx} × ${cr.geo.ny} celdas, periódico arriba y abajo (la torre tapa el ${fmt((100 * cr.geo.D) / cr.geo.ny, 0)} % del alto del canal) · paredes ${cfg.paredes === 'exactas' ? 'exactas: el aire choca con el contorno real, no con el borde de las celdas (rebote interpolado de Bouzidi y colisión TRT)' : 'en escalera: la pared es el borde de las celdas'}. Reynolds de la simulación ≈ ${fmt(reRed, 0)}; el real, con la V de diseño, ≈ ${(reReal / 1e6).toFixed(0)} millones: en una planta de aristas vivas el aire se despega en las esquinas casi a cualquier Reynolds, por eso la estela y el Strouhal se parecen; en una planta redondeada, no.`),
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (60 % más rápido que el viento que llega, o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? `Color: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega, o más).` : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'),
   );
   if (det) {
     // la ventana fina: al menos 360 px de ancho, o el doble del recuadro en el túnel
@@ -1574,7 +1574,7 @@ function centroRepro(c: H, tam: Tam) {
     : marcoA;
   const avisoComp = comparada && Math.abs(comparada.g.meta.u0 - m.u0) > 1e-9 ? [h('p', { class: 'nota chica' }, 'Las dos grabaciones se hicieron con distinta velocidad de entrada en la red (una con el túnel «lento»): los colores se leen igual porque cada una se escala con la suya.')] : [];
   c.append(h('p', { class: 'cartel-tunel' }, 'Reproducción de una grabación: no se está simulando.'), panelRepro, vistaTunel, ...avisoComp,
-    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? 'Color: velocidad con un espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro (60 % más rápido que el viento que llega, o más).' : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
+    h('p', { class: 'llave' }, cfg.vista === 'vorticidad' ? 'Color: giro del aire (naranja antihorario, violeta horario).' : cfg.vista === 'velocidad' ? `Color: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega, o más).` : 'Color: presión en Cp, azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app.'));
   cajaCp = h('div', { class: 'cp-perimetro' }); c.append(cajaCp); anchoCp = Math.min(ancho, 900);
   mostrarCuadro(r.k);
 }

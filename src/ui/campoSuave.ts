@@ -12,9 +12,17 @@ export const TERMICO: [number, string][] = [
   [0, '#120b1f'], [0.2, '#2e1a52'], [0.4, '#5b3290'], [0.56, '#9a5aa8'], [0.7, '#d590b0'], [0.84, '#f3bf7a'], [1, '#fdf2b8'],
 ];
 const hexARgb = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-/** tabla de 256 colores del espectro térmico (r, g, b seguidos) */
-export const LUT_TERMICO = (() => {
-  const t = new Uint8ClampedArray(256 * 3), st = TERMICO.map(([p, c]) => [p, ...hexARgb(c)] as number[]);
+/**
+ * El arcoíris (opción pedida por la cátedra/el usuario, apagada por defecto): de azul oscuro (quieto) a rojo (lo más
+ * rápido), pasando por celeste, verde, amarillo y naranja, como lo muestran los programas comerciales. Paradas propias
+ * (no copiadas de ningún programa). Ojo: acá el azul y el rojo son lento y rápido, no compresión y tracción; las llaves
+ * lo dicen.
+ */
+export const ARCOIRIS: [number, string][] = [
+  [0, '#1f2a8a'], [0.15, '#2f6fd6'], [0.32, '#2fb7d8'], [0.48, '#3fbf6a'], [0.62, '#c8d43a'], [0.74, '#f6c531'], [0.87, '#f07a24'], [1, '#c8261f'],
+];
+const armarLut = (paradas: [number, string][]) => {
+  const t = new Uint8ClampedArray(256 * 3), st = paradas.map(([p, c]) => [p, ...hexARgb(c)] as number[]);
   for (let i = 0; i < 256; i++) {
     const x = i / 255; let k = 0;
     while (k < st.length - 2 && x > st[k + 1][0]) k++;
@@ -22,9 +30,24 @@ export const LUT_TERMICO = (() => {
     t[3 * i] = r0 + (r1 - r0) * f; t[3 * i + 1] = g0 + (g1 - g0) * f; t[3 * i + 2] = b0 + (b1 - b0) * f;
   }
   return t;
-})();
-/** los colores del espectro, para la llave */
-export const coloresTermico = () => TERMICO.map(([, c]) => c);
+};
+/** tabla de 256 colores del espectro térmico (r, g, b seguidos) */
+export const LUT_TERMICO = armarLut(TERMICO);
+export const LUT_ARCOIRIS = armarLut(ARCOIRIS);
+
+/** el espectro de la velocidad elegido (se recuerda en el navegador) */
+export type EspectroVel = 'termico' | 'arcoiris';
+const CLAVE_ESPECTRO = 'torre3d.espectroVelocidad';
+export let espectroVel: EspectroVel = (() => { try { return localStorage.getItem(CLAVE_ESPECTRO) === 'arcoiris' ? 'arcoiris' : 'termico'; } catch { return 'termico'; } })();
+export function elegirEspectroVel(e: EspectroVel) { espectroVel = e; try { localStorage.setItem(CLAVE_ESPECTRO, e); } catch { /* sin almacenamiento */ } }
+/** la tabla de colores de la velocidad que está en uso */
+export const lutVelocidad = () => (espectroVel === 'arcoiris' ? LUT_ARCOIRIS : LUT_TERMICO);
+/** los colores del espectro de la velocidad en uso, para la llave */
+export const coloresTermico = () => (espectroVel === 'arcoiris' ? ARCOIRIS : TERMICO).map(([, c]) => c);
+/** el espectro en palabras, para las notas */
+export const textoEspectro = () => (espectroVel === 'arcoiris' ? 'el arcoíris, de azul oscuro (quieto) a celeste, verde, amarillo, naranja y rojo' : 'el espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro');
+/** aclaración para las llaves de la velocidad cuando el arcoíris está elegido */
+export const avisoArcoiris = () => (espectroVel === 'arcoiris' ? ' · el rojo es rápido, no tracción' : '');
 
 export interface Vista {
   /** píxeles del destino */
@@ -65,8 +88,8 @@ export function pintarSuave(px: Uint8ClampedArray, v: Vista, nx: number, ny: num
 
 /** colores de cada vista (los mismos en el túnel y en la ventana de detalle) */
 export function colorTermico(t: number, px: Uint8ClampedArray, k: number) {
-  const i = 3 * Math.max(0, Math.min(255, Math.round(t * 255)));
-  px[k] = LUT_TERMICO[i]; px[k + 1] = LUT_TERMICO[i + 1]; px[k + 2] = LUT_TERMICO[i + 2];
+  const i = 3 * Math.max(0, Math.min(255, Math.round(t * 255))), L = lutVelocidad();
+  px[k] = L[i]; px[k + 1] = L[i + 1]; px[k + 2] = L[i + 2];
 }
 /** de «fondo» a a (valor negativo) o a b (positivo), con |v| = 1 en el extremo */
 export const divergente = (fondo: number[], neg: number[], pos: number[]) => (v: number, px: Uint8ClampedArray, k: number) => {

@@ -15,7 +15,7 @@ import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, Pr
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
-import { coloresTermico, dibujarFlechas, LUT_TERMICO, muestraVelocidad, type ModoFlechas } from './campoSuave';
+import { avisoArcoiris, textoEspectro, coloresTermico, dibujarFlechas, espectroVel, lutVelocidad, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { tramosEdificio } from '../viento/contexto';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
@@ -157,10 +157,11 @@ async function ciclo() {
 const verde = () => new THREE.Color(css('--deformada', '#1d9e75')), blanco = new THREE.Color(1, 1, 1);
 /** la velocidad con el espectro térmico (el mismo del túnel 2D): 0 quieto, 1,6 veces la de la altura de la torre o más */
 /** tramo del espectro térmico que usan las líneas de corriente (sin el amarillo más claro, que no se ve sobre blanco) */
-const LINEA_T0 = 0.06, LINEA_T1 = 0.82;
-const colLinea = (s: number, out: THREE.Color) => { const t = LINEA_T0 + (LINEA_T1 - LINEA_T0) * Math.max(0, Math.min(1, s / (1.6 * UH))), i = 3 * Math.round(t * 255); return out.setRGB(LUT_TERMICO[i] / 255, LUT_TERMICO[i + 1] / 255, LUT_TERMICO[i + 2] / 255, THREE.SRGBColorSpace); };
-const coloresLinea = () => Array.from({ length: 6 }, (_, k) => { const t = LINEA_T0 + ((LINEA_T1 - LINEA_T0) * k) / 5, i = 3 * Math.round(t * 255); return `rgb(${LUT_TERMICO[i]},${LUT_TERMICO[i + 1]},${LUT_TERMICO[i + 2]})`; });
-const colVel = (s: number, out: THREE.Color) => { const i = 3 * Math.max(0, Math.min(255, Math.round((s / (1.6 * UH)) * 255))); return out.setRGB(LUT_TERMICO[i] / 255, LUT_TERMICO[i + 1] / 255, LUT_TERMICO[i + 2] / 255, THREE.SRGBColorSpace); };
+// (el arcoíris no tiene tramo claro: se usa entero)
+const tramoLinea = () => (espectroVel === 'arcoiris' ? [0, 1] : [0.06, 0.82]);
+const colLinea = (s: number, out: THREE.Color) => { const [t0, t1] = tramoLinea(), L = lutVelocidad(), t = t0 + (t1 - t0) * Math.max(0, Math.min(1, s / (1.6 * UH))), i = 3 * Math.round(t * 255); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
+const coloresLinea = () => { const [t0, t1] = tramoLinea(), L = lutVelocidad(); return Array.from({ length: 6 }, (_, k) => { const i = 3 * Math.round((t0 + ((t1 - t0) * k) / 5) * 255); return `rgb(${L[i]},${L[i + 1]},${L[i + 2]})`; }); };
+const colVel = (s: number, out: THREE.Color) => { const L = lutVelocidad(), i = 3 * Math.max(0, Math.min(255, Math.round((s / (1.6 * UH)) * 255))); return out.setRGB(L[i] / 255, L[i + 1] / 255, L[i + 2] / 255, THREE.SRGBColorSpace); };
 function colCp(cp: number, out: THREE.Color) {
   // convención de la app: empuje (comprime) azul, succión (tracciona) rojo
   if (!isFinite(cp)) return out.set(0xcfd4d9);
@@ -421,13 +422,13 @@ function armarLlaves3d() {
   else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): el viento comparado con el del campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, 'quieto'], [1 / 1.6, 'igual'], [1, '+60 % o más']] };
   else if (cfg.horizontal || cfg.vertical) corte = cfg.color === 'cp'
     ? { titulo: 'Cortes: presión (Cp)', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] }
-    : { titulo: `Cortes: velocidad del viento (el que llega a ${Math.round(zRef3d())} m: ${tv3(1)})`, colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
+    : { titulo: `Cortes: velocidad del viento (el que llega a ${Math.round(zRef3d())} m: ${tv3(1)})${avisoArcoiris()}`, colores: coloresTermico(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
   // las flechas: si el corte ya va en velocidad, su llave sirve; si no, una aparte arriba a la derecha
   const conCortes = cfg.horizontal || cfg.vertical || cfg.vereda;
   let flechas: Llave | null = null;
-  if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: 'Flechas: el color dice la velocidad', colores: coloresTermico(), marcas: [[0, 'quieta'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
+  if (conCortes && cfg.flechas === 'fijas' && (cfg.vereda || cfg.color === 'cp')) flechas = { titulo: `Flechas: el color dice la velocidad${avisoArcoiris()}`, colores: coloresTermico(), marcas: [[0, 'quieta'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] };
   else if (conCortes && cfg.flechas === 'proporcionales') flechas = { titulo: 'Flechas: el largo dice la velocidad', colores: ['#f4f4f4', '#1d1d24'], marcas: [[0, 'corta: lenta'], [1, `una separación: ${tv3(1.6)}`]] };
-  if (flechas && cfg.lineas && cfg.colorLineas === 'velocidad' && flechas.titulo.startsWith('Flechas: el color')) flechas.titulo = 'Flechas y líneas de corriente: el color dice la velocidad';
+  if (flechas && cfg.lineas && cfg.colorLineas === 'velocidad' && flechas.titulo.startsWith('Flechas: el color')) flechas.titulo = `Flechas y líneas de corriente: el color dice la velocidad${avisoArcoiris()}`;
   const lf = flechas ? llaveHtml(flechas) : null; lf?.classList.add('derecha');
   // qué quiere decir cada marca: las flechas, las líneas de corriente y los anillos
   const sim: Simbolo[] = [];
@@ -438,7 +439,7 @@ function armarLlaves3d() {
   if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: cfg.colorLineas === 'velocidad' ? coloresLinea()[3] : new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire', nota: cfg.colorLineas === 'velocidad' ? 'el color dice la velocidad' : undefined });
   // las líneas usan la escala de la velocidad: si el corte o las flechas ya la muestran, no hace falta otra llave
   const corteVel = (cfg.horizontal || cfg.vertical) && !cfg.vereda && cfg.color !== 'cp';
-  const llLineas: Llave | null = cfg.lineas && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: 'Líneas de corriente: velocidad', colores: coloresLinea(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] } : null;
+  const llLineas: Llave | null = cfg.lineas && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: `Líneas de corriente: velocidad${avisoArcoiris()}`, colores: coloresLinea(), marcas: [[0, 'quieto'], [1 / 1.6, `${tv3(1)} (llega)`], [1, `≥ ${tv3(1.6)}`]] } : null;
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
   llaves3d.replaceChildren(...(cfg.llave ? [llaveHtml(caras), ...(corte ? [llaveHtml(corte)] : []), ...(llLineas ? [(() => { const e = llaveHtml(llLineas); e.classList.add('derecha'); return e; })()] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
 }
@@ -474,7 +475,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   armarVista(marco);
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con el espectro térmico, de violeta muy oscuro (quieto) a amarillo claro (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
   dibujar();
 }
 
@@ -548,7 +549,7 @@ export function panelTunel3d(c: H) {
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
   const uv = seccion('Unidades de la velocidad').cuerpo; c.append(uv.parentElement!);
-  uv.append(controlUnidadViento(zRef3d(), () => { armarLlaves3d(); estado.avisarPanel(); }));
+  uv.append(controlUnidadViento(zRef3d(), () => { if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); armarLlaves3d(); estado.avisarPanel(); }));
   const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
   {
     const estilo = h('select', { 'aria-label': 'Estilo de las flechas' }) as HTMLSelectElement;
