@@ -837,8 +837,18 @@ export function montarPlanta(cont: HTMLElement) {
               return out;
             })(),
             cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
+            (() => {
+              // tolerancia de alabeo: hasta cuánto puede salirse del plano un paño antes de partirlo o avisar
+              const w = document.createElement('div'); w.className = 'campo-esq regla-grilla';
+              const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'Tolerancia de alabeo');
+              const act = pn.alabeoMax === -1 ? 'libre' : (pn.alabeoMax ?? 0.005) > 0.0075 ? 'frio' : 'plano';
+              ([['plano', 'Plano · 5 mm', 'Cada paño plano: hasta 5 mm fuera del plano', 0.005], ['frio', 'Curvado en frío · 15 mm', 'Vidrio plano curvado en obra sobre el marco: hasta 15 mm', 0.015], ['libre', 'Libre', 'Sin límite (vidrio curvo de fábrica)', -1]] as const).forEach(([k, t, ti, v]) => {
+                const x = boton(t, () => ponerPn(q => { if (v === 0.005) delete q.alabeoMax; else q.alabeoMax = v; }), ti); x.setAttribute('aria-pressed', String(act === k)); sg.append(x);
+              });
+              w.append('alabeo ', sg); return w;
+            })(),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
-            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.alabeados ? ` · ${r.alabeados} paños alabeados (no planos): para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
+            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.curvados ? ` · ${r.curvados} paños curvados en frío (dentro de la tolerancia).` : ''}${r.alabeados ? ` · ${r.alabeados} paños pasan la tolerancia de alabeo${r.caras ? ' (en las caras planas se parten en dos triángulos)' : ''}: para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : r.curvados ? '' : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
             boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), ''));
         }
         segue.append(pan);

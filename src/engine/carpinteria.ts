@@ -281,7 +281,14 @@ export interface Paneleria {
   origen?: 'inicio' | 'centro' | 'fin' | null;
   /** corrimiento de la modulación (m) desde el origen */
   desfase?: number | null;
+  /**
+   * cuánto puede salirse del plano un paño (m): 0,005 = plano (vacío), 0,015 = vidrio curvado en frío, null… «libre»
+   * se escribe -1. Pasada la tolerancia, en las caras planas el paño se parte en dos triángulos (facetas)
+   */
+  alabeoMax?: number | null;
 }
+/** la tolerancia de alabeo de la panelería (m): por defecto 5 mm (paño plano); -1 = libre */
+export const toleranciaAlabeo = (pn: Paneleria) => (pn.alabeoMax === -1 ? Infinity : Math.max(0.005, pn.alabeoMax ?? 0.005));
 /** lo que hace falta para repartir montantes en un largo */
 export type Reparto = Pick<Paneleria, 'modulo' | 'regla' | 'origen' | 'desfase'>;
 /**
@@ -305,7 +312,7 @@ export function divisiones(L: number, rep: Reparto): number[] {
 }
 /** un paño: polígono plano (3 o más puntos; en las caras planas, recortado por el borde de la cara) */
 export interface Panel { p: P3[]; opaco: boolean; area: number }
-export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; /** travesaños: en cada losa (donde la toca), el antepecho, los intermedios y el remate de arriba */ travesanos: [P3, P3][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
+export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; /** travesaños: en cada losa (donde la toca), el antepecho, los intermedios y el remate de arriba */ travesanos: [P3, P3][]; /** paños curvados en frío (alabeo entre 5 mm y la tolerancia) */ curvados: number; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
 
 /** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
 function montantesAnillo(r: Punto[], rep: Reparto): number[] {
@@ -382,7 +389,7 @@ const clave = (a: P3, b: P3) => { const r = (x: number) => Math.round(x * 1000) 
  * horizontales en cada losa, el antepecho y los intermedios. Cada paño es el rectángulo de la grilla recortado por el
  * borde de la cara (en un borde inclinado queda un trapecio o un triángulo): siempre plano.
  */
-function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>, zTope: number) {
+function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>, zTope: number, tol: number) {
   type Cara = { q: P3[]; bd: BandaFachada };
   type Grupo = { n: { x: number; y: number; z: number }; d: number; caras: Cara[] };
   const grupos: Grupo[] = [];
@@ -399,8 +406,9 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
       const raw: P3[] = [{ ...bd.a[i], z: bd.z0 }, { ...bd.a[(i + 1) % m], z: bd.z0 }, { ...bd.b[(i + 1) % m], z: bd.z1 }, { ...bd.b[i], z: bd.z1 }];
       const q = raw.filter((p, k) => { const r = raw[(k + 1) % raw.length]; return Math.hypot(p.x - r.x, p.y - r.y, p.z - r.z) > 1e-6; });
       if (q.length < 3) continue;
-      if (q.length === 4 && alabeo(q) > 0.005) { res.alabeados++; agregar([q[0], q[1], q[2]], bd); agregar([q[0], q[2], q[3]], bd); }
-      else agregar(q, bd);
+      const al = q.length === 4 ? alabeo(q) : 0;
+      if (al > tol) { res.alabeados++; agregar([q[0], q[1], q[2]], bd); agregar([q[0], q[2], q[3]], bd); }
+      else { if (al > 0.005) res.curvados++; agregar(q, bd); }
     }
   });
   res.caras += grupos.length;
@@ -443,12 +451,13 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
 }
 
 export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): ResultadoPaneleria {
-  const res: ResultadoPaneleria = { paneles: [], montantes: [], travesanos: [], vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
+  const res: ResultadoPaneleria = { paneles: [], montantes: [], travesanos: [], curvados: 0, vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
   const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
   const vistos = new Set<string>();
   const rep: Reparto = { ...pn, modulo: mod };
   const zTope = Math.max(...bandas.map(b => b.z1));
-  paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos, zTope);
+  const tol = toleranciaAlabeo(pn);
+  paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos, zTope, tol);
   bandas.filter(b => !b.plana).forEach(bd => {
     const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
     const ts = bd.montantes ? bd.a.map((_, i) => i) : montantesAnillo(bd.a, rep);
@@ -466,7 +475,7 @@ export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): Result
         res.paneles.push({ p: q, opaco: frk[j].opaco, area: ar });
         if (j > 0 || toca) travesano(res, q[0], q[1]);
         if (j + 2 === frk.length && Math.abs(bd.z1 - zTope) < 1e-6) travesano(res, q[3], q[2]);
-        if (alabeo(q) > 0.005) res.alabeados++;
+        const al = alabeo(q); if (al > tol) res.alabeados++; else if (al > 0.005) res.curvados++;
       }
     });
   });

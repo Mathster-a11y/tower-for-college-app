@@ -191,3 +191,21 @@ describe('grilla por reglas (reparto de montantes)', () => {
     expect(res.paneles.length).toBe(2 * (15 + 12));
   });
 });
+
+describe('tolerancia de alabeo', () => {
+  it('una torre retorcida: con «plano» los paños se parten; con «libre» ninguno pasa la tolerancia', () => {
+    const p = ejemploGuia();
+    p.niveles.forEach(n => { n.silueta = null; });
+    p.niveles.find(n => n.nombre === 'PB')!.silueta = rectangulo(20, 16);
+    p.perfilTorre = { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 1 }], giro: 1 };
+    aplicarPerfil(p);
+    p.carpinteriaTramos = [{ desde: 0, modo: 'continua', forma: 'plana' }];
+    aplicarCarpinteriaTramos(p);
+    const b = bandasFachada(p);
+    const plano = calcularPaneleria(b, { modulo: 1.5 }), frio = calcularPaneleria(b, { modulo: 1.5, alabeoMax: 0.015 }), libre = calcularPaneleria(b, { modulo: 1.5, alabeoMax: -1 });
+    expect(plano.alabeados).toBeGreaterThan(0);
+    expect(frio.alabeados).toBeLessThan(plano.alabeados);
+    expect(frio.curvados).toBeGreaterThan(0);
+    expect(libre.alabeados).toBe(0);
+  });
+});
