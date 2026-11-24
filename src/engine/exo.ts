@@ -901,6 +901,19 @@ const catalogo = (def: ExoDef) => (def.material === 'hormigon' ? CATALOGO_HORMIG
 export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[] }
 
 /** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
+/**
+ * ficha F: el acero de los cinturones (no son barras del modelo plano): en cada brazo, un reticulado de un piso de alto
+ * que da la vuelta al perímetro, con dos cordones (la sección de los cordones del brazo) y una diagonal por paño de
+ * alto × alto (la de las diagonales del brazo). Se cuenta una vez (los dos vientos comparten el cinturón).
+ */
+export function pesoCinturon(def: ExoDef, en: EntradaExo): number {
+  if (def.tipo !== 'F' || def.cinturon === false) return 0;
+  const P = 2 * (en.ancho + (en.anchosPerp?.[0] ?? en.ancho)), Av = propsSeccion(def.viga).A, Ad = propsSeccion(def.diagonal).A;
+  return nivelesOutrigger(def, en.zs).reduce((s, k) => {
+    const h = en.zs[k] - en.zs[k - 1], np = Math.max(4, Math.round(P / Math.max(h, 1)));
+    return s + (2 * P * Av + np * Math.hypot(h, P / np) * Ad) * gammaExo(def);
+  }, 0);
+}
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
   return entradas.reduce((s, en, i) => {
@@ -910,8 +923,10 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
     const esquina = (b: Barra) => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s - centroEn(k)) - anchoEn(k) / 2) < 1e-6);
     // las alas del mástil (ficha E) son de otra cara: no se cuentan; las alas del tubo (columnas intermedias de las caras
     // perpendiculares) sí, con su cantidad (cada cara perpendicular aparece una vez en cada viento como ala)
-    const factor = (b: Barra) => (b.nucleo ? 0 : b.fraccion === undefined || b.fraccion === 1 ? 1 : def.tipo === 'E' ? 0 : b.fraccion);
-    return s + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
+    // ficha F: las columnas de la cara se pesan todas (las que el cinturón hace trabajar en parte también son de acero entero)
+    const colsF = def.tipo === 'F' && def.cinturon !== false ? Math.max(1, Math.round(def.columnasCara ?? 4)) / 2 : 1;
+    const factor = (b: Barra) => (b.nucleo ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : def.tipo === 'E' ? 0 : b.fraccion);
+    return s + (i === 0 ? pesoCinturon(def, en) : 0) + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
   }, 0);
 }
 

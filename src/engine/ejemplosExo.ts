@@ -182,3 +182,51 @@ export function ejemploBasicoExo(): Proyecto {
     },
   };
 }
+
+/**
+ * Shanghai Tower (Shanghái, 2015, Gensler; estructura Thornton Tomasetti). Núcleo de hormigón con outriggers,
+ * supercolumnas y cinturones: la ficha F.
+ *  - 632 m y nueve zonas de 12 a 15 pisos, con dos pisos de máquinas y refugio en cada junta (Wikipedia, Designing
+ *    Buildings).
+ *  - Núcleo de hormigón de unos 90 × 90 ft (30 m) (Thornton Tomasetti); outriggers de acero de dos pisos de alto en los
+ *    pisos de máquinas y cinturones dobles en cada zona; ocho supercolumnas compuestas (AISC, Modern Steel Construction,
+ *    abril 2013; ENR).
+ *  - Lo demás (planta, espesor del núcleo, cuántas juntas tienen brazos, secciones): supuesto.
+ */
+export function ejemploShanghai(): Proyecto {
+  const h = 632, n = 48, dz = h / n, B = 55;                   // un nivel de la app cada 13,2 m ≈ 2,7 pisos reales
+  const niveles: Nivel[] = [];
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Corona (632 m)' : `nivel ${k} (≈ piso ${Math.round((k * dz) / (h / 128))})`, cota: r2(k * dz), ...(k === n ? { B, L: B } : {}) });
+  niveles.push({ nombre: 'PB', cota: 0, B, L: B }, { nombre: 'Subsuelo', cota: -10 });
+  // juntas de zona: nueve zonas iguales (supuesto); los brazos van en el nivel de la app más cercano
+  const juntas = Array.from({ length: 8 }, (_, j) => r2(Math.round(((j + 1) * h) / 9 / dz) * dz));
+  return {
+    version: 1,
+    nombre: 'Shanghai Tower (Shanghái, 2015) · modelo aproximado',
+    alumno: '',
+    sitio: { V: 42, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: B + 6, a1: B + 6 },
+    hormigon: 'H40',
+    // núcleo de hormigón de 30 × 30 m (Thornton Tomasetti); pared de 1,50 m (supuesto); toma el viento de los dos lados
+    muros: [tubo('N1', 0, 0, 30, 30, 1.5, (B * B) / 2, 'Núcleo', 'Núcleo B')],
+    exo: {
+      tipo: 'F', separacion: 0, modulo: 4, nucleo: 30, outriggers: juntas, cinturon: false,
+      losas: { franja: 6.25, qD: 0.5, qL: 0.25 },
+      // supercolumnas compuestas como cajones de acero equivalentes, por tramos (supuesto); brazos: botón «Dimensionar»
+      columna: { b: 4.0, e: 0.25 }, diagonal: { b: 1.2, e: 0.06 }, viga: { b: 0.15, e: 0.008 },
+      tramos: [{ clase: 'columna', desde: 0, sec: { b: 4.0, e: 0.25 } }, { clase: 'columna', desde: 211, sec: { b: 3.5, e: 0.2 } }, { clase: 'columna', desde: 421, sec: { b: 2.5, e: 0.15 } }],
+      E: 2.1e7, sigmaAdm: 14000,
+      notas: [
+        '632 m y nueve zonas de 12 a 15 pisos, con dos pisos de máquinas y refugio en cada junta (Wikipedia; Designing Buildings). Acá nueve zonas iguales (supuesto).',
+        'Núcleo de hormigón de unos 90 × 90 ft (30 m): Thornton Tomasetti. Pared de 1,50 m y que toma el viento de los dos lados: supuestos.',
+        'Outriggers de acero de dos pisos de alto en los pisos de máquinas, cinturones dobles en cada zona y ocho supercolumnas compuestas (acero y hormigón) atadas al núcleo por los brazos: AISC (Modern Steel Construction, abril 2013) y ENR. Acá los brazos son de un piso de alto (un nivel de la app, 13,2 m) y van en las ocho juntas (supuesto: las fuentes no dicen en cuántas).',
+        'Planta cuadrada de 55 m (supuesto: la torre real es redondeada y se angosta con la altura). Un nivel de la app cada 13,2 m (unos 2,7 pisos reales; la planilla admite 49 niveles).',
+        'Supercolumnas pareadas a media cara, alineadas con los brazos: cada brazo toma la suya (sin el reparto del cinturón, que en la obra lleva sobre todo el peso de cada zona). Son compuestas (acero y hormigón) y cada una lleva unas 24 000 t: un tubo de acero no alcanza. Acá son cajones de acero equivalentes por tramos: 4,0 m × 250 mm hasta 211 m, 3,5 m × 200 mm hasta 421 m y 2,5 m × 150 mm arriba (supuestos). Por eso el «acero» que informa la app (unas 107 000 t) no es el de la obra: la mayor parte son las supercolumnas, que en la realidad son sobre todo hormigón.',
+        'Brazos dimensionados con la app (diagonales de 1,20 m × 60 mm; los cordones quedan en el tubo más chico porque el brazo de 13,2 m de alto los descarga). Flecha de la azotea unos h/650 con el viento de la planilla; sin los brazos, h/210.',
+        'Las losas apoyan en el perímetro: la mitad de cada losa (franja de 6,25 m), con 0,5 t/m² de peso y 0,25 t/m² de sobrecarga (supuesto); la otra mitad, en el núcleo. Los brazos se conectan al terminar la obra gruesa.',
+        'Viento: CIRSOC 102 con V = 42 m/s y exposición de centro de ciudad (supuesto: del orden de la presión básica de 0,55 kPa de Shanghái pasada a ráfaga; hay tifones).',
+      ],
+    },
+  };
+}

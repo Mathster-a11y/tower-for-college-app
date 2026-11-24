@@ -26,7 +26,7 @@ import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
 import { capturar3D, vistas3D } from './ui/vistas';
-import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
+import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { datos201De } from './engine/metodos/cirsoc';
@@ -566,6 +566,7 @@ TORRES_PRUEBA.forEach((t, k) => {
 $('b-ejemplo-34').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploPlanta34()); cerrarMenus(); mensaje('Cargada la torre de 34 pisos: los núcleos toman el viento; las columnas, solo carga de losa.'); });
 $('b-ejemplo-chica').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploBasicoExo()); cerrarMenus(); mensaje('Cargada la torre chica con tubo en X: es el ejemplo paso a paso de la guía. Seguí el viento A.'); });
 $('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHancock()); cerrarMenus(); mensaje('Cargado el John Hancock Center: caras que se angostan con la altura y el tubo en X que toma todo el viento (etapa 08 · Exoesqueleto). Las fuentes de cada número están en la etapa 08.'); });
+$('b-ejemplo-shanghai').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploShanghai()); cerrarMenus(); mensaje('Cargada la Shanghai Tower: núcleo de hormigón con outriggers en las juntas de zona (etapa 08 · Exoesqueleto, ficha F). Las fuentes y los supuestos están en la etapa 08.'); });
 $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });

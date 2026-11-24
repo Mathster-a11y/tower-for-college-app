@@ -1,4 +1,4 @@
-import{bg as ee,bh as re,bi as ie,bj as ae,bk as te,bl as ne,bm as oe}from"./index-D-sHs641.js";const y=(t,l)=>`array<${l}, 19>(${t.map(n=>l==="f32"?n.toPrecision(17):String(n)).join(", ")})`,ue=`
+import{bg as ee,bh as re,bi as ie,bj as ae,bk as te,bl as ne,bm as oe}from"./index-BUFIZbl4.js";const y=(t,l)=>`array<${l}, 19>(${t.map(n=>l==="f32"?n.toPrecision(17):String(n)).join(", ")})`,ue=`
 struct Param { nx: u32, ny: u32, nz: u32, n: u32, tau0: f32, cs2: f32, zc: u32, trt: u32 };
 @group(0) @binding(0) var<uniform> p: Param;
 @group(0) @binding(1) var<storage, read> fi: array<f32>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger, columnasEfectivas } from './exo';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger, columnasEfectivas, pesoCinturon } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -385,6 +385,15 @@ describe('exoesqueleto · núcleo con outriggers (ficha F)', () => {
     // las más lejanas del brazo trabajan menos
     const ps = columnasEfectivas(def({ b: 0.4, e: 0.02 }), 30, 4, [10], zs).psi.filter(q => q.y > 0).sort((a, b) => Math.abs(a.y - 4) - Math.abs(b.y - 4));
     for (let i = 1; i < ps.length; i++) expect(ps[i].psi).toBeLessThanOrEqual(ps[i - 1].psi + 1e-12);
+  });
+  it('el peso del cinturón: cordones y diagonales alrededor del perímetro en cada brazo; sin cinturón, nada', () => {
+    const en: EntradaExo = { zs, W, EJ: () => EI, ancho: 30, tCaras: [-4, 4], Eh: 3e6, h: H, anchosPerp: zs.map(() => 20) };
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'F', outriggers: [44, 80] };
+    const P = 100, Av = propsSeccion(def.viga).A, Ad = propsSeccion(def.diagonal).A, np = 25;
+    expect(pesoCinturon(def, en)).toBeCloseTo(2 * (2 * P * Av + np * Math.hypot(4, P / np) * Ad) * 7.85, 6);
+    expect(pesoCinturon({ ...def, cinturon: false }, en)).toBe(0);
+    // con cinturón, además, trabajan (y se cuentan) más columnas de la cara
+    expect(pesoExo(def, [en, en]) - pesoExo({ ...def, cinturon: false }, [en, en])).toBeGreaterThan(pesoCinturon(def, en));
   });
   it('las losas cargan las columnas del perímetro, no el núcleo', () => {
     const def = base({ b: 0.5, e: 0.025 }, { losas: { franja: 4 } });
