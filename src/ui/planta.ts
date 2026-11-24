@@ -12,12 +12,13 @@ import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
+import { abrirDesplegado } from './desplegado';
 import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
 import { prepararSecciones } from '../engine/loft';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
-import type { TipoEsquina } from '../engine/contorno';
+import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
@@ -849,7 +850,7 @@ export function montarPlanta(cont: HTMLElement) {
             })(),
             cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
             Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.curvados ? ` · ${r.curvados} paños curvados en frío (dentro de la tolerancia).` : ''}${r.alabeados ? ` · ${r.alabeados} paños pasan la tolerancia de alabeo${r.caras ? ' (en las caras planas se parten en dos triángulos)' : ''}: para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : r.curvados ? '' : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
-            boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), ''));
+            h2(boton('Alzado desplegado…', () => abrirDesplegado(), 'Las caras de la fachada una al lado de la otra, en verdadera magnitud, con la lista de paños; tocá una cara para hacerla opaca o abierta o darle su propio módulo'), boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), '')));
         }
         segue.append(pan);
         const tn = tramoEn(p, n.cota);
@@ -1243,8 +1244,28 @@ export function montarPlanta(cont: HTMLElement) {
       const niveles = esq.todos ? p2.niveles.map((_, k) => k) : [iNivel];
       const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: queAhora(), niveles });
       if (!r.cambios.length) { await avisar('error', 'No se cambió ninguna esquina', r.avisos.join(' ') || 'No hay esquinas salientes entre lados rectos.'); return; }
-      estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else { soltarCarp(nv); nv.carpinteria = c.v; } }); });
-      if (r.avisos.length) await avisar('info', 'Esquinas tratadas, con avisos', r.avisos.join(' '));
+      // con envolvente diseñada aparte, la carpintería de sus pisos no se toca piso por piso: se tratan las esquinas de
+      // la piel (las secciones de esos pisos, o la planta base si va por perfil) y los pisos la siguen
+      let enPiel = 0, saltados = 0, base = false;
+      estado.cambiar(() => {
+        const pp = estado.proyecto, env = pp.envolvente;
+        r.cambios.forEach(c => {
+          const nv = pp.niveles[c.i];
+          if (c.que === 'losa') { nv.silueta = c.v; return; }
+          const genEnv = !!env && tramoEn(pp, nv.cota)?.modo === 'continua' && !nv.carpManual && !pp.carpinteriaFija;
+          if (!genEnv) { soltarCarp(nv); nv.carpinteria = c.v; return; }
+          const sec = seccionEnv(c.i);
+          if (sec) { const t = tratarEsquinas(sec.v, esq.tipo, esq.a, esq.b ?? esq.a); if (!('error' in t)) { sec.v = t.map(q => ({ x: q.x, y: q.y, ...(q.b ? { b: q.b } : {}) })); enPiel++; } return; }
+          if (!seccionesEnvolvente(env) && !base) { const t = tratarEsquinas(env!.planta, esq.tipo, esq.a, esq.b ?? esq.a); if (!('error' in t)) { env!.planta = t.map(q => ({ x: q.x, y: q.y, ...(q.b ? { b: q.b } : {}) })); base = true; enPiel++; } return; }
+          if (!seccionesEnvolvente(env)) return;
+          saltados++;
+        });
+      });
+      const msj = [...r.avisos];
+      if (base) msj.push('En la envolvente se trataron las esquinas de su planta base: todos sus pisos las siguen.');
+      else if (enPiel) msj.push(`En la envolvente se trataron ${enPiel} ${enPiel === 1 ? 'sección' : 'secciones'}.`);
+      if (saltados) msj.push(`${saltados} ${saltados === 1 ? 'piso' : 'pisos'} de la envolvente que no son sección pasan de una sección a otra: para tratarlos, hacé una sección en ese piso.`);
+      if (msj.length) await avisar('info', 'Esquinas tratadas', msj.join(' '));
     });
     const pie = document.createElement('p'); pie.className = 'nota';
     pie.textContent = 'Se tratan las esquinas salientes entre lados rectos (las entrantes y las curvas quedan). Se puede deshacer. Cambia la forma que recibe el viento en las presiones 3D y en los túneles 2D y 3D (ahí se comparan el arrastre, la fuerza lateral y la velocidad crítica); la planilla y el CIRSOC 102 siguen con B, L y los Cp de la norma, que no premian la forma de las esquinas (eso pide un ensayo en túnel de viento).';

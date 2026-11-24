@@ -286,11 +286,24 @@ export interface Paneleria {
    * se escribe -1. Pasada la tolerancia, en las caras planas el paño se parte en dos triángulos (facetas)
    */
   alabeoMax?: number | null;
+  /** ajustes de una cara plana de la fachada (se reconoce por su orientación, inclinación y distancia: ver InfoCara.id) */
+  caras?: AjusteCara[] | null;
+}
+/** una cara de la fachada con algo propio: vidrio, opaca (ciega) o abierta (sin cerramiento), y su módulo */
+export interface AjusteCara { id: string; tipo?: 'vidrio' | 'opaca' | 'abierta' | null; modulo?: number | null }
+/** una cara plana de la fachada: para el alzado desplegado y para elegirla y ajustarla */
+export interface InfoCara {
+  /** «azimut°·inclinación°·distancia»: la misma cara mientras no cambie de plano */
+  id: string; nombre: string; mira: string; inclinacion: number;
+  /** ancho (en el sentido horizontal de la cara) y alturas, en metros */
+  ancho: number; z0: number; z1: number; area: number;
+  /** el borde de cada pedazo de la cara, desplegado: s (0 = el borde izquierdo mirando la cara) y z */
+  bordes: { s: number; z: number }[][];
 }
 /** la tolerancia de alabeo de la panelería (m): por defecto 5 mm (paño plano); -1 = libre */
 export const toleranciaAlabeo = (pn: Paneleria) => (pn.alabeoMax === -1 ? Infinity : Math.max(0.005, pn.alabeoMax ?? 0.005));
 /** lo que hace falta para repartir montantes en un largo */
-export type Reparto = Pick<Paneleria, 'modulo' | 'regla' | 'origen' | 'desfase'>;
+export type Reparto = Pick<Paneleria, 'modulo' | 'regla' | 'origen' | 'desfase' | 'caras'>;
 /**
  * dónde van los montantes en un largo L (de 0 a L, los dos bordes incluidos). Parejo: tantas partes iguales como hagan
  * falta para no pasar del módulo. Fijo: cada módulo exacto desde el origen (inicio, centro o fin) más el desfase; el
@@ -311,8 +324,8 @@ export function divisiones(L: number, rep: Reparto): number[] {
   return out;
 }
 /** un paño: polígono plano (3 o más puntos; en las caras planas, recortado por el borde de la cara) */
-export interface Panel { p: P3[]; opaco: boolean; area: number }
-export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; /** travesaños: en cada losa (donde la toca), el antepecho, los intermedios y el remate de arriba */ travesanos: [P3, P3][]; /** paños curvados en frío (alabeo entre 5 mm y la tolerancia) */ curvados: number; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
+export interface Panel { p: P3[]; opaco: boolean; area: number; /** la cara plana (InfoCara.id) y el paño desplegado */ cara?: string; sz?: { s: number; z: number }[] }
+export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; /** travesaños: en cada losa (donde la toca), el antepecho, los intermedios y el remate de arriba */ travesanos: [P3, P3][]; /** paños curvados en frío (alabeo entre 5 mm y la tolerancia) */ curvados: number; /** las caras planas de la fachada (el poliedro) */ carasInfo: InfoCara[]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
 
 /** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
 function montantesAnillo(r: Punto[], rep: Reparto): number[] {
@@ -419,7 +432,14 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
     const aSZ = (p: P3): SZ => ({ s: p.x * h.x + p.y * h.y, z: p.z });
     const a3 = (q: SZ): P3 => { const t = (g.d - g.n.z * q.z) / n2; return { x: q.s * h.x + t * m2.x, y: q.s * h.y + t * m2.y, z: q.z }; };
     const todas = g.caras.flatMap(c => c.q.map(aSZ)), smin = Math.min(...todas.map(q => q.s)), smax = Math.max(...todas.map(q => q.s));
-    const cols = divisiones(smax - smin, rep).map(x => smin + x);
+    // la cara: su nombre y sus ajustes (vidrio, opaca o abierta; módulo propio)
+    const az = (((Math.round((Math.atan2(g.n.y, g.n.x) * 180) / Math.PI) % 360) + 360) % 360), inc = Math.round((Math.atan2(g.n.z, n2) * 180) / Math.PI);
+    const id = `${az}°·${inc}°·${(Math.round(g.d * 10) / 10 + 0).toFixed(1)}`;
+    const ej = (a: number) => { const d = ['x+', 'x+ y+', 'y+', 'x− y+', 'x−', 'x− y−', 'y−', 'x+ y−']; return d[Math.round(a / 45) % 8]; };
+    res.carasInfo.push({ id, nombre: '', mira: ej(az), inclinacion: inc, ancho: smax - smin, z0: Math.min(...todas.map(q => q.z)), z1: Math.max(...todas.map(q => q.z)), area: g.caras.reduce((x, c) => x + newell(c.q).area, 0), bordes: g.caras.map(c => c.q.map(aSZ).map(q => ({ s: q.s - smin, z: q.z }))) });
+    const ov = rep.caras?.find(c => c.id === id);
+    if (ov?.tipo === 'abierta') return;                         // sin cerramiento: ni paños ni grilla
+    const cols = divisiones(smax - smin, ov?.modulo ? { ...rep, modulo: ov.modulo } : rep).map(x => smin + x);
     // bordes de la cara que no comparte con otra del mismo plano: las esquinas y las aristas inclinadas son montantes
     const usos = new Map<string, number>();
     g.caras.forEach(c => c.q.forEach((p, i) => { const k = clave(p, c.q[(i + 1) % c.q.length]); usos.set(k, (usos.get(k) ?? 0) + 1); }));
@@ -441,7 +461,7 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
           let q = recortarSZ(poli, x => x.s - cols[k]); q = recortarSZ(q, x => cols[k + 1] - x.s); q = recortarSZ(q, x => x.z - z0); q = recortarSZ(q, x => z1 - x.z);
           if (q.length < 3 || areaSZ(q) < 1e-6) continue;
           const p3 = q.map(a3);
-          res.paneles.push({ p: p3, opaco: frk[j].opaco, area: newell(p3).area });
+          res.paneles.push({ p: p3, opaco: ov?.tipo === 'opaca' || frk[j].opaco, area: newell(p3).area, cara: id, sz: q.map(x => ({ s: x.s - smin, z: x.z })) });
           const abajo = j > 0 || toca, arriba = j + 2 === frk.length && Math.abs(c.bd.z1 - zTope) < 1e-6;
           p3.forEach((x, i) => { const y = p3[(i + 1) % p3.length]; if ((abajo && Math.abs(x.z - z0) < 1e-6 && Math.abs(y.z - z0) < 1e-6) || (arriba && Math.abs(x.z - z1) < 1e-6 && Math.abs(y.z - z1) < 1e-6)) travesano(res, x, y); });
         }
@@ -451,13 +471,15 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
 }
 
 export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): ResultadoPaneleria {
-  const res: ResultadoPaneleria = { paneles: [], montantes: [], travesanos: [], curvados: 0, vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
+  const res: ResultadoPaneleria = { paneles: [], montantes: [], travesanos: [], curvados: 0, carasInfo: [], vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
   const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
   const vistos = new Set<string>();
   const rep: Reparto = { ...pn, modulo: mod };
   const zTope = Math.max(...bandas.map(b => b.z1));
   const tol = toleranciaAlabeo(pn);
   paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos, zTope, tol);
+  // nombres de las caras: C1, C2… alrededor de la torre (por hacia dónde miran), de abajo hacia arriba
+  res.carasInfo.sort((x, y) => parseFloat(x.id) - parseFloat(y.id) || x.z0 - y.z0).forEach((c, k) => { c.nombre = `C${k + 1}`; });
   bandas.filter(b => !b.plana).forEach(bd => {
     const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
     const ts = bd.montantes ? bd.a.map((_, i) => i) : montantesAnillo(bd.a, rep);

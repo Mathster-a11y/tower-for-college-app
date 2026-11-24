@@ -209,3 +209,19 @@ describe('tolerancia de alabeo', () => {
     expect(libre.alabeados).toBe(0);
   });
 });
+
+describe('caras de la fachada', () => {
+  it('cada cara plana tiene nombre e id; se puede hacer opaca, abierta o con módulo propio', () => {
+    const r0 = puntosSilueta(rectangulo(20, 16), 8);
+    const b = [{ z0: 0, z1: 3, modo: 'losa' as const, a: r0, b: r0, plana: true }, { z0: 3, z1: 6, modo: 'losa' as const, a: r0, b: r0, plana: true }];
+    const base = calcularPaneleria(b, { modulo: 1.5 });
+    expect(base.carasInfo.map(c => c.nombre)).toEqual(['C1', 'C2', 'C3', 'C4']);
+    const c = base.carasInfo.find(x => x.mira === 'y−')!;                 // la cara de 20 m que mira a y−
+    expect(c.ancho).toBeCloseTo(20, 6); expect(c.z1).toBe(6);
+    const enC = (r: ReturnType<typeof calcularPaneleria>) => r.paneles.filter(x => x.cara === c.id);
+    expect(enC(base).length).toBe(2 * 14);
+    expect(enC(calcularPaneleria(b, { modulo: 1.5, caras: [{ id: c.id, tipo: 'opaca' }] })).every(x => x.opaco)).toBe(true);
+    expect(enC(calcularPaneleria(b, { modulo: 1.5, caras: [{ id: c.id, tipo: 'abierta' }] })).length).toBe(0);
+    expect(enC(calcularPaneleria(b, { modulo: 1.5, caras: [{ id: c.id, modulo: 2.5 }] })).length).toBe(2 * 8);
+  });
+});
