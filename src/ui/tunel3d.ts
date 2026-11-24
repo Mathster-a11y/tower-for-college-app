@@ -24,6 +24,7 @@ import { categoriaLawson, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { MediaPlano } from '../viento/direcciones';
 import { aBase64, deBase64, desempaquetar, empaquetar, FORMATO_3D, huella, VERSION_3D } from '../viento/archivo3d';
 import { abrirLamina } from './tunel3dLamina';
+import { criterioQ, isosuperficie, umbralQ } from '../viento/vortices';
 import { alMuestrear, cfgRosa, factorEval, seccionRosa, zEval, type CtxRosa } from './tunel3dRosa';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
@@ -52,6 +53,8 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** etapa 3: líneas o tubos, partículas, de dónde salen (rastrillo), escala de la velocidad y modo maqueta */
   estiloLineas: 'lineas' as 'lineas' | 'tubos', particulas: false, rastrillo: 'grilla' as 'grilla' | 'vertical' | 'horizontal', rastPos: 0.5, rastAlto: 0.6, rastN: 14,
   escalaVel: 'fija' as 'fija' | 'auto', maqueta: false,
+  /** etapa 7: los remolinos como superficies (criterio Q) y qué tan fuertes tienen que ser para dibujarse */
+  vortices: false, umbralQ: 0.3,
   vereda: false, horizontal: true, vertical: false,
   /** confort del peatón: viento medio anual a 10 m del lugar (m/s, de una estación meteorológica) y si se pinta Lawson */
   vientoMedio: 4, lawson: true,
@@ -88,7 +91,7 @@ interface Corrida {
 let corrida: Corrida | null = null;
 let soporteGpu: string | null | undefined;                    // undefined: todavía no se preguntó
 let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam: THREE.PerspectiveCamera; ctl: OrbitControls; torre: THREE.Mesh | null; trozos: { desde: number; n: number; caras: number[] }[]; planoH: THREE.Mesh | null; planoV: THREE.Mesh | null; lineas: THREE.Group; clave: string;
-  particulas: Particulas | null; sol: THREE.DirectionalLight; suelo: THREE.Mesh; vecinos: THREE.Mesh[] } | null = null;
+  particulas: Particulas | null; sol: THREE.DirectionalLight; suelo: THREE.Mesh; vecinos: THREE.Mesh[]; vortices: THREE.Mesh | null } | null = null;
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
@@ -284,7 +287,7 @@ function armarVista(cont: HTMLElement) {
   }
   const lineas = new THREE.Group(); esc.add(lineas);
   torre.castShadow = true;
-  vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave, particulas: null, sol, suelo, vecinos };
+  vista = { cont, ren, esc, cam, ctl, torre, trozos, planoH: null, planoV: null, lineas, clave: c.clave, particulas: null, sol, suelo, vecinos, vortices: null };
   aplicarMaqueta();
   cont.append(ren.domElement);
   ctl.addEventListener('change', () => dibujar());
@@ -378,7 +381,8 @@ function actualizarCampo() {
     m.position.set(0, g.nz / g.escala / 2, -((yc + 0.5) - g.ny / 2) / g.escala); v.esc.add(m); v.planoV = m;
   }
   // líneas de corriente, cada tanto
-  if ((cfg.lineas || cfg.particulas) && performance.now() - c.ultimasLineas > 3000) { c.ultimasLineas = performance.now(); lineasDeCorriente(); }
+  if ((cfg.lineas || cfg.particulas || cfg.vortices) && performance.now() - c.ultimasLineas > 3000) { c.ultimasLineas = performance.now(); lineasDeCorriente(); vortices(); }
+  if (!cfg.vortices && v.vortices) { v.esc.remove(v.vortices); v.vortices.geometry.dispose(); v.vortices = null; }
   if (!cfg.lineas && !cfg.particulas) v.lineas.clear();
   dibujar();
 }
@@ -407,6 +411,20 @@ function escalaAutomatica(c: Corrida, zc: number): number {
 }
 const zVereda = (g: Geometria3D) => zEval(g);
 
+/** los remolinos: la superficie donde Q (giro menos estiramiento) pasa el umbral, violeta y transparente */
+function vortices() {
+  const c = corrida, v = vista;
+  if (!c || !v || !c.campo) return;
+  if (v.vortices) { v.esc.remove(v.vortices); v.vortices.geometry.dispose(); v.vortices = null; }
+  if (!cfg.vortices) return;
+  const g = c.geo, Q = criterioQ(c.campo, g.nx, g.ny, g.nz, g.solido), iso = umbralQ(Q, cfg.umbralQ);
+  if (!isFinite(iso)) return;
+  const t = isosuperficie(Q, g.nx, g.ny, g.nz, iso), pos = new Float32Array(t.length);
+  for (let i = 0; i < t.length; i += 3) { const q = aMundo(g, t[i] + 0.5, t[i + 1] + 0.5, t[i + 2] - 0.5); pos[i] = q.x; pos[i + 1] = q.y; pos[i + 2] = q.z; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color('#6a4fb3'), transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false, roughness: 0.6 }));
+  v.esc.add(m); v.vortices = m;
+}
 /** las semillas de las líneas: la grilla de siempre o un rastrillo vertical u horizontal (en celdas de la red) */
 function semillas(g: Geometria3D): number[][] {
   const bC = g.caja.y1 - g.caja.y0 + 1, x0 = Math.max(2, g.caja.x0 - bC), yc = (g.caja.y0 + g.caja.y1 + 1) / 2, n = Math.max(3, Math.round(cfg.rastN));
@@ -564,6 +582,7 @@ function armarLlaves3d() {
   if (cfg.lineas) sim.push({ forma: 'lineaGruesa', color: cfg.colorLineas === 'velocidad' ? coloresLinea()[3] : new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6).getStyle(), texto: 'Línea de corriente: el camino del aire', nota: cfg.colorLineas === 'velocidad' ? 'el color dice la velocidad' : undefined });
   // las líneas usan la escala de la velocidad: si el corte o las flechas ya la muestran, no hace falta otra llave
   const corteVel = (cfg.horizontal || cfg.vertical) && !cfg.vereda && cfg.color !== 'cp';
+  if (cfg.vortices) sim.push({ forma: 'lineaGruesa', color: '#6a4fb3', texto: 'Superficie violeta: un remolino', nota: 'donde el aire gira más de lo que se estira (criterio Q)' });
   const llLineas: Llave | null = (cfg.lineas || cfg.particulas) && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: `${cfg.particulas && !cfg.lineas ? 'Partículas' : 'Líneas de corriente'}: velocidad${avisoArcoiris()}`, colores: coloresLinea(), marcas: marcasVel() } : null;
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
   llavesVisibles = cfg.llave ? [...(cfg.maqueta ? [] : [caras]), ...(corte ? [corte] : []), ...(llLineas ? [llLineas] : []), ...(flechas ? [flechas] : [])] : [];
@@ -602,6 +621,8 @@ function seccionVista(): HTMLElement {
       sel('Líneas de corriente', [['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']], cfg.estiloLineas, x => { cfg.estiloLineas = x; }),
       sel('Escala de la velocidad', [['fija', 'fija (hasta 1,6 veces el que llega)'], ['auto', 'automática (lo que se ve)']], cfg.escalaVel, x => { cfg.escalaVel = x; })),
     chk('Partículas que viajan con el aire (como tinta)', cfg.particulas, x => { cfg.particulas = x; }, 'Puntos que recorren las líneas de corriente a la velocidad del aire: donde se separan el aire acelera, donde se juntan se frena'),
+    chk('Remolinos (superficies violetas)', cfg.vortices, x => { cfg.vortices = x; }, 'Envuelve los núcleos de los remolinos: donde el aire gira más de lo que se estira (criterio Q). Con grillas grandes tarda un poco en armarse'),
+    ...(cfg.vortices ? [rango('Remolinos: hacia la derecha, también los flojos', 1 - cfg.umbralQ, 0.5, 0.97, 0.01, x => { cfg.umbralQ = 1 - x; })] : []),
     h('div', { class: 'grilla2' },
       sel('De dónde salen', [['grilla', 'una grilla delante de la torre'], ['vertical', 'un rastrillo vertical'], ['horizontal', 'un rastrillo horizontal']], cfg.rastrillo, x => { cfg.rastrillo = x; }),
       ...(cfg.rastrillo === 'vertical' ? [rango('Rastrillo: de costado', cfg.rastPos, 0, 1, 0.02, x => { cfg.rastPos = x; })] : cfg.rastrillo === 'horizontal' ? [rango('Rastrillo: altura', cfg.rastAlto, 0.03, 1.3, 0.01, x => { cfg.rastAlto = x; })] : []),
