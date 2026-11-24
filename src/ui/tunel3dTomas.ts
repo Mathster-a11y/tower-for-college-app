@@ -19,6 +19,8 @@ export interface VistaToma {
   flechas: 'no' | 'fijas' | 'proporcionales';
   /** cantidad de flechas: veces las de siempre (con más, trazo más fino) */
   densidadFlechas: number;
+  /** grosor de los tubos (veces el de base) */
+  grosorLineas: number;
   horizontal: boolean; vertical: boolean; zRel: number; yRel: number;
   color: 'velocidad' | 'cp'; espectro: 'termico' | 'arcoiris'; escalaVel: 'fija' | 'auto';
   rastrillo: 'grilla' | 'vertical' | 'horizontal'; verRastrillo: boolean; rastN: number;
@@ -39,7 +41,7 @@ export interface ExportarTomas { resolucion: '1280x720' | '1920x1080'; mp4: bool
 
 export const VISTA_BASE: VistaToma = {
   maqueta: false, torreCp: true, suelo: true, lineas: 'lineas', colorLineas: 'velocidad', particulas: false, vortices: false, umbralQ: 0.3,
-  flechas: 'fijas', densidadFlechas: 1, horizontal: true, vertical: false, zRel: 0.5, yRel: 0.5, color: 'velocidad', espectro: 'termico', escalaVel: 'fija',
+  flechas: 'fijas', densidadFlechas: 1, grosorLineas: 1, horizontal: true, vertical: false, zRel: 0.5, yRel: 0.5, color: 'velocidad', espectro: 'termico', escalaVel: 'fija',
   rastrillo: 'grilla', verRastrillo: true, rastN: 14, vereda: false, lawson: true,
 };
 export const SIM_BASE: SimToma = { tam: 'liviano', paredes: 'exactas', angulo: 0, lento: false, ajustado: false, banda: false, bandaCota: NaN, bandaPisos: 3 };

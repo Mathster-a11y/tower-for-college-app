@@ -127,8 +127,9 @@ export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: Modo
     let color = tinta;
     if (modo === 'fijas' && colorear) { colorTermico(Math.min(1, s / 1.6), px, 0); color = `rgb(${px[0]},${px[1]},${px[2]})`; }
     const trazo = () => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.moveTo(x1 + ax + nx, y1 + ay + ny); g.lineTo(x1, y1); g.lineTo(x1 + ax - nx, y1 + ay - ny); g.stroke(); };
-    g.strokeStyle = borde; g.lineWidth = 3.4 * grosor; g.globalAlpha = 0.75; trazo();
-    g.strokeStyle = color; g.lineWidth = 1.6 * grosor; g.globalAlpha = 1; trazo();
+    // trazo fino (con un borde claro para que se lea sobre cualquier color)
+    g.strokeStyle = borde; g.lineWidth = 2.6 * grosor; g.globalAlpha = 0.7; trazo();
+    g.strokeStyle = color; g.lineWidth = 1.2 * grosor; g.globalAlpha = 1; trazo();
   }
   g.restore();
 }

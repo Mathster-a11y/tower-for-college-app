@@ -80,7 +80,9 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** lo que también se puede apagar para las grabaciones: los colores de Cp de la torre, el suelo y la raya del rastrillo */
   torreCp: true, suelo: true, verRastrillo: true,
   /** cantidad de flechas en los cortes: veces las de siempre (unas 32 a lo ancho); con más, el trazo se afina */
-  densidadFlechas: 1 };
+  densidadFlechas: 1,
+  /** grosor de los tubos de las líneas de corriente (veces el de base, más fino que antes) */
+  grosorLineas: 1 };
 // la fidelidad elegida antes (si hay) arma las opciones de entrada
 { const f = fidelidadGuardada(); if (f) Object.assign(cfg, FIDELIDAD[f].d3); }
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -503,7 +505,7 @@ function trazosDeCorriente(): Trazo[] {
   // (o a menos del grosor del tubo del borde) se la saca hasta el borde más cercano, o arriba de la azotea si está más
   // cerca. En la grilla una celda es sólida si su centro está adentro: sin esto, en las esquinas la línea pasaba por
   // celdas «de aire» que en el dibujo ya son torre
-  const margen = (cfg.lineas && cfg.estiloLineas === 'tubos' ? 0.16 + 0.12 * g.escala : 0.1) + 0.2;
+  const margen = (cfg.lineas && cfg.estiloLineas === 'tubos' ? radioTubo(g) * g.escala : 0.1) + 0.2;
   const cuerpos = [...g.tramos.map(t2 => ({ pol: t2.pol, h0: t2.h0, h1: t2.h1 })), ...g.vecinos.map(v2 => ({ pol: v2.pol, h0: v2.desde, h1: v2.altura }))];
   const fuera = (p: number[]) => sacarAfuera(p, cuerpos, g.escala, margen);
   return semillas(g).map(p0 => {
@@ -526,6 +528,8 @@ function trazosDeCorriente(): Trazo[] {
     return tr;
   }).filter(tr => tr.pts.length > 3);
 }
+/** el radio de los tubos (m): unas 0,06 celdas más 5 cm, por el grosor elegido (antes 0,16 celdas más 12 cm: muy gruesos de cerca) */
+const radioTubo = (g: Geometria3D) => Math.max(0.02, cfg.grosorLineas * (0.06 / g.escala + 0.05));
 function lineasDeCorriente() {
   const c = corrida!, v = vista!, g = c.geo;
   v.lineas.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
@@ -535,7 +539,7 @@ function lineasDeCorriente() {
   const porVel = cfg.colorLineas === 'velocidad', uno = new THREE.Color(css('--deformada', '#1d9e75')).multiplyScalar(0.6);
   const color = (m: number, out: THREE.Color) => (porVel ? colLinea(m, out) : out.copy(uno));
   if (cfg.lineas) {
-    if (cfg.estiloLineas === 'tubos') v.lineas.add(grupoTubos(trazos, color, 0.16 / g.escala + 0.12));
+    if (cfg.estiloLineas === 'tubos') v.lineas.add(grupoTubos(trazos, color, radioTubo(g)));
     else {
       const mat = new THREE.LineBasicMaterial({ vertexColors: true }), cc = new THREE.Color();
       for (const tr of trazos) {
@@ -555,7 +559,7 @@ function lineasDeCorriente() {
   if (cfg.particulas) {
     // más claras que las líneas y más gruesas que los tubos: se ven aunque viajen por adentro
     const blancoP = new THREE.Color(1, 1, 1), colP = (m: number, out: THREE.Color) => color(m, out).lerp(blancoP, 0.45);
-    const p = new Particulas(trazos, colP, 8, Math.max(2.5, 1.8 / g.escala), g.nx / UH / 8000);
+    const p = new Particulas(trazos, colP, 8, Math.max(0.6, cfg.grosorLineas * (0.7 / g.escala + 0.3)), g.nx / UH / 8000);
     v.lineas.add(p.obj); v.particulas = p;
   }
 }
@@ -695,7 +699,8 @@ function seccionVista(): HTMLElement {
     chk('Modo maqueta (torre blanca y sombras)', cfg.maqueta, x => { cfg.maqueta = x; }, 'Como una maqueta en un túnel: la torre y los vecinos sin color, con sombras; el color queda para el aire'),
     h('div', { class: 'grilla2' },
       sel('Líneas de corriente', [['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']], cfg.estiloLineas, x => { cfg.estiloLineas = x; }),
-      sel('Escala de la velocidad', [['fija', 'fija (hasta 1,6 veces el que llega)'], ['auto', 'automática (lo que se ve)']], cfg.escalaVel, x => { cfg.escalaVel = x; })),
+      sel('Escala de la velocidad', [['fija', 'fija (hasta 1,6 veces el que llega)'], ['auto', 'automática (lo que se ve)']], cfg.escalaVel, x => { cfg.escalaVel = x; }),
+      ...(cfg.estiloLineas === 'tubos' ? [sel('Grosor de los tubos', [['0.5', 'muy finos'], ['1', 'finos'], ['1.7', 'medios'], ['2.8', 'gruesos']], String(cfg.grosorLineas) as '0.5' | '1' | '1.7' | '2.8', x => { cfg.grosorLineas = +x; })] : [])),
     chk('Partículas que viajan con el aire (como tinta)', cfg.particulas, x => { cfg.particulas = x; }, 'Puntos que recorren las líneas de corriente a la velocidad del aire: donde se separan el aire acelera, donde se juntan se frena'),
     chk('Remolinos (superficies violetas)', cfg.vortices, x => { cfg.vortices = x; }, 'Envuelve los núcleos de los remolinos: donde el aire gira más de lo que se estira (criterio Q). Con grillas grandes tarda un poco en armarse'),
     ...(cfg.vortices ? [rango('Remolinos: hacia la derecha, también los flojos', 1 - cfg.umbralQ, 0.5, 0.97, 0.01, x => { cfg.umbralQ = 1 - x; })] : []),
@@ -784,7 +789,7 @@ function tomaActual(): Toma {
     vista: {
       maqueta: cfg.maqueta, torreCp: cfg.torreCp, suelo: cfg.suelo, lineas: cfg.lineas ? cfg.estiloLineas : 'no', colorLineas: cfg.colorLineas, particulas: cfg.particulas,
       vortices: cfg.vortices, umbralQ: cfg.umbralQ, flechas: cfg.flechas, horizontal: cfg.horizontal, vertical: cfg.vertical, zRel: cfg.zRel, yRel: cfg.yRel,
-      densidadFlechas: cfg.densidadFlechas, color: cfg.color, espectro: espectroVel, escalaVel: cfg.escalaVel, rastrillo: cfg.rastrillo, verRastrillo: cfg.verRastrillo, rastN: cfg.rastN, vereda: cfg.vereda, lawson: cfg.lawson,
+      densidadFlechas: cfg.densidadFlechas, grosorLineas: cfg.grosorLineas, color: cfg.color, espectro: espectroVel, escalaVel: cfg.escalaVel, rastrillo: cfg.rastrillo, verRastrillo: cfg.verRastrillo, rastN: cfg.rastN, vereda: cfg.vereda, lawson: cfg.lawson,
     },
     camara: v ? 'guardada' : 'esquina', ...(v ? { pos: v.cam.position.toArray(), mira: v.ctl.target.toArray() } : {}),
     acercar: 1, recorrido: cfgGrab.recorrido, segundos: cfgGrab.segundos, calentar: 1.5, llaves: 'costado', simbolos: cfg.simbolos, grafico: true, rotulo: true,
@@ -799,7 +804,7 @@ function aplicarVistaToma(t: Toma) {
   const v = t.vista;
   Object.assign(cfg, {
     maqueta: v.maqueta, torreCp: v.torreCp, suelo: v.suelo, lineas: v.lineas !== 'no', estiloLineas: v.lineas === 'tubos' ? 'tubos' : 'lineas', colorLineas: v.colorLineas,
-    particulas: v.particulas, vortices: v.vortices, umbralQ: v.umbralQ, flechas: v.flechas, densidadFlechas: v.densidadFlechas, horizontal: v.horizontal, vertical: v.vertical, zRel: v.zRel, yRel: v.yRel,
+    particulas: v.particulas, vortices: v.vortices, umbralQ: v.umbralQ, flechas: v.flechas, densidadFlechas: v.densidadFlechas, grosorLineas: v.grosorLineas, horizontal: v.horizontal, vertical: v.vertical, zRel: v.zRel, yRel: v.yRel,
     color: v.color, escalaVel: v.escalaVel, rastrillo: v.rastrillo, verRastrillo: v.verRastrillo, rastN: v.rastN, vereda: v.vereda, lawson: v.lawson,
     llave: true, simbolos: t.simbolos,
   });
@@ -1039,6 +1044,7 @@ function seccionTomas(): HTMLElement {
           ...(v.flechas !== 'no' ? [fSel('Cantidad de flechas (más: trazo más fino)', v, 'densidadFlechas', [['0.5', 'la mitad'], ['1', 'normal'], ['1.5', '1,5 veces'], ['2', 'el doble'], ['3', 'el triple'], ['4', '4 veces'], ['6', '6 veces']], true)] : []),
           fSel('Líneas de corriente', v, 'lineas', [['no', 'sin líneas'], ['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']]),
           fSel('Color de las líneas', v, 'colorLineas', [['velocidad', 'la velocidad'], ['uno', 'un solo color']]),
+          ...(v.lineas === 'tubos' ? [fSel('Grosor de los tubos', v, 'grosorLineas', [['0.5', 'muy finos'], ['1', 'finos'], ['1.7', 'medios'], ['2.8', 'gruesos']], true)] : []),
           fChk('Partículas (como tinta)', v, 'particulas'), fChk('Nubes de turbulencia (remolinos, criterio Q)', v, 'vortices'),
           ...(v.vortices ? [fNum('Remolinos: umbral (0,03 muchos ↔ 0,5 solo los fuertes)', v, 'umbralQ', 0.03, 0.5, 0.01)] : []),
           fSel('Espectro de la velocidad', v, 'espectro', [['termico', 'térmico (de la app)'], ['arcoiris', 'arcoíris (el rojo es rápido, no tracción)']]),
