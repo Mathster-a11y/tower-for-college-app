@@ -377,6 +377,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .barra-sel button, .barra-lazo button, .barra-lazo label, .colocar-panel button, .capas button, .capas label, .tira button, .tira .seg button,
   .avance button, .seg button, .fila-acciones button, .panel button:not(.esq-abrir):not(.esq-icono):not(.tirador), .esquema li { min-height: 36px; }
   .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { padding: 6px 10px; }
+  /* los botones de una letra (σ, p, J de la vista 3D; ⋯ de la planta) también con 36 px de ancho */
+  .tira button.mini, .herr-planta.seg.chico .menu-mas > button { min-width: 36px; }
   .subpasos button { padding: 4px 12px; }
   .capas label, .capas button { padding: 4px 12px; }
   .grilla-caja button, .grilla-pasos button { min-height: 32px; }
@@ -1845,3 +1847,7 @@ details.toma3d > summary { display: flex; align-items: center; gap: 6px; cursor:
 details.toma3d > summary .toma3d-nombre { flex: 1 1 140px; min-width: 120px; font-weight: 600; }
 details.toma3d > summary .mini { margin-left: 0; }
 details.toma3d h4 { margin: 10px 0 4px; font-size: 12.5px; color: var(--ink2, #5f6b76); }
+/* lo secundario de cada etapa, plegado (plan de entrega, inciso 2) */
+details.mas-detalle { margin: 10px 0; border-top: 1px solid var(--edge, #c3cad1); padding-top: 6px; }
+details.mas-detalle > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 0; min-height: 28px; }
+@media (pointer: coarse) { details.mas-detalle > summary { min-height: 36px; } }

@@ -140,14 +140,27 @@ export function tablaControlesImpresa(cs: Control[]): H {
 
 /** dos dibujos lado a lado si entran; si no, uno debajo del otro */
 /**
- * Ancho de cada dibujo de una fila: dos por fila solo si cada uno queda de 420 px o más; si no, uno debajo del otro.
+ * Ancho de cada dibujo de una fila: dos por fila si cada uno queda de 255 px o más; si no, uno debajo del otro.
  * El dibujo se arma con el ancho real de su columna, así el texto queda en su tamaño (no se achica al escalar).
  */
 let columnasFila = 1;
 function anchos(tam: Tam, n2 = 2) {
   const a = tam.ancho ?? 600;
-  columnasFila = a >= n2 * 420 + 16 * (n2 - 1) ? n2 : 1;
+  // los gráficos en altura son angostos y altos: lado a lado desde 255 px cada uno (así la etapa entra en una pantalla
+  // de notebook con el panel del 3D abierto, sin desplazarse para ver el segundo)
+  columnasFila = a >= n2 * 255 + 16 * (n2 - 1) ? n2 : 1;
   return columnasFila > 1 ? { ancho: Math.floor((a - 16 * (n2 - 1)) / n2), alto: Math.max(320, Math.min(560, (tam.alto ?? 520) - 70)) } : { ancho: a, alto: 380 };
+}
+/**
+ * lo secundario de una etapa, plegado (plan de entrega, inciso 2): un desplegable «Más detalle» que recuerda si se lo
+ * abrió (por título, en este navegador)
+ */
+function masDetalle(titulo: string, ...hijos: Node[]): HTMLElement {
+  const clave = `torre3d.masDetalle.${titulo}`;
+  let abierto = false; try { abierto = localStorage.getItem(clave) === '1'; } catch { /* sin almacenamiento */ }
+  const d = h('details', { class: 'mas-detalle', ...(abierto ? { open: '' } : {}) }, h('summary', {}, `Más detalle: ${titulo}`), ...hijos) as HTMLDetailsElement;
+  d.addEventListener('toggle', () => { try { localStorage.setItem(clave, d.open ? '1' : '0'); } catch { /* sin almacenamiento */ } });
+  return d;
 }
 function fila(...hijos: Node[]) { const f = h('div', { class: 'fila-dibujos' }, ...hijos); f.style.gridTemplateColumns = `repeat(${columnasFila}, minmax(0, 1fr))`; return f; }
 function nivelElegido(alt: PuntoAltura[], clave: string): PuntoAltura | undefined {
@@ -338,8 +351,8 @@ const estabilidad: Etapa = {
       h('p', { class: `nota estado ${fg.verifica ? 'verifica' : 'no-verifica'}` }, fg.verifica ? `Verifica: corta la base a ${fmt(fg.e)} m del eje, dentro del tercio medio (±${fmt(fg.tercio)} m).` : `No verifica: corta la base a ${fmt(fg.e)} m del eje, fuera del tercio medio (±${fmt(fg.tercio)} m).`));
     c.append(fila(f1, f2));
     const fuera = fg.puntos.filter(x => !x.dentro);
-    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, '3 · Línea de presiones piso a piso'), dibujoPresiones(fg, { ancho: Math.min(tam.ancho ?? 600, 760), alto: 360 }),
-      h('p', { class: 'nota' }, `En cada nivel, la resultante de todo lo que está arriba corta el nivel a e = M / N del eje. La banda verde es el núcleo central de la planta (lado / 6): es una referencia, porque la planta no es maciza. ${fuera.length ? `Fuera: ${fuera.map(x => x.nivel).join(', ')}.` : 'Todos los niveles quedan dentro.'}`)));
+    c.append(masDetalle('la línea de presiones piso a piso', h('figure', { class: 'diagrama' }, h('figcaption', {}, '3 · Línea de presiones piso a piso'), dibujoPresiones(fg, { ancho: Math.min(tam.ancho ?? 600, 760), alto: 360 }),
+      h('p', { class: 'nota' }, `En cada nivel, la resultante de todo lo que está arriba corta el nivel a e = M / N del eje. La banda verde es el núcleo central de la planta (lado / 6): es una referencia, porque la planta no es maciza. ${fuera.length ? `Fuera: ${fuera.map(x => x.nivel).join(', ')}.` : 'Todos los niveles quedan dentro.'}`))));
   },
   nombreCentro: () => `Funicular · viento ${estado.dir}`,
   estado: () => peor(grupoControles(['Estabilidad', 'Funicular']).filter(c => c.estado !== 'informativo')),
@@ -388,6 +401,8 @@ const rigidezE: Etapa = {
     const varia = Jniv.some(x => Math.abs(x.J - rg.J) > 1e-6 * rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     const a = anchos(tam);
+    // la fila de abajo, con la altura que deja el gráfico de ΣJ (que mide unos 210 px): la etapa entra en la pantalla
+    if (columnasFila > 1) a.alto = Math.max(300, Math.min(a.alto, (tam.alto ?? 520) - 290));
     c.append(graficoRigidez(rs, { ancho: Math.min(tam.ancho ?? 600, 900) }));
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
@@ -784,15 +799,17 @@ const flexion: Etapa = {
       graficoTensiones(v0, adm, { ancho: anchoT, alto: Math.max(320, Math.min(500, (tam.alto ?? 520) - 140)) })));
     // fibras en altura: la peor tracción (descargado) y la peor compresión (cargado) de la pieza, piso a piso
     const f = fibras().find(x => x.nombre === v0.nombre);
+    // lo secundario: la pieza en todos los pisos y la tabla muro por muro (plegados)
+    const det = masDetalle('la pieza en todos los pisos y la tabla muro por muro');
     if (f && f.niveles.length > 1) {
       const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
-      c.append(comoLeer(
+      det.append(comoLeer(
         `Es la misma pieza ${v0.nombre} en todos los pisos: el eje vertical es la altura (cada punto es la base de un piso) y el horizontal, la tensión σ en kg/cm² (a la derecha del 0, tracción; a la izquierda, compresión).`,
         'Línea llena: la fibra más comprimida de cada piso, con la losa cargada. Línea punteada: la fibra más traccionada, con la losa descargada. El color sigue al signo: rojo donde tracciona, azul donde comprime.',
         'Abajo el momento del viento es máximo, por eso las dos líneas se abren en la base: ahí están la peor compresión y la peor tracción (los valores rotulados). Hacia arriba el momento baja más rápido que el peso y las líneas se cierran.',
         'Donde la punteada cruza el 0 deja de haber tracción: de ese piso para arriba alcanza con la armadura mínima. Si la llena pasa la línea σbk, ese piso no verifica a compresión.',
       ));
-      c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
+      det.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
         series: [
           { nombre: 'fibra más traccionada, descargado (0,7 t/m², punteada)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t'), porSigno: true },
           { nombre: 'fibra más comprimida, cargado (0,9 t/m², llena)', color: 'compresion', tipo: 'linea', puntos: pts('c'), porSigno: true },
@@ -801,12 +818,12 @@ const flexion: Etapa = {
         alturas: Math.abs(z - (f.niveles[0]?.z ?? 0)) > 1e-6 ? [{ z, texto: `se ve: ${nomNivel}` }] : [],
       }, { ancho: anchoT, alto: Math.max(300, Math.min(520, (tam.alto ?? 520) - 120)) }));
       const filasF = f.niveles.slice().reverse().map(nv => [nv.nivel, nv.z, nv.v.M, Math.max(...nv.v.muros.map(m => m.traccion)), Math.min(...nv.v.muros.map(m => m.compresion)), nv.v.muros.reduce((s, m) => s + Math.max(m.As, m.AsMin), 0)]);
-      c.append(tablaValores(['Nivel', 'z (m)', 'M pieza (tm)', 'tracción máx.', 'compresión máx.', 'ΣAs (cm²)'], filasF, [0, 2, 1, 1, 1, 1]));
+      det.append(tablaValores(['Nivel', 'z (m)', 'M pieza (tm)', 'tracción máx.', 'compresión máx.', 'ΣAs (cm²)'], filasF, [0, 2, 1, 1, 1, 1]));
     }
     const filas = v0.muros.map(m => [`${m.id} (${m.papel})`, m.A, m.Ndesc, m.Ncarg, m.sigM / 10, m.desc[0] / 10, m.desc[1] / 10, m.carg[0] / 10, m.carg[1] / 10, Math.max(m.As, m.AsMin)]);
     const t = tablaValores(['Muro', 'F (m²)', 'Ng (t)', 'Nq (t)', 'M·y/J', 'σ desc. ext.', 'σ desc. int.', 'σ carg. ext.', 'σ carg. int.', 'As (cm²)'], filas, [0, 3, 1, 1, 1, 1, 1, 1, 1, 1]);
-    t.setAttribute('open', '');
-    c.append(t, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
+    det.append(t);
+    c.append(det, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
   },
   nombreCentro: () => `Flexocompresión · viento ${estado.dir}`,
   estado: () => peor(grupoControles(usaCirsoc201() ? ['CIRSOC 201'] : ['Flexocompresión'])),

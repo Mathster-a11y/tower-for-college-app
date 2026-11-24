@@ -11,6 +11,7 @@ import type { Camino, Muro, Proyecto, Ubicacion } from './modelo';
 import { cajaMuro, tipoDe } from './modelo';
 import { agruparNodos, copiarNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
 import type { Punto } from './silueta';
+import { nodosMuro } from './dibujo';
 import { polilinea, propiedades, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -49,8 +50,49 @@ export type Operacion =
   | { t: 'espejar'; eje: EjeSimetria; c: Punto }
   | { t: 'escalar'; c: Punto; f: number; espesor: boolean };
 
+/**
+ * las cotas pegadas a los muros que se transforman: se guarda adónde va cada punto (con la misma transformación) y,
+ * después de transformar, se lo vuelve a pegar al nodo del muro que quedó ahí. Al girar o espejar, los nodos de un muro
+ * se renumeran (la esquina 0 pasa a ser otra): sin esto la cota saltaba a otra esquina.
+ */
+function seguirCotas(p: Proyecto, ids: Set<string>, f: (q: Punto) => Punto): () => void {
+  const pend: { q: import('./modelo').PuntoCota; destino: Punto }[] = [];
+  for (const c of p.cotas ?? []) for (const q of [c.a, c.b]) if (q.ref && ids.has(q.ref.id)) {
+    const m = p.muros.find(x => x.id === q.ref!.id), n = m ? nodosMuro(m)[q.ref.k] : undefined;
+    pend.push({ q, destino: f(n ? { x: n.x, y: n.y } : { x: q.x, y: q.y }) });
+  }
+  return () => {
+    for (const { q, destino } of pend) {
+      const m = p.muros.find(x => x.id === q.ref!.id); if (!m) continue;
+      const ns = nodosMuro(m);
+      let k = -1, d2 = Infinity;
+      ns.forEach((n, i) => { const d = (n.x - destino.x) ** 2 + (n.y - destino.y) ** 2; if (d < d2) { d2 = d; k = i; } });
+      q.x = r4(destino.x); q.y = r4(destino.y);
+      if (k >= 0 && d2 < 1e-6) q.ref = { id: m.id, k }; else delete q.ref;       // si el nodo ya no está, queda suelta ahí
+    }
+  };
+}
 /** aplica una operación a los muros y grupos de la selección. Devuelve un error si algo está bloqueado. */
 export function aplicar(p: Proyecto, sel: Seleccion, op: Operacion): string | null {
+  const { ids } = resolver(p, sel);
+  if (!ids.size) return aplicarSinCotas(p, sel, op);
+  const gir = (q: Punto, c: Punto): Punto => ({ x: c.x - (q.y - c.y), y: c.y + (q.x - c.x) });
+  const f = (q: Punto): Punto => {
+    if (op.t === 'mover') return { x: q.x + op.dx, y: q.y + op.dy };
+    if (op.t === 'girar') { let r = q; for (let k = 0; k < op.q; k++) r = gir(r, op.c); return r; }
+    if (op.t === 'espejar') {
+      const base: 'x' | 'y' = op.eje === 'x' || op.eje === 'd2' ? 'x' : 'y';
+      const r = base === 'x' ? { x: 2 * op.c.x - q.x, y: q.y } : { x: q.x, y: 2 * op.c.y - q.y };
+      return op.eje === 'd1' || op.eje === 'd2' ? gir(r, op.c) : r;
+    }
+    return { x: op.c.x + (q.x - op.c.x) * op.f, y: op.c.y + (q.y - op.c.y) * op.f };
+  };
+  const despues = seguirCotas(p, ids, f);
+  const err = aplicarSinCotas(p, sel, op);
+  if (!err) despues();
+  return err;
+}
+function aplicarSinCotas(p: Proyecto, sel: Seleccion, op: Operacion): string | null {
   const { ids, grupos } = resolver(p, sel);
   if (!ids.size) return 'No hay nada elegido.';
   if (p.muros.some(m => ids.has(m.id) && muroBloqueado(p, m))) return 'Lo elegido tiene muros bloqueados 🔒: desbloquealos primero.';
@@ -449,6 +491,7 @@ export function girarLibre(p: Proyecto, sel: Seleccion, c: Punto, grados: number
   if (!ids.size) return { error: 'No hay nada elegido.' };
   if (p.muros.some(m => ids.has(m.id) && muroBloqueado(p, m))) return { error: 'Lo elegido tiene muros bloqueados 🔒.' };
   const a = (grados * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+  const despues = seguirCotas(p, ids, q => ({ x: c.x + (q.x - c.x) * cs - (q.y - c.y) * sn, y: c.y + (q.x - c.x) * sn + (q.y - c.y) * cs }));
   let convertidos = 0;
   p.muros = p.muros.map(m => {
     if (!ids.has(m.id)) return m;
@@ -459,5 +502,6 @@ export function girarLibre(p: Proyecto, sel: Seleccion, c: Punto, grados: number
     const { pegadoA: _a, pegadoB: _b, rolA: _ra, rolB: _rb, ...resto } = m; void _a; void _b; void _ra; void _rb;
     return ponerPerfil({ ...resto, pegadoA: '', pegadoB: '' } as Muro, trasladar(g, c.x, c.y));
   });
+  despues();
   return { convertidos };
 }
