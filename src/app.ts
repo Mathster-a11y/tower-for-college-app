@@ -14,7 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarTodas } from './ui/comp';
 import { leerProyecto, textoErrores } from './engine/lector';
 import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
@@ -98,6 +98,13 @@ function dibujarPanel() {
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
   }
   try { e.panel(p, sub); } catch (err) { console.error(err); p.append(h('p', { class: 'error' }, `No se pudo armar el panel: ${String(err)}`)); }
+  // las secciones vienen plegadas: un renglón para abrirlas o plegarlas todas juntas
+  const secs = p.querySelectorAll('section.seccion.plegable');
+  if (secs.length > 1) {
+    const ab = h('button', { type: 'button', class: 'enlace' }, 'Abrir todas'), pl = h('button', { type: 'button', class: 'enlace' }, 'Plegar todas');
+    ab.addEventListener('click', () => plegarTodas(p, false)); pl.addEventListener('click', () => plegarTodas(p, true));
+    secs[0].before(h('div', { class: 'plegar-todas' }, h('span', { class: 'nota chica' }, `${secs.length} secciones`), ab, pl));
+  }
   requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
 }
@@ -114,7 +121,7 @@ function dibujarTira(e: Etapa) {
     b.addEventListener('click', () => { if (m.disponible && cfg.metodo !== k) estado.cambiarCalculo({ metodo: k }); });
     segMet.append(b);
   });
-  t.append(h('span', { class: 'nota chica' }, 'Método'), segMet);
+  t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Método'), segMet));
   if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
     ([['actual', 'Anterior'], ['nuevo', '2025 (cátedra)']] as const).forEach(([k, txt]) => {
@@ -122,7 +129,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
       segV.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Planilla'), segV);
+    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Planilla'), segV));
   }
   if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
@@ -131,7 +138,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.verificacion !== k) estado.cambiarCalculo({ verificacion: k }); });
       segN.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Verificación'), segN);
+    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Verificación'), segN));
   }
   if (cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
@@ -140,7 +147,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.teoria !== k) estado.cambiarCalculo({ teoria: k }); });
       segT.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Piezas'), segT);
+    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Piezas'), segT));
   }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
@@ -149,7 +156,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.armado !== k) estado.cambiarCalculo({ armado: k }); });
       segA.append(b);
     });
-    t.append(h('span', { class: 'nota chica' }, 'Armado'), segA);
+    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Armado'), segA));
   }
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Dirección del viento', 'data-globo': 'Viento A y B|El viento A empuja la cara mayor (ancho B) y lo toman los tabiques paralelos (hoja «J Tabiques paralelos»). El viento B empuja la cara menor y lo toman los ortogonales.' });
   (['A', 'B'] as const).forEach(dd => {
@@ -182,7 +189,7 @@ function dibujarAvance() {
   const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
   const lista = h('div', { class: 'lista-avance' });
   a.replaceChildren(cab, lista);
-  hacerPlegable(a, cab, 'Avance de la planilla');
+  hacerPlegable(a, cab, 'Avance de la planilla', false);
   lista.replaceChildren(...ETAPAS.map(e => {
     const est = e.estado();
     const b = h('button', { type: 'button', 'aria-current': String(e.id === estado.etapa) }, h('span', { class: 'nro' }, e.nro), h('span', { class: 'nom' }, e.nombre), chip(est === 'pendiente' ? 'pendiente' : est, est === 'revisar' && e.id === 'flexion' ? 'armadura' : est));
@@ -979,7 +986,7 @@ document.getElementById('arranque')?.remove();
 montarDivisores();
 {
   const b3 = document.querySelector<HTMLElement>('.bloque3d'), cab3 = b3?.querySelector<HTMLElement>('.tira');
-  if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría'); }
+  if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría', false); }
 }
 
 }

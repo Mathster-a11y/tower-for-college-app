@@ -78,10 +78,17 @@ button.peligro { color: var(--danger); border-color: var(--danger); }
 button.peligro:hover { background: var(--mal-fill); }
 button.glifo { width: 30px; height: 28px; padding: 0; display: inline-grid; place-items: center; font-size: 15px; }
 button.mini { padding: 1px 9px; font-size: 12px; }
-.seg { display: inline-flex; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; background: var(--field); flex-wrap: wrap; }
-.seg button { border: 0; border-radius: 0; background: transparent; padding: 4px 12px; }
-.seg button + button { border-left: 1px solid var(--field-edge); }
+/* botones segmentados: una caja con las opciones como pastillas adentro. Si no entran en una línea se parten en filas
+   sin cortar ninguna (la caja pasa de pastilla a rectángulo redondeado y nada queda recortado) */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--field-edge); border-radius: 17px; background: var(--field); }
+.seg > button, .seg > .menu-mas > button, .seg > .boton { border: 0; border-radius: 999px; background: transparent; padding: 3px 11px; }
+.seg > button:not([aria-pressed="true"]):hover, .seg > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+/* los pasos de una etapa (1 · …, 2 · …): en filas parejas en lugar de dejar uno solo abajo */
+/* rótulo y botones juntos: si la fila se parte, no queda el rótulo solo al final de la de arriba */
+.par-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.seg.pasos { flex: 1 1 100%; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.seg.pasos > button { text-align: center; }
 .seg.chico button { padding: 2px 10px; font-size: 12px; }
 .interruptor { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; }
 .interruptor input { appearance: none; width: 30px; height: 17px; border-radius: 999px; background: #b9c1c9; position: relative; margin: 0; padding: 0; border: 0; cursor: pointer; transition: background .15s; }
@@ -127,8 +134,10 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rolb); color: #fff; }
 .banda .chip { background: #fff; color: var(--rolb); font-weight: 700; font-family: var(--mono); font-size: 13px; border-radius: 6px; padding: 1px 6px; }
 .banda h2 { margin: 0; font-size: 17px; color: #fff; }
-.subpasos { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 10px 2px; }
-.subpasos button { font-size: 12px; padding: 2px 10px; }
+.subpasos { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 2px; padding: 2px; margin: 8px 10px 2px; border: 1px solid var(--field-edge); border-radius: 17px; background: var(--field); }
+.subpasos[hidden] { display: none; }
+.subpasos button { font-size: 12px; padding: 3px 8px; border: 0; border-radius: 999px; background: transparent; }
+.subpasos button:not([aria-pressed="true"]):hover { background: var(--tint); }
 .subpasos button[aria-pressed="true"] { background: var(--rolb); border-color: var(--rolb); color: #fff; font-weight: 600; }
 .panel { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 22px; display: flex; flex-direction: column; gap: 8px; }
 .panel > * { flex-shrink: 0; }
@@ -387,9 +396,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 }
 /* planta angosta (tablet vertical o panel lateral ancho): las herramientas en varias líneas, cada una entera */
 @media (max-width: 1100px) {
-  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
-  .sel-nivel { top: 84px; right: 10px; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
+  .sel-nivel { top: 106px; right: 10px; }
 }
 @media (max-width: 760px) {
   body { height: auto; }
@@ -399,9 +407,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   /* el grupo del final (Carta, Resumen, Ayuda) también en fila: si no, estira toda la barra */
   .riel .riel-fin { margin-top: 0; margin-left: 0; display: flex; flex-direction: row; gap: 2px; flex: 0 0 auto; }
   /* herramientas de la planta: en varias líneas, cada una entera */
-  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
-  .sel-nivel { top: 84px; right: 10px; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
+  .sel-nivel { top: 106px; right: 10px; }
   .lateral { border-right: 0; }
   .panel { overflow: visible; }
   .centro { min-height: 70vh; }
@@ -1138,8 +1145,7 @@ button.peligro { color: var(--mal); }
 
 /* ---- al final para ganar a las reglas de arriba: pantallas angostas y táctiles ---- */
 @media (max-width: 1100px) {
-  .herr-planta { flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
   .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { min-height: 30px; }
 }
 @media (pointer: coarse) {
@@ -1667,13 +1673,16 @@ details.como-leer summary { cursor: pointer; color: var(--accent); font-weight: 
 details.como-leer ul { margin: 4px 0 0; padding-left: 18px; }
 details.como-leer li { margin: 2px 0; }
 /* explicaciones del centro detrás de «?» (comp.ts, plegarExplicaciones) */
-.ayuda-plegable { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 4px; }
-.ayuda-boton { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 13px; line-height: 1; color: var(--accent); background: var(--field); border: 1px solid var(--accent); }
-.ayuda-boton[aria-expanded="true"] { color: var(--field); background: var(--accent); }
-.ayuda-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink2); }
+/* el mismo aspecto que «Cómo leer este gráfico» y «Más detalle»: un renglón azul con su triángulo */
+.ayuda-plegable { display: block; margin: 2px 0 6px; }
+.ayuda-boton { display: inline-flex; align-items: center; gap: 5px; padding: 2px 0; border: 0; border-radius: 0; background: none; font-size: 12.5px; font-weight: 600; color: var(--accent); min-height: 24px; }
+.ayuda-boton:hover { background: none; text-decoration: underline; }
+.ayuda-boton::before { content: '▸'; font-size: 11px; }
+.ayuda-boton[aria-expanded="true"]::before { content: '▾'; }
+.ayuda-texto { margin-top: 4px; padding-left: 14px; border-left: 2px solid var(--edge); display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink2); }
 .ayuda-texto[hidden] { display: none; }
 .ayuda-texto ul { margin: 0; padding-left: 18px; }
-@media (pointer: coarse) { .ayuda-boton { width: 32px; height: 32px; min-height: 32px; } }
+@media (pointer: coarse) { .ayuda-boton { min-height: 36px; } }
 /* llaves para leer los dibujos: siempre a la vista, junto al dibujo */
 #centro-dibujos .llave { color: var(--ink2); font-size: 12.5px; margin: 2px 0; }
 /* túnel 2D: torre piso por piso */
@@ -1851,3 +1860,10 @@ details.toma3d h4 { margin: 10px 0 4px; font-size: 12.5px; color: var(--ink2, #5
 details.mas-detalle { margin: 10px 0; border-top: 1px solid var(--edge, #c3cad1); padding-top: 6px; }
 details.mas-detalle > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 0; min-height: 28px; }
 @media (pointer: coarse) { details.mas-detalle > summary { min-height: 36px; } }
+
+/* panel izquierdo: abrir o plegar todas las secciones */
+.plegar-todas { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin: 0 2px 6px; }
+.plegar-todas .nota { margin-right: auto; }
+button.enlace { border: 0; background: none; padding: 2px 0; min-height: 24px; color: var(--accent); font-size: 12.5px; font-weight: 600; border-radius: 0; }
+button.enlace:hover { background: none; text-decoration: underline; }
+@media (pointer: coarse) { button.enlace { min-height: 36px; } }

@@ -463,7 +463,7 @@ const rototrasl: Etapa = {
     const dp = datosRotoPlano(d);
     const pasoN = Number(estado.sub.pasoRoto) || 1;
     const paso = Math.min(4, pasoN) as Paso;
-    const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Paso' });
+    const seg = h('div', { class: 'seg chico pasos', role: 'group', 'aria-label': 'Paso' });
     (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación', '5 · Animada', '6 · En 3D'] as const).forEach((t, i) => {
       const b2 = h('button', { type: 'button', 'aria-pressed': String(pasoN === i + 1) }, t);
       b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
