@@ -69,7 +69,8 @@ export function armarInforme(): HTMLElement {
     ...cartas.map(({ dc, dir }) => dato(`Flecha azotea ${dir}`, dc.roto ? `${fmt(dc.roto.dTop * 1000, 1)} mm` : '—', `límite h/500 = ${fmt((zTop / 500) * 1000, 0)} mm`)),
     ...cartas.map(({ dc, dir }) => dato(`Vuelco ${dir}: Me / Mv`, fmt(dc.vuelco.coef, 2), 'tiene que ser ≥ 1,5')));
   p1.append(datos);
-  if (cartas[0]) p1.append(carta(cartas[0].dc, 'B', 1100));
+  // portada: la carta C (la torre en el espacio); la A es la lámina principal (página 3) y la D, la de estabilidad (4)
+  if (cartas[0]) p1.append(carta(cartas[0].dc, 'C', 1100));
   doc.append(p1);
 
   // ---- 2 · ¿Verifica?
@@ -111,7 +112,7 @@ export function armarInforme(): HTMLElement {
       const lim = (dc.zTop / 500) * 1000, dTop = dc.roto ? dc.roto.dTop * 1000 : NaN;
       const s = hoja(`5${'ab'[i]}`, `¿Es rígida? ¿Gira? · viento ${dir}`);
       s.append(frase(`La azotea se corre ${fmt(dTop, 1)} mm (el límite es ${fmt(lim, 0)} mm, h/500): ${dTop <= lim ? 'la torre es suficientemente rígida' : 'hay que agregar rigidez'}. ${Math.abs(dp.Mt) > 1e-6 ? `Como el centro de rigidez está a ${fmt(Math.abs(dp.Xr))} m del eje, la planta además gira (Mt = ${fmt(Math.abs(dp.Mt), 0)} tm) y los tabiques del lado alejado trabajan más.` : 'El centro de rigidez está en el eje: la planta no gira, cada pieza toma viento según su J.'}`));
-      s.append(carta(dc, 'C', 1100));
+      s.append(carta(dc, 'B', 1100));
       s.append(dibujoRototraslacion(dp, 4, { ancho: 900, alto: 560 }));
       doc.append(s);
     });

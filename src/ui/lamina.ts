@@ -37,9 +37,9 @@ export function laminaA3(dir: 'A' | 'B', hoja: number, hojas: number): SVGSVGEle
     const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'lamina', role: 'img', 'aria-label': `Lámina A3, viento ${dir}` }) as SVGSVGElement;
     svg.append(el('rect', { x: 0, y: 0, width: W, height: H, class: 'lm-fondo' }));
     svg.append(el('rect', { x: M, y: M, width: W - 2 * M, height: H - 2 * M, class: 'lm-marco' }));
-    // fila de arriba: ficha y vuelco
+    // fila de arriba: la torre en el espacio (C, la portada) y el vuelco (D); abajo, la lámina principal (A)
     const x0 = M + 20, wCol = (W - 2 * M - 60) / 2, yA = M + 20, hA = 1340;
-    svg.append(anidar(carta(dc, 'B', 1100), x0, yA, wCol, hA));
+    svg.append(anidar(carta(dc, 'C', 1100), x0, yA, wCol, hA));
     svg.append(anidar(carta(dc, 'D', 1100), x0 + wCol + 20, yA, wCol, hA));
     svg.append(el('line', { x1: M, x2: W - M, y1: yA + hA + 10, y2: yA + hA + 10, class: 'lm-linea' }));
     // fila de abajo: lámina M, N y Q a la izquierda

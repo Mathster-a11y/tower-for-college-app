@@ -840,10 +840,11 @@ export function datosCarta(): DatosCarta | null {
   };
 }
 const VARIANTES: [Variante, string, string][] = [
-  ['A', 'A · Lámina M, N y Q', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja.'],
-  ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
-  ['C', 'C · Axonometría de la ménsula', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones.'],
+  // el orden de la entrega: C de portada, A como lámina principal, D la estabilidad y B el resumen
+  ['C', 'C · Axonometría (portada)', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones. Va en la portada del informe, de la Carta PDF y arriba en la lámina A3.'],
+  ['A', 'A · Lámina M, N y Q (principal)', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja. Es la lámina principal: la que se corrige contra la planilla.'],
   ['D', 'D · Vuelco y suelo', 'El esquema de abajo de las tablas de «M,NyQ», a escala: viento de cada piso, W en hW, peso P, resultante, punto de giro, núcleo central b\'/6 y tensiones en el suelo, con las dos tablas de la hoja.'],
+  ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
 ];
 const cartaE: Etapa = {
   id: 'carta', nro: '▤', nombre: 'Carta', rol: '--r-resumen', dependeDir: true, conFuente: true,

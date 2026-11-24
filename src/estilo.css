@@ -632,16 +632,18 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .carta .ct-base { fill: var(--ink); }
 .carta .ct-base-planta { fill: var(--zebra); stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 4 2; }
 .carta .ct-flecha.peso line { stroke: var(--ink); } .carta .ct-flecha.peso polygon { fill: var(--ink); }
-.carta .ct-flecha.resultante-r line { stroke: var(--mal); } .carta .ct-flecha.resultante-r polygon { fill: var(--mal); }
-.carta .ct-r-punteada { stroke: var(--mal); stroke-width: 1.6; stroke-dasharray: 2 3; }
+/* R = W + P, el volcador y el equilibrante no son tracción ni compresión: colores de las cargas (el rojo es solo tracción) */
+.carta .ct-flecha.resultante-r line { stroke: var(--ink); } .carta .ct-flecha.resultante-r polygon { fill: var(--ink); }
+.carta .ct-r-punteada { stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 2 3; }
 .carta .ct-rojo { fill: var(--mal); }
 .carta .ct-amarillo { fill: var(--revisar); }
+.carta .ct-carga { fill: var(--carga); } .carta .ct-peso { fill: var(--ink2); }
 .carta .ct-nucleo.ok { fill: color-mix(in srgb, var(--ok) 45%, transparent); }
 .carta .ct-nucleo.mal { fill: color-mix(in srgb, var(--mal) 45%, transparent); }
 .carta .ct-giro { fill: var(--ink); stroke: var(--lienzo); stroke-width: 1.5; }
 .arco-momento .arco-trazo { fill: none; }
-.carta .ct-arco.volcador .arco-trazo { stroke: var(--mal); } .carta .ct-arco.volcador .arco-punta { fill: var(--mal); }
-.carta .ct-arco.equilibrante .arco-trazo { stroke: var(--revisar); } .carta .ct-arco.equilibrante .arco-punta { fill: var(--revisar); }
+.carta .ct-arco.volcador .arco-trazo { stroke: var(--carga); } .carta .ct-arco.volcador .arco-punta { fill: var(--carga); }
+.carta .ct-arco.equilibrante .arco-trazo { stroke: var(--ink2); } .carta .ct-arco.equilibrante .arco-punta { fill: var(--ink2); }
 .carta .ct-suelo-t { fill: color-mix(in srgb, var(--compresion) 22%, transparent); stroke: var(--compresion); stroke-width: 1.4; }
 .carta .ct-suelo-t.traccion { fill: color-mix(in srgb, var(--traccion) 22%, transparent); stroke: var(--traccion); }
 .et3d.giro { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }
