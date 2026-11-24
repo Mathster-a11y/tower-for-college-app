@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resultados del túnel 3D</title>
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;--tint:#dbe8f6;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;
+  --traccion:#e24b4a;--compresion:#378add;--deformada:#1d9e75;--carga:#d85a30;--corte:#7f77dd;
+  --e1:#1a6bbd;--e2:#a8650a;--e3:#1d8a68;--e4:#6a1b9a}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.55 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1000px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:27px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:18px;margin:30px 0 10px;padding-top:12px;border-top:2px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 6px;border-radius:15px;background:var(--acc);color:#fff;font-size:13px;font-weight:700;flex:none}
+h3{font-size:14.5px;margin:18px 0 6px;break-after:avoid}
+p{margin:6px 0} ul,ol{margin:6px 0 6px 20px;padding:0} li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;break-inside:avoid}
+.tarjeta.gris{background:var(--panel);border-color:transparent}
+.tarjeta.aviso{background:var(--warnf);border-color:#ecd9a8}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--tint);color:var(--acc);white-space:nowrap}
+.chip.ok{background:var(--okf);color:var(--ok)}.chip.warn{background:var(--warnf);color:var(--warn)}.chip.gris{background:var(--panel);color:var(--ink2)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+tr{break-inside:avoid}
+thead{display:table-header-group}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.cols{grid-template-columns:1fr}.pag{padding:20px 16px 40px}}
+figure{margin:10px 0;break-inside:avoid}
+figcaption{font-size:12px;color:var(--ink2);margin-top:4px}
+svg{max-width:100%;height:auto;display:block}
+.esp{display:grid;grid-template-columns:150px 1fr 1.4fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hair);break-inside:avoid}
+.barra{height:18px;border-radius:4px;border:1px solid var(--hair)}
+.bloque{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.bloque .tarjeta{margin:0}
+.bloque b{display:block;font-size:13px}
+.bloque small{color:var(--ink2)}
+@media (max-width:720px){.bloque{grid-template-columns:1fr 1fr}.esp{grid-template-columns:1fr}}
+code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+.eq{font-family:'Cambria Math','STIX Two Math','Latin Modern Math',serif;font-size:14px;background:#f7f8fa;border-left:3px solid var(--acc);padding:6px 10px;margin:6px 0;break-inside:avoid}
+.mantener{break-inside:avoid}
+.cap{break-before:page}
+.ref{font-size:12px;color:var(--ink2)}
+.ref a{color:var(--acc)}
+@page{size:A4;margin:14mm 12mm}
+@media print{.pag{padding:0;max-width:none}h2{margin-top:0}}
+</style>
+</head>
+<body>
+<div class="pag">
+
+<h1>Resultados del túnel 3D</h1>
+<p class="sub">Propuesta: qué datos sacar de la simulación 3D de la torre, cómo presentarlos y cómo grabarlos · 24/11/2026</p>
+
+<div class="tarjeta gris">
+<p><b>En una frase.</b> Hoy el túnel 3D muestra <i>cómo</i> se mueve el aire (cortes, líneas de corriente, Cp promedio de cada cara, vereda con Lawson). La propuesta es que además <b>mida</b> lo que usa un proyectista: fuerzas en la base y por piso, presiones pico de fachada, la respuesta dinámica (vórtices, aceleraciones) y el confort en la calle. Cada dato va con su número, su gráfico, su comparación con el CIRSOC y su hoja en el Excel.</p>
+</div>
+
+<div class="bloque">
+  <div class="tarjeta"><span class="chip">1</span><b>Estructura</b><small>Cortante y vuelco en la base, cargas y torsores por piso, simultaneidad de arrastre, lateral y torsión</small></div>
+  <div class="tarjeta"><span class="chip">2</span><b>Fachada</b><small>Presiones pico (empuje y succión) en kN/m², mapa de la fachada desplegada y zonas</small></div>
+  <div class="tarjeta"><span class="chip">3</span><b>Confort en la torre</b><small>Vórtices contra la frecuencia de la torre, aceleración en la azotea (mili-g), deriva</small></div>
+  <div class="tarjeta"><span class="chip">4</span><b>Confort en la calle</b><small>Ráfagas a 1,5 m, Lawson con rosa de vientos, bajada del aire (downwash)</small></div>
+</div>
+
+<h2><span class="n">0</span>Lo que ya está y lo que falta</h2>
+<table>
+<thead><tr><th style="width:30%">Dato</th><th style="width:18%">Hoy</th><th>Lo que falta</th></tr></thead>
+<tr><td>Cp de cada cara</td><td><span class="chip ok">promedio</span></td><td>Desvío (RMS), mínimo y máximo de cada celda de fachada; picos; pasarlo a kN/m²</td></tr>
+<tr><td>Fuerza por piso</td><td><span class="chip ok">en el 2D</span></td><td>En el 3D, integrada en cada piso, con el torsor; en la base, como serie de tiempo</td></tr>
+<tr><td>Strouhal y V crítica</td><td><span class="chip ok">en el 2D</span></td><td>En el 3D con la fuerza lateral de toda la torre; aceleraciones</td></tr>
+<tr><td>Vereda (Lawson LDDC)</td><td><span class="chip ok">una dirección</span></td><td>Varias direcciones con la rosa de vientos; criterio a elegir; altura de evaluación (balcón, terraza)</td></tr>
+<tr><td>Líneas de corriente</td><td><span class="chip ok">sembradas fijas</span></td><td>Rastrillo movible, tubos con sombra, partículas animadas, escala fija para comparar</td></tr>
+<tr><td>Grabación</td><td><span class="chip ok">en el 2D</span></td><td>Grabar el 3D con cámara guiada y el gráfico de fuerzas sincronizado</td></tr>
+</table>
+
+<h2 class="cap"><span class="n">1</span>Cómo lo presentan otros programas</h2>
+<p>Revisé la documentación pública de programas comerciales y libres de simulación de fluidos. <b>Se toman ideas de presentación, no código ni imágenes ni íconos</b>: todo lo que sigue se programa de nuevo en la app, con nuestro motor y nuestro estilo.</p>
+<table>
+<thead><tr><th style="width:21%">Programa</th><th>Lo que muestra y cómo</th><th style="width:32%">La idea que tomamos</th></tr></thead>
+<tr><td><b>SolidWorks Flow Simulation</b> (comercial)</td><td>Cortes (cut plots), mapas sobre las superficies (surface plots), trayectorias del flujo, sonda que da el valor al pasar el mouse. Barra de colores horizontal o vertical, con escala logarítmica opcional y el mínimo y el máximo señalados en el dibujo.</td><td>Sonda a pedido (no por defecto). Mínimo y máximo señalables en la fachada. Escala lineal o logarítmica.</td></tr>
+<tr><td><b>Autodesk CFD</b> (comercial)</td><td>Planos de resultados con gráficos XY sobre una línea; «traces» como tinta inyectada que se anima y se guarda como video; calculadora de paredes que integra la fuerza sobre una superficie elegida.</td><td>Partículas animadas como tinta. Gráfico sobre una línea del corte. Integrar fuerzas por cara y por piso.</td></tr>
+<tr><td><b>SimScale</b> (comercial, también Lattice Boltzmann)</td><td>Mapa de confort peatonal por categorías; se cambia el criterio (Lawson, Davenport, NEN 8100) sin volver a simular; la altura de evaluación es elegible; resultados por dirección y combinados con la rosa de vientos.</td><td>Criterio intercambiable sin resimular. Altura de evaluación. Rosa de vientos.</td></tr>
+<tr><td><b>Orbital Stack</b> (comercial)</td><td>Para fachadas: Cp mínimo, máximo, medio y RMS por dirección, como mapas sobre el edificio; la envolvente de presiones pico (positiva y negativa) en kPa, con la presión interior; resolución de 1 a 4 m.</td><td>Las cuatro estadísticas de Cp. Envolvente de todas las direcciones. Pasar a kN/m² con la q(z) del CIRSOC.</td></tr>
+<tr><td><b>ParaView</b> (libre)</td><td>Durante años usó «Cool to Warm» (azul–blanco–rojo) por defecto; desde la 5.13 usa un mapa nuevo («Fast») elegido por cuánto se distinguen los valores. Ofrece viridis. Para vórtices, isosuperficies del criterio Q.</td><td>Espectros perceptuales, nunca arcoíris. Vórtices con criterio Q en la fidelidad máxima.</td></tr>
+<tr><td>Las dos imágenes de referencia</td><td>Torre gris o blanca como maqueta, contexto en gris claro con sombras suaves, líneas de corriente largas como tubos que envuelven la torre y forman el remolino de la estela; el color de la línea es la velocidad.</td><td>«Modo maqueta»: torre blanca, contexto gris, sombras. Tubos con relieve. Remolino visible.</td></tr>
+</table>
+<p class="ref">Fuentes: <a href="https://goengineer.com/blog/solidworks-flow-simulation-results-analysis-tools-explained">GoEngineer, herramientas de resultados de SolidWorks Flow</a> · <a href="https://help.solidworks.com/2018/English/WhatsNew/c_flow_simulation.htm">SolidWorks 2018, novedades de Flow</a> · <a href="https://help.autodesk.com/cloudhelp/2023/ENU/SimCFD-UsersGuide/files/GUID-9EBC3C73-AB3B-4341-BBDF-58601024BD7C.htm">Autodesk CFD, Particle Traces</a> · <a href="https://help.autodesk.com/cloudhelp/2023/ENU/SimCFD-UsersGuide/files/GUID-8F1E8CAC-1846-4F3B-BB00-2AD0CAB9A3FE.htm">Autodesk CFD, flujo de resultados</a> · <a href="https://www.simscale.com/docs/analysis-types/pedestrian-wind-comfort-analysis/pedestrian-comfort-map/">SimScale, mapa de confort peatonal</a> · <a href="https://www.simscale.com/blog/lawson-wind-comfort-criteria/">SimScale, criterio de Lawson</a> · <a href="https://help.orbitalstack.com/cladding-pressures-explained">Orbital Stack, presiones de fachada</a> · <a href="https://www.kitware.com/new-default-colormap-and-background-in-next-paraview-release/">Kitware, nuevo mapa de colores de ParaView</a> · <a href="https://www.kitware.com/use-viscm-to-design-color-maps-for-paraview-4-4/">Kitware, viridis</a> · <a href="https://sites.utexas.edu/artscivis/color/">UT Austin, críticas al arcoíris</a> · <a href="https://www.csc.kth.se/~weinkauf/publications/documents/sahner07a.pdf">Sahner y otros, vórtices con criterio Q</a></p>
+
+<h2 class="cap"><span class="n">2</span>Espectros de colores</h2>
+<p>Las dos imágenes de referencia usan el arcoíris («jet»): azul lento, verde, amarillo, rojo rápido. Es lindo pero engaña: el ojo ve escalones donde el valor cambia parejo (la franja amarilla brilla más que el resto y parece un borde), no se lee en blanco y negro y los daltónicos confunden rojo y verde. Además choca con la regla de la app: <b>rojo es tracción y azul es compresión</b>. Por eso cada magnitud tiene su espectro y ninguno es arcoíris.</p>
+<div class="esp"><b>Velocidad del aire</b><div class="barra" style="background:linear-gradient(90deg,#2e1a52,#5b3290,#9a5aa8,#d590b0,#f3bf7a,#fdf2b8)"></div><span>«Térmico» (el que ya usamos): oscuro quieto, claro rápido. Crece la luz con el valor, se lee impreso en gris. Líneas de corriente y cortes.</span></div>
+<div class="esp"><b>Presión, Cp</b><div class="barra" style="background:linear-gradient(90deg,#1d5fa8,#378add,#bcd9f5,#ffffff,#f6c3c2,#e24b4a,#a32726)"></div><span>Divergente con el blanco en cero: el viento que <b>empuja</b> la cara la comprime (azul); la <b>succión</b> la tracciona (rojo). Igual que ahora.</span></div>
+<div class="esp"><b>Presión pico de fachada</b><div class="barra" style="background:linear-gradient(90deg,#1d5fa8 0 14%,#378add 14% 28%,#bcd9f5 28% 42%,#fff 42% 50%,#f6c3c2 50% 64%,#e24b4a 64% 82%,#a32726 82%)"></div><span>El mismo, pero en <b>bandas</b> (8 a 10 escalones con valor redondo): así se zonifica la fachada y se imprime sin ambigüedad.</span></div>
+<div class="esp"><b>Giro del aire</b><div class="barra" style="background:linear-gradient(90deg,#5b3290,#a99bd6,#ffffff,#9fd8c3,#1d8a68)"></div><span>Divergente violeta–blanco–verde: horario y antihorario sin usar rojo ni azul. Para los vórtices 3D, isosuperficie de un solo color (violeta) con transparencia.</span></div>
+<div class="esp"><b>Confort Lawson</b><div class="barra" style="background:linear-gradient(90deg,#e8f5e9 0 20%,#a5d6a7 20% 40%,#ffe082 40% 60%,#ffb74d 60% 80%,#8d6e63 80%)"></div><span>Por categorías (A a E), de verde claro a marrón, como ya está. Peligroso (más de 15 m/s): rayado negro sobre el marrón.</span></div>
+<div class="esp"><b>Turbulencia (RMS)</b><div class="barra" style="background:linear-gradient(90deg,#ffffff,#d9d3e8,#9b8fc4,#5d4b97,#2b1d55)"></div><span>Secuencial blanco a violeta oscuro: dónde el aire «tiembla». Sirve para ver de dónde salen los picos.</span></div>
+<div class="esp"><b>Aceleración, deriva</b><div class="barra" style="background:linear-gradient(90deg,#f3faf7,#9fd8c3,#1d9e75,#0e5a42)"></div><span>Verde de la deformada (<code>--deformada</code>): es movimiento, no tensión.</span></div>
+<div class="tarjeta gris mantener"><b>Reglas de la barra de colores</b>
+<ul>
+<li>Abajo, horizontal, con la unidad elegida (km/h, m/s, veces el viento que llega; kN/m² o Cp).</li>
+<li><b>Escala fija o automática</b>: fija para comparar dos corridas o dos grabaciones con los mismos colores; automática para ver el detalle de una.</li>
+<li>Marcas en valores redondos y en el de referencia (el viento que llega, el Cp del CIRSOC).</li>
+<li>Opción de señalar el mínimo y el máximo en el dibujo (apagada por defecto, como todos los rótulos del 3D).</li>
+</ul></div>
+
+<h2 class="cap"><span class="n">3</span>Estructura: fuerzas en la base y por piso</h2>
+<p>La simulación ya tiene la presión en cada celda de fachada en cada paso. Sumándola cara por cara se obtiene la fuerza de cada piso y, con su brazo, el torsor; acumulando de arriba hacia abajo, el cortante y el vuelco en cada nivel.</p>
+<div class="eq">F<sub>x,i</sub>(t) = Σ<sub>celdas del piso i</sub> p · n<sub>x</sub> · ΔA &nbsp;·&nbsp; M<sub>t,i</sub>(t) = Σ p · (x · n<sub>y</sub> − y · n<sub>x</sub>) · ΔA &nbsp;·&nbsp; V<sub>base</sub> = Σ<sub>i</sub> F<sub>i</sub> &nbsp;·&nbsp; M<sub>vuelco</sub> = Σ<sub>i</sub> F<sub>i</sub> · z<sub>i</sub></div>
+<div class="cols">
+<figure>
+<svg viewBox="0 0 420 250" role="img" aria-label="Fuerza por piso: simulación contra CIRSOC">
+<rect x="0" y="0" width="420" height="250" fill="#fff"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#5f6b76">
+<line x1="60" y1="220" x2="400" y2="220" stroke="#c3cad1"/><line x1="60" y1="20" x2="60" y2="220" stroke="#c3cad1"/>
+<text x="230" y="240" text-anchor="middle">fuerza del piso (t)</text><text x="18" y="120" transform="rotate(-90 18 120)" text-anchor="middle">altura (m)</text>
+<text x="56" y="223" text-anchor="end">0</text><text x="56" y="123" text-anchor="end">30</text><text x="56" y="23" text-anchor="end">60</text>
+</g>
+<g fill="#d85a30" opacity=".85">
+<rect x="61" y="210" width="120" height="8"/><rect x="61" y="200" width="128" height="8"/><rect x="61" y="190" width="136" height="8"/><rect x="61" y="180" width="142" height="8"/><rect x="61" y="170" width="148" height="8"/><rect x="61" y="160" width="152" height="8"/><rect x="61" y="150" width="157" height="8"/><rect x="61" y="140" width="160" height="8"/><rect x="61" y="130" width="164" height="8"/><rect x="61" y="120" width="167" height="8"/><rect x="61" y="110" width="170" height="8"/><rect x="61" y="100" width="172" height="8"/><rect x="61" y="90" width="175" height="8"/><rect x="61" y="80" width="177" height="8"/><rect x="61" y="70" width="179" height="8"/><rect x="61" y="60" width="181" height="8"/><rect x="61" y="50" width="183" height="8"/><rect x="61" y="40" width="185" height="8"/><rect x="61" y="30" width="150" height="8"/>
+</g>
+<polyline fill="none" stroke="#1f2328" stroke-width="1.6" points="196,214 205,194 214,174 222,154 229,134 235,114 240,94 245,74 249,54 252,34"/>
+<g stroke="#1f2328" stroke-width="1" opacity=".5">
+<line x1="160" y1="214" x2="232" y2="214"/><line x1="170" y1="174" x2="258" y2="174"/><line x1="182" y1="134" x2="276" y2="134"/><line x1="190" y1="94" x2="290" y2="94"/><line x1="196" y1="54" x2="300" y2="54"/>
+</g>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#1f2328">
+<rect x="312" y="196" width="10" height="8" fill="#d85a30"/><text x="326" y="204">simulación (media)</text>
+<line x1="312" y1="182" x2="322" y2="182" stroke="#1f2328" stroke-width="1.6"/><text x="326" y="185">CIRSOC 102</text>
+<line x1="312" y1="168" x2="322" y2="168" stroke="#1f2328" opacity=".5"/><text x="326" y="171">mín. y máx.</text>
+</g>
+</svg>
+<figcaption>Fuerza de cada piso (barras), contra la del reglamento (línea) y la banda de variación en el tiempo. La azotea pierde fuerza porque el aire pasa por arriba.</figcaption>
+</figure>
+<figure>
+<svg viewBox="0 0 420 250" role="img" aria-label="Serie de tiempo de las fuerzas en la base">
+<rect width="420" height="250" fill="#fff"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#5f6b76">
+<line x1="50" y1="125" x2="405" y2="125" stroke="#c3cad1"/><line x1="50" y1="20" x2="50" y2="230" stroke="#c3cad1"/>
+<text x="230" y="244" text-anchor="middle">tiempo (s a escala real)</text><text x="14" y="125" transform="rotate(-90 14 125)" text-anchor="middle">cortante en la base (t)</text>
+</g>
+<polyline fill="none" stroke="#d85a30" stroke-width="1.6" points="50,70 62,62 74,74 86,58 98,66 110,55 122,72 134,60 146,68 158,52 170,70 182,64 194,57 206,73 218,61 230,66 242,50 254,69 266,63 278,58 290,74 302,60 314,65 326,55 338,71 350,62 362,57 374,68 386,61 398,66"/>
+<polyline fill="none" stroke="#7f77dd" stroke-width="1.6" points="50,125 62,100 74,92 86,112 98,145 110,160 122,150 134,118 146,95 158,90 170,115 182,148 194,163 206,152 218,120 230,96 242,88 254,112 266,146 278,162 290,155 302,122 314,94 326,90 338,114 350,147 362,160 374,150 386,118 398,96"/>
+<line x1="242" y1="20" x2="242" y2="230" stroke="#ef9f27" stroke-dasharray="3 3"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#1f2328">
+<text x="238" y="14" fill="#8a5f00" text-anchor="middle">máx. de arrastre: lateral al 72 %</text>
+<line x1="60" y1="215" x2="72" y2="215" stroke="#d85a30" stroke-width="1.6"/><text x="76" y="218">arrastre (en el sentido del viento)</text>
+<line x1="60" y1="200" x2="72" y2="200" stroke="#7f77dd" stroke-width="1.6"/><text x="76" y="203">lateral (vórtices, de un lado al otro)</text>
+</g>
+</svg>
+<figcaption>Las fuerzas en la base en el tiempo. En el instante del máximo de una se lee cuánto valen las otras: de ahí sale la simultaneidad.</figcaption>
+</figure>
+</div>
+<h3>Qué se muestra</h3>
+<ul>
+<li><b>Tarjetas</b>: cortante en x y en y, vuelco en x y en y, torsor, cada uno con media, desvío y pico; y el mismo valor del CIRSOC al lado (como «Simulación / Reglamento = 0,92»).</li>
+<li><b>Gráfico en altura</b>: fuerza y torsor por piso, simulación contra reglamento, con la banda de mínimo y máximo.</li>
+<li><b>Serie de tiempo</b> de las tres fuerzas en la base, con un cursor sincronizado con la vista 3D y la grabación.</li>
+<li><b>Simultaneidad</b>: en el instante del máximo de cada una, cuánto valen las otras dos (fracción de su propio máximo). Se compara con los casos 1 a 4 del CIRSOC 102 (que ya combinan 100 % y 75 %) y queda como pregunta para la cátedra si se usan.</li>
+</ul>
+<h3>Qué se exporta</h3>
+<ul>
+<li><b>Cargas equivalentes por piso</b> (F<sub>x</sub>, F<sub>y</sub>, M<sub>t</sub> de cada nivel): una hoja nueva del Excel del túnel y un CSV con columnas que se pegan en un programa de análisis estructural (nivel, cota, Fx, Fy, Mz). Se pueden cargar en el FEM de la app como «viento de la simulación», al lado del CIRSOC.</li>
+<li>Las series de tiempo de la base, en CSV.</li>
+</ul>
+<div class="tarjeta aviso mantener"><b>Para que sea honesto.</b> La grilla es gruesa y el Reynolds bajo: la <b>media</b> es confiable para comparar formas (un 10 a 20 % de diferencia con un túnel real es esperable); los <b>picos</b> dependen de cuánto tiempo se simuló. La app avisa cuántas «pasadas del aire» lleva promediadas y no muestra picos con menos de 10. Las cargas de la simulación son un estudio: <b>el cálculo de la entrega sigue con el CIRSOC</b>.</div>
+
+<h2 class="cap"><span class="n">4</span>Fachada: presiones pico y zonas</h2>
+<p>Para cada celda de fachada se guardan cuatro números a lo largo del tiempo: el Cp medio, su desvío (RMS), el mínimo y el máximo. El pico de diseño se estima con un factor de pico, porque la simulación es corta para «ver» la ráfaga de 50 años:</p>
+<div class="eq">Cp<sub>pico+</sub> = Cp<sub>medio</sub> + g · Cp<sub>RMS</sub> &nbsp;·&nbsp; Cp<sub>pico−</sub> = Cp<sub>medio</sub> − g · Cp<sub>RMS</sub> &nbsp;(g ≈ 3,5) &nbsp;·&nbsp; p = q(z) · (Cp<sub>pico</sub> − Cp<sub>interior</sub>)</div>
+<p>q(z) es la del CIRSOC 102 (la misma que ya usa la app) y la presión interior se elige como en el reglamento (edificio cerrado: ±0,18). Girando el viento (0° a 360°, cada 30° o 45°) se arma la <b>envolvente</b>: en cada celda, el peor empuje y la peor succión de todas las direcciones.</p>
+<figure>
+<svg viewBox="0 0 900 270" role="img" aria-label="Fachada desplegada con presiones pico en bandas">
+<rect width="900" height="270" fill="#fff"/>
+<defs>
+<linearGradient id="barlo" x1="0" x2="1"><stop offset="0" stop-color="#bcd9f5"/><stop offset=".5" stop-color="#378add"/><stop offset="1" stop-color="#bcd9f5"/></linearGradient>
+</defs>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="11" fill="#1f2328" text-anchor="middle">
+<text x="125" y="16">Barlovento</text><text x="330" y="16">Lateral derecha</text><text x="535" y="16">Sotavento</text><text x="740" y="16">Lateral izquierda</text>
+</g>
+<g stroke="#fff" stroke-width=".6">
+<!-- barlovento: bandas de empuje, más fuerte arriba al centro -->
+<rect x="40" y="26" width="170" height="200" fill="#bcd9f5"/>
+<rect x="60" y="40" width="130" height="160" fill="#378add"/>
+<rect x="80" y="50" width="90" height="100" fill="#1d5fa8"/>
+<rect x="40" y="26" width="20" height="200" fill="#f6c3c2"/><rect x="190" y="26" width="20" height="200" fill="#f6c3c2"/>
+<!-- laterales: succión fuerte en el borde de ataque -->
+<rect x="245" y="26" width="170" height="200" fill="#f6c3c2"/>
+<rect x="245" y="26" width="45" height="200" fill="#e24b4a"/>
+<rect x="245" y="26" width="18" height="200" fill="#a32726"/>
+<rect x="655" y="26" width="170" height="200" fill="#f6c3c2"/>
+<rect x="780" y="26" width="45" height="200" fill="#e24b4a"/>
+<rect x="807" y="26" width="18" height="200" fill="#a32726"/>
+<!-- sotavento -->
+<rect x="450" y="26" width="170" height="200" fill="#f6c3c2"/>
+<rect x="470" y="26" width="130" height="60" fill="#e24b4a" opacity=".55"/>
+</g>
+<g stroke="#1f2328" stroke-width="1" fill="none"><rect x="40" y="26" width="170" height="200"/><rect x="245" y="26" width="170" height="200"/><rect x="450" y="26" width="170" height="200"/><rect x="655" y="26" width="170" height="200"/></g>
+<g stroke="#1f2328" stroke-dasharray="4 3" fill="none"><line x1="290" y1="26" x2="290" y2="226"/><line x1="780" y1="26" x2="780" y2="226"/></g>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#1f2328">
+<text x="294" y="240">zona de esquina (a)</text><text x="690" y="240">zona de esquina (a)</text>
+<text x="40" y="252">kN/m²:</text>
+</g>
+<g transform="translate(84,243)">
+<rect x="0" y="0" width="40" height="11" fill="#1d5fa8"/><rect x="40" y="0" width="40" height="11" fill="#378add"/><rect x="80" y="0" width="40" height="11" fill="#bcd9f5"/><rect x="120" y="0" width="40" height="11" fill="#fff" stroke="#c3cad1"/><rect x="160" y="0" width="40" height="11" fill="#f6c3c2"/><rect x="200" y="0" width="40" height="11" fill="#e24b4a"/><rect x="240" y="0" width="40" height="11" fill="#a32726"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="9.5" fill="#1f2328" text-anchor="middle"><text x="40" y="24">+1,5</text><text x="80" y="24">+1,0</text><text x="120" y="24">+0,5</text><text x="160" y="24">0</text><text x="200" y="24">−1,0</text><text x="240" y="24">−2,0</text><text x="280" y="24">−3,0</text></g>
+<text x="300" y="9" font-family="IBM Plex Sans,system-ui,sans-serif" font-size="9.5" fill="#5f6b76">azul: el viento empuja la cara (la comprime) · rojo: la succiona (la tracciona)</text>
+</g>
+</svg>
+<figcaption>La fachada «desplegada»: las cuatro caras una al lado de la otra, en bandas. La succión más fuerte aparece en el borde donde el aire se despega (zona de esquina). Esquema ilustrativo, no un resultado.</figcaption>
+</figure>
+<h3>Qué se muestra</h3>
+<ul>
+<li><b>Sobre la torre en 3D</b>: el mapa de la estadística elegida (media, RMS, pico+, pico−, envolvente), en Cp o en kN/m².</li>
+<li><b>Fachada desplegada</b> (un dibujo plano de las cuatro caras): es lo que se imprime en la lámina y lo que entiende el fachadista. Con la grilla de pisos y las zonas de esquina del CIRSOC (ancho a) superpuestas.</li>
+<li><b>Tabla por zona</b> (centro de cara, esquina, borde de la azotea): el peor valor de la simulación contra el de componentes y revestimientos del CIRSOC 102. Una zona donde la simulación da más que el reglamento se marca.</li>
+<li><b>Para el diseño</b>: «zonificar» el vidrio, con un tipo para el centro y otro reforzado para las esquinas, en vez de uno solo para todo.</li>
+</ul>
+
+<h2 class="cap"><span class="n">5</span>Confort en la torre: vórtices, aceleración y deriva</h2>
+<p>Una torre esbelta puede ser segura y a la vez moverse lo suficiente para que se note en los últimos pisos. Tres controles:</p>
+<div class="cols">
+<div>
+<h3>Desprendimiento de vórtices</h3>
+<p>La fuerza lateral de la base oscila; su espectro tiene un pico en la frecuencia de los vórtices. De ahí sale el Strouhal de la torre entera (St = f·B/V) y la velocidad crítica, la que hace que los vórtices vayan al ritmo de la torre:</p>
+<div class="eq">V<sub>crítica</sub> = n<sub>1</sub> · B / St</div>
+<p>Se compara con la V de diseño a la altura de 2/3 h. La frecuencia propia n<sub>1</sub> sale del CIRSOC (Anexo) o del FEM de la app.</p>
+</div>
+<figure>
+<svg viewBox="0 0 400 220" role="img" aria-label="Espectro de la fuerza lateral con el pico de los vórtices y la frecuencia de la torre">
+<rect width="400" height="220" fill="#fff"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#5f6b76">
+<line x1="40" y1="185" x2="385" y2="185" stroke="#c3cad1"/><line x1="40" y1="15" x2="40" y2="185" stroke="#c3cad1"/>
+<text x="212" y="205" text-anchor="middle">frecuencia (Hz, a escala real)</text><text x="14" y="100" transform="rotate(-90 14 100)" text-anchor="middle">energía de la fuerza lateral</text>
+</g>
+<path d="M40 175 C80 170 110 160 140 140 C160 120 170 40 182 30 C194 40 204 120 224 142 C260 165 320 175 385 180" fill="#7f77dd" fill-opacity=".18" stroke="#7f77dd" stroke-width="1.8"/>
+<line x1="182" y1="25" x2="182" y2="185" stroke="#7f77dd" stroke-dasharray="3 3"/>
+<line x1="262" y1="25" x2="262" y2="185" stroke="#1d9e75" stroke-width="2"/>
+<g font-family="IBM Plex Sans,system-ui,sans-serif" font-size="10" fill="#1f2328">
+<text x="186" y="40" fill="#5b3290">vórtices: f = St · V / B</text>
+<text x="266" y="40" fill="#0e5a42">torre: n₁</text>
+<text x="200" y="120" font-size="9.5" fill="#5f6b76">si se acercan,</text><text x="200" y="132" font-size="9.5" fill="#5f6b76">resonancia</text>
+</g>
+</svg>
+<figcaption>El espectro de la fuerza lateral: el pico de los vórtices tiene que quedar lejos de la frecuencia propia de la torre.</figcaption>
+</figure>
+</div>
+<h3>Aceleración en la azotea</h3>
+<p>Con la energía de la fuerza en la frecuencia de la torre, un oscilador de un grado de libertad da la aceleración (la torre como un péndulo invertido en su primer modo):</p>
+<div class="eq">σ<sub>a</sub> ≈ (1 / M*) · √( π · n<sub>1</sub> · S<sub>F</sub>(n<sub>1</sub>) / (4 ζ) ) &nbsp;·&nbsp; a<sub>pico</sub> = g<sub>p</sub> · σ<sub>a</sub> &nbsp;(g<sub>p</sub> ≈ 3,5) &nbsp;·&nbsp; en mili-g: a / 9,81 · 1000</div>
+<p>M* es la masa generalizada del primer modo (sale de los pesos de cada nivel que ya calcula la app), ζ el amortiguamiento (1 a 2 % para hormigón; pregunta para la cátedra) y S<sub>F</sub> el espectro de la fuerza simulada, escalado a la velocidad real. Criterios de referencia:</p>
+<table>
+<thead><tr><th>Criterio</th><th>Período de retorno</th><th>Límite</th></tr></thead>
+<tr><td>Código de Canadá (NBCC)</td><td>10 años</td><td>10 a 30 mili-g (el valor bajo para viviendas)</td></tr>
+<tr><td>ISO 10137</td><td>1 año</td><td>depende de la frecuencia de la torre; más estricto para viviendas que para oficinas</td></tr>
+</table>
+<p>Hay que pasar la V de 50 años del CIRSOC a 1 o 10 años; los métodos de conversión están discutidos, así que la app muestra la aceleración para los dos períodos con la conversión a la vista. Si no verifica, se propone un amortiguador de masa sintonizada (TMD) como tema de diseño, sin calcularlo.</p>
+<h3>Desplazamiento y deriva</h3>
+<p>La app ya calcula la deformada con el J de cada nivel (h/500 en la azotea). Se agrega la <b>deriva entre pisos</b> (corrimiento de un piso respecto del de abajo dividido por la altura del piso), con las cargas del CIRSOC y con las de la simulación, para cuidar tabiques, carpinterías y ascensores.</p>
+<p class="ref"><b>Fuentes de los criterios:</b> <a href="https://cppwind.com/wp-content/uploads/2020/12/Practical-Considerations-in-the-Assessment-of-Building-Motion-Acceptability-DenoonStrobel-2012.pdf">Denoon y Strobel, CPP (2012), aceptabilidad del movimiento de edificios</a> · <a href="https://webstore.ansi.org/preview-pages/ISO/preview_ISO+10137-2007.pdf">ISO 10137:2007 (vista previa)</a>. Los valores exactos de la ISO por uso y frecuencia se toman de la norma antes de programarlos.</p>
+
+<h2 class="cap"><span class="n">6</span>Confort en la calle</h2>
+<p>La vereda con el criterio de Lawson (LDDC: 2,5 / 4 / 6 / 8 m/s superados el 5 % del tiempo) ya está, para una dirección de viento. La propuesta suma:</p>
+<ul>
+<li><b>Rosa de vientos</b>: la frecuencia de cada dirección (8 o 16) y el viento medio de la estación meteorológica más cercana. Se simula cada dirección y se combinan las probabilidades de superar cada umbral; así cada punto de la vereda tiene una sola categoría.</li>
+<li><b>Criterio intercambiable sin volver a simular</b>: Lawson LDDC, Lawson 2001 (4 / 6 / 8 / 10 m/s), Davenport. Se guarda el factor de velocidad de cada punto y el criterio se aplica al dibujar.</li>
+<li><b>Seguridad</b>: la ráfaga peligrosa (15 m/s, LDDC) aparte, rayada, aunque el confort sea aceptable.</li>
+<li><b>Altura de evaluación</b>: 1,5 m sobre la vereda, y también terrazas y balcones (a la altura de cada uno, sobre su losa).</li>
+<li><b>Bajada del aire (downwash)</b>: un corte vertical en la cara de barlovento con líneas de corriente sembradas a 2/3 de la altura, para ver cómo el aire baja a la vereda. Es el «por qué» de la mancha marrón del mapa.</li>
+<li><b>Medidas de diseño</b> para probar y comparar: marquesina, retiro del basamento, podio, árboles (como porosidad). Se comparan dos corridas con el mismo color de escala.</li>
+</ul>
+
+<h2 class="cap"><span class="n">7</span>Cómo se ve: la vista 3D</h2>
+<p>Lo que muestran las dos imágenes de referencia, hecho a nuestra manera y respetando lo que ya pediste: <b>sin rótulos, letras ni círculos en el 3D por defecto</b>; solo colores, flechas y la llave.</p>
+<table>
+<thead><tr><th style="width:26%">Herramienta</th><th>Cómo funciona</th></tr></thead>
+<tr><td><b>Modo maqueta</b></td><td>Torre blanca o gris claro, vecinos en gris más claro, sombras suaves y piso con la grilla de manzanas. El color queda solo para el aire.</td></tr>
+<tr><td><b>Rastrillo de líneas</b></td><td>Una línea (vertical u horizontal) que se arrastra en el 3D; de ella salen las líneas de corriente. Densidad y largo elegibles. Como tubos con relieve (sombreados) para que se lea qué pasa adelante y qué atrás.</td></tr>
+<tr><td><b>Partículas (tinta)</b></td><td>Puntos o «cometas» cortos que viajan por las líneas a la velocidad del aire: muestran el sentido y la velocidad sin flechas. Es la mejor vista para grabar.</td></tr>
+<tr><td><b>Color sobre la torre</b></td><td>Cp o kN/m², con la estadística elegida (sección 4). Bandas o continuo.</td></tr>
+<tr><td><b>Cortes</b></td><td>Los que ya están, con un gráfico «sobre una línea» opcional: la velocidad o la presión a lo largo de una recta del corte (por ejemplo, de la vereda a la azotea).</td></tr>
+<tr><td><b>Sonda</b></td><td>Apagada por defecto. Al prenderla, tocar un punto da su valor en un globo que desaparece al soltar.</td></tr>
+<tr><td><b>Vórtices</b></td><td>Solo en fidelidad máxima: una superficie violeta transparente donde el aire gira más de lo que se estira (criterio Q). Muestra el remolino de la estela y los de las esquinas.</td></tr>
+<tr><td><b>Cámaras guardadas</b></td><td>Vista de barlovento, de la esquina, de arriba, del peatón; siempre las mismas, para que las imágenes de dos proyectos se puedan comparar.</td></tr>
+</table>
+
+<h2 class="cap"><span class="n">8</span>Grabaciones de la simulación 3D</h2>
+<ul>
+<li><b>Video (WebM)</b> de la vista con una cámara guiada: quieta, órbita lenta alrededor de la torre o «vuelo» desde el peatón hasta la azotea. Con la barra de colores, la escala y el tiempo dentro del cuadro.</li>
+<li><b>Gráfico sincronizado</b>: las fuerzas en la base corren debajo del video con un cursor; al pausar, la vista y el gráfico muestran el mismo instante.</li>
+<li><b>Archivo de la corrida</b> (.torreviento3d): no guarda todos los pasos (pesaría gigas) sino las estadísticas (media, RMS, mín., máx.) de la fachada y de la vereda, las series de tiempo de las fuerzas y unas instantáneas. Se reabre sin volver a simular.</li>
+<li><b>Comparar dos corridas</b> lado a lado (como en el 2D), con escala fija: antes y después de una marquesina, prisma contra torre ahusada, con y sin vecinos.</li>
+</ul>
+
+<h2><span class="n">9</span>Lo que sale de la app</h2>
+<table>
+<thead><tr><th>Salida</th><th>Contenido</th></tr></thead>
+<tr><td>Excel del túnel (hojas nuevas)</td><td>«Base»: medias, desvíos y picos con su comparación con el CIRSOC · «Cargas por piso»: Fx, Fy, Mt por nivel · «Fachada»: el peor valor por zona en kN/m² · «Vereda»: el porcentaje de superficie de cada categoría · «Dinámica»: St, V crítica, aceleraciones</td></tr>
+<tr><td>CSV</td><td>Series de tiempo; cargas por piso con columnas para un programa de análisis estructural</td></tr>
+<tr><td>Lámina «Estudio de viento» (PDF)</td><td>Una página por bloque, como los informes de consultoras: estructura, fachada, confort en la torre, calle; con las imágenes de las cámaras guardadas y las advertencias</td></tr>
+<tr><td>Imágenes</td><td>PNG de la vista y SVG de los gráficos, como el resto de la app</td></tr>
+</table>
+
+<h2 class="cap"><span class="n">10</span>Plan por etapas</h2>
+<table>
+<thead><tr><th style="width:8%">Etapa</th><th>Qué</th><th style="width:16%">Tamaño</th></tr></thead>
+<tr><td><b>1</b></td><td>Fuerzas por piso y en la base en el 3D (series de tiempo, media, desvío, pico), comparadas con el CIRSOC; hoja del Excel y CSV de cargas por piso</td><td><span class="chip">mediano</span></td></tr>
+<tr><td><b>2</b></td><td>Estadísticas de Cp por celda (RMS, mín., máx.), picos con factor g, kN/m² con q(z); fachada desplegada en bandas; tabla por zona contra el CIRSOC</td><td><span class="chip">mediano</span></td></tr>
+<tr><td><b>3</b></td><td>Modo maqueta, rastrillo de líneas como tubos, partículas, escala fija o automática, cámaras guardadas, grabación 3D con el gráfico sincronizado</td><td><span class="chip warn">grande</span></td></tr>
+<tr><td><b>4</b></td><td>Espectro de la fuerza lateral del 3D: Strouhal, V crítica, aceleración en mili-g para 1 y 10 años, deriva entre pisos</td><td><span class="chip">mediano</span></td></tr>
+<tr><td><b>5</b></td><td>Barrido de direcciones (envolvente de fachada) y rosa de vientos en la vereda; criterios intercambiables; altura de evaluación; seguridad</td><td><span class="chip warn">grande</span></td></tr>
+<tr><td><b>6</b></td><td>Lámina «Estudio de viento» en PDF y archivo .torreviento3d</td><td><span class="chip">mediano</span></td></tr>
+<tr><td><b>7</b></td><td>Vórtices con criterio Q (solo en fidelidad máxima)</td><td><span class="chip gris">opcional</span></td></tr>
+</table>
+<p>Las etapas 1, 2 y 4 se validan contra el caso de OpenFOAM que ya exporta la app (el Cd de la torre del ejemplo dio 0,77) y contra valores de túnel de viento publicados para prismas.</p>
+
+<h2><span class="n">11</span>Preguntas para la cátedra</h2>
+<ol>
+<li>¿Qué amortiguamiento usamos para la aceleración (1 % o 2 %)?</li>
+<li>¿Qué criterio de aceleración (NBCC con 10 años o ISO 10137 con 1 año) y cómo convertimos la V de 50 años del CIRSOC?</li>
+<li>¿De qué estación meteorológica sacamos el viento medio y la rosa de vientos para cada sitio?</li>
+<li>¿Las cargas por piso de la simulación pueden entrar a la entrega como estudio complementario, o solo como comparación?</li>
+<li>¿Qué factor de simultaneidad se acepta si la simulación da distinto que los casos 1 a 4 del CIRSOC?</li>
+</ol>
+
+<h2><span class="n">12</span>Derechos de autor</h2>
+<p>De los programas revisados (SolidWorks, Autodesk CFD, SimScale, Orbital Stack, ParaView) se tomaron <b>solo ideas generales de presentación</b>, que no son propiedad de nadie: cortes, trayectorias, sondas, mapas sobre superficies, envolventes, criterios de confort publicados. No se copia código (tampoco el de los libres, cuyas licencias piden condiciones que no queremos heredar), ni íconos, ni capturas, ni textos, ni la estética de sus pantallas. Los espectros se definen con nuestros propios colores. Las fórmulas (factor de pico, oscilador de un grado de libertad, criterio Q, Lawson) son de la literatura técnica y se citan.</p>
+
+</div>
+</body>
+</html>
