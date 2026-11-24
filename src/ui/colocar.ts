@@ -570,11 +570,25 @@ export function montarColocar(api: ApiPlanta) {
         const ge = el('g', { class: 'exo-planta' });
         ge.append(el('rect', { x: X(cx - hx), y: Y(cy + hy), width: X(cx + hx) - X(cx - hx), height: Y(cy - hy) - Y(cy + hy), class: 'exo-contorno' }));
         const columna = (x: number, y: number) => ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna' }));
+        if (p.exo.tipo === 'F') {
+          // núcleo con outriggers: brazos desde las caras del núcleo hasta las columnas del perímetro, en los dos vientos;
+          // el contorno es el cinturón (si no hay, se borra)
+          const c = Math.max(0.5, (p.exo.nucleo ?? Math.min(hx, hy) * 2 / 3) / 2);
+          if (p.exo.cinturon === false) ge.firstChild?.remove();
+          for (const sg of [-1, 1]) for (const t of [-c, c]) {
+            ge.append(el('line', { x1: X(cx + sg * c), y1: Y(cy + t), x2: X(cx + sg * hx), y2: Y(cy + t), class: 'exo-brazo' }));
+            ge.append(el('line', { x1: X(cx + t), y1: Y(cy + sg * c), x2: X(cx + t), y2: Y(cy + sg * hy), class: 'exo-brazo' }));
+            columna(cx + sg * hx, cy + t); columna(cx + t, cy + sg * hy);
+          }
+          ge.append(el('text', { x: X(cx - hx) + 4, y: Y(cy + hy) - 5, class: 'exo-rot' }, `outriggers · brazos del núcleo a las columnas${p.exo.cinturon === false ? '' : ' · cinturón en el perímetro'}`));
+          g.append(ge);
+        } else {
         for (const sx of [-1, 1]) for (const sy of [-1, 1]) columna(cx + sx * hx, cy + sy * hy);
         const na = Math.max(0, Math.round(p.exo.alas ?? 0));
         for (let i = 1; i <= na; i++) { const t = -1 + (2 * i) / (na + 1); for (const s2 of [-1, 1]) { columna(cx + t * hx, cy + s2 * hy); columna(cx + s2 * hx, cy + t * hy); } }
         ge.append(el('text', { x: X(cx - hx) + 4, y: Y(cy + hy) - 5, class: 'exo-rot' }, `exoesqueleto · a ${fmt(sep, 2)} m de la fachada`));
         g.append(ge);
+        }
       }
     }
     // caminos

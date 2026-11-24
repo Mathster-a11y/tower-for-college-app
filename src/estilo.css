@@ -1196,6 +1196,7 @@ button.peligro { color: var(--mal); }
 /* convención de toda la app: rojo tracción, azul compresión */
 .exo-dibujo { --ex-trac: var(--traccion); --ex-comp: var(--compresion); --ex-neutro: color-mix(in srgb, var(--ink2) 18%, var(--lienzo)); }
 .exo-dibujo .ex-barra.neutra { stroke: var(--dim); }
+.exo-dibujo .ex-barra.nucleo { stroke: var(--dim); stroke-width: 7; stroke-opacity: 0.45; stroke-linecap: butt; cursor: default; }
 .exo-dibujo .ex-toque { stroke: transparent; stroke-width: 14; cursor: pointer; }
 .exo-dibujo .ex-g-barra:hover .ex-barra, .exo-dibujo .ex-g-barra.elegida .ex-barra { stroke: var(--elegido); }
 .exo-dibujo .ex-g-barra.elegida .ex-toque { stroke: color-mix(in srgb, var(--elegido) 22%, transparent); }
@@ -1834,4 +1835,5 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .exo-planta { pointer-events: none; }
 .exo-planta .exo-contorno { fill: none; stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 1.5; stroke-dasharray: 7 4; }
 .exo-planta .exo-columna { fill: var(--r-rototrasl, #6a3d9a); opacity: .85; }
+.exo-planta .exo-brazo { stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 2.5; opacity: .8; }
 .exo-planta .exo-rot { font: 600 11px var(--fuente); fill: var(--r-rototrasl, #6a3d9a); }

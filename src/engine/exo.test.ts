@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra } from './exo';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -326,6 +326,46 @@ describe('exoesqueleto · diagonales arriostradas por las losas', () => {
     const tramos = c.barras.filter(b => idBarra(b.id) === 'D1');
     expect(tramos.length).toBeGreaterThan(1);
     tramos.forEach(b => expect(b.sec).toEqual(sec));
+  });
+});
+
+describe('exoesqueleto · núcleo con outriggers (ficha F)', () => {
+  const n = 20, zs = Array.from({ length: n + 1 }, (_, i) => i * 4), W = zs.slice(1).map((_, i) => (i === n - 1 ? 5 : 10));
+  const EI = 3e6 * 40, d = 15, H = 80;
+  const base = (col: { b: number; e: number }, extra: Partial<ExoDef> = {}): ExoDef => ({ ...EXO_POR_DEFECTO, tipo: 'F', separacion: 0, pesoPropio: false, nucleo: 8, outriggers: [80], cinturon: false,
+    columna: col, viga: { b: 3, e: 1.5 }, diagonal: { b: 3, e: 1.5 }, uniones: { columna: 'articulada', diagonal: 'rigida', viga: 'rigida', base: 'articulada' }, ...extra });
+  it('outrigger en la azotea: el par de las columnas es el de Smith y Coull, M = θ·EI / (H·(1 + EI / (2·E·A·d²)))', () => {
+    const col = { b: 0.8, e: 0.04 }, r = calcularExo(base(col), zs, W, () => EI, 2 * d, [-5, 5], 3e6);
+    const A = 2 * propsSeccion(col).A;                      // dos planos, una columna por lado en cada uno
+    const theta = W.reduce((s, P, i) => s + (P * zs[i + 1] ** 2) / 2, 0) / EI;
+    const M = (theta * EI) / (H * (1 + EI / (2 * 2.1e7 * A * d * d)));
+    // el brazo es un reticulado de un piso de alto (no una línea): queda un poco más rígido que la teoría
+    expect(Math.abs((r.Msin[0] - r.Mtab[0]) / M - 1)).toBeLessThan(0.06);
+    expect(r.Ftab.reduce((a, b) => a + b, 0)).toBeCloseTo(W.reduce((a, b) => a + b, 0), 6);   // el corte, todo al núcleo
+    expect(r.u[n - 1]).toBeLessThan(r.uSin[n - 1] * 0.5);
+  });
+  it('sin columnas que lo frenen, vuelve a ser la ménsula de tabiques; el núcleo no se verifica ni se pesa como acero', () => {
+    const r = calcularExo(base({ b: 0.02, e: 0.001 }), zs, W, () => EI, 2 * d, [-5, 5], 3e6);
+    expect(r.u[n - 1] / r.uSin[n - 1]).toBeGreaterThan(0.98);
+    expect(r.controles.some(c => /^[KR]\d/.test(c.id))).toBe(false);
+    expect(cirsoc301(base({ b: 0.8, e: 0.04 }), zs, W, () => EI, 2 * d, [-5, 5], 3e6).some(c => /^[KR]\d/.test(c.id))).toBe(false);
+    const en: EntradaExo = { zs, W, EJ: () => EI, ancho: 2 * d, tCaras: [-5, 5], Eh: 3e6, h: H };
+    // con los perfiles por defecto: columnas, cordones y diagonales de los brazos; las del núcleo (100 m²) pesarían 30 000 t más
+    const peso = pesoExo(base(EXO_POR_DEFECTO.columna, { viga: EXO_POR_DEFECTO.viga, diagonal: EXO_POR_DEFECTO.diagonal }), [en, en]);
+    expect(peso).toBeGreaterThan(50); expect(peso).toBeLessThan(1000);
+  });
+  it('dos outriggers frenan más que uno; con cinturón (todas las columnas de la cara) más que sin él', () => {
+    const col = { b: 0.5, e: 0.025 };
+    const u = (x: Partial<ExoDef>) => { const r = calcularExo(base(col, { uniones: undefined, ...x }), zs, W, () => EI, 2 * d, [-5, 5], 3e6); return r.u[n - 1]; };
+    expect(u({ outriggers: [44, 80] })).toBeLessThan(u({ outriggers: [80] }));
+    expect(u({ cinturon: true, columnasCara: 6 })).toBeLessThan(u({ cinturon: false }));
+    expect(nivelesOutrigger({ ...EXO_POR_DEFECTO, tipo: 'F' }, zs)).toEqual([10]);
+  });
+  it('las losas cargan las columnas del perímetro, no el núcleo', () => {
+    const def = base({ b: 0.5, e: 0.025 }, { losas: { franja: 4 } });
+    const cara = cargarCara(armarCara(def, 2 * d, zs), def, zs, W.map(() => 0), { q: 0.9, franja: 4, ancho: () => 2 * d, centro: () => 0, anchoPerp: () => 10 });
+    expect(cara.cargasNudo!.length).toBeGreaterThan(0);
+    expect(cara.cargasNudo!.every(c => !cara.nudos[c.nudo].nucleo)).toBe(true);
   });
 });
 

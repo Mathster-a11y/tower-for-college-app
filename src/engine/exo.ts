@@ -19,12 +19,13 @@
  */
 import type { RotoRes } from './planilla';
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
   C: { nombre: 'Mega-columnas y cinturones', texto: 'Columnas en las esquinas atadas por reticulados cinturón (muy rígidos) en dos niveles.' },
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
+  F: { nombre: 'Núcleo con outriggers', texto: 'Brazos reticulados de un piso de alto que salen del núcleo de tabiques hacia las columnas del perímetro (con un cinturón, todas las de la cara): cuando el núcleo se flexiona, las columnas lo frenan con un par de fuerzas (Taipei 101, Shanghai Tower).' },
   E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
 };
 
@@ -68,6 +69,14 @@ export interface ExoDef {
    * que baja la losa y pandea de piso a piso, no de nudo a nudo
    */
   arriostradas?: boolean;
+  /** ficha F: ancho del núcleo en el sentido del viento (m); por defecto, un tercio de la cara */
+  nucleo?: number;
+  /** ficha F: cotas de los brazos (el cordón de arriba; el reticulado tiene un piso de alto); por defecto, a media altura */
+  outriggers?: number[];
+  /** ficha F: cinturón en cada brazo (ata todas las columnas de la cara perpendicular); por defecto sí */
+  cinturon?: boolean;
+  /** ficha F: columnas del perímetro en cada cara perpendicular al viento que toma el cinturón; por defecto 4 */
+  columnasCara?: number;
   /** ficha E: piso donde empiezan los chevrones (abajo, solo el mástil) y la sección del mástil */
   pisoInicio?: number; mastil?: Seccion;
   /** ficha E: debajo del primer módulo el mástil es otra pieza (Citicorp: la supercolumna de 7,3 m), hasta la cota «hasta» */
@@ -127,7 +136,7 @@ const GAMMA_ACERO = 7.85;
 export const gammaExo = (def: ExoDef) => def.gamma ?? (def.material === 'hormigon' ? 2.4 : GAMMA_ACERO);
 
 export type ClaseBarra = 'columna' | 'diagonal' | 'viga';
-export interface Nudo { id: number; s: number; z: number; piso: number }
+export interface Nudo { id: number; s: number; z: number; piso: number; /** ficha F: nudo del núcleo (no recibe la losa del exo) */ nucleo?: boolean }
 /** carga repartida lineal en globales (t/m de barra): x horizontal (s), z vertical; en el extremo a y en el b */
 export interface CargaBarra { xa: number; za: number; xb: number; zb: number }
 export interface Barra {
@@ -139,6 +148,8 @@ export interface Barra {
   carga?: CargaBarra;
   /** parte de la sección que representa (ala: la mitad del mástil de una cara perpendicular, compartido por dos caras) */
   fraccion?: number;
+  /** ficha F: el núcleo de tabiques (y sus brazos rígidos hasta el borde): no es del exo, no se verifica ni se pesa */
+  nucleo?: boolean;
 }
 export interface Cara {
   nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean;
@@ -151,6 +162,13 @@ export interface Cara {
  * @param ancho distancia entre las columnas de esquina, en el sentido del viento (m)
  * @param zs cotas de los pisos sobre PB, de abajo hacia arriba; zs[0] = PB (base)
  */
+/** ficha F: niveles (índices de zs, ≥ 1) del cordón de arriba de cada brazo; sin cotas, el piso más cerca de media altura */
+export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
+  const n = zs.length - 1;
+  const cerca = (z: number) => zs.reduce((m, zz, k) => (k >= 1 && Math.abs(zz - z) < Math.abs(zs[m] - z) ? k : m), 1);
+  const pedidos = def.outriggers?.length ? def.outriggers.map(cerca) : [cerca((zs[0] + zs[n]) / 2)];
+  return [...new Set(pedidos.filter(k => k >= 1 && k <= n))].sort((a, b) => a - b);
+}
 export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[]): Cara {
   const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
   /**
@@ -301,7 +319,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
       const sk = tramo('mastil', a, b, sm), pk = sk === sm ? pm : propsSeccion(sk);
       barras.push({ id: `F${++nf}`, clase: 'columna', a, b, A: pk.A / 2, I: pk.I / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: 0.5 });
     }
-  } else {
+  } else if (def.tipo !== 'F') {
     // columnas de esquina, de piso a piso
     for (const lado of [S0, S1]) for (let k = 0; k < n; k++) barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
     // alas: las columnas intermedias de las caras perpendiculares, sumadas a las esquinas (la mitad en cada cara)
@@ -327,6 +345,37 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
         barra('viga', nudo(S0(kt), kt), nudo(S1(kt), kt)); barra('viga', nudo(S0(kb), kb), nudo(S1(kb), kb));
         cruz(kb, kt);
       });
+    }
+  }
+  if (def.tipo === 'F') {
+    // núcleo con outriggers: el plano vertical que pasa por el núcleo. El núcleo es una barra por piso en s = 0 (su EI
+    // se pone en calcularExo con el de los tabiques); en cada brazo, un reticulado de un piso de alto desde el borde del
+    // núcleo (atado al eje con barras rígidas) hasta la columna del perímetro, que va de la base a la azotea
+    const c = Math.min(anchoK(0) / 2 - 0.5, Math.max(0.5, (def.nucleo ?? anchoK(0) / 3) / 2));
+    const kOut = nivelesOutrigger(def, zs);
+    const nucleoNudo = (s: number, k: number) => { const id = nudo(s, k); nudos[id].nucleo = true; return id; };
+    for (let k = 0; k < n; k++) barras.push({ id: `K${k + 1}`, clase: 'columna', a: nucleoNudo(0, k), b: nucleoNudo(0, k + 1), A: 100, I: 1, sec: { b: 1, e: 0.5 }, relA: false, relB: false, borde: false, nucleo: true });
+    const sinCint = def.cinturon === false, fr = sinCint ? 1 : Math.max(1, def.columnasCara ?? 4) / 2;
+    const rel = un.columna === 'articulada';
+    for (const lado of [S0, S1]) for (let k = 0; k < n; k++) {
+      const s0 = tramo('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1), def.columna), pk = propsSeccion(s0);
+      barras.push({ id: `C${barras.filter(x => x.clase === 'columna' && !x.nucleo).length + 1}`, clase: 'columna', a: nudo(lado(k), k), b: nudo(lado(k + 1), k + 1), A: pk.A * fr, I: pk.I * fr, sec: s0, relA: rel, relB: rel, borde: true, ...(fr !== 1 ? { fraccion: fr } : {}) });
+    }
+    let nr = 0;
+    for (const k of kOut) {
+      for (const sg of [-1, 1]) {
+        // barras rígidas del eje del núcleo al borde, arriba y abajo del brazo
+        for (const kk of [k - 1, k]) barras.push({ id: `R${++nr}`, clase: 'viga', a: nucleoNudo(0, kk), b: nucleoNudo(sg * c, kk), A: 100, I: 100, sec: { b: 1, e: 0.5 }, relA: false, relB: false, borde: false, nucleo: true });
+        const sF = sg > 0 ? S1 : S0, L0 = sF(k) - sg * c, h0 = zs[k] - zs[k - 1];
+        const nb = Math.max(1, Math.round(Math.abs(L0) / Math.max(h0, 1)));
+        const x = (i: number, kk: number) => sg * c + ((sF(kk) - sg * c) * i) / nb;
+        for (let i = 0; i < nb; i++) {
+          barra('viga', nudo(x(i, k), k), nudo(x(i + 1, k), k)); barra('viga', nudo(x(i, k - 1), k - 1), nudo(x(i + 1, k - 1), k - 1));
+          // montantes y diagonales (Warren con montantes)
+          if (i > 0) barra('columna', nudo(x(i, k - 1), k - 1), nudo(x(i, k), k));
+          if (i % 2 === 0) barra('diagonal', nudo(x(i, k - 1), k - 1), nudo(x(i + 1, k), k)); else barra('diagonal', nudo(x(i, k), k), nudo(x(i + 1, k - 1), k - 1));
+        }
+      }
     }
   }
   // barras agregadas a mano (entre nudos que ya existen o en un piso)
@@ -424,7 +473,7 @@ export interface CargaLosa { q: number; franja: number; ancho: (k: number) => nu
 export function cargasDeLosa(cara: Cara, zs: number[], l: CargaLosa): { nudo: number; P: number }[] {
   const n = zs.length - 1, f = l.franja;
   const porPiso = new Map<number, Nudo[]>();
-  cara.nudos.forEach(q => { if (q.piso > 0) porPiso.set(q.piso, [...(porPiso.get(q.piso) ?? []), q]); });
+  cara.nudos.forEach(q => { if (q.piso > 0 && !q.nucleo) porPiso.set(q.piso, [...(porPiso.get(q.piso) ?? []), q]); });
   const conNudos = [...porPiso.keys()].sort((a, b) => a - b);
   if (!conNudos.length) return [];
   // carga de cada piso que va a la cara (en el piso con nudos que la recibe)
@@ -557,6 +606,8 @@ export interface EsfuerzoBarra {
   /** en el extremo a (Q = V(0)) y en el b */
   N: number; Q: number; Ma: number; Mb: number; Nb: number; Qb: number;
   relA: boolean; relB: boolean; sec: Seccion;
+  /** ficha F: barra del núcleo (no es del exo) */
+  nucleo?: boolean;
   /** cargas repartidas en locales (t/m): p axial, q perpendicular, en a y en b */
   pa: number; pb: number; qa: number; qb: number;
 }
@@ -588,7 +639,7 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
   const mapa = new Map<number, [number, number, number]>();   // nudo → índices globales (u, w, φ); −1 = fijo
   let k = nPisos;
   cara.nudos.forEach(q => {
-    if (q.piso === 0) { if (cara.baseArticulada) { mapa.set(q.id, [-1, -1, k]); k += 1; } else mapa.set(q.id, [-1, -1, -1]); }
+    if (q.piso === 0) { if (cara.baseArticulada && !q.nucleo) { mapa.set(q.id, [-1, -1, k]); k += 1; } else mapa.set(q.id, [-1, -1, -1]); }
     else if (q.piso < 0) { mapa.set(q.id, [k, k + 1, k + 2]); k += 3; }      // entre pisos: u propio (no lo toca la losa)
     else { mapa.set(q.id, [q.piso - 1, k, k + 1]); k += 2; }
   });
@@ -640,7 +691,7 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     recuperar: u => fuerzasLocales(u).map(({ b, A, B, r, f }) => ({
       id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: r.L,
       N: -f[0], Q: f[1], Ma: -f[2], Mb: f[5], Nb: f[3], Qb: -f[4],
-      relA: b.relA, relB: b.relB, sec: b.sec, fraccion: b.fraccion, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb,
+      relA: b.relA, relB: b.relB, sec: b.sec, fraccion: b.fraccion, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb, ...(b.nucleo ? { nucleo: true } : {}),
     })),
     reacciones: u => {
       const out = new Map<number, { s: number; V: number; H: number }>();
@@ -709,18 +760,27 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     q: qLosa, franja: def.losas.franja, ancho: k => (anchos && anchos[k] > 0 ? anchos[k] : anchoCara),
     centro: k => (def.tipo !== 'E' && corr ? corr[k] ?? 0 : 0), anchoPerp: k => op.anchosPerp?.[k] ?? dPerp,
   } : undefined;
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`, anchos, corr), def, zs, W, losa), def.E, n) }));
+  const F = def.tipo === 'F';
+  // ficha F: el núcleo está dentro de cada plano (cada uno con su parte del EJ de los tabiques); la ménsula sola no se suma
+  const conNucleo = (c: Cara): Cara => (F ? { ...c, barras: c.barras.map(b => (b.nucleo && b.clase === 'columna' ? { ...b, I: Math.max(EJ((c.nudos[b.a].z + c.nudos[b.b].z) / 2) || 0, 1e-6) / (def.E * tCaras.length) } : b)) } : c);
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr)), def, zs, W, losa), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
-  const K = Kt.map((f, i) => f.map((v, j) => v + caras.reduce((s, c) => s + c.c.K[i][j], 0)));
+  const K = Kt.map((f, i) => f.map((v, j) => (F ? 0 : v) + caras.reduce((s, c) => s + c.c.K[i][j], 0)));
   const u = resolver(K, P.map(w => [w])).map(f => f[0]);
   // sin exo: si arriba no hay tabiques que tomen viento (núcleo solo de gravedad) la ménsula no existe → sin número
   let uSin: number[];
   const sinTabiques = zs.slice(1).some((z, i) => !(EJ((zs[i] + z) / 2) > 0));
   try { uSin = resolver(Kt, W.map(w => [w])).map(f => f[0]); if (sinTabiques || uSin.some(x => !isFinite(x))) throw new Error('singular'); } catch { uSin = W.map(() => NaN); }
   const mult = (A: Mat, x: number[]) => A.map(f => f.reduce((s, v, j) => s + v * x[j], 0));
-  const Ftab = mult(Kt, u), Fexo = P.map((w, i) => w - Ftab[i]);
+  let Ftab = mult(Kt, u), Fexo = P.map((w, i) => w - Ftab[i]);
+  // ficha F: lo que toma el núcleo sale de sus barras (corte y momento de cada piso), no de la ménsula sola
+  const nucleoF = F ? caras.map(c => c.c.recuperar(u).filter(e => e.nucleo && e.clase === 'columna').sort((a, b) => a.a.z - b.a.z)) : null;
+  // corte y momento del núcleo en la base de cada tramo (convenio de la planilla: positivos con el viento)
+  const VK = nucleoF ? zs.slice(0, n).map((_, k) => nucleoF.reduce((s, bs) => s + (bs[k] ? bs[k].Q : 0), 0)) : null;
+  const MK = nucleoF ? zs.slice(0, n).map((_, k) => nucleoF.reduce((s, bs) => s + (bs[k] ? -bs[k].Ma : 0), 0)) : null;
+  if (VK) { Ftab = VK.map((v, k) => v - (VK[k + 1] ?? 0)); Fexo = P.map((w, i) => w - Ftab[i]); }
   const acumula = (F: number[]) => {
     const V = new Array<number>(n + 1).fill(0), M = new Array<number>(n + 1).fill(0);
     for (let i = n - 1; i >= 0; i--) V[i] = V[i + 1] + F[i];                      // V[i]: corte en el tramo de i a i+1 (y en el nivel i)
@@ -728,6 +788,7 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     return { V, M };
   };
   const ct = acumula(Ftab), cs = acumula(W);
+  if (MK) MK.forEach((m, k) => { ct.M[k] = m; });
   // J equivalente de cada cara: el J de una ménsula de hormigón que se corre lo mismo que la cara sola bajo W
   const uRef = resolver(rigidezTabiques(zs, () => Eh * 1), W.map(w => [w])).map(f => f[0]);   // ménsula con J = 1 m⁴
   const res: ResultadoExo['caras'] = caras.map(({ t, c }) => {
@@ -736,10 +797,13 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     // ménsula muy blanda (J = 10⁻⁴ m⁴), como lo hacen la fachada y las losas; no cambia la rigidez de la cara
     const Kpuente = rigidezTabiques(zs, () => Eh * 1e-4);
     try { const uc = resolver(c.K.map((f, i) => f.map((v, j) => v + Kpuente[i][j])), W.map(w => [w])).map(f => f[0]); Jeq = uRef[n - 1] / uc[n - 1]; } catch { Jeq = 0; }
+    // ficha F: el plano trae su parte del núcleo; el J equivalente del exo es lo que agregan los brazos y las columnas
+    if (F) { const ut = resolver(Kt.map(f => f.map(v => v / tCaras.length)), W.map(w => [w])).map(f => f[0]); Jeq = Math.max(0, Jeq - uRef[n - 1] / ut[n - 1]); }
     return { nombre: c.cara.nombre, t, esfuerzos: c.recuperar(u), reacciones: c.reacciones(u), Jeq, ancho: anchoCara };
   });
   const controles: ControlBarra[] = [];
   res.forEach(c => c.esfuerzos.forEach(e => {
+    if (e.nucleo) return;
     const p = propsBarra(e);
     // a lo largo de la barra (con carga repartida, el máximo puede estar adentro)
     let sigma = 0, M = 0, Nc = 0;
@@ -780,8 +844,8 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
     const esquina = (b: Barra) => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s - centroEn(k)) - anchoEn(k) / 2) < 1e-6);
     // las alas del mástil (ficha E) son de otra cara: no se cuentan; las alas del tubo (columnas intermedias de las caras
     // perpendiculares) sí, con su cantidad (cada cara perpendicular aparece una vez en cada viento como ala)
-    const factor = (b: Barra) => (b.fraccion === undefined || b.fraccion === 1 ? 1 : def.tipo === 'E' ? 0 : b.fraccion);
-    return s + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
+    const factor = (b: Barra) => (b.nucleo ? 0 : b.fraccion === undefined || b.fraccion === 1 ? 1 : def.tipo === 'E' ? 0 : b.fraccion);
+    return s + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
   }, 0);
 }
 
@@ -991,6 +1055,7 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
   const rL = losas && qL > 0 ? calcularExo({ ...def, pesoPropio: false }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: qL, anchosPerp }) : null;
   const out: Cirsoc301Barra[] = [];
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
+    if (eW.nucleo) return;
     const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id), eL = rL?.caras[ic].esfuerzos.find(x => x.id === eW.id);
     if (!eD) return;
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)

@@ -13,6 +13,7 @@ import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { datosExo, momentoTabiques } from './exo';
+import { nivelesOutrigger } from '../engine/exo';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
@@ -351,7 +352,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       // viento A: las caras van en x = ±t y la cara corre a lo largo de y; viento B: en y = ±t, a lo largo de x
       const aPlanta = (s2: number, t: number) => (dir === 'A' ? { x: t, y: s2 } : { x: s2, y: t });
       d.r.caras.forEach(c => c.esfuerzos.forEach(e => {
-        if ((e.fraccion ?? 1) !== 1) return;                 // las alas son los mástiles de las otras caras: se dibujan con ellas
+        if (e.nucleo) return;                               // ficha F: el núcleo ya está (son los tabiques)
+        if ((e.fraccion ?? 1) !== 1 && d.def.tipo !== 'F') return;   // las alas son los mástiles de las otras caras: se dibujan con ellas
         // caras que siguen la planta (Hancock): la cara se mete hacia adentro con la altura
         const interp = (vs: number[], z: number) => {
           const zs = d.r.zs, k = zs.findIndex(zz => zz >= z - 1e-9);
@@ -370,6 +372,17 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         grupo.add(m);
       }));
     });
+    // ficha F: el cinturón, un anillo por el perímetro arriba y abajo de cada brazo
+    const dA = caras[0].d, dB = caras[1].d;
+    if (dA && dB && dA.def.tipo === 'F' && dA.def.cinturon !== false) {
+      const hy = dA.ancho / 2, hx = dB.ancho / 2;
+      const mat = new THREE.MeshStandardMaterial({ color: acero, roughness: 0.45, metalness: 0.3 });
+      const tubo = (a: THREE.Vector3, b: THREE.Vector3) => { const L = a.distanceTo(b); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, L, 8), mat); m.position.copy(a.clone().add(b).multiplyScalar(0.5)); m.quaternion.setFromUnitVectors(eje, b.clone().sub(a).normalize()); grupo.add(m); };
+      nivelesOutrigger(dA.def, dA.r.zs).forEach(k => [dA.r.zs[k], dA.r.zs[k - 1]].forEach(z => {
+        const p = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]].map(([x, y]) => new THREE.Vector3(x, z, -y));
+        p.forEach((q, i) => tubo(q, p[(i + 1) % 4]));
+      }));
+    }
   }
 
   /** torre sin deformar (trazos), eje del CR deformado y flecha curva del giro en la azotea */

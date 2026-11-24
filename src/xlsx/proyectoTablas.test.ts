@@ -139,6 +139,10 @@ describe('exoesqueleto y torre inclinada en las tablas', () => {
     const conLosas = ejemploHearst(); conLosas.exo!.losas = { franja: 6, qD: 0.45, qL: 0.25 };
     const rl = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(conLosas))), ejemploGuia())!;
     expect(rl.proyecto.exo!.losas).toEqual({ franja: 6, qD: 0.45, qL: 0.25 });
+    // ficha F: núcleo con outriggers
+    const outr = ejemploGuia(); outr.exo = { ...ejemploHearst().exo!, tipo: 'F', nucleo: 9, outriggers: [20.5, 41], cinturon: false, columnasCara: 6, notas: undefined, cortes: undefined, pasoH: undefined };
+    const ro = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(outr))), ejemploGuia())!;
+    expect(ro.proyecto.exo).toEqual(outr.exo);
     const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
     const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
     const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;

@@ -26,7 +26,8 @@ export function entradaDesglose(): EntradaDesglose {
 /** la hoja 8: el exoesqueleto con el viento A (si el proyecto tiene uno) */
 function entradaExoDesglose(): EntradaDesglose['exo'] {
   const def = estado.proyecto.exo;
-  if (!def || !exoEnElCalculo()) return null;
+  // la hoja 8 es la cuenta a mano de un tubo (columnas y diagonales en las caras): no sirve para la ficha F
+  if (!def || !exoEnElCalculo() || def.tipo === 'F') return null;
   const d = datosExo('A', def);
   if (!d) return null;
   const n = d.r.u.length - 1, zs = d.r.zs, hp = zs.length > 1 ? (zs[zs.length - 1] - zs[0]) / (zs.length - 1) : 3;

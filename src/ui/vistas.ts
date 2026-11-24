@@ -144,7 +144,7 @@ export function alzadoSVG(p: Proyecto, dir: 'A' | 'B', ancho = 900, altoMax = 11
   if (p.exo) {
     const d = datosExo(dir === 'A' ? 'B' : 'A');
     d?.r.caras[0]?.esfuerzos.forEach(e => {
-      if ((e.fraccion ?? 1) !== 1) return;
+      if ((e.fraccion ?? 1) !== 1 || e.nucleo) return;
       svg.append(el('line', { x1: X(e.a.s), y1: Y(e.a.z), x2: X(e.b.s), y2: Y(e.b.z), stroke: e.clase === 'diagonal' ? '#1d7f5f' : '#333', 'stroke-width': e.clase === 'columna' ? 2 : 1.4 }));
     });
   }
