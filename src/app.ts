@@ -77,6 +77,8 @@ function dibujarPanel() {
   const lat = $('lateral');
   lat.style.setProperty('--rol', rolDe(e));
   lat.style.setProperty('--rolb', `var(${e.rol.replace('--r-', '--rb-')})`);
+  // el color de la etapa también para los pasos del centro (jerarquía de botones en estilo.css)
+  document.documentElement.style.setProperty('--rolb', `var(${e.rol.replace('--r-', '--rb-')})`);
   $('banda-nro').textContent = e.nro;
   $('banda-titulo').textContent = e.id === 'flexion' ? 'Flexocompresión' : e.id === 'rototrasl' ? 'Rototraslación' : e.nombre;
   const sp = $('subpasos');
