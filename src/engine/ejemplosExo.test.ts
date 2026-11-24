@@ -46,6 +46,12 @@ describe('edificios reales con exoesqueleto', () => {
       (['A', 'B'] as const).forEach(dir => expect(exo(p, dir).c301().filter(x => !x.verifica).map(x => `${x.cara} ${x.id} ${x.ratio.toFixed(2)}`)).toEqual([]));
     });
   }));
+  it('Citicorp, Hancock y Hearst: las losas apoyan en el exo (la mitad de cada losa, con el núcleo)', () => {
+    [ejemploCiticorp(), ejemploHancock(), ejemploHearst()].forEach(p => {
+      expect(p.exo!.losas?.franja).toBeGreaterThan(4);
+      expect(p.exo!.notas!.some(n => /losas apoyan en el exo/.test(n))).toBe(true);
+    });
+  });
   it('Citicorp y Hancock: el núcleo no toma viento y el exo se lleva todo el momento', () => {
     [ejemploCiticorp(), ejemploHancock()].forEach(p => {
       expect(p.muros.find(m => m.id === 'N1')!.piezaA).toBe('');

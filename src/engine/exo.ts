@@ -728,6 +728,8 @@ export const CATALOGO_TUBOS: Seccion[] = ([
   [0.8, 0.04], [0.9, 0.04], [1.0, 0.04], [1.0, 0.05], [1.2, 0.05],
   // megacolumnas y megadiagonales (torres muy altas: Hancock, Citicorp)
   [1.2, 0.06], [1.4, 0.06], [1.4, 0.08], [1.6, 0.08], [1.8, 0.08], [1.8, 0.1], [2.0, 0.1], [2.0, 0.125],
+  // cajones armados con chapa gruesa (el mástil del Citicorp sobre el cajón de transición)
+  [2.2, 0.15], [2.5, 0.15],
 ] as [number, number][]).map(([b, e]) => ({ b, e })).sort((u, v) => propsSeccion(u).A - propsSeccion(v).A);
 
 /** hormigón: barras macizas cuadradas de 30 a 200 cm (e = b/2) */

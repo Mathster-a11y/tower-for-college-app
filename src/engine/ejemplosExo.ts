@@ -57,7 +57,8 @@ export function ejemploHancock(): Proyecto {
     exo: {
       tipo: 'D', separacion: 0, modulo: 8, anchoVariable: true, cortes, alas: 5,
       // secciones dimensionadas con la app (botón «Dimensionar»): las reales no están en las fuentes
-      columna: { b: 1.2, e: 0.06 }, diagonal: { b: 1.2, e: 0.05 }, viga: { b: 0.9, e: 0.04 },
+      columna: { b: 1.6, e: 0.08 }, diagonal: { b: 1.4, e: 0.06 }, viga: { b: 0.9, e: 0.04 },
+      losas: { franja: 7, qD: 0.45, qL: 0.25 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
         '100 pisos, techo a 1127 ft (343,5 m): estudio de la Johns Hopkins University (JHU, wk05). CTBUH: 343,7 m.',
@@ -66,8 +67,9 @@ export function ejemploHancock(): Proyecto {
         'X de 200 ft, cinco y media por cara (JHU; Chicago Architecture Center: pisos 2–20, 21–37, 38–55, 56–74, 75–91 y media X 92–97). Acá arrancan en PB y la media X de arriba es una X de 100 ft (supuesto).',
         'Un nivel de la app cada 25 ft (≈ 2,2 pisos reales; la planilla admite 49 niveles): el nombre dice qué pisos junta.',
         '24 columnas en el perímetro, 7 por cara (estudio JHU): las 5 intermedias de cada cara perpendicular al viento trabajan con las esquinas como alas del tubo (alas = 5; cota superior, sin «shear lag»). Las intermedias de las caras paralelas no se modelan.',
-        'Secciones: las del botón «Dimensionar», con el control del curso y el CIRSOC 301 (columnas y diagonales de 1,20 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
-        'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app pesa unas 25 700 t.',
+        'Secciones: las del botón «Dimensionar», con el control del curso y el CIRSOC 301 y las losas apoyadas (columnas de 1,60 m y diagonales de 1,40 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
+        'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app, con las losas apoyadas, pesa unas 42 100 t: más que eso (el modelo no tiene «shear lag» ni las columnas intermedias de las caras paralelas, y usa el viento del CIRSOC). Otra fuente de divulgación da 46 000 t cortas de acero en toda la torre.',
+        'Las losas apoyan en el exo: una franja de 7 m junto a cada fachada (con el núcleo que lleva la otra mitad del peso, como en el estudio JHU: en la base la mitad de la planta son unos 2030 m², arriba unos 770 m²; 7 m es un término medio), con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
       ],
     },
   };
@@ -99,7 +101,8 @@ export function ejemploHearst(): Proyecto {
     muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700, 'Núcleo', 'Núcleo B')],
     exo: {
       tipo: 'A', separacion: 0, modulo: 8, pasoH: r2(40 * FT), cortes,
-      columna: { b: 0.6, e: 0.04 }, diagonal: { b: 0.6, e: 0.04 }, viga: { b: 0.6, e: 0.03 },
+      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.9, e: 0.04 }, viga: { b: 0.15, e: 0.008 },
+      losas: { franja: 5.5, qD: 0.45, qL: 0.25 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
         '46 pisos y 597 ft (182 m): Wikipedia. Torre de 160 × 120 ft (48,8 × 36,6 m) sobre la base histórica de 200 × 200 ft: ENR.',
@@ -107,7 +110,9 @@ export function ejemploHearst(): Proyecto {
         'Entrepiso de 182 m / 45 = 4,04 m (el real es de 13′6″ = 4,11 m en los pisos tipo; supuesto para que la azotea quede a 182 m).',
         'Debajo del piso 10 el diagrid baja por la base histórica hasta PB como un rombo alto (supuesto: en la obra son megacolumnas en el atrio).',
         'Núcleo al oeste, corrido del centro (Wikipedia): genera torsión. Sus medidas y que también tome viento son supuestos.',
-        '10 480 t cortas de acero en total (Wikipedia). Secciones de las barras: supuestas (los nudos son abulonados). Probá «Dimensionar».',
+        '10 480 t cortas de acero en total (Wikipedia; unas 9500 t). Barras de perfiles laminados de ala ancha con nudos abulonados (AISC, Modern Steel Construction); sus medidas no están publicadas. Acá, las del botón «Dimensionar» con las losas apoyadas: diagonales de 0,90 m × 40 mm (el diagrid no tiene columnas ni vigas intermedias: quedan en el tubo más chico). El diagrid de la app pesa unas 7500 t.',
+        'En la obra las diagonales están arriostradas por las losas en cada piso entre nudos (AISC); en la app pandean de nudo a nudo (del lado seguro).',
+        'Las losas apoyan en el exo: una franja de 5,5 m junto a cada fachada: el diagrid lleva la mitad de cada losa (48,8 × 36,6 m), el núcleo la otra mitad, con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
       ],
     },
   };
