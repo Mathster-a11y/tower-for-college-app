@@ -62,6 +62,12 @@ export interface ExoDef {
    * va al núcleo y a los tabiques). qD: peso (0,7 t/m², el de la planilla); qL: sobrecarga (0,2 t/m²: 0,9 − 0,7).
    */
   losas?: LosasExo;
+  /**
+   * las losas arriostran las diagonales en cada piso que cruzan (Hearst: las diagonales del diagrid se atan a la losa
+   * entre nudos): cada diagonal se parte en los pisos, el punto queda atado al corrimiento de la losa, recibe ahí lo
+   * que baja la losa y pandea de piso a piso, no de nudo a nudo
+   */
+  arriostradas?: boolean;
   /** ficha E: piso donde empiezan los chevrones (abajo, solo el mástil) y la sección del mástil */
   pisoInicio?: number; mastil?: Seccion;
   /** ficha E: debajo del primer módulo el mástil es otra pieza (Citicorp: la supercolumna de 7,3 m), hasta la cota «hasta» */
@@ -339,7 +345,32 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     const sec = c.sec ?? b.sec, p = propsSeccion(sec);
     return { ...b, sec, A: p.A, I: p.I, relA: c.relA ?? b.relA, relB: c.relB ?? b.relB };
   });
-  return { nombre, nudos, barras: fin, baseArticulada: un.base === 'articulada' };
+  return { nombre, nudos, barras: def.arriostradas ? arriostrar(fin, nudos, zs, nudoEn) : fin, baseArticulada: un.base === 'articulada' };
+}
+
+/** separador del id de los tramos de una diagonal arriostrada por las losas: «D5·2» es el segundo tramo de D5 */
+export const TRAMO_SEP = '·';
+/** el id de la barra de la ficha (sin el tramo): los cambios barra por barra van con este id */
+export const idBarra = (id: string) => id.split(TRAMO_SEP)[0];
+/**
+ * Diagonales arriostradas por las losas: cada diagonal que cruza pisos entre sus nudos se parte en esos pisos. El punto
+ * de cruce es un nudo del piso (comparte el corrimiento de la losa); entre tramos la barra sigue entera (unión rígida,
+ * sin cambiar su rigidez); las articulaciones de los extremos quedan en el primero y el último tramo.
+ */
+function arriostrar(barras: Barra[], nudos: Nudo[], zs: number[], nudoEn: (s: number, z: number) => number): Barra[] {
+  const out: Barra[] = [];
+  for (const b of barras) {
+    const A = nudos[b.a], B = nudos[b.b];
+    const z0 = Math.min(A.z, B.z), z1 = Math.max(A.z, B.z);
+    const cruces = b.clase === 'diagonal' ? zs.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6) : [];
+    if (!cruces.length) { out.push(b); continue; }
+    const sube = B.z > A.z, orden = sube ? cruces : [...cruces].reverse();
+    const pts = [b.a, ...orden.map(z => nudoEn(A.s + ((B.s - A.s) * (z - A.z)) / (B.z - A.z), z)), b.b];
+    for (let j = 0; j + 1 < pts.length; j++) {
+      out.push({ ...b, id: `${b.id}${TRAMO_SEP}${j + 1}`, a: pts[j], b: pts[j + 1], relA: j === 0 ? b.relA : false, relB: j + 2 === pts.length ? b.relB : false });
+    }
+  }
+  return out;
 }
 
 /**

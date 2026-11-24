@@ -8,7 +8,7 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -438,6 +438,11 @@ export function panelExo(c: H) {
     const porPiso = losaPorPiso(q, L0.franja, B, Lp), planta = pl.B * pl.L * q;
     fu.append(h('p', { class: 'nota chica' }, `Cada piso le baja al exo hasta ${fmt(porPiso, 0)} t (${fmt(planta > 0 ? (porPiso / planta) * 100 : 0, 0)} % de la planta, con ${fmt(q, 1)} t/m²). Las columnas lo llevan a la base: con 1,2 D + 1,6 L y con el viento (1,2 D + 0,5 L + W) en el CIRSOC 301; el peso, además, le resta tracción a las columnas de barlovento. La planilla de la cátedra sigue cargando toda la losa en los tabiques: para su compresión queda del lado seguro, para su tracción no.`));
   }
+  const ar = h('label', { class: 'campo-linea', title: 'Cada diagonal se ata a la losa en cada piso que cruza entre sus nudos (como en el Hearst): ahí comparte el corrimiento de la losa, recibe su carga y pandea de piso a piso en lugar de nudo a nudo. Sirve sobre todo en el diagrid, donde las diagonales cruzan varios pisos.' });
+  const cba = h('input', { type: 'checkbox' }) as HTMLInputElement; cba.checked = !!def.arriostradas;
+  cba.addEventListener('change', () => set(x => { x.arriostradas = cba.checked || undefined; }));
+  ar.append(cba, ' Las losas arriostran las diagonales en cada piso (pandean de piso a piso)');
+  fu.append(ar);
   if (def.material !== 'hormigon') {
     const sc = h('label', { class: 'campo-linea', title: 'CIRSOC 302, Tabla 2.2.1: los tubos sin costura admiten paredes un poco más esbeltas (1,12 y 1,40 √(E/Fy) en lugar de 1,05 y 1,30)' });
     const cbs = h('input', { type: 'checkbox' }) as HTMLInputElement; cbs.checked = !!def.sinCostura;
@@ -725,10 +730,12 @@ export function detalleBarra(e: EsfuerzoBarra, p: { A: number; I: number; W: num
  */
 function editorBarra(e: EsfuerzoBarra) {
   const p = estado.proyecto, def = p.exo!;
-  const cam = def.barras?.[e.id] ?? {};
+  // con las diagonales arriostradas por las losas, el cambio vale para la diagonal entera (todos sus tramos)
+  const idB = idBarra(e.id);
+  const cam = def.barras?.[idB] ?? {};
   const poner = (f: (c: NonNullable<ExoDef['barras']>[string]) => void) => estado.cambiar(() => {
-    const x = p.exo!; x.barras = { ...(x.barras ?? {}) }; const c = { ...(x.barras[e.id] ?? {}) }; f(c);
-    if (Object.keys(c).length) x.barras[e.id] = c; else delete x.barras[e.id];
+    const x = p.exo!; x.barras = { ...(x.barras ?? {}) }; const c = { ...(x.barras[idB] ?? {}) }; f(c);
+    if (Object.keys(c).length) x.barras[idB] = c; else delete x.barras[idB];
     if (!Object.keys(x.barras).length) delete x.barras;
   });
   const sel = (etq: string, val: string, opciones: [string, string][], f: (v: string) => void) => {
@@ -768,18 +775,18 @@ function editorBarra(e: EsfuerzoBarra) {
   };
   const espejo = (): { a: [number, number]; b: [number, number] } => ({ a: [2 * centro(e.a.z) - e.a.s, e.a.z], b: [2 * centro(e.b.z) - e.b.s, e.b.z] });
   const aplicar = (destinos: { a: [number, number]; b: [number, number] }[], texto: string) => {
-    const nueva = e.id.startsWith('N');
+    const nueva = idB.startsWith('N');
     let n = 0;
     estado.cambiar(() => {
       const x = p.exo!;
       if (nueva) {
         const ya = (q: { a: [number, number]; b: [number, number] }) => (x.nuevas ?? []).some(nb => (mismo({ s: nb.a[0], z: nb.a[1] }, { s: q.a[0], z: q.a[1] }) && mismo({ s: nb.b[0], z: nb.b[1] }, { s: q.b[0], z: q.b[1] })) || (mismo({ s: nb.a[0], z: nb.a[1] }, { s: q.b[0], z: q.b[1] }) && mismo({ s: nb.b[0], z: nb.b[1] }, { s: q.a[0], z: q.a[1] })));
-        const orig = (x.nuevas ?? [])[+e.id.slice(1) - 1];
+        const orig = (x.nuevas ?? [])[+idB.slice(1) - 1];
         const nuevos = destinos.filter(q => !ya(q)).map(q => ({ ...orig, clase: e.clase, a: q.a, b: q.b }));
         n = nuevos.length; x.nuevas = [...(x.nuevas ?? []), ...nuevos];
       } else {
         // las barras de la ficha que caen en los destinos reciben el mismo cambio
-        const c0 = x.barras?.[e.id];
+        const c0 = x.barras?.[idB];
         if (!c0) return;
         x.barras = { ...(x.barras ?? {}) };
         // con pisos de distinta altura el nudo a media altura (el cruce de una X) no cae justo: se busca la barra de la
@@ -791,8 +798,8 @@ function editorBarra(e: EsfuerzoBarra) {
         };
         for (const q of destinos) {
           let f: EsfuerzoBarra | undefined, dMin = Infinity;
-          for (const y of cara?.esfuerzos ?? []) { if (y.clase !== e.clase || y.id === e.id) continue; const dv = dist(y, q); if (dv < dMin) { dMin = dv; f = y; } }
-          if (f && isFinite(dMin)) { x.barras[f.id] = { ...c0 }; n++; }
+          for (const y of cara?.esfuerzos ?? []) { if (y.clase !== e.clase || idBarra(y.id) === idB) continue; const dv = dist(y, q); if (dv < dMin) { dMin = dv; f = y; } }
+          if (f && isFinite(dMin) && !x.barras[idBarra(f.id)]) { x.barras[idBarra(f.id)] = { ...c0 }; n++; }
         }
       }
     });
@@ -808,7 +815,7 @@ function editorBarra(e: EsfuerzoBarra) {
     sel('Unión en b', e.relB ? 'art' : 'rig', un, v => poner(c => { c.relB = v === 'art'; })),
     sel('Sección', iSec >= 0 ? String(iSec) : '', tubos, v => poner(c => { if (v === '') delete c.sec; else c.sec = CATALOGO_TUBOS[+v]; })),
     quitar, ...(Object.keys(cam).length ? [volver] : []),
-    h('span', { class: 'nota chica' }, 'Vale para esta barra en las dos caras y con los dos vientos. Si queda un mecanismo, la app avisa.'));
+    h('span', { class: 'nota chica' }, idB !== e.id ? `Es un tramo de ${idB} entre dos losas: el cambio vale para la diagonal entera, en las dos caras y con los dos vientos. Si queda un mecanismo, la app avisa.` : 'Vale para esta barra en las dos caras y con los dos vientos. Si queda un mecanismo, la app avisa.'));
 }
 
 /**

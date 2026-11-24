@@ -51,6 +51,7 @@ describe('edificios reales con exoesqueleto', () => {
       expect(p.exo!.losas?.franja).toBeGreaterThan(4);
       expect(p.exo!.notas!.some(n => /losas apoyan en el exo/.test(n))).toBe(true);
     });
+    expect(ejemploHearst().exo!.arriostradas).toBe(true);
   });
   it('Citicorp y Hancock: el núcleo no toma viento y el exo se lleva todo el momento', () => {
     [ejemploCiticorp(), ejemploHancock()].forEach(p => {

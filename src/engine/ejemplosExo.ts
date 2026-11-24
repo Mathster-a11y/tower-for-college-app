@@ -101,8 +101,8 @@ export function ejemploHearst(): Proyecto {
     muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700, 'Núcleo', 'Núcleo B')],
     exo: {
       tipo: 'A', separacion: 0, modulo: 8, pasoH: r2(40 * FT), cortes,
-      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.9, e: 0.04 }, viga: { b: 0.15, e: 0.008 },
-      losas: { franja: 5.5, qD: 0.45, qL: 0.25 },
+      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.8, e: 0.04 }, viga: { b: 0.15, e: 0.008 },
+      losas: { franja: 5.5, qD: 0.45, qL: 0.25 }, arriostradas: true,
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
         '46 pisos y 597 ft (182 m): Wikipedia. Torre de 160 × 120 ft (48,8 × 36,6 m) sobre la base histórica de 200 × 200 ft: ENR.',
@@ -110,8 +110,8 @@ export function ejemploHearst(): Proyecto {
         'Entrepiso de 182 m / 45 = 4,04 m (el real es de 13′6″ = 4,11 m en los pisos tipo; supuesto para que la azotea quede a 182 m).',
         'Debajo del piso 10 el diagrid baja por la base histórica hasta PB como un rombo alto (supuesto: en la obra son megacolumnas en el atrio).',
         'Núcleo al oeste, corrido del centro (Wikipedia): genera torsión. Sus medidas y que también tome viento son supuestos.',
-        '10 480 t cortas de acero en total (Wikipedia; unas 9500 t). Barras de perfiles laminados de ala ancha con nudos abulonados (AISC, Modern Steel Construction); sus medidas no están publicadas. Acá, las del botón «Dimensionar» con las losas apoyadas: diagonales de 0,90 m × 40 mm (el diagrid no tiene columnas ni vigas intermedias: quedan en el tubo más chico). El diagrid de la app pesa unas 7500 t.',
-        'En la obra las diagonales están arriostradas por las losas en cada piso entre nudos (AISC); en la app pandean de nudo a nudo (del lado seguro).',
+        '10 480 t cortas de acero en total (Wikipedia; unas 9500 t). Barras de perfiles laminados de ala ancha con nudos abulonados (AISC, Modern Steel Construction); sus medidas no están publicadas. Acá, las del botón «Dimensionar» con las losas apoyadas y arriostrando las diagonales: diagonales de 0,80 m × 40 mm (el diagrid no tiene columnas ni vigas intermedias: quedan en el tubo más chico). El diagrid de la app pesa unas 6700 t (sin el arriostramiento hacían falta diagonales de 0,90 m y unas 7500 t).',
+        'Las diagonales están arriostradas por las losas en cada piso entre nudos (AISC): en la app cada diagonal se ata a la losa en los tres pisos que cruza entre nudos, recibe ahí la carga de la losa y pandea de piso a piso (4 m de alto, unos 4,4 m de barra) en lugar de nudo a nudo.',
         'Las losas apoyan en el exo: una franja de 5,5 m junto a cada fachada: el diagrid lleva la mitad de cada losa (48,8 × 36,6 m), el núcleo la otra mitad, con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
       ],
     },

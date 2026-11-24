@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL } from './exo';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -294,6 +294,38 @@ describe('exoesqueleto · las losas apoyan en el exo', () => {
     expect(col(con)).toBeGreaterThan(losa);
     // sin las losas, nada cambia (las combinaciones son las de siempre)
     expect(sin.every(b => !/L/.test(b.combinacion))).toBe(true);
+  });
+});
+
+describe('exoesqueleto · diagonales arriostradas por las losas', () => {
+  const zs = Array.from({ length: 25 }, (_, i) => i * 4), W = zs.slice(1).map(() => 12);
+  const base: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'A', modulo: 8, vanos: 2, pesoPropio: false };
+  it('cada diagonal se parte en los pisos que cruza: tramos de un piso, atados a la losa, con el mismo largo total', () => {
+    const libre = armarCara(base, 24, zs), atada = armarCara({ ...base, arriostradas: true }, 24, zs);
+    const largo = (c: Cara) => c.barras.filter(b => b.clase === 'diagonal').reduce((s, b) => s + Math.hypot(c.nudos[b.b].s - c.nudos[b.a].s, c.nudos[b.b].z - c.nudos[b.a].z), 0);
+    expect(largo(atada)).toBeCloseTo(largo(libre), 6);
+    atada.barras.filter(b => b.clase === 'diagonal').forEach(b => {
+      expect(Math.abs(atada.nudos[b.b].z - atada.nudos[b.a].z)).toBeLessThanOrEqual(4 + 1e-6);
+      expect(atada.nudos[b.a].piso).toBeGreaterThanOrEqual(0); expect(atada.nudos[b.b].piso).toBeGreaterThanOrEqual(0);
+    });
+    // todos los pisos tienen nudos en la cara (la losa carga la diagonal donde la toca)
+    for (let k = 1; k < zs.length; k++) expect(atada.nudos.some(q => q.piso === k)).toBe(true);
+  });
+  it('equilibrio con el viento, un poco más rígido, mismo peso y menos esbeltez en las diagonales', () => {
+    const r0 = calcularExo(base, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6), r1 = calcularExo({ ...base, arriostradas: true }, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6);
+    r1.Ftab.forEach((f, i) => expect(f + r1.Fexo[i]).toBeCloseTo(W[i], 6));
+    expect(r1.u[r1.u.length - 1]).toBeLessThanOrEqual(r0.u[r0.u.length - 1] * (1 + 1e-9));
+    const en: EntradaExo = { zs, W, EJ: () => 3e6 * 30, ancho: 24, tCaras: [-10, 10], Eh: 3e6, h: 96 };
+    expect(pesoExo({ ...base, arriostradas: true }, [en, en])).toBeCloseTo(pesoExo(base, [en, en]), 6);
+    const lam = (d: ExoDef) => Math.max(...cirsoc301(d, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6).filter(x => x.clase === 'diagonal').map(x => x.lambdaC));
+    expect(lam({ ...base, arriostradas: true })).toBeLessThan(lam(base) / 2);
+  });
+  it('un cambio barra por barra vale para la diagonal entera (todos sus tramos)', () => {
+    const sec = { b: 0.9, e: 0.04 };
+    const c = armarCara({ ...base, arriostradas: true, barras: { D1: { sec } } }, 24, zs);
+    const tramos = c.barras.filter(b => idBarra(b.id) === 'D1');
+    expect(tramos.length).toBeGreaterThan(1);
+    tramos.forEach(b => expect(b.sec).toEqual(sec));
   });
 });
 
