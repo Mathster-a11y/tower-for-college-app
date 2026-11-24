@@ -77,6 +77,13 @@ export interface ExoDef {
   cinturon?: boolean;
   /** ficha F: columnas del perímetro en cada cara perpendicular al viento que toma el cinturón; por defecto 4 */
   columnasCara?: number;
+  /**
+   * ficha F: los brazos se conectan desde el principio de la obra (false). Por defecto se conectan al terminar la obra
+   * gruesa, como se hace en las torres reales: el peso propio y el de las losas (D) bajan por las columnas y el núcleo
+   * sin pasar por los brazos; la sobrecarga (L) y el viento, sí. Conectados desde el principio, el acortamiento de las
+   * columnas cargadas (el núcleo casi no se acorta) fuerza los brazos con el peso.
+   */
+  brazosDesdeElPrincipio?: boolean;
   /** ficha E: piso donde empiezan los chevrones (abajo, solo el mástil) y la sección del mástil */
   pisoInicio?: number; mastil?: Seccion;
   /** ficha E: debajo del primer módulo el mástil es otra pieza (Citicorp: la supercolumna de 7,3 m), hasta la cota «hasta» */
@@ -150,6 +157,8 @@ export interface Barra {
   fraccion?: number;
   /** ficha F: el núcleo de tabiques (y sus brazos rígidos hasta el borde): no es del exo, no se verifica ni se pesa */
   nucleo?: boolean;
+  /** ficha F: barra de un brazo (reticulado del outrigger) */
+  brazo?: boolean;
 }
 export interface Cara {
   nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean;
@@ -169,7 +178,7 @@ export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
   const pedidos = def.outriggers?.length ? def.outriggers.map(cerca) : [cerca((zs[0] + zs[n]) / 2)];
   return [...new Set(pedidos.filter(k => k >= 1 && k <= n))].sort((a, b) => a - b);
 }
-export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[]): Cara {
+export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[], op: { /** ficha F: sin los brazos (todavía no conectados) */ sinBrazos?: boolean } = {}): Cara {
   const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
   /**
    * centro de la cara en el nivel k: en una torre inclinada o corrida (Diseño → Perfil) cada nivel se corre respecto
@@ -352,7 +361,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     // se pone en calcularExo con el de los tabiques); en cada brazo, un reticulado de un piso de alto desde el borde del
     // núcleo (atado al eje con barras rígidas) hasta la columna del perímetro, que va de la base a la azotea
     const c = Math.min(anchoK(0) / 2 - 0.5, Math.max(0.5, (def.nucleo ?? anchoK(0) / 3) / 2));
-    const kOut = nivelesOutrigger(def, zs);
+    const kOut = op.sinBrazos ? [] : nivelesOutrigger(def, zs);
     const nucleoNudo = (s: number, k: number) => { const id = nudo(s, k); nudos[id].nucleo = true; return id; };
     for (let k = 0; k < n; k++) barras.push({ id: `K${k + 1}`, clase: 'columna', a: nucleoNudo(0, k), b: nucleoNudo(0, k + 1), A: 100, I: 1, sec: { b: 1, e: 0.5 }, relA: false, relB: false, borde: false, nucleo: true });
     const sinCint = def.cinturon === false, fr = sinCint ? 1 : Math.max(1, def.columnasCara ?? 4) / 2;
@@ -362,6 +371,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
       barras.push({ id: `C${barras.filter(x => x.clase === 'columna' && !x.nucleo).length + 1}`, clase: 'columna', a: nudo(lado(k), k), b: nudo(lado(k + 1), k + 1), A: pk.A * fr, I: pk.I * fr, sec: s0, relA: rel, relB: rel, borde: true, ...(fr !== 1 ? { fraccion: fr } : {}) });
     }
     let nr = 0;
+    const i0 = barras.length;
     for (const k of kOut) {
       for (const sg of [-1, 1]) {
         // barras rígidas del eje del núcleo al borde, arriba y abajo del brazo
@@ -377,6 +387,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
         }
       }
     }
+    for (let i = i0; i < barras.length; i++) if (!barras[i].nucleo) barras[i].brazo = true;
   }
   // barras agregadas a mano (entre nudos que ya existen o en un piso)
   (def.nuevas ?? []).forEach((nb, i) => {
@@ -428,7 +439,7 @@ function arriostrar(barras: Barra[], nudos: Nudo[], zs: number[], nudoEn: (s: nu
  * un cuarto del viento total por borde). Se escala para que el viento sobre la fachada sume exactamente ΣW (la parte
  * del primer tramo que queda por debajo del primer piso baja directo a la base).
  */
-export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], losa?: CargaLosa): Cara {
+export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], losa?: CargaLosa, pesoSoloBrazos = false): Cara {
   const n = zs.length - 1, peso = def.pesoPropio !== false;
   const cargasNudo = losa && losa.q > 0 && losa.franja > 0 ? cargasDeLosa(cara, zs, losa) : undefined;
   // viento por metro de altura en cada piso (t/m, de toda la torre): W_k / D_k
@@ -449,7 +460,8 @@ export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], l
   return { ...cara, cargasNudo, barras: cara.barras.map(b => {
     const A = cara.nudos[b.a], B = cara.nudos[b.b], L = Math.hypot(B.s - A.s, B.z - A.z) || 1;
     const c: CargaBarra = { xa: 0, za: 0, xb: 0, zb: 0 };
-    if (peso) { c.za = c.zb = -gammaExo(def) * b.A; }
+    // el núcleo de la ficha F no es acero del exo: su peso lo cuenta la planilla
+    if (peso && !b.nucleo && (!pesoSoloBrazos || b.brazo)) { c.za = c.zb = -gammaExo(def) * b.A; }
     if (def.viento === 'fachada' && b.borde) {
       // t/m de altura → t/m de barra (por la proyección vertical)
       const k = (Math.abs(B.z - A.z) / L) * f / 4;
@@ -473,7 +485,10 @@ export interface CargaLosa { q: number; franja: number; ancho: (k: number) => nu
 export function cargasDeLosa(cara: Cara, zs: number[], l: CargaLosa): { nudo: number; P: number }[] {
   const n = zs.length - 1, f = l.franja;
   const porPiso = new Map<number, Nudo[]>();
-  cara.nudos.forEach(q => { if (q.piso > 0 && !q.nucleo) porPiso.set(q.piso, [...(porPiso.get(q.piso) ?? []), q]); });
+  // ficha F: la losa va a las columnas del perímetro (ni al núcleo ni a los nudos de los brazos, que se conectan al final)
+  const conBrazos = cara.barras.some(b => b.brazo);
+  const deColumna = new Set(cara.barras.filter(b => !b.brazo && !b.nucleo).flatMap(b => [b.a, b.b]));
+  cara.nudos.forEach(q => { if (q.piso > 0 && !q.nucleo && (!conBrazos || deColumna.has(q.id))) porPiso.set(q.piso, [...(porPiso.get(q.piso) ?? []), q]); });
   const conNudos = [...porPiso.keys()].sort((a, b) => a - b);
   if (!conNudos.length) return [];
   // carga de cada piso que va a la cara (en el piso con nudos que la recibe)
@@ -751,8 +766,24 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
  * @param Eh módulo del hormigón (t/m²), para el J equivalente de cada cara
  */
 export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
-  op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
+  op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ficha F: sin los brazos (las cargas que llegan antes de conectarlos) */ sinBrazos?: boolean; /** ficha F: el peso propio, solo el de los brazos */ pesoSoloBrazos?: boolean; /** qLosa es carga permanente (D): con los brazos conectados al final, va sin ellos */ casoD?: boolean; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
   const n = zs.length - 1;
+  // ficha F con los brazos conectados al final: el peso (D) se resuelve sin brazos y se le suma la sobrecarga y el viento
+  // con brazos (superposición: es lineal)
+  if (def.tipo === 'F' && !def.brazosDesdeElPrincipio && !op.sinBrazos && !op.pesoSoloBrazos && (op.qLosa === undefined || op.casoD) && (def.pesoPropio !== false || def.losas)) {
+    const qG = op.casoD ? op.qLosa ?? 0 : def.losas ? def.losas.qD ?? LOSA_QD : 0, qW = op.casoD ? 0 : def.losas ? def.losas.qL ?? LOSA_QL : 0;
+    const g = calcularExo(def, zs, W.map(() => 0), EJ, anchoCara, tCaras, Eh, anchos, corr, { ...op, casoD: false, qLosa: qG, sinBrazos: true });
+    // con los brazos: la sobrecarga, el viento y el peso de los propios brazos (se montan apoyados en lo que ya está)
+    const w = calcularExo(def, zs, W, EJ, anchoCara, tCaras, Eh, anchos, corr, { ...op, casoD: false, qLosa: qW, pesoSoloBrazos: true });
+    const caras = w.caras.map((c, i) => {
+      const gE = new Map(g.caras[i].esfuerzos.map(e => [e.id, e]));
+      const esfuerzos = c.esfuerzos.map(e => { const x = gE.get(e.id); return x ? { ...e, N: e.N + x.N, Q: e.Q + x.Q, Ma: e.Ma + x.Ma, Mb: e.Mb + x.Mb, Nb: e.Nb + x.Nb, Qb: e.Qb + x.Qb, pa: e.pa + x.pa, pb: e.pb + x.pb, qa: e.qa + x.qa, qb: e.qb + x.qb } : e; });
+      const reac = new Map<string, { s: number; V: number; H: number }>();
+      [...c.reacciones, ...g.caras[i].reacciones].forEach(r => { const k = r.s.toFixed(6), y = reac.get(k) ?? { s: r.s, V: 0, H: 0 }; y.V += r.V; y.H += r.H; reac.set(k, y); });
+      return { ...c, esfuerzos, reacciones: [...reac.values()] };
+    });
+    return { ...w, u: w.u.map((x, i) => x + g.u[i]), caras, controles: controlesExo(caras, def) };
+  }
   const Kt = rigidezTabiques(zs, EJ);
   const qLosa = op.qLosa ?? (def.losas ? (def.losas.qD ?? LOSA_QD) + (def.losas.qL ?? LOSA_QL) : 0);
   const dPerp = tCaras.length > 1 ? Math.max(...tCaras) - Math.min(...tCaras) : anchoCara;
@@ -763,7 +794,7 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
   const F = def.tipo === 'F';
   // ficha F: el núcleo está dentro de cada plano (cada uno con su parte del EJ de los tabiques); la ménsula sola no se suma
   const conNucleo = (c: Cara): Cara => (F ? { ...c, barras: c.barras.map(b => (b.nucleo && b.clase === 'columna' ? { ...b, I: Math.max(EJ((c.nudos[b.a].z + c.nudos[b.b].z) / 2) || 0, 1e-6) / (def.E * tCaras.length) } : b)) } : c);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr)), def, zs, W, losa), def.E, n) }));
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr, { sinBrazos: op.sinBrazos })), def, zs, W, losa, op.pesoSoloBrazos), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
@@ -801,8 +832,14 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     if (F) { const ut = resolver(Kt.map(f => f.map(v => v / tCaras.length)), W.map(w => [w])).map(f => f[0]); Jeq = Math.max(0, Jeq - uRef[n - 1] / ut[n - 1]); }
     return { nombre: c.cara.nombre, t, esfuerzos: c.recuperar(u), reacciones: c.reacciones(u), Jeq, ancho: anchoCara };
   });
+  const controles = controlesExo(res, def);
+  return { zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res, controles };
+}
+
+/** control del curso de cada barra: σ = |N|/A + |M|/W ≤ σadm a lo largo de la barra y pandeo (N < Ncr/1,7, λ ≤ 200) */
+function controlesExo(caras: { nombre: string; esfuerzos: EsfuerzoBarra[] }[], def: ExoDef): ControlBarra[] {
   const controles: ControlBarra[] = [];
-  res.forEach(c => c.esfuerzos.forEach(e => {
+  caras.forEach(c => c.esfuerzos.forEach(e => {
     if (e.nucleo) return;
     const p = propsBarra(e);
     // a lo largo de la barra (con carga repartida, el máximo puede estar adentro)
@@ -812,7 +849,7 @@ export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: numb
     const pandeo = Nc < 0 && (-Nc > Ncr / 1.7 || lambda > 200);
     controles.push({ cara: c.nombre, id: e.id, clase: e.clase, N: e.N, M, sigma, lambda, Ncr, estado: sigma <= def.sigmaAdm && !pandeo ? 'verifica' : 'no verifica' });
   }));
-  return { zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res, controles };
+  return controles;
 }
 
 // ------------------------------------------------------------------ dimensionado: el exo más liviano que verifica
@@ -1050,14 +1087,15 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
   const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: 0 });
   const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0 })) : null;
   // D: el peso propio y el peso de las losas; L: la sobrecarga de las losas (si apoyan en el exo)
-  const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: def.losas?.qD ?? LOSA_QD, anchosPerp });
+  // ficha F con los brazos conectados al final: D baja sin pasar por ellos (salvo el peso de los propios brazos)
+  const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: def.losas?.qD ?? LOSA_QD, anchosPerp, casoD: true });
   const qL = def.losas?.qL ?? LOSA_QL;
   const rL = losas && qL > 0 ? calcularExo({ ...def, pesoPropio: false }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: qL, anchosPerp }) : null;
   const out: Cirsoc301Barra[] = [];
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
     if (eW.nucleo) return;
-    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id), eL = rL?.caras[ic].esfuerzos.find(x => x.id === eW.id);
-    if (!eD) return;
+    // (una barra que no está en el caso D, como los brazos que se conectan al final, no tiene esfuerzos de D)
+    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id) ?? { ...eW, N: 0, Q: 0, Ma: 0, Mb: 0, Nb: 0, Qb: 0, pa: 0, pb: 0, qa: 0, qb: 0 }, eL = rL?.caras[ic].esfuerzos.find(x => x.id === eW.id);
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
     const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
     const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f, S = p.W * f;

@@ -361,6 +361,20 @@ describe('exoesqueleto · núcleo con outriggers (ficha F)', () => {
     expect(u({ cinturon: true, columnasCara: 6 })).toBeLessThan(u({ cinturon: false }));
     expect(nivelesOutrigger({ ...EXO_POR_DEFECTO, tipo: 'F' }, zs)).toEqual([10]);
   });
+  it('brazos conectados al final: el peso no los fuerza; desde el principio, el acortamiento de las columnas sí. Siempre en equilibrio', () => {
+    const def = base({ b: 0.5, e: 0.025 }, { uniones: undefined, losas: { franja: 4, qL: 0 }, pesoPropio: true, outriggers: [44, 80] });
+    const brazos = (r: ReturnType<typeof calcularExo>) => Math.max(...r.caras[0].esfuerzos.filter(e => e.clase === 'diagonal').map(e => Math.abs(e.N)));
+    // solo las losas (sin el peso de los brazos, que siempre pasa por ellos)
+    const sinPeso = { ...def, pesoPropio: false };
+    expect(brazos(calcularExo(sinPeso, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6))).toBeLessThan(1e-6);
+    expect(brazos(calcularExo({ ...sinPeso, brazosDesdeElPrincipio: true }, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6))).toBeGreaterThan(10);
+    const tarde = calcularExo(def, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6), antes = calcularExo({ ...def, brazosDesdeElPrincipio: true }, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6);
+    const V = (r: ReturnType<typeof calcularExo>) => r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+    expect(V(tarde)).toBeCloseTo(V(antes), 3);
+    // y en el CIRSOC 301 las diagonales de los brazos no ven D
+    const c301 = (x: ExoDef) => Math.max(...cirsoc301(x, zs, W, () => EI, 2 * d, [-5, 5], 3e6).filter(b => b.clase === 'diagonal').map(b => b.ratio));
+    expect(c301(def)).toBeLessThan(c301({ ...def, brazosDesdeElPrincipio: true }));
+  });
   it('las losas cargan las columnas del perímetro, no el núcleo', () => {
     const def = base({ b: 0.5, e: 0.025 }, { losas: { franja: 4 } });
     const cara = cargarCara(armarCara(def, 2 * d, zs), def, zs, W.map(() => 0), { q: 0.9, franja: 4, ancho: () => 2 * d, centro: () => 0, anchoPerp: () => 10 });

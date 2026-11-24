@@ -423,6 +423,11 @@ export function panelExo(c: H) {
     cbc.addEventListener('change', () => set(x => { x.cinturon = cbc.checked ? undefined : false; }));
     ci.append(cbc, ' Cinturón a la altura de cada brazo (trabajan todas las columnas de la cara)');
     fo.append(ci);
+    const bp = h('label', { class: 'campo-linea', title: 'En las torres reales los brazos se conectan al terminar la obra gruesa: así el peso (de la estructura y de las losas) baja por las columnas y el núcleo sin forzar los brazos. Si se conectan desde el principio, las columnas cargadas se acortan más que el núcleo y los brazos toman parte del peso.' });
+    const cbp2 = h('input', { type: 'checkbox' }) as HTMLInputElement; cbp2.checked = !def.brazosDesdeElPrincipio;
+    cbp2.addEventListener('change', () => set(x => { x.brazosDesdeElPrincipio = cbp2.checked ? undefined : true; }));
+    bp.append(cbp2, ' Brazos conectados al terminar la obra gruesa (el peso no pasa por ellos; la sobrecarga y el viento, sí)');
+    fo.append(bp);
     if (def.cinturon !== false) campo(fo, 'Columnas en cada cara perpendicular', 'exo-colcara', def.columnasCara ?? 4, nu((x, v) => (x.columnasCara = Math.max(1, Math.round(v)))), { tipo: 'number', ayuda: 'columnas del perímetro en cada cara perpendicular al viento que el cinturón suma al par de fuerzas (sin «shear lag»: cota superior)' });
   }
   sec(def.tipo === 'F' ? 'Columna del perímetro' : 'Columna', 'columna'); sec(def.tipo === 'F' ? 'Diagonal del brazo' : 'Diagonal', 'diagonal'); sec(def.tipo === 'F' ? 'Cordón del brazo' : 'Viga / cinturón', 'viga');
