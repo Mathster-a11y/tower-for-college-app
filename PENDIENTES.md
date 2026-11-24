@@ -15,11 +15,15 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 6. ~~Contexto urbano: edificios con retiros~~ (23/11: «＋ retiro» en la tabla, JSON, DXF con contornos anidados; 2D, piso por piso y 3D)
 7. ~~Contexto urbano: calcar el sitio desde un PDF~~ (23/11: con el PDF de fondo en la planta, Colocar → Forma → «edificio vecino» con su alto, o un camino cerrado → ⌂; los vecinos se ven punteados en la planta)
 8. ~~Cp y fuerza por piso del túnel como hoja del Excel~~ (23/11: «⤓ Excel (.xlsx)» con Piso por piso, Interferencia y Cp del perímetro, fórmulas y gráficos)
-9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
+9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado. En espera (24/11): lo que buscaba lo cubren el piso por piso, la ventana de detalle, la fidelidad máxima y el caso de OpenFOAM; una banda periódica rompe el perfil del viento con la altura. Se retoma si hace falta
 10. ~~3D en el procesador más rápido~~ (24/11: WebAssembly con SIMD, unas 2 veces más rápido, igual al de JavaScript en 1e-6; varios núcleos no: necesitan memoria compartida, que el navegador solo da con encabezados que GitHub Pages no manda)
 11. ~~Niveles de fidelidad (básica → máxima)~~ (23/11: selector «Fidelidad» en los dos túneles, con la que conviene para la computadora; se recuerda)
 12. ~~Exportar el caso a OpenFOAM~~ (23/11: Túnel 3D → «⤓ Caso de OpenFOAM (.zip)»; probado con OpenFOAM v1912: malla OK y simpleFoam converge; Cd de un prisma de 60 m = 1,00)
 13. ~~Túnel 2D: modo «solo los muros»~~ (23/11: Planta → «solo los muros»; al menos 40 celdas por ancho y los tabiques de menos de 1,2 celdas engrosados, con aviso)
+
+### Unidades y glosario (pedido del 23/11)
+- ~~Velocidades del túnel en km/h (o m/s, o veces el viento que llega), con el viento de diseño a esa altura o uno propio~~ (23/11)
+- ~~Revisión de unidades de las cuentas (tm y t·m, unidades que faltaban, letras que cambian de significado entre métodos) y glosario: unidades, la simulación paso a paso, el diccionario y las variables de cada método, en cada guía y en docs/glosario_y_unidades.pdf~~ (24/11)
 
 ### Diseño y cálculo
 14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)

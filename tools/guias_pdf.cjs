@@ -31,6 +31,14 @@ const METODOS = [['Guía', 'guia'], ['Planilla', 'planilla'], ['CIRSOC', 'cirsoc
     await pg.locator('.guia-barra button', { hasText: 'Cerrar' }).click();
     console.log('listo', salida);
   }
+  // el glosario completo (unidades, la simulación paso a paso y las variables de los cinco métodos)
+  await pg.locator('#panel button', { hasText: 'Glosario y unidades' }).click();
+  await pg.waitForSelector('.guia-impresion[data-listo="1"]', { timeout: 60000 });
+  await pg.emulateMedia({ media: 'print' });
+  const glos = path.join(__dirname, '..', 'docs', 'glosario_y_unidades.pdf');
+  await pg.pdf({ path: glos, format: 'A4', printBackground: true, margin: { top: '12mm', bottom: '12mm', left: '10mm', right: '10mm' } });
+  await pg.emulateMedia({ media: 'screen' });
+  console.log('listo', glos);
   if (errores.length) console.log('errores', errores);
   await b.close();
 })();

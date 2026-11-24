@@ -1731,3 +1731,10 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 /* edificios vecinos del contexto urbano en la planta (calcados de un PDF o importados) */
 .vecino-planta { fill: color-mix(in srgb, #8f9198 22%, transparent); stroke: #8f9198; stroke-width: 1.2; stroke-dasharray: 5 3; pointer-events: none; }
 .vecino-rot { font: 600 10px system-ui, sans-serif; fill: #5a5c63; pointer-events: none; }
+/* glosario de la guía de cálculo */
+.glosario td.sim { white-space: nowrap; font-family: var(--mono, monospace); font-weight: 600; }
+.glosario td small { display: inline; }
+.glosario-dl { display: grid; grid-template-columns: minmax(150px, max-content) 1fr; gap: 6px 14px; margin: 8px 0; }
+.glosario-dl dt { font-weight: 600; }
+.glosario-dl dd { margin: 0; }
+@media (max-width: 600px) { .glosario-dl { grid-template-columns: 1fr; } .glosario-dl dd { margin-bottom: 6px; } }
