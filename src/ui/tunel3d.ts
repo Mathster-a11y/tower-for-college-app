@@ -886,6 +886,10 @@ function grabarToma(t: Toma, W: number, F: number): Promise<{ blob: Blob | null;
   });
 }
 
+/** los videos de la última exportación de simulaciones (en esta sesión), para la presentación del trabajo */
+export interface VideoTunel { nombre: string; blob: Blob; portada: string; ext: string; ficha: string[]; ancho: number; alto: number }
+let ultimosVideos: VideoTunel[] = [];
+export const ultimasSimulaciones = (): VideoTunel[] => ultimosVideos;
 /** graba todas las tomas activas, una detrás de otra, y arma el paquete (.zip con los videos, la ficha y la presentación) */
 async function exportarSimulaciones() {
   const msg = (x: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = x; };
@@ -946,6 +950,8 @@ async function exportarSimulaciones() {
     if (cancelada) msg(`Cancelado. ${videos.length ? `Se arma el paquete con las ${videos.length} tomas grabadas.` : ''}`);
   }
   if (!videos.length) { msg(`No se grabó ninguna toma. ${fallas.join(' · ')}`); return; }
+  // quedan a mano para la presentación del trabajo (Exportar ▾ → Presentación del trabajo)
+  ultimosVideos = videos.map(x => ({ nombre: x.t.nombre, blob: x.blob, portada: x.portada, ext: x.ext, ficha: describirToma(x.t, nombresTam()), ancho: W, alto: H }));
   msg('Armando el paquete…');
   await armarPaquete(videos, fallas, W, H);
 }
