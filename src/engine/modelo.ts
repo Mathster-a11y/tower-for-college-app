@@ -322,6 +322,8 @@ export interface Proyecto {
   carpinteriaTramos?: import('./carpinteria').TramoCarpinteria[];
   /** la carpintería no sigue a las losas: los tramos no la recalculan y las losas se editan sin tocarla (vacío = sigue) */
   carpinteriaFija?: boolean | null;
+  /** la envolvente diseñada aparte de las losas: la usan los tramos «Envolvente» (vacío = la piel sigue el borde de las losas) */
+  envolvente?: import('./envolvente').Envolvente | null;
   /** panelería de la carpintería: montantes cada «modulo» m, antepecho opaco y travesaños intermedios (vacío = sin paneles) */
   paneleria?: import('./carpinteria').Paneleria | null;
   /** planos que recortan las losas (la corona a 45° del Citicorp), dibujados en el corte de la torre (planos_corte.ts) */

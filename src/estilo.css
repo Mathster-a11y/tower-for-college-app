@@ -1921,3 +1921,6 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .herr-planta.compacta .grupo-rot::before { content: ""; display: block; width: 1px; height: 16px; background: var(--rule); }
 .sigue-losa .regla-grilla { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sigue-losa .regla-grilla .seg button { font-size: 11.5px; padding: 3px 8px; }
+/* la carpintería que genera la envolvente: su sombra en la planta (no se edita acá) */
+.planta .carpinteria.sombra-env { stroke-dasharray: 6 4; stroke-width: 1.8; fill: color-mix(in srgb, var(--carpinteria) 5%, transparent); }
+.planta .carpinteria.editando.sombra-env { pointer-events: none; cursor: default; }

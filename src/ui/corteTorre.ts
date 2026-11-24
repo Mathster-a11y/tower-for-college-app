@@ -32,6 +32,7 @@ function generados(p: Proyecto): Set<number> {
 
 export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   const raiz = document.createElement('div'); raiz.className = 'corte-torre'; raiz.hidden = true;
+  let objetivo: 'losas' | 'envolvente' = 'losas';
   const barra = document.createElement('div'); barra.className = 'corte-barra';
   const svg = document.createElementNS(NS, 'svg') as SVGSVGElement; svg.classList.add('corte-svg');
   const pie = document.createElement('div'); pie.className = 'corte-pie'; pie.setAttribute('role', 'status');
@@ -85,7 +86,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       ext.push(bc, bm, op, boton('Quitar el calco', '', () => { estado.calcoCorte = null; modo = 'editar'; armar(); }));
     }
     // planos de corte: los de este corte, con su ángulo, qué sacan y quitar
-    const pls = (estado.proyecto.planosCorte ?? []).filter(q => q.eje === eje);
+    const pls = planosDe(estado.proyecto).filter(q => q.eje === eje);
     const bp = boton('+ Plano de corte', 'Dos puntos en el corte: el plano pasa por ellos y saca lo de arriba (la corona a 45° del Citicorp)', () => { modo = modo === 'plano' ? 'editar' : 'plano'; plano = []; armar(); }); bp.setAttribute('aria-pressed', String(modo === 'plano'));
     const listaP = pls.map(q => {
       const d = document.createElement('span'); d.className = 'plano-item';
@@ -97,7 +98,10 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
         boton('✕', 'Quitar el plano: las losas vuelven a como estaban antes de cortarlas', () => quitarPlano(q.id)));
       return d;
     });
-    barra.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'Corte de la torre' }), seg, lpos, lr, bp, ...listaP, ...ext, boton('Cerrar', 'Volver a la planta (Esc)', cerrar));
+    // con envolvente, los planos recortan las losas o la envolvente (se elige)
+    const obj = document.createElement('div'); obj.className = 'seg chico'; obj.setAttribute('role', 'group'); obj.setAttribute('aria-label', 'Qué recortan los planos');
+    if (estado.proyecto.envolvente) ([['losas', 'Planos: losas'], ['envolvente', 'Planos: envolvente']] as const).forEach(([v, t]) => { const x = boton(t, v === 'losas' ? 'Los planos de corte recortan las losas' : 'Los planos de corte recortan la envolvente (las losas no se tocan)', () => { objetivo = v; modo = 'editar'; plano = []; armar(); }); x.setAttribute('aria-pressed', String(objetivo === v)); obj.append(x); });
+    barra.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'Corte de la torre' }), seg, ...(estado.proyecto.envolvente ? [obj] : []), lpos, lr, bp, ...listaP, ...ext, boton('Cerrar', 'Volver a la planta (Esc)', cerrar));
   }
   function armarPie() {
     pie.textContent = modo === 'plano' ? (plano.length ? 'Tocá el segundo punto del plano (por ejemplo, el otro extremo del techo inclinado del plano calcado).' : 'Plano de corte: tocá el primer punto de la recta (en el alzado calcado, una punta del techo inclinado). Se saca lo de arriba; después se puede cambiar.')
@@ -156,7 +160,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
     calib.forEach(q => svg.append(el('circle', { cx: W(q.w), cy: Z(q.z), r: 5, class: 'calib' })));
     // planos de corte de este corte: la recta de borde a borde de la vista, el lado que se saca sombreado, y sus manijas
     const ancho = svg.clientWidth || 800, alto = svg.clientHeight || 600;
-    (p.planosCorte ?? []).filter(q => q.eje === eje).forEach(q => {
+    planosDe(p).filter(q => q.eje === eje).forEach(q => {
       const a = previaPlano?.id === q.id ? previaPlano.a : q.a, b = previaPlano?.id === q.id ? previaPlano.b : q.b;
       const dx = W(b.w) - W(a.w), dy = Z(b.z) - Z(a.z), L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, big = 4 * (ancho + alto);
       const p1 = [W(a.w) - ux * big, Z(a.z) - uy * big], p2 = [W(a.w) + ux * big, Z(a.z) + uy * big];
@@ -196,19 +200,20 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       if (plano.length === 2) {
         const [a, b] = plano; plano = []; modo = 'editar';
         if (Math.hypot(b.w - a.w, b.z - a.z) < 0.2) { armar(); return; }
-        const pp = estado.proyecto, id = (() => { let n = 1; while ((pp.planosCorte ?? []).some(x => x.id === `P${n}`)) n++; return `P${n}`; })();
+        const pp = estado.proyecto, id = (() => { let n = 1; while (planosDe(pp).some(x => x.id === `P${n}`)) n++; return `P${n}`; })();
         const r4 = (x: number) => Math.round(x * 100) / 100;
         estado.cambiar(px => {
-          const antes = px.niveles.map(n => ({ cota: n.cota, silueta: n.silueta ? n.silueta.map(v => ({ ...v })) : null, B: n.B ?? null, L: n.L ?? null }));
-          px.planosCorte = [...(px.planosCorte ?? []), { id, eje, a: { w: r4(a.w), z: r4(a.z) }, b: { w: r4(b.w), z: r4(b.z) }, antes }];
+          const nuevo: PlanoCorte = { id, eje, a: { w: r4(a.w), z: r4(a.z) }, b: { w: r4(b.w), z: r4(b.z) } };
+          if (objetivo === 'losas') nuevo.antes = px.niveles.map(n => ({ cota: n.cota, silueta: n.silueta ? n.silueta.map(v => ({ ...v })) : null, B: n.B ?? null, L: n.L ?? null }));
+          ponerPlanos(px, [...planosDe(px), nuevo]);
         });
-        mensaje(`Plano ${id} a ${f2(anguloPlano({ id, eje, a, b }))}°: las losas que cruza quedan recortadas. Cambiá el lado con ⇅ o movelo con sus manijas (□).`);
+        mensaje(`Plano ${id} a ${f2(anguloPlano({ id, eje, a, b }))}°: ${objetivo === 'envolvente' ? 'la envolvente queda recortada (las losas no se tocan)' : 'las losas que cruza quedan recortadas'}. Cambiá el lado con ⇅ o movelo con sus manijas (□).`);
       }
       return;
     }
     const hp = (ev.target as Element).closest?.('.manija-plano');
     if (hp && modo === 'editar') {
-      const q0 = (estado.proyecto.planosCorte ?? []).find(x => x.id === hp.getAttribute('data-plano'));
+      const q0 = planosDe(estado.proyecto).find(x => x.id === hp.getAttribute('data-plano'));
       if (q0) { previaPlano = { id: q0.id, a: { ...q0.a }, b: { ...q0.b } }; arr = { tipo: 'plano', id: ev.pointerId, punta: hp.getAttribute('data-punta') as 'a' | 'b', sx: ev.clientX, sy: ev.clientY }; try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ } return; }
     }
     const h = (ev.target as Element).closest?.('.manija');
@@ -259,27 +264,35 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   new ResizeObserver(() => dibujar()).observe(raiz);
   estado.suscribir(() => { if (!raiz.hidden && !arr) armar(); });
 
+  /** a qué se le dibujan los planos: a las losas o a la envolvente (que no guarda «antes»: se recalcula sola) */
+  function planosDe(pp: Proyecto): PlanoCorte[] { return objetivo === 'envolvente' ? pp.envolvente?.planos ?? [] : pp.planosCorte ?? []; }
+  function ponerPlanos(pp: Proyecto, xs: PlanoCorte[]) {
+    if (objetivo === 'envolvente') { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, planos: xs.length ? xs : null }; return; }
+    if (xs.length) pp.planosCorte = xs; else delete pp.planosCorte;
+  }
   /** cambia un plano: las losas vuelven a como estaban antes de cortarlas y se recortan con el plano nuevo */
   function cambiarPlano(id: string, f: (q: PlanoCorte) => void) {
     estado.cambiar(pp => {
-      const q = (pp.planosCorte ?? []).find(x => x.id === id); if (!q) return;
+      const q = planosDe(pp).find(x => x.id === id); if (!q) return;
       restaurar(pp, q); f(q);
+      if (objetivo === 'envolvente') ponerPlanos(pp, [...planosDe(pp)]);
     });
   }
   function quitarPlano(id: string) {
     estado.cambiar(pp => {
-      const q = (pp.planosCorte ?? []).find(x => x.id === id); if (!q) return;
+      const q = planosDe(pp).find(x => x.id === id); if (!q) return;
       restaurar(pp, q);
-      pp.planosCorte = (pp.planosCorte ?? []).filter(x => x.id !== id); if (!pp.planosCorte.length) delete pp.planosCorte;
+      ponerPlanos(pp, planosDe(pp).filter(x => x.id !== id));
     });
-    mensaje(`Plano ${id} quitado: las losas que recortaba volvieron a como estaban.`);
+    mensaje(objetivo === 'envolvente' ? `Plano ${id} quitado de la envolvente.` : `Plano ${id} quitado: las losas que recortaba volvieron a como estaban.`);
   }
   /** las losas como estaban antes del plano (las que no se tocaron después quedan igual) */
   function restaurar(pp: Proyecto, q: PlanoCorte) {
     (q.antes ?? []).forEach(a => { const n = pp.niveles.find(x => Math.abs(x.cota - a.cota) < 1e-6); if (!n) return; n.silueta = a.silueta ? a.silueta.map(v => ({ ...v })) : null; n.B = a.B; n.L = a.L; });
   }
-  function armar() { armarBarra(); armarPie(); dibujar(); }
-  function abrir() { raiz.hidden = false; armar(); }
+  function armar() { if (objetivo === 'envolvente' && !estado.proyecto.envolvente) objetivo = 'losas'; armarBarra(); armarPie(); dibujar(); }
+  /** @param a qué recortan los planos que se dibujen: las losas (por defecto) o la envolvente */
+  function abrir(obj: 'losas' | 'envolvente' = 'losas') { objetivo = obj === 'envolvente' && estado.proyecto.envolvente ? 'envolvente' : 'losas'; raiz.hidden = false; armar(); }
   function cerrar() { raiz.hidden = true; modo = 'editar'; calib = []; previa = null; mensaje('Corte cerrado.'); }
   return { abrir, cerrar, activo: () => !raiz.hidden };
 }

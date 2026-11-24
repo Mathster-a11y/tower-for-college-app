@@ -15,7 +15,7 @@ import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } fr
 import { comunLosas, tramoEn } from './carpinteria';
 import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
-export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
+export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
 export interface AvisoDiseno {
   tipo: TipoAviso;
   /** texto para el usuario */
@@ -30,7 +30,9 @@ export interface AvisoDiseno {
   cotas: number[];
 }
 
-const TOL = 0.05;                                     // 5 cm: lo que se dibuja a ojo no cuenta como error
+const TOL = 0.05;
+/** puntos cada 25 cm por todo el contorno (no alcanza con los vértices: un lado puede cruzar un vacío o salir de la piel) */
+const densos = (v: Punto[]) => v.flatMap((a, j) => { const b = v[(j + 1) % v.length], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.25)); return Array.from({ length: m }, (_, t) => ({ x: a.x + (b.x - a.x) * t / m, y: a.y + (b.y - a.y) * t / m })); });                                     // 5 cm: lo que se dibuja a ojo no cuenta como error
 
 /** ¿el punto está adentro del polígono? (o a menos de TOL del borde) */
 export function adentro(q: Punto, pol: Punto[], tol = TOL): boolean {
@@ -75,6 +77,7 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
   const niveles = p.niveles.map((n, i) => ({ n, i })).filter(({ n }) => n.cota >= -1e-6);
   const fuera = new Map<string, { cotas: number[]; max: number }>(), enHueco = new Map<string, { cotas: number[]; hueco: string }>();
   const carp: { cotas: number[]; max: number } = { cotas: [], max: 0 };
+  const fueraEnv: { cotas: number[]; max: number } = { cotas: [], max: 0 };
   const bl = new Map<string, number[]>();
   niveles.forEach(({ n, i }) => {
     const pl = plantaDeNivel(p, i), pol = puntosSilueta(pl.silueta, 8);
@@ -86,9 +89,16 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
       const h = (p.huecosLosa ?? []).find(hh => huecoEn(hh, n.cota) && hh.v.length >= 3 && adentro({ x: m.x, y: m.y }, hh.v, -TOL));
       if (h) { const f = enHueco.get(m.id) ?? { cotas: [], hueco: h.nombre || h.id }; f.cotas.push(n.cota); enHueco.set(m.id, f); }
     });
-    // la carpintería (si la hay) no sale de la losa
+    // la carpintería (si la hay) no sale de la losa; con una envolvente diseñada aparte es al revés: la losa no sale
+    // de la piel (lo de entre la losa y la piel es a propósito)
     const c = carpinteriaDeNivel(p, i);
-    if (c) {
+    const conEnv = !!p.envolvente && tramoEn(p, n.cota)?.modo === 'continua' && !n.carpManual;
+    if (c && conEnv) {
+      const max = Math.max(0, ...densos(puntosSilueta(pl.silueta, 8)).map(q => (adentro(q, puntosSilueta(c.v, 8)) ? 0 : distanciaBorde(q, puntosSilueta(c.v, 8)))));
+      // el borde de la losa puede pasar la piel lo que mide el retiro del tramo (la nariz de la losa): eso no es salir
+      const vuelo = Math.max(0, tramoEn(p, n.cota)?.retiro ?? 0);
+      if (max > TOL + vuelo * Math.SQRT2) { fueraEnv.cotas.push(n.cota); fueraEnv.max = Math.max(fueraEnv.max, max); }   // en las esquinas, el retiro × √2
+    } else if (c) {
       const max = Math.max(...puntosSilueta(c.v, 8).map(q => (adentro(q, pol) ? 0 : distanciaBorde(q, pol))));
       if (max > TOL) { carp.cotas.push(n.cota); carp.max = Math.max(carp.max, max); }
     }
@@ -120,8 +130,6 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
   ordenZ.forEach(({ n, i }, k) => {
     if (!(n.carpManual || p.carpinteriaFija) || n.carpVoladizo || tramoEn(p, n.cota)?.modo !== 'losa' || !ordenZ[k + 1]) return;
     const com = comunLosas(plantaDeNivel(p, i).silueta, plantaDeNivel(p, ordenZ[k + 1].i).silueta).piezas.map(v => puntosSilueta(v, 8));
-    // puntos cada 25 cm por todo el contorno (no alcanza con los vértices: un lado puede cruzar el vacío)
-    const densos = (v: Punto[]) => v.flatMap((a, j) => { const b = v[(j + 1) % v.length], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.25)); return Array.from({ length: m }, (_, t) => ({ x: a.x + (b.x - a.x) * t / m, y: a.y + (b.y - a.y) * t / m })); });
     const d = Math.max(0, ...(n.carpinteria && n.carpinteria.length >= 3 ? [n.carpinteria] : []).flatMap(v => densos(puntosSilueta(v, 8))).map(q => (com.some(c => adentro(q, c)) ? 0 : Math.min(...com.map(c => distanciaBorde(q, c))))));
     if (d > TOL) { vacio.push(n.cota); vacioMax = Math.max(vacioMax, d); }
   });
@@ -132,6 +140,7 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     out.push({ tipo: 'carpinteria-partida', cotas: partida.map(n => n.cota), texto: `Lo común a la losa y la de arriba se parte en piezas separadas ${rangoNiveles(p, partida.map(n => n.cota))}: la carpintería va por la pieza más grande y lo demás queda sin carpintería (hasta ${f2(area)} m²).`, arreglo: 'Revisá las losas de esos pisos (que se superpongan en una sola pieza) o soltá la carpintería del piso y dibujala a mano.' });
   }
   if (vacio.length) out.push({ tipo: 'carpinteria-vacio', cotas: vacio, texto: `La carpintería ${p.carpinteriaFija ? 'fija' : 'editada a mano'} pasa sobre un vacío ${rangoNiveles(p, vacio)} (hasta ${f2(vacioMax)} m fuera de lo común a la losa de abajo y la de arriba).`, arreglo: p.carpinteriaFija ? 'Hacé que siga a las losas (Losa → «Que siga a las losas»), metela a mano o marcá el piso como voladizo a propósito.' : 'Volvé a atarla al tramo (Losa → Carpintería → «Volver a atar»), metela a mano, o marcala como voladizo a propósito.' });
+  if (fueraEnv.cotas.length) out.push({ tipo: 'losa-fuera-envolvente', cotas: fueraEnv.cotas, texto: `La losa sale de la envolvente ${rangoNiveles(p, fueraEnv.cotas)} (hasta ${f2(fueraEnv.max)} m).`, arreglo: 'Achicá la losa en esos pisos o agrandá la envolvente (Carpintería → Envolvente); un balcón a propósito: soltá la carpintería del piso.' });
   if (carp.cotas.length) out.push({ tipo: 'carpinteria-fuera', cotas: carp.cotas, texto: `La carpintería sale de la losa ${rangoNiveles(p, carp.cotas)} (hasta ${f2(carp.max)} m).`, arreglo: 'Usá «Carpintería que sigue a la losa» (botón «Losa» → Carpintería) o metela a mano: la fachada apoya en el borde de la losa.' });
   bl.forEach((cotas, clave) => {
     const [plan, caja] = clave.split('|');

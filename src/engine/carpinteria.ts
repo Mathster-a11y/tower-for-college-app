@@ -14,6 +14,7 @@
 import type { Proyecto } from './modelo';
 import { desfasarAnillo } from './contorno';
 import { interseccion } from './interseccion';
+import { contornoEnvolvente } from './envolvente';
 import { plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
 
 export type ModoCarpinteria = 'sin' | 'losa' | 'continua';
@@ -107,6 +108,13 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
     if (nv.carpManual) return;                                 // editada a mano: la controlan los avisos
     if (t.modo === 'sin') { nv.carpinteria = null; return; }
     const d = Math.max(0, t.retiro ?? 0), arriba = orden[k + 1];
+    // envolvente diseñada aparte: la carpintería es el corte de la piel a esta altura (ya con su retiro)
+    if (t.modo === 'continua' && p.envolvente) {
+      const ve = contornoEnvolvente(p, i);
+      if (!ve) { nv.carpinteria = null; return; }
+      hecho.set(i, [ve.map(q => ({ ...q }))]);
+      return;
+    }
     let bases: Vertice[][] = [sil.get(i)!];
     if (t.modo === 'losa' && arriba) bases = comunLosas(sil.get(i)!, sil.get(arriba.i)!).piezas;
     const vs = bases.map(b => (d > 0 ? desfasarAnillo(b, -d) : b)).filter(v => !('error' in v) && (v as Vertice[]).length >= 3) as Vertice[][];
