@@ -78,8 +78,13 @@ export class Particulas {
 }
 
 // ------------------------------------------------------------------------------------------------ cámaras
-export type NombreCamara = 'esquina' | 'barlovento' | 'costado' | 'arriba' | 'peaton';
-export const CAMARAS: [NombreCamara, string][] = [['esquina', 'Esquina'], ['barlovento', 'Barlovento'], ['costado', 'Costado'], ['arriba', 'Arriba'], ['peaton', 'Peatón']];
+export type NombreCamara = 'esquina' | 'barlovento' | 'costado' | 'arriba' | 'peaton' | 'detalle';
+export const CAMARAS: [NombreCamara, string][] = [['esquina', 'Esquina'], ['barlovento', 'Barlovento'], ['costado', 'Costado'], ['arriba', 'Arriba'], ['peaton', 'Peatón'], ['detalle', 'Zoom a la esquina']];
+/** la cámara acercada (f > 1) o alejada (f < 1) hacia el punto que mira */
+export function acercar(c: { pos: THREE.Vector3; mira: THREE.Vector3 }, f: number): { pos: THREE.Vector3; mira: THREE.Vector3 } {
+  if (!(f > 0) || f === 1) return { pos: c.pos.clone(), mira: c.mira.clone() };
+  return { pos: c.mira.clone().add(c.pos.clone().sub(c.mira).multiplyScalar(1 / f)), mira: c.mira.clone() };
+}
 /** el centro de la torre en el mundo (m) */
 export function centroTorre(g: Geometria3D) { return new THREE.Vector3(((g.caja.x0 + g.caja.x1 + 1) / 2 - g.nx / 2) / g.escala, 0, -((g.caja.y0 + g.caja.y1 + 1) / 2 - g.ny / 2) / g.escala); }
 /** posición y punto al que mira cada cámara (siempre las mismas para la misma torre y grilla) */
@@ -90,6 +95,12 @@ export function camara(nombre: NombreCamara, g: Geometria3D): { pos: THREE.Vecto
     case 'costado': return { pos: new THREE.Vector3(c.x + 0.4 * D, 0.5 * H, c.z + 2.6 * D), mira: new THREE.Vector3(c.x + 0.4 * D, 0.4 * H, c.z) };
     case 'arriba': return { pos: new THREE.Vector3(c.x + 0.5 * D, 3.2 * D, c.z + 0.01), mira: new THREE.Vector3(c.x + 0.5 * D, 0, c.z) };
     case 'peaton': return { pos: new THREE.Vector3(c.x + 0.8 * D, 1.7, c.z + 1.1 * D), mira: new THREE.Vector3(c.x, 0.55 * H, c.z) };
+    case 'detalle': {
+      // la esquina de barlovento (la que da al viento y a la cámara de costado), de cerca: ahí se despega el aire
+      const xe = (g.caja.x0 - g.nx / 2) / g.escala, ze = -((g.caja.y1 + 1) - g.ny / 2) / g.escala, d = Math.max(g.B, g.L, 0.25 * H);
+      // desde afuera, en diagonal y un poco arriba: se ve la esquina, el aire que se despega y el corte de costado
+      return { pos: new THREE.Vector3(xe - 1.3 * d, 0.6 * H + 0.35 * d, ze - 1.7 * d), mira: new THREE.Vector3(xe + 0.35 * d, 0.55 * H, ze + 0.15 * d) };
+    }
     default: return { pos: new THREE.Vector3(-Lx * 0.62, Math.max(H * 1.9, Lx * 0.42), Ly * 1.25), mira: new THREE.Vector3(Lx * 0.05, H * 0.3, 0) };
   }
 }
@@ -105,27 +116,42 @@ export interface OpcionesGrabacion {
   /** lo que va encima de cada cuadro (llave, tiempo, gráfico) */
   encima: (g: CanvasRenderingContext2D, W: number, H: number, t: number) => void;
   alTerminar: (video: Blob | null, error?: string) => void;
+  /** ancho del video (px); por defecto el del lienzo (hasta 1600) */
+  ancho?: number;
+  /** franja al costado para las llaves (px, fuera de la imagen: no tapa nada); 0 o nada, sin franja */
+  franja?: number;
+  /** preferir MP4 (lo abre PowerPoint) si el navegador lo graba */
+  mp4?: boolean;
+}
+/** el formato que va a grabar el navegador (MP4 si se pide y se puede, si no WebM); null si no graba video */
+export function formatoVideo(mp4 = true): { tipo: string; ext: 'mp4' | 'webm' } | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const tipos: [string, 'mp4' | 'webm'][] = [...(mp4 ? [['video/mp4;codecs=avc1.42E01E', 'mp4'], ['video/mp4;codecs=avc1', 'mp4'], ['video/mp4', 'mp4']] as [string, 'mp4'][] : []), ['video/webm;codecs=vp9', 'webm'], ['video/webm;codecs=vp8', 'webm'], ['video/webm', 'webm']];
+  const t = tipos.find(([x]) => MediaRecorder.isTypeSupported?.(x));
+  return t ? { tipo: t[0], ext: t[1] } : null;
 }
 /** graba la vista en un video WebM (MediaRecorder sobre un lienzo que junta la escena y lo de encima) */
 export function grabar(op: OpcionesGrabacion): { parar: () => void } {
-  const W = Math.min(1600, op.lienzo.width), H = Math.round((W * op.lienzo.height) / op.lienzo.width);
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const W = op.ancho ?? Math.min(1600, op.lienzo.width), H = Math.round((W * op.lienzo.height) / op.lienzo.width), F = Math.max(0, Math.round(op.franja ?? 0));
+  // las medidas del video tienen que ser pares (los codificadores de MP4 no aceptan impares)
+  const cv = document.createElement('canvas'); cv.width = 2 * Math.round((W + F) / 2); cv.height = 2 * Math.round(H / 2);
   const g = cv.getContext('2d')!;
-  const tipos = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-  const tipo = typeof MediaRecorder !== 'undefined' ? tipos.find(t => MediaRecorder.isTypeSupported?.(t)) : undefined;
-  if (!tipo || !('captureStream' in cv)) { setTimeout(() => op.alTerminar(null, 'Este navegador no graba video (probá con Chrome, Edge o Firefox).'), 0); return { parar: () => undefined }; }
-  const rec = new MediaRecorder(cv.captureStream(30), { mimeType: tipo, videoBitsPerSecond: 6_000_000 });
+  const fmt = formatoVideo(op.mp4 ?? false);
+  if (!fmt || !('captureStream' in cv)) { setTimeout(() => op.alTerminar(null, 'Este navegador no graba video (probá con Chrome, Edge o Firefox).'), 0); return { parar: () => undefined }; }
+  const rec = new MediaRecorder(cv.captureStream(30), { mimeType: fmt.tipo, videoBitsPerSecond: Math.round(6_000_000 * Math.max(1, (cv.width * cv.height) / (1280 * 720))) });
   const partes: Blob[] = [];
   rec.ondataavailable = e => { if (e.data.size) partes.push(e.data); };
-  rec.onstop = () => op.alTerminar(new Blob(partes, { type: 'video/webm' }));
+  rec.onstop = () => op.alTerminar(new Blob(partes, { type: fmt.tipo.split(';')[0] }));
   let vivo = true;
   const t0 = performance.now();
   const cuadro = () => {
     if (!vivo) return;
     const t = Math.min(1, (performance.now() - t0) / (op.segundos * 1000));
     op.alCuadro(t);
-    g.drawImage(op.lienzo, 0, 0, W, H);
-    op.encima(g, W, H, t);
+    // con franja: fondo blanco a la derecha y la escena a la izquierda (lo de encima recibe el ancho total)
+    if (F) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height); }
+    g.drawImage(op.lienzo, 0, 0, W, cv.height);
+    op.encima(g, cv.width, cv.height, t);
     if (t >= 1) { vivo = false; rec.stop(); return; }
     requestAnimationFrame(cuadro);
   };

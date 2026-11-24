@@ -13,18 +13,27 @@ export interface Llave {
 }
 
 /** la llave en el lienzo, abajo a la izquierda (x, y: esquina de abajo a la izquierda) */
-export function llaveEnLienzo(g: CanvasRenderingContext2D, ll: Llave, x: number, yAbajo: number, ancho = 170, fondo = '#ffffff', tinta = '#223344') {
+/**
+ * la llave en un lienzo (abajo a la izquierda en x, yAbajo). Con maxAncho (px, la caja entera) no se pasa de ese ancho:
+ * el título se parte en renglones y los textos se ajustan (para la franja de los videos)
+ */
+export function llaveEnLienzo(g: CanvasRenderingContext2D, ll: Llave, x: number, yAbajo: number, ancho = 170, fondo = '#ffffff', tinta = '#223344', maxAncho = Infinity) {
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
   const fs = 11, barra = 9, pad = 6, filaExtras = ll.extras?.length ? fs + 6 : 0;
   g.font = `600 ${fs}px system-ui, sans-serif`;
   const anchoExtras = (ll.extras ?? []).reduce((s, e) => s + g.measureText(e.texto).width + 22, 0);
-  const W = Math.max(ancho, g.measureText(ll.titulo).width, anchoExtras) + 2 * pad, H = pad + fs + 4 + barra + 3 + fs + filaExtras + pad;
+  const W = Math.min(maxAncho, Math.max(ancho, g.measureText(ll.titulo).width, anchoExtras) + 2 * pad);
+  // el título en renglones que entren en el ancho
+  const renglones: string[] = [];
+  for (const pal of ll.titulo.split(' ')) { const u = renglones.length - 1; if (u >= 0 && g.measureText(`${renglones[u]} ${pal}`).width <= W - 2 * pad) renglones[u] += ` ${pal}`; else renglones.push(pal); }
+  const altoTit = renglones.length * (fs + 2) - 2;
+  const H = pad + altoTit + 4 + barra + 3 + fs + filaExtras + pad;
   const x0 = x, y0 = yAbajo - H;
   g.globalAlpha = 0.86; g.fillStyle = fondo; g.beginPath(); g.roundRect(x0, y0, W, H, 6); g.fill(); g.globalAlpha = 1;
   g.fillStyle = tinta; g.textBaseline = 'top'; g.textAlign = 'left';
-  g.fillText(ll.titulo, x0 + pad, y0 + pad);
-  const by = y0 + pad + fs + 4, bw = W - 2 * pad;
+  renglones.forEach((r, i) => g.fillText(r, x0 + pad, y0 + pad + i * (fs + 2), W - 2 * pad));
+  const by = y0 + pad + altoTit + 4, bw = W - 2 * pad;
   const gr = g.createLinearGradient(x0 + pad, 0, x0 + pad + bw, 0);
   ll.colores.forEach((c, i) => gr.addColorStop(ll.colores.length === 1 ? 0 : i / (ll.colores.length - 1), c));
   g.fillStyle = gr; g.fillRect(x0 + pad, by, bw, barra);
@@ -32,7 +41,7 @@ export function llaveEnLienzo(g: CanvasRenderingContext2D, ll: Llave, x: number,
   g.font = `${fs}px system-ui, sans-serif`; g.fillStyle = tinta;
   for (const [t, txt] of ll.marcas) {
     g.textAlign = t <= 0.02 ? 'left' : t >= 0.98 ? 'right' : 'center';
-    g.fillText(txt, x0 + pad + t * bw, by + barra + 3);
+    g.fillText(txt, x0 + pad + t * bw, by + barra + 3, isFinite(maxAncho) ? bw / Math.max(2, ll.marcas.length) * 1.4 : undefined);
   }
   if (ll.extras?.length) {
     let ex = x0 + pad; const ey = by + barra + 3 + fs + 4;
@@ -94,7 +103,7 @@ function glifo(g: CanvasRenderingContext2D, s: Simbolo, x: number, y: number, ti
 }
 
 /** los símbolos en el lienzo, abajo a la derecha (xDerecha, yAbajo: esquina de abajo a la derecha) */
-export function simbolosEnLienzo(g: CanvasRenderingContext2D, titulo: string, items: Simbolo[], xDerecha: number, yAbajo: number, fondo = '#ffffff', tinta = '#223344') {
+export function simbolosEnLienzo(g: CanvasRenderingContext2D, titulo: string, items: Simbolo[], xDerecha: number, yAbajo: number, fondo = '#ffffff', tinta = '#223344', maxAncho = Infinity) {
   if (!items.length) return { ancho: 0, alto: 0 };
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
   const fs = 11, fn = 10, pad = 6, glAncho = 26;
@@ -104,22 +113,26 @@ export function simbolosEnLienzo(g: CanvasRenderingContext2D, titulo: string, it
     g.font = `${fs}px system-ui, sans-serif`; W = Math.max(W, glAncho + g.measureText(s.texto).width);
     if (s.nota) { g.font = `${fn}px system-ui, sans-serif`; W = Math.max(W, glAncho + g.measureText(s.nota).width); }
   }
-  W += 2 * pad;
+  W = Math.min(maxAncho, W + 2 * pad);
   const H = pad + fs + 5 + items.reduce((a, s) => a + fs + 4 + (s.nota ? fn + 2 : 0), 0) + pad - 2;
   const x0 = xDerecha - W, y0 = yAbajo - H;
   g.globalAlpha = 0.88; g.fillStyle = fondo; g.beginPath(); g.roundRect(x0, y0, W, H, 6); g.fill(); g.globalAlpha = 1;
   g.textBaseline = 'top'; g.textAlign = 'left'; g.fillStyle = tinta; g.font = `600 ${fs}px system-ui, sans-serif`;
-  g.fillText(titulo, x0 + pad, y0 + pad);
+  g.fillText(titulo, x0 + pad, y0 + pad, W - 2 * pad);
   let y = y0 + pad + fs + 5;
+  const mx = W - 2 * pad - glAncho;
   for (const s of items) {
     glifo(g, s, x0 + pad, y, tinta, fondo);
-    g.fillStyle = tinta; g.font = `${fs}px system-ui, sans-serif`; g.fillText(s.texto, x0 + pad + glAncho, y);
+    g.fillStyle = tinta; g.font = `${fs}px system-ui, sans-serif`; g.fillText(s.texto, x0 + pad + glAncho, y, mx);
     y += fs + 4;
-    if (s.nota) { g.globalAlpha = 0.75; g.font = `${fn}px system-ui, sans-serif`; g.fillText(s.nota, x0 + pad + glAncho, y - 2); g.globalAlpha = 1; y += fn + 2; }
+    if (s.nota) { g.globalAlpha = 0.75; g.font = `${fn}px system-ui, sans-serif`; g.fillText(s.nota, x0 + pad + glAncho, y - 2, mx); g.globalAlpha = 1; y += fn + 2; }
   }
   g.restore();
   return { ancho: W, alto: H };
 }
+
+/** el alto de la caja de los símbolos (para ubicarla antes de dibujarla) */
+export const altoSimbolos = (items: Simbolo[]) => (items.length ? 6 + 11 + 5 + items.reduce((a, s) => a + 11 + 4 + (s.nota ? 12 : 0), 0) + 4 : 0);
 
 /** los símbolos como HTML (encima de la vista 3D): el dibujito va en un lienzo chico */
 export function simbolosHtml(titulo: string, items: Simbolo[], tinta = '#223344', fondo = '#ffffff'): HTMLElement {

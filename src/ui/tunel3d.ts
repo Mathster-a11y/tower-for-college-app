@@ -16,11 +16,11 @@ import { MedicionBanda } from '../viento/banda3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
-import { avisoArcoiris, textoEspectro, coloresTermico, dibujarFlechas, espectroVel, lutVelocidad, muestraVelocidad, type ModoFlechas } from './campoSuave';
+import { avisoArcoiris, textoEspectro, coloresTermico, dibujarFlechas, elegirEspectroVel, espectroVel, lutVelocidad, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { tramosEdificio } from '../viento/contexto';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
 import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
-import { llaveEnLienzo, llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
+import { altoSimbolos, llaveEnLienzo, llaveHtml, simbolosEnLienzo, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { MediaPlano } from '../viento/direcciones';
 import { aBase64, deBase64, desempaquetar, empaquetar, FORMATO_3D, huella, VERSION_3D } from '../viento/archivo3d';
@@ -29,7 +29,8 @@ import { criterioQ, isosuperficie, umbralQ } from '../viento/vortices';
 import { alMuestrear, cfgRosa, factorEval, seccionRosa, zEval, type CtxRosa } from './tunel3dRosa';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
-import { CAMARAS, camara, centroTorre, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
+import { acercar, CAMARAS, camara, centroTorre, formatoVideo, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
+import { cargarTomas, describirToma, guardarTomas, nuevoId, PLANTILLAS, type ExportarTomas, type Toma } from './tunel3dTomas';
 import { alCambiarFachada, cfgFachada, colorCp, llaveFachada, seccionFachada, valorTrozo } from './tunel3dFachada';
 import { vientoCirsoc } from './cirsoc102';
 import { FACTOR_SERVICIO, KN_POR_T } from '../engine/cargas/cirsoc102';
@@ -75,7 +76,9 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
    */
   banda: false, bandaCota: NaN, bandaPisos: 3,
   /** dominio de la torre entera: alto de 1,5 H (normal) o 1,25 H (ajustado: más celdas en la torre, el techo más cerca) */
-  ajustado: false };
+  ajustado: false,
+  /** lo que también se puede apagar para las grabaciones: los colores de Cp de la torre, el suelo y la raya del rastrillo */
+  torreCp: true, suelo: true, verRastrillo: true };
 // la fidelidad elegida antes (si hay) arma las opciones de entrada
 { const f = fidelidadGuardada(); if (f) Object.assign(cfg, FIDELIDAD[f].d3); }
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -430,7 +433,9 @@ function aplicarMaqueta() {
   if (!v) return;
   v.ren.shadowMap.enabled = cfg.maqueta; v.sol.castShadow = cfg.maqueta;
   const mt = v.torre!.material as THREE.MeshStandardMaterial;
-  mt.vertexColors = !cfg.maqueta; mt.color.set(cfg.maqueta ? 0xf7f7f5 : 0xffffff); mt.needsUpdate = true;
+  const blanca = cfg.maqueta || !cfg.torreCp;
+  mt.vertexColors = !blanca; mt.color.set(blanca ? 0xf7f7f5 : 0xffffff); mt.needsUpdate = true;
+  v.suelo.visible = cfg.suelo && !corrida?.geo.banda;
   for (const m of v.vecinos) { const mm = m.material as THREE.MeshStandardMaterial; mm.color.set(cfg.maqueta ? 0xd9dcdf : 0x9a9ca3); mm.needsUpdate = true; }
   (v.suelo.material as THREE.MeshStandardMaterial).needsUpdate = true; mt.needsUpdate = true;
 }
@@ -520,7 +525,7 @@ function lineasDeCorriente() {
     }
   }
   // el rastrillo a la vista (ámbar): de dónde salen las líneas
-  if (cfg.rastrillo !== 'grilla') {
+  if (cfg.rastrillo !== 'grilla' && cfg.verRastrillo) {
     const ss = semillas(g), a = ss[0], b = ss[ss.length - 1];
     const r = new THREE.Line(new THREE.BufferGeometry().setFromPoints([aMundo(g, a[0], a[1], a[2]), aMundo(g, b[0], b[1], b[2])]), new THREE.LineBasicMaterial({ color: new THREE.Color(css('--elegido', '#ef9f27')) }));
     v.lineas.add(r);
@@ -534,11 +539,19 @@ function lineasDeCorriente() {
   }
 }
 
+/** la resolución del lienzo mientras se graba en fila (null: la de la pantalla) */
+let tamGrab: { w: number; h: number } | null = null;
 function dibujar() {
   const v = vista;
   if (!v || !v.cont.isConnected) return;
-  const w = Math.max(320, v.cont.clientWidth), hh = Math.round(w * 0.58);
-  if (v.ren.domElement.width !== Math.round(w * v.ren.getPixelRatio())) { v.ren.setSize(w, hh); v.cam.aspect = w / hh; v.cam.updateProjectionMatrix(); }
+  if (tamGrab) {
+    // grabando en fila: el lienzo con la resolución del video (en pantalla se ve achicado, con la misma forma)
+    if (v.ren.domElement.width !== tamGrab.w || v.ren.domElement.height !== tamGrab.h) { v.ren.setPixelRatio(1); v.ren.setSize(tamGrab.w, tamGrab.h, false); v.cam.aspect = tamGrab.w / tamGrab.h; v.cam.updateProjectionMatrix(); }
+  } else {
+    const w = Math.max(320, v.cont.clientWidth), hh = Math.round(w * 0.58);
+    if (v.ren.getPixelRatio() !== Math.min(2, window.devicePixelRatio)) v.ren.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    if (v.ren.domElement.width !== Math.round(w * v.ren.getPixelRatio())) { v.ren.setSize(w, hh); v.cam.aspect = w / hh; v.cam.updateProjectionMatrix(); }
+  }
   v.particulas?.avanzar(performance.now());
   v.ren.render(v.esc, v.cam);
 }
@@ -592,6 +605,8 @@ async function exportarOpenFOAM() {
 let llaves3d: H | null = null;
 /** las llaves que se ven (para dibujarlas dentro del video) */
 let llavesVisibles: Llave[] = [];
+/** los símbolos del dibujo que corresponden a lo que se ve (para el video) */
+let simbolosVisibles: Simbolo[] = [];
 /** las llaves de lo que se ve: las caras (Cp) y el corte o la vereda */
 function armarLlaves3d() {
   if (!llaves3d) return;
@@ -624,7 +639,8 @@ function armarLlaves3d() {
   if (cfg.vortices) sim.push({ forma: 'lineaGruesa', color: '#6a4fb3', texto: 'Superficie violeta: un remolino', nota: 'donde el aire gira más de lo que se estira (criterio Q)' });
   const llLineas: Llave | null = (cfg.lineas || cfg.particulas) && cfg.colorLineas === 'velocidad' && !corteVel && !flechas ? { titulo: `${cfg.particulas && !cfg.lineas ? 'Partículas' : 'Líneas de corriente'}: velocidad${avisoArcoiris()}`, colores: coloresLinea(), marcas: marcasVel() } : null;
   const ls = sim.length && cfg.simbolos ? simbolosHtml('Símbolos del dibujo', sim, '#223344', fondo) : null;
-  llavesVisibles = cfg.llave ? [...(cfg.maqueta ? [] : [caras]), ...(corte ? [corte] : []), ...(llLineas ? [llLineas] : []), ...(flechas ? [flechas] : [])] : [];
+  simbolosVisibles = sim;
+  llavesVisibles = cfg.llave ? [...(cfg.maqueta || !cfg.torreCp ? [] : [caras]), ...(corte ? [corte] : []), ...(llLineas ? [llLineas] : []), ...(flechas ? [flechas] : [])] : [];
   llaves3d.replaceChildren(...(cfg.llave ? [...(cfg.maqueta ? [] : [llaveHtml(caras)]), ...(corte ? [llaveHtml(corte)] : []), ...(llLineas ? [(() => { const e = llaveHtml(llLineas); e.classList.add('derecha'); return e; })()] : []), ...(lf ? [lf] : [])] : []), ...(ls ? [ls] : []));
 }
 
@@ -728,6 +744,346 @@ function grabarVideo() {
   });
   if (grabando) msg(`Grabando ${cfgGrab.segundos} s…`);
   estado.avisarPanel();
+}
+
+
+// ------------------------------------------------------------------------------------------------ tomas en fila
+let tomas: Toma[] = cargarTomas();
+const cfgExp: ExportarTomas = { resolucion: '1280x720', mp4: true, pptx: true };
+let enFila: { cancelar: boolean; i: number; n: number; estado: string } | null = null;
+const pausa = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+const nombresTam = () => ({ ...Object.fromEntries(Object.entries(TAM).map(([k, v]) => [k, v.texto])), procesador: TAM_CPU.texto });
+
+/** la toma con lo que se ve ahora (y la cámara de este momento) */
+function tomaActual(): Toma {
+  const v = vista;
+  return {
+    id: nuevoId(), nombre: `Toma ${tomas.length + 1}`, activa: true,
+    sim: { tam: cfg.motor === 'procesador' ? 'procesador' : cfg.tam, paredes: cfg.paredes, angulo: cfg.angulo, lento: cfg.lento, ajustado: cfg.ajustado, banda: cfg.banda, bandaCota: cfg.bandaCota, bandaPisos: cfg.bandaPisos },
+    vista: {
+      maqueta: cfg.maqueta, torreCp: cfg.torreCp, suelo: cfg.suelo, lineas: cfg.lineas ? cfg.estiloLineas : 'no', colorLineas: cfg.colorLineas, particulas: cfg.particulas,
+      vortices: cfg.vortices, umbralQ: cfg.umbralQ, flechas: cfg.flechas, horizontal: cfg.horizontal, vertical: cfg.vertical, zRel: cfg.zRel, yRel: cfg.yRel,
+      color: cfg.color, espectro: espectroVel, escalaVel: cfg.escalaVel, rastrillo: cfg.rastrillo, verRastrillo: cfg.verRastrillo, rastN: cfg.rastN, vereda: cfg.vereda, lawson: cfg.lawson,
+    },
+    camara: v ? 'guardada' : 'esquina', ...(v ? { pos: v.cam.position.toArray(), mira: v.ctl.target.toArray() } : {}),
+    acercar: 1, recorrido: cfgGrab.recorrido, segundos: cfgGrab.segundos, calentar: 1.5, llaves: 'costado', simbolos: cfg.simbolos, grafico: true, rotulo: true,
+  };
+}
+function aplicarSimToma(t: Toma) {
+  const s = t.sim;
+  if (s.tam === 'procesador') cfg.motor = 'procesador'; else if (TAM[s.tam]) { cfg.tam = s.tam; if (soporteGpu) cfg.motor = 'placa'; }
+  cfg.paredes = s.paredes; cfg.angulo = s.angulo; cfg.lento = s.lento; cfg.ajustado = s.ajustado; cfg.banda = s.banda; cfg.bandaCota = s.bandaCota; cfg.bandaPisos = s.bandaPisos;
+}
+function aplicarVistaToma(t: Toma) {
+  const v = t.vista;
+  Object.assign(cfg, {
+    maqueta: v.maqueta, torreCp: v.torreCp, suelo: v.suelo, lineas: v.lineas !== 'no', estiloLineas: v.lineas === 'tubos' ? 'tubos' : 'lineas', colorLineas: v.colorLineas,
+    particulas: v.particulas, vortices: v.vortices, umbralQ: v.umbralQ, flechas: v.flechas, horizontal: v.horizontal, vertical: v.vertical, zRel: v.zRel, yRel: v.yRel,
+    color: v.color, escalaVel: v.escalaVel, rastrillo: v.rastrillo, verRastrillo: v.verRastrillo, rastN: v.rastN, vereda: v.vereda, lawson: v.lawson,
+    llave: true, simbolos: t.simbolos,
+  });
+  if (espectroVel !== v.espectro) elegirEspectroVel(v.espectro);
+}
+/** la cámara de la toma (con el zoom) */
+function camaraToma(t: Toma, g: Geometria3D) {
+  const b = t.camara === 'guardada' && t.pos && t.mira ? { pos: new THREE.Vector3().fromArray(t.pos), mira: new THREE.Vector3().fromArray(t.mira) } : camara(t.camara === 'guardada' ? 'esquina' : t.camara, g);
+  return acercar(b, t.acercar);
+}
+
+/**
+ * lo que va en el video además de la escena: el rótulo de la toma, el tiempo, las llaves, los símbolos y el gráfico de
+ * las fuerzas. Con la franja al costado (F > 0) todo va en la franja y no tapa nada; «encima», en las esquinas, chico
+ * y medio transparente; sin llaves, solo el rótulo y el gráfico (si se piden).
+ */
+function encimaToma(gx: CanvasRenderingContext2D, Wt: number, Ht: number, t: Toma, F: number) {
+  const c = corrida; if (!c) return;
+  const tinta = css('--ink', '#223344'), colA = css('--carga', '#d85a30'), colL = css('--corte', '#7f77dd');
+  const seg = c.gpu ? c.gpu.pasos * (isFinite(c.dtPaso) ? c.dtPaso : 0) : 0;
+  const W = Wt - F, p = estado.proyecto;
+  const rotulo = `${t.nombre}`, sub = `${p.nombre || 'Proyecto'} · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''}${c.geo.banda ? ` · banda de ${fmt(c.geo.banda.z0, 0)} a ${fmt(c.geo.banda.z1, 0)} m` : ''}`;
+  const tiempo = isFinite(c.dtPaso) && seg > 0 ? `${fmt(seg, 0)} s simulados` : `${fmt(((c.gpu?.pasos ?? 0) * UH) / c.geo.nx, 1)} pasadas del aire`;
+  gx.save();
+  if (F > 0) {
+    // franja: rótulo arriba, llaves y símbolos en el medio, gráfico abajo
+    const x = W + 12, ancho = F - 24;
+    gx.fillStyle = '#ffffff'; gx.fillRect(W, 0, F, Ht); gx.fillStyle = 'rgba(0,0,0,0.12)'; gx.fillRect(W, 0, 1, Ht);
+    let y = 14;
+    if (t.rotulo) {
+      gx.fillStyle = tinta; gx.textBaseline = 'top'; gx.font = `700 ${Math.round(F / 18)}px system-ui, sans-serif`; gx.fillText(rotulo, x, y, ancho); y += Math.round(F / 18) + 6;
+      gx.font = `${Math.round(F / 26)}px system-ui, sans-serif`; gx.fillStyle = '#5f6b76'; gx.fillText(sub, x, y, ancho); y += Math.round(F / 26) + 4; gx.fillText(tiempo, x, y, ancho); y += Math.round(F / 26) + 12;
+    }
+    // cada llave con su alto real (el título largo se parte en renglones), una debajo de otra, sin salirse de la franja
+    if (t.llaves !== 'no') for (const ll of llavesVisibles) {
+      const prueba = document.createElement('canvas').getContext('2d')!, r0 = llaveEnLienzo(prueba, ll, 0, 1000, ancho, '#ffffff', tinta, ancho);
+      llaveEnLienzo(gx, ll, x, y + r0.alto, ancho, '#ffffff', tinta, ancho); y += r0.alto + 8;
+    }
+    if (t.simbolos && simbolosVisibles.length) { const a = altoSimbolos(simbolosVisibles); simbolosEnLienzo(gx, 'Símbolos del dibujo', simbolosVisibles, x + ancho, y + a, '#ffffff', tinta, ancho); y += a + 8; }
+    if (t.grafico && c.fz && c.fz.serie.length > 1) graficoEnLienzo(gx, c.fz.serie, x, Ht - 118, ancho, 106, { arrastre: colA, lateral: colL, tinta });
+  } else {
+    // encima: hasta tres llaves arriba a la izquierda, chicas (no más de un 28 % del ancho) y medio transparentes
+    if (t.llaves === 'encima') {
+      const an = Math.min(260, W * 0.28); let y = 10;
+      for (const ll of llavesVisibles.slice(0, 3)) { const prueba = document.createElement('canvas').getContext('2d')!, r0 = llaveEnLienzo(prueba, ll, 0, 1000, an, '#ffffff', tinta, an); llaveEnLienzo(gx, ll, 10, y + r0.alto, an, '#ffffff', tinta, an); y += r0.alto + 6; }
+    }
+    if (t.rotulo) {
+      gx.font = '600 13px system-ui, sans-serif'; gx.textAlign = 'right'; gx.textBaseline = 'alphabetic';
+      const ancho = Math.min(W * 0.4, Math.max(gx.measureText(rotulo).width, 200) + 24);
+      gx.fillStyle = 'rgba(255,255,255,0.82)'; gx.fillRect(W - ancho - 8, 8, ancho, 44);
+      gx.fillStyle = tinta; gx.fillText(rotulo, W - 16, 26, ancho - 16); gx.font = '11px system-ui, sans-serif'; gx.fillText(`${sub} · ${tiempo}`, W - 16, 42, ancho - 16);
+    }
+    if (t.grafico && c.fz && c.fz.serie.length > 1) graficoEnLienzo(gx, c.fz.serie, W - Math.min(360, W * 0.3) - 10, Ht - 100, Math.min(360, W * 0.3), 90, { arrastre: colA, lateral: colL, tinta });
+  }
+  gx.restore();
+}
+
+/** graba una toma (con la cámara y el recorrido de la toma) y devuelve el video */
+function grabarToma(t: Toma, W: number, F: number): Promise<{ blob: Blob | null; error?: string }> {
+  return new Promise(res => {
+    const v = vista!, g = corrida!.geo, c0 = camaraToma(t, g);
+    const desde = camara('peaton', g), hasta = camara('arriba', g), suave = (x: number) => x * x * (3 - 2 * x);
+    v.ctl.enabled = false;
+    grabando = grabar({
+      lienzo: v.ren.domElement, segundos: t.segundos, ancho: W - F, franja: F, mp4: cfgExp.mp4,
+      alCuadro: k => {
+        if (t.recorrido === 'orbita') {
+          const r = c0.pos.clone().sub(c0.mira), a = 2 * Math.PI * k;
+          v.cam.position.set(c0.mira.x + r.x * Math.cos(a) - r.z * Math.sin(a), c0.pos.y, c0.mira.z + r.x * Math.sin(a) + r.z * Math.cos(a)); v.cam.lookAt(c0.mira);
+        } else if (t.recorrido === 'vuelo') {
+          const q = suave(k); v.cam.position.lerpVectors(desde.pos, hasta.pos, q); v.cam.lookAt(new THREE.Vector3().lerpVectors(desde.mira, hasta.mira, q));
+        } else { v.cam.position.copy(c0.pos); v.cam.lookAt(c0.mira); }
+        dibujar();
+      },
+      encima: (gx, Wt, Ht) => encimaToma(gx, Wt, Ht, t, F),
+      alTerminar: (blob, error) => { grabando = null; v.ctl.enabled = true; res({ blob, error }); },
+    });
+    if (enFila?.cancelar) grabando?.parar();
+  });
+}
+
+/** graba todas las tomas activas, una detrás de otra, y arma el paquete (.zip con los videos, la ficha y la presentación) */
+async function exportarSimulaciones() {
+  const msg = (x: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = x; };
+  const lista = tomas.filter(t => t.activa);
+  if (!lista.length) { msg('No hay tomas marcadas para grabar.'); return; }
+  if (!vista?.cont.isConnected || !corrida) { msg('Abrí la vista del túnel 3D (Viento → Túnel 3D) y esperá a que arranque.'); return; }
+  const fv = formatoVideo(cfgExp.mp4);
+  if (!fv) { msg('Este navegador no graba video (probá con Chrome o Edge).'); return; }
+  const [W, H] = cfgExp.resolucion.split('x').map(Number);
+  const antes = { cfg: JSON.parse(JSON.stringify(cfg)) as typeof cfg, espectro: espectroVel, cam: vista ? { pos: vista.cam.position.clone(), mira: vista.ctl.target.clone() } : null };
+  enFila = { cancelar: false, i: 0, n: lista.length, estado: 'empezando' };
+  const videos: { t: Toma; blob: Blob; portada: string; ext: string }[] = [], fallas: string[] = [];
+  const avisar = (x: string) => { if (enFila) enFila.estado = x; msg(x); estado.avisarPanel(); };
+  try {
+    for (const [i, t] of lista.entries()) {
+      if (enFila.cancelar) break;
+      enFila.i = i;
+      aplicarSimToma(t);
+      if (!corrida || corrida.clave !== claveCorrida()) { avisar(`Toma ${i + 1} de ${lista.length} · «${t.nombre}»: arrancando la simulación…`); await iniciar(); estado.avisarPanel(); }
+      // que la vista sea de esta corrida y que la simulación corra
+      for (let k = 0; k < 120 && (!vista || !corrida || vista.clave !== corrida.clave || !corrida.gpu); k++) await pausa(250);
+      const c: Corrida | null = corrida;
+      if (!c?.gpu || !vista) { fallas.push(`«${t.nombre}»: no arrancó (${c?.error ?? 'sin motor'})`); continue; }
+      if (!c.corriendo) { c.corriendo = true; requestAnimationFrame(ciclo); }
+      // calentar: el aire tiene que pasar por el túnel unas veces antes de grabar
+      const t0 = performance.now();
+      while (!enFila.cancelar && corrida === c && (c.gpu.pasos * UH) / c.geo.nx < t.calentar) {
+        if (c.roto) break;
+        avisar(`Toma ${i + 1} de ${lista.length} · «${t.nombre}»: calentando ${fmt((c.gpu.pasos * UH) / c.geo.nx, 1)} de ${fmt(t.calentar, 1)} pasadas del aire…`);
+        await pausa(1000);
+        if (performance.now() - t0 > 30 * 60 * 1000) break;
+      }
+      if (enFila.cancelar) break;
+      if (c.roto) { fallas.push(`«${t.nombre}»: la simulación se volvió inestable (${c.roto})`); continue; }
+      // lo que se ve, la resolución y la cámara
+      // la franja de las llaves: un cuarto del ancho, dentro de la resolución elegida (el video queda de W × H)
+      const F = t.llaves === 'costado' ? 2 * Math.round(W * 0.125) : 0;
+      tamGrab = { w: W - F, h: H };
+      aplicarVistaToma(t); c.ultimasLineas = 0; aplicarMaqueta(); actualizarCampo(); armarLlaves3d();
+      const c0 = camaraToma(t, c.geo); ponerCamara(c0);
+      await pausa(1500); c.ultimasLineas = 0; actualizarCampo(); await pausa(800);
+      dibujar();
+      // la portada del video en la presentación: el primer cuadro con la franja, como en el video
+      const pc = document.createElement('canvas'); pc.width = W; pc.height = H;
+      const pg2 = pc.getContext('2d')!; pg2.fillStyle = '#ffffff'; pg2.fillRect(0, 0, W, H); pg2.drawImage(vista.ren.domElement, 0, 0, W - F, H); encimaToma(pg2, W, H, t, F);
+      const portada = pc.toDataURL('image/png');
+      avisar(`Toma ${i + 1} de ${lista.length} · «${t.nombre}»: grabando ${t.segundos} s…`);
+      const r = await grabarToma(t, W, F);
+      if (r.blob) videos.push({ t, blob: r.blob, portada, ext: fv.ext }); else fallas.push(`«${t.nombre}»: ${r.error ?? 'no se grabó'}`);
+    }
+  } finally {
+    tamGrab = null;
+    Object.assign(cfg, antes.cfg); if (espectroVel !== antes.espectro) elegirEspectroVel(antes.espectro);
+    const cancelada = enFila?.cancelar; enFila = null;
+    if (vista) { vista.ctl.enabled = true; if (antes.cam) ponerCamara(antes.cam); }
+    if (corrida && corrida.clave === claveCorrida()) { corrida.ultimasLineas = 0; aplicarMaqueta(); actualizarCampo(); } else void iniciar();
+    armarLlaves3d(); estado.avisarPanel();
+    if (cancelada) msg(`Cancelado. ${videos.length ? `Se arma el paquete con las ${videos.length} tomas grabadas.` : ''}`);
+  }
+  if (!videos.length) { msg(`No se grabó ninguna toma. ${fallas.join(' · ')}`); return; }
+  msg('Armando el paquete…');
+  await armarPaquete(videos, fallas, W, H);
+}
+
+
+/** las tarjetas abiertas de la lista (se recuerdan al redibujar el panel) */
+const tomasAbiertas = new Set<string>();
+/** probar una toma en la vista (sin grabar): su simulación, lo que se ve y la cámara */
+async function probarToma(t: Toma) {
+  aplicarSimToma(t);
+  if (!corrida || corrida.clave !== claveCorrida()) { await iniciar(); estado.avisarPanel(); for (let k = 0; k < 60 && (!vista || vista.clave !== corrida?.clave); k++) await pausa(250); }
+  aplicarVistaToma(t);
+  if (corrida) corrida.ultimasLineas = 0;
+  aplicarMaqueta(); actualizarCampo(); armarLlaves3d();
+  if (corrida && vista) ponerCamara(camaraToma(t, corrida.geo));
+  estado.avisarPanel();
+}
+function seccionTomas(): HTMLElement {
+  const s = seccion('Grabar varias simulaciones y exportarlas'), d = s.cuerpo;
+  const listo = () => { guardarTomas(tomas); estado.avisarPanel(); };
+  const campo = (rot: string, el: HTMLElement, ayuda?: string) => h('label', { class: 'campo', ...(ayuda ? { title: ayuda } : {}) }, h('span', {}, rot), el);
+  const fSel = <O extends object, K extends keyof O>(rot: string, o: O, k: K, ops: [string, string][], num = false) => {
+    const e = h('select', {}) as HTMLSelectElement; ops.forEach(([v, t]) => e.append(new Option(t, v, false, String(o[k]) === v)));
+    e.addEventListener('change', () => { (o as Record<K, unknown>)[k] = num ? +e.value : e.value; listo(); });
+    return campo(rot, e);
+  };
+  const fChk = <O extends object, K extends keyof O>(rot: string, o: O, k: K, ayuda?: string) => {
+    const l = h('label', { class: 'campo-linea', ...(ayuda ? { title: ayuda } : {}) }, h('input', { type: 'checkbox', ...(o[k] ? { checked: '' } : {}) }), ` ${rot}`);
+    l.querySelector('input')!.addEventListener('change', e => { (o as Record<K, unknown>)[k] = (e.target as HTMLInputElement).checked; listo(); });
+    return l;
+  };
+  const fNum = <O extends object, K extends keyof O>(rot: string, o: O, k: K, min: number, max: number, paso: number, ayuda?: string) => {
+    const i = h('input', { type: 'number', min: String(min), max: String(max), step: String(paso), value: String(o[k]), class: 'n' }) as HTMLInputElement;
+    i.addEventListener('change', () => { const v = parseFloat(i.value.replace(',', '.')); if (isFinite(v)) { (o as Record<K, unknown>)[k] = Math.max(min, Math.min(max, v)); listo(); } });
+    return campo(rot, i, ayuda);
+  };
+  // agregar tomas: con una plantilla o con lo que se ve ahora
+  const pl = h('select', { 'aria-label': 'Plantilla' }) as HTMLSelectElement;
+  PLANTILLAS.forEach(([n], i) => pl.append(new Option(n, String(i))));
+  const bAdd = h('button', { type: 'button', class: 'boton' }, '＋ Agregar');
+  bAdd.addEventListener('click', () => { const t = PLANTILLAS[+pl.value][1](); t.id = nuevoId(); t.sim.tam = cfg.motor === 'procesador' ? 'procesador' : cfg.tam; tomas.push(t); tomasAbiertas.add(t.id); listo(); });
+  const bAct = h('button', { type: 'button', class: 'boton', title: 'Una toma con todo lo que se ve ahora en la vista, con esta cámara' }, '＋ Con lo que se ve ahora');
+  bAct.addEventListener('click', () => { const t = tomaActual(); tomas.push(t); tomasAbiertas.add(t.id); listo(); });
+  d.append(h('p', { class: 'nota' }, 'Armá una lista de tomas: cada una con su simulación (la definición de la geometría, las paredes, el giro, la banda), lo que se ve (cortes, flechas, líneas o tubos, partículas, remolinos, espectro, maqueta), la cámara (con zoom), el recorrido y las llaves. «Exportar simulaciones» las graba una detrás de otra y baja un .zip con los videos, un LEAME con la ficha de cada uno y una presentación de PowerPoint con un video por lámina. Lo que se simula vuelve a arrancar la simulación solo si cambia; las tomas con la misma simulación se graban seguidas sin esperar.'),
+    h('div', { class: 'fila-acciones' }, pl, bAdd, bAct));
+  // cómo se exporta
+  const res = h('select', {}) as HTMLSelectElement;
+  ([['1280x720', '1280 × 720 (HD)'], ['1920x1080', '1920 × 1080 (Full HD)']] as const).forEach(([v, t]) => res.append(new Option(t, v, false, cfgExp.resolucion === v)));
+  res.addEventListener('change', () => { cfgExp.resolucion = res.value as ExportarTomas['resolucion']; });
+  const fv = formatoVideo(true);
+  const mp4 = h('label', { class: 'campo-linea', title: 'PowerPoint reproduce MP4; WebM no siempre' }, h('input', { type: 'checkbox', ...(cfgExp.mp4 ? { checked: '' } : {}) }), ` MP4 si el navegador lo graba (${fv?.ext === 'mp4' ? 'este sí' : 'este no: va en WebM'})`);
+  mp4.querySelector('input')!.addEventListener('change', e => { cfgExp.mp4 = (e.target as HTMLInputElement).checked; });
+  const ppt = h('label', { class: 'campo-linea' }, h('input', { type: 'checkbox', ...(cfgExp.pptx ? { checked: '' } : {}) }), ' Con la presentación de PowerPoint (un video por lámina, con su ficha)');
+  ppt.querySelector('input')!.addEventListener('change', e => { cfgExp.pptx = (e.target as HTMLInputElement).checked; });
+  const activas = tomas.filter(t => t.activa).length;
+  const bExp = h('button', { type: 'button', class: enFila ? 'boton' : 'primario' }, enFila ? '■ Cancelar' : `▶ Exportar simulaciones (${activas})`);
+  bExp.addEventListener('click', () => { if (enFila) { enFila.cancelar = true; grabando?.parar(); return; } void exportarSimulaciones(); });
+  if (!activas && !enFila) bExp.setAttribute('disabled', '');
+  d.append(h('div', { class: 'grilla2' }, campo('Resolución de los videos', res)), mp4, ppt, h('div', { class: 'fila-acciones' }, bExp),
+    ...(enFila ? [h('p', { class: 'nota' }, `Toma ${enFila.i + 1} de ${enFila.n}: ${enFila.estado}. Quedate en esta vista mientras graba (la placa de video dibuja lo que se ve).`)] : []));
+  // la lista
+  const nt = nombresTam(), gr: [string, string][] = [...(cfg.motor === 'procesador' || soporteGpu === null ? [] : Object.entries(TAM).map(([k, v]) => [k, `${k} · ${v.texto}`] as [string, string])), ['procesador', TAM_CPU.texto]];
+  tomas.forEach((t, i) => {
+    const det = h('details', { class: 'toma3d', ...(tomasAbiertas.has(t.id) ? { open: '' } : {}) }) as HTMLDetailsElement;
+    det.addEventListener('toggle', () => { if (det.open) tomasAbiertas.add(t.id); else tomasAbiertas.delete(t.id); });
+    const act = h('input', { type: 'checkbox', title: 'Grabarla', ...(t.activa ? { checked: '' } : {}) }) as HTMLInputElement;
+    act.addEventListener('click', e => e.stopPropagation()); act.addEventListener('change', () => { t.activa = act.checked; listo(); });
+    const nom = h('input', { type: 'text', value: t.nombre, class: 'toma3d-nombre', 'aria-label': 'Nombre de la toma' }) as HTMLInputElement;
+    nom.addEventListener('click', e => e.preventDefault()); nom.addEventListener('keydown', e => e.stopPropagation());
+    nom.addEventListener('change', () => { t.nombre = nom.value.trim() || `Toma ${i + 1}`; guardarTomas(tomas); });
+    const boton = (txt: string, tit: string, f: () => void) => { const b = h('button', { type: 'button', class: 'mini', title: tit }, txt); b.addEventListener('click', e => { e.preventDefault(); f(); }); return b; };
+    const sum = h('summary', {}, act, ' ', nom, h('span', { class: 'nota chica' }, ` ${t.segundos} s · ${t.camara === 'detalle' ? 'zoom a la esquina' : t.camara}`),
+      boton('↑', 'Subir', () => { if (i) { [tomas[i - 1], tomas[i]] = [tomas[i], tomas[i - 1]]; listo(); } }),
+      boton('↓', 'Bajar', () => { if (i < tomas.length - 1) { [tomas[i + 1], tomas[i]] = [tomas[i], tomas[i + 1]]; listo(); } }),
+      boton('⧉', 'Duplicar', () => { const c2 = JSON.parse(JSON.stringify(t)) as Toma; c2.id = nuevoId(); c2.nombre = `${t.nombre} (copia)`; tomas.splice(i + 1, 0, c2); tomasAbiertas.add(c2.id); listo(); }),
+      boton('✕', 'Borrar', () => { tomas.splice(i, 1); listo(); }));
+    det.append(sum);
+    if (det.open || tomasAbiertas.has(t.id)) {
+      const v = t.vista, si = t.sim;
+      const prob = h('button', { type: 'button', class: 'boton' }, 'Probar esta toma en la vista'); prob.addEventListener('click', () => { void probarToma(t); });
+      det.append(
+        h('p', { class: 'nota chica' }, describirToma(t, nt).join(' ')),
+        h('h4', {}, 'Simulación (si cambia, la simulación vuelve a arrancar)'),
+        h('div', { class: 'grilla2' },
+          fSel('Definición de la geometría (grilla)', si, 'tam', gr.some(([k]) => k === si.tam) ? gr : [...gr, [si.tam, si.tam]]),
+          fSel('Paredes', si, 'paredes', [['exactas', 'exactas: la planta real (fina)'], ['escalera', 'en escalera (gruesa)']]),
+          fSel('Giro del viento', si, 'angulo', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? '0°' : `${a}°`]), true),
+          fChk('Túnel lento (más estable)', si, 'lento'), fChk('Dominio ajustado (1,25 H)', si, 'ajustado'), fChk('Banda de pisos', si, 'banda')),
+        ...(si.banda ? [h('div', { class: 'grilla2' }, fNum('Banda: cota del medio (m; vacío = 2/3 H)', si, 'bandaCota', 0, 2000, 0.5), fNum('Banda: pisos', si, 'bandaPisos', 1, 8, 1))] : []),
+        h('h4', {}, 'Qué se ve'),
+        h('div', { class: 'grilla2' },
+          fChk('Corte horizontal', v, 'horizontal'), fChk('Corte vertical', v, 'vertical'),
+          fNum('Altura del corte horizontal (0 a 1)', v, 'zRel', 0, 1.3, 0.05), fNum('Posición del corte vertical (0 a 1)', v, 'yRel', 0, 1, 0.05),
+          fSel('Color de los cortes', v, 'color', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']]),
+          fSel('Flechas en los cortes', v, 'flechas', [['no', 'sin flechas'], ['fijas', 'del mismo largo (color = velocidad)'], ['proporcionales', 'el largo dice la velocidad']]),
+          fSel('Líneas de corriente', v, 'lineas', [['no', 'sin líneas'], ['lineas', 'líneas finas'], ['tubos', 'tubos con relieve']]),
+          fSel('Color de las líneas', v, 'colorLineas', [['velocidad', 'la velocidad'], ['uno', 'un solo color']]),
+          fChk('Partículas (como tinta)', v, 'particulas'), fChk('Nubes de turbulencia (remolinos, criterio Q)', v, 'vortices'),
+          ...(v.vortices ? [fNum('Remolinos: umbral (0,03 muchos ↔ 0,5 solo los fuertes)', v, 'umbralQ', 0.03, 0.5, 0.01)] : []),
+          fSel('Espectro de la velocidad', v, 'espectro', [['termico', 'térmico (de la app)'], ['arcoiris', 'arcoíris (el rojo es rápido, no tracción)']]),
+          fSel('Escala de la velocidad', v, 'escalaVel', [['fija', 'fija (se comparan los videos)'], ['auto', 'automática (todo el espectro)']]),
+          fSel('De dónde salen las líneas', v, 'rastrillo', [['grilla', 'una grilla delante'], ['vertical', 'un rastrillo vertical'], ['horizontal', 'un rastrillo horizontal']]),
+          ...(v.rastrillo !== 'grilla' ? [fNum('Cantidad de líneas', v, 'rastN', 4, 40, 1), fChk('Ver la raya del rastrillo', v, 'verRastrillo')] : []),
+          fChk('Modo maqueta (torre blanca y sombras)', v, 'maqueta'), fChk('Torre con los colores del Cp', v, 'torreCp'), fChk('Suelo', v, 'suelo'),
+          fChk('Vereda (viento a 1,5 m)', v, 'vereda'), ...(v.vereda ? [fChk('Vereda con el confort de Lawson', v, 'lawson')] : [])),
+        h('h4', {}, 'Cámara y grabación'),
+        h('div', { class: 'grilla2' },
+          fSel('Cámara', t, 'camara', [...CAMARAS.map(([k, n]) => [k, n] as [string, string]), ...(t.pos ? [['guardada', 'la de esta toma'] as [string, string]] : [])]),
+          fNum('Zoom (1 = normal, 2 = el doble de cerca)', t, 'acercar', 0.4, 5, 0.1),
+          fSel('Recorrido', t, 'recorrido', [['quieta', 'cámara quieta'], ['orbita', 'una vuelta alrededor'], ['vuelo', 'vuelo: del peatón a la vista de arriba']]),
+          fNum('Duración (s)', t, 'segundos', 3, 180, 1), fNum('Calentar antes de grabar (pasadas del aire)', t, 'calentar', 0, 20, 0.5, 'Cuántas veces el aire cruza el túnel antes de grabar: con menos de 1 el flujo todavía no se armó')),
+        h('h4', {}, 'Llaves y rótulos del video'),
+        h('div', { class: 'grilla2' },
+          fSel('Llaves de colores', t, 'llaves', [['costado', 'en una franja al costado (no tapan nada)'], ['encima', 'encima, en una esquina (chicas)'], ['no', 'sin llaves']]),
+          fChk('Símbolos del dibujo (qué es cada marca)', t, 'simbolos'), fChk('Gráfico de las fuerzas en la base', t, 'grafico'), fChk('Rótulo: nombre, proyecto y tiempo', t, 'rotulo')),
+        h('div', { class: 'fila-acciones' }, prob));
+    }
+    d.append(det);
+  });
+  if (!tomas.length) d.append(h('p', { class: 'nota chica' }, 'Todavía no hay tomas: agregá una con una plantilla o con lo que se ve ahora.'));
+  return s.el;
+}
+/** el .zip: los videos, el LEAME con la ficha de cada uno, y la presentación con los videos (si se pidió) */
+async function armarPaquete(videos: { t: Toma; blob: Blob; portada: string; ext: string }[], fallas: string[], W: number, H: number) {
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip(), p = estado.proyecto, hoy = new Date().toLocaleDateString('es-AR');
+  const archivo = (i: number, t: Toma, ext: string) => `${String(i + 1).padStart(2, '0')}_${t.nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'toma'}.${ext}`;
+  const nt = nombresTam();
+  const leame = [
+    `Simulaciones de viento · ${p.nombre || 'Proyecto'} · ${hoy}`,
+    'Torre 3D · túnel de viento 3D (Lattice Boltzmann, didáctico: no reemplaza un ensayo ni un estudio profesional).',
+    `Videos de ${W} × ${H} (${videos[0].ext.toUpperCase()}). ${videos[0].ext === 'webm' ? 'WebM: si PowerPoint no lo reproduce, convertilo a MP4 (por ejemplo con VLC o HandBrake) o usá Chrome o Edge, que graban MP4.' : ''}`,
+    '',
+    ...videos.flatMap(({ t, ext }, i) => [`${archivo(i, t, ext)} · ${t.nombre}`, ...describirToma(t, nt).map(x => `   ${x}`), '']),
+    ...(fallas.length ? ['No se grabaron:', ...fallas.map(x => `   ${x}`)] : []),
+  ].join('\r\n');
+  zip.file('LEAME.txt', leame);
+  videos.forEach(({ t, blob, ext }, i) => zip.file(`videos/${archivo(i, t, ext)}`, blob));
+  zip.file('tomas.json', JSON.stringify(videos.map(x => x.t), null, 1));
+  if (cfgExp.pptx) {
+    try {
+      const { default: Pptx } = await import('pptxgenjs');
+      const pr = new Pptx(); pr.layout = 'LAYOUT_WIDE';
+      const t0 = pr.addSlide();
+      t0.addText('Estudio de viento en el túnel 3D', { x: 0.6, y: 2.2, w: 12, h: 1, fontSize: 36, bold: true, color: '1F2328' });
+      t0.addText(`${p.nombre || 'Proyecto'} · ${hoy}`, { x: 0.6, y: 3.2, w: 12, h: 0.6, fontSize: 18, color: '5F6B76' });
+      t0.addText('Simulación didáctica (Lattice Boltzmann) con Torre 3D. Cada lámina tiene un video con sus llaves de colores al costado.', { x: 0.6, y: 4.0, w: 12, h: 0.8, fontSize: 14, color: '5F6B76' });
+      const aBase64 = async (b: Blob) => { const buf = new Uint8Array(await b.arrayBuffer()); let s2 = ''; for (let k = 0; k < buf.length; k += 0x8000) s2 += String.fromCharCode(...buf.subarray(k, k + 0x8000)); return btoa(s2); };
+      for (const { t, blob, portada, ext } of videos) {
+        const sl = pr.addSlide();
+        sl.addText(t.nombre, { x: 0.4, y: 0.15, w: 12.5, h: 0.6, fontSize: 24, bold: true, color: '1F2328' });
+        // el video en 16:9 (13,33 × 7,5 in), con lugar para el título y la ficha
+        const hv = 5.6, wv = (hv * W) / H;
+        sl.addMedia({ type: 'video', data: `${blob.type || `video/${ext}`};base64,${await aBase64(blob)}`, extn: ext, cover: portada.replace(/^data:/, ''), x: (13.33 - wv) / 2, y: 0.85, w: wv, h: hv });
+        sl.addText(describirToma(t, nt).join('\n'), { x: 0.4, y: 6.55, w: 12.5, h: 0.85, fontSize: 10, color: '5F6B76', valign: 'top' });
+      }
+      zip.file('presentacion.pptx', await pr.write({ outputType: 'blob' }) as Blob);
+    } catch (e) { zip.file('presentacion_ERROR.txt', `No se pudo armar la presentación: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  const out = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(out);
+  a.download = `simulaciones_viento_${(p.nombre || 'proyecto').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)}.zip`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+  const e = document.getElementById('mensaje'); if (e) e.textContent = `Listo: ${videos.length} video${videos.length === 1 ? '' : 's'} en el paquete (${fmt(out.size / 1e6, 1)} MB)${fallas.length ? `; no se grabaron ${fallas.length}` : ''}.`;
 }
 
 // ------------------------------------------------------------------------------------------------ archivo y lámina (etapa 6)
@@ -956,6 +1312,7 @@ export function panelTunel3d(c: H) {
       h('p', { class: 'nota chica' }, 'Prender o apagar capas no vuelve a simular.'));
   }
   c.append(seccionVista());
+  c.append(seccionTomas());
   const m = seccion('Lo que se mide').cuerpo; c.append(m.parentElement!);
   panelEstado = h('div', {}); m.append(panelEstado);
   const sf = seccion('Fuerzas: base y piso por piso').cuerpo; c.append(sf.parentElement!);

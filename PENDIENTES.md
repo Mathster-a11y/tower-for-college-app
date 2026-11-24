@@ -25,6 +25,8 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - ~~Velocidades del túnel en km/h (o m/s, o veces el viento que llega), con el viento de diseño a esa altura o uno propio~~ (23/11)
 - ~~Revisión de unidades de las cuentas (tm y t·m, unidades que faltaban, letras que cambian de significado entre métodos) y glosario: unidades, la simulación paso a paso, el diccionario y las variables de cada método, en cada guía y en docs/glosario_y_unidades.pdf~~ (24/11)
 
+30. ~~Grabar varias simulaciones y exportarlas~~ (24/11): Túnel 3D → «Grabar varias simulaciones y exportarlas». Lista de tomas (plantillas o «con lo que se ve ahora»), cada una con su simulación (grilla, paredes exactas o en escalera, giro, banda, dominio, túnel lento), lo que se ve (cortes, flechas, líneas o tubos, partículas, remolinos, espectro térmico o arcoíris, escala, maqueta, torre sin colores, suelo, rastrillo y su raya, vereda), cámara (las fijas, «zoom a la esquina» o la propia, con zoom), recorrido, duración, calentamiento y llaves (franja al costado que no tapa nada, encima chicas o ninguna; símbolos, gráfico y rótulo). «Exportar simulaciones» las graba en fila (rearranca la simulación solo si cambia) a 1280 × 720 o 1920 × 1080, en MP4 si el navegador puede, y baja un .zip con los videos, LEAME, tomas.json y una presentación de PowerPoint con un video por lámina. Revisadas todas las opciones que se apagan (ninguna da errores)
+
 ### Diseño y cálculo
 14. ~~Vista en corte para editar «desde» y «hasta» de cada muro arrastrando~~ (ya estaba: Diseño → Niveles)
 15. ~~Revisar la matemática de «Flex comp PB paralelos»: revisión, hoja 7 del desglose, rótulos de O y P y #DIV/0! en Controles~~ (23/11, `docs/flexocompresion_planilla/`)

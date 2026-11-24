@@ -1839,3 +1839,9 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .exo-planta .exo-columna { fill: var(--r-rototrasl, #6a3d9a); opacity: .85; }
 .exo-planta .exo-brazo { stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 2.5; opacity: .8; }
 .exo-planta .exo-rot { font: 600 11px var(--fuente); fill: var(--r-rototrasl, #6a3d9a); }
+/* túnel 3D: la lista de tomas para grabar en fila */
+details.toma3d { border: 1px solid var(--edge, #c3cad1); border-radius: 8px; padding: 6px 8px; margin: 6px 0; background: var(--lienzo, #fff); }
+details.toma3d > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; flex-wrap: wrap; }
+details.toma3d > summary .toma3d-nombre { flex: 1 1 140px; min-width: 120px; font-weight: 600; }
+details.toma3d > summary .mini { margin-left: 0; }
+details.toma3d h4 { margin: 10px 0 4px; font-size: 12.5px; color: var(--ink2, #5f6b76); }
