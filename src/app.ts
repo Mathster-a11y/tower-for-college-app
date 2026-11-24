@@ -25,6 +25,7 @@ import { usarConfig, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
+import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
@@ -568,6 +569,7 @@ window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.r
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos).'); });
 $('b-ejemplo-citicorp').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorp()); cerrarMenus(); mensaje('Cargado el Citicorp Center: núcleo, supercolumnas en la base abierta y el exoesqueleto de chevrones (ficha E) en la etapa 08 · Exoesqueleto.'); });
+$('b-ejemplo-citicorp-fachada').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorpFachada()); estado.capas.fachada = true; estado.cambiar(); cerrarMenus(); mensaje('Cargado el Citicorp Center con su forma y su fachada: la corona a 45° es un plano de corte, la plaza queda abierta, la carpintería va por piso en las oficinas y envolvente en la corona. Mirá la capa «Fachada» en el 3D y el alzado desplegado (Carpintería → Panelería).'); });
 // torres de prueba: diez plantas variadas armadas con las piezas tipo (se usan para controlar la app)
 TORRES_PRUEBA.forEach((t, k) => {
   const [cod, desc] = t.nombre.split(' · ');
