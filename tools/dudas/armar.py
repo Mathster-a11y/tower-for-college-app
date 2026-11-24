@@ -1,6 +1,8 @@
 """Arma docs/dudas_planilla/index.html con los números de datos.json (DUDAS=1 npx vitest run tools/dudas).
 Después: node tools/dudas/pdf.cjs  → docs/dudas_planilla/dudas_planilla.pdf"""
-import json, os
+import json, os, base64, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ecuaciones as EQ
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.join(AQUI, '..', '..')
@@ -94,10 +96,16 @@ ejemplos = ''.join(
     f"<td class=n>{n(e['e'], 2)}</td><td class=n>{len(e['piezas'])}</td><td class=n>{n(e['Q'], 1)}</td><td class=n>{n(e['Mv'])}</td></tr>" for nom, e in EJ)
 
 asimT1 = pz(A, 'T1')
+def b64(r):
+    return base64.b64encode(open(os.path.join(RAIZ, r), 'rb').read()).decode()
+FUENTES = ("@font-face { font-family: 'IBM Plex Math'; src: url(data:font/woff2;base64," + b64('src/assets/fuentes/plex-math-sub.woff2') + ") format('woff2'); }\n"
+           "@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') + ") format('woff2'); }\n"
+           "@font-face { font-family: 'IBM Plex Sans'; font-weight: 600 700; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') + ") format('woff2'); }\n")
 html = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dudas sobre la planilla</title>
 <style>
+{FUENTES}{EQ.CSS}
 :root {{ --tinta: #1f2328; --gris: #5b6472; --suave: #eef1f5; --acento: #1565c0; --ok: #2e7d32; --aviso: #8a5f00;
   /* la convención de la app: rojo tracción, azul compresión */
   --traccion: #e24b4a; --compresion: #378add; }}
@@ -158,49 +166,38 @@ tabique de 4,00 × 0,20 m), donde la planta rota. Torre de 34 pisos: una planta 
 Excel y LibreOffice (la app se verifica celda por celda contra las dos).</p>
 
 <div class="duda">
-<h2>1. El momento de cada pieza: O = G + N suma un momento y una fuerza <span class="tag alta">cambia hasta 66 %</span></h2>
-<div class="grilla">
-<div><h4>Planilla</h4>«Rototrasl. cara mayor», columna <code>O = G + N</code>. <code>G = Mv·J/ΣJ</code> es el momento de traslación (tm);
-<code>N = Mt·J·a/ΣJt·a²</code> es el <b>corte</b> de rotación (t). «Flex comp PB paralelos» toma <code>J = O</code> como el momento de la pieza.</div>
-<div><h4>Guía</h4>Reparte el momento con el mismo porcentaje que el corte: cada tabique toma (traslación ± rotación) / Q del viento,
-y ese porcentaje se aplica a M (Anexo de rototraslación).</div>
-<div><h4>CIRSOC / estática</h4>Con losa rígida y piezas que se deforman igual, cada pieza toma su parte del corte en todos los pisos,
-así que su momento es esa misma parte del momento: <span class="f">Mj = (Qtras + Qrot)/Q · Mv = G + N·hW</span>, con hW = Mv/Q.
-El método CIRSOC de la app lo hace así, en los cuatro casos de carga del 102-25.</div></div>
-<table><tr><th>Ejemplo</th><th>Pieza</th><th>G (tm)</th><th>N (t)</th><th>hW (m)</th><th>O = G + N (planilla)</th><th>G + N·hW</th><th>Planilla contra corregido</th></tr>
+<h2>1. El momento de cada pieza: M<sub>j</sub> = M<sub>tras</sub> + Q<sub>rot</sub> suma un momento y una fuerza <span class="tag alta">cambia hasta 66 %</span></h2>
+{EQ.eq_momento(A)}
+<table><tr><th>Ejemplo</th><th>Pieza</th><th>M<sub>tras</sub> (tm)</th><th>Q<sub>rot</sub> (t)</th><th>M<sub>v</sub>/Q (m)</th><th>M<sub>j</sub> planilla = M<sub>tras</sub> + Q<sub>rot</sub></th><th>M<sub>j</sub> = M<sub>tras</sub> + Q<sub>rot</sub>·M<sub>v</sub>/Q</th><th>Planilla contra corregido</th></tr>
 {''.join(filas1)}</table>
-<p>Sin excentricidad (ejemplo de la guía) N = 0 y da igual. Con excentricidad, la planilla le saca casi toda la rotación al momento:
+<p>Sin excentricidad (ejemplo de la guía) Q<sub>rot</sub> = 0 y da igual. Con excentricidad, la planilla le saca casi toda la rotación al momento:
 las piezas del lado que se suma quedan cortas (T1 de la torre asimétrica: {n(asimT1['O'])} en vez de {n(asimT1['Mcorr'])} tm) y las del lado que se resta, largas.
-Como N está en toneladas y G en tm, el resultado además cambia si se cambian las unidades.</p>
-<div class="preg"><b>Pregunta.</b> ¿La columna O de «Rototrasl.» quiere ser el momento de la pieza? Si es así, ¿N no debería pasar a momento
-con el brazo de la resultante (N·Mv/Q), o aplicarse el porcentaje total (E + N)/Q a Mv, como hace la guía? Si O es otra cosa
+Como Q<sub>rot</sub> está en toneladas y M<sub>tras</sub> en tm, el resultado además cambia si se cambian las unidades.</p>
+<div class="preg"><b>Pregunta.</b> ¿La columna O de «Rototrasl.» (M<sub>j</sub>) quiere ser el momento de la pieza? Si es así, ¿la columna N (Q<sub>rot</sub>) no debería pasar a momento
+con el brazo de la resultante (Q<sub>rot</sub>·M<sub>v</sub>/Q), o aplicarse el porcentaje total (Q<sub>tras</sub> + Q<sub>rot</sub>)/Q a M<sub>v</sub>, como hace la guía? Si O es otra cosa
 (por ejemplo, un índice para ordenar las piezas), ¿qué momento debería leer la hoja de flexocompresión?</div>
 </div>
 
 <div class="duda">
 <h2>2. La combinación de cargas en la flexocompresión <span class="tag alta">del lado inseguro</span></h2>
-<div class="grilla">
-<div><h4>Planilla</h4>«Flex comp PB paralelos»: <code>O = (−H/B − J/W)·0,1</code> (compresión con Ng, el edificio <b>descargado</b>) y
-<code>P = (−I/B + J/W)·0,1</code> (tracción con Nq, el edificio <b>cargado</b>).</div>
-<div><h4>Guía</h4>Verifica la compresión con el edificio cargado (0,9 t/m²) y la tracción con el descargado (0,7 t/m²).</div>
-<div><h4>CIRSOC</h4>El 101-25 arma la compresión máxima con <b>1,2 D + 1,0 W + L</b> y la tracción máxima (y el vuelco) con
-<b>0,9 D + 1,0 W</b>: la carga mayor con la compresión y la menor con la tracción. Es el mismo principio con cargas de servicio.</div></div>
-<table><tr><th>Ejemplo</th><th>Pieza</th><th>Ng (t)</th><th>Nq (t)</th><th>Compresión planilla</th><th>Compresión con Nq</th><th>Tracción planilla</th><th>Tracción con Ng</th></tr>
+{EQ.eq_cargas()}
+<table><tr><th>Ejemplo</th><th>Pieza</th><th>N<sub>0,7</sub> (t)</th><th>N<sub>0,9</sub> (t)</th><th>σ<sub>c</sub> planilla (con N<sub>0,7</sub>)</th><th>σ<sub>c</sub> con N<sub>0,9</sub></th><th>σ<sub>t</sub> planilla (con N<sub>0,9</sub>)</th><th>σ<sub>t</sub> con N<sub>0,7</sub></th></tr>
 {''.join(filas2)}</table>
-<p>Tensiones en kg/cm², con el mismo momento O de la planilla, para separar esta duda de la anterior
-(<span class="trac">rojo: tracción</span>, <span class="comp">azul: compresión</span>). La diferencia es siempre (Nq − Ng)/F y en las dos
+<p>Tensiones en kg/cm², con el mismo momento M<sub>j</sub> de la planilla, para separar esta duda de la anterior
+(<span class="trac">rojo: tracción</span>, <span class="comp">azul: compresión</span>). La diferencia es siempre (N<sub>0,9</sub> − N<sub>0,7</sub>)/F y en las dos
 tensiones va del lado inseguro: menos compresión y menos tracción que las que corresponden.</p>
-<div class="preg"><b>Pregunta.</b> ¿Las columnas O y P cruzan las cargas a propósito? Si no, ¿la compresión debería usar Nq (columna I) y la
-tracción Ng (columna H)?</div>
+<div class="preg"><b>Pregunta.</b> ¿Las columnas O y P cruzan las cargas a propósito? Si no, ¿la compresión debería usar N<sub>0,9</sub> (columna I) y la
+tracción N<sub>0,7</sub> (columna H)?</div>
 </div>
 
 <div class="duda">
 <h2>3. Ocho filas sin peso propio <span class="tag media">según la fila donde cae la pieza</span></h2>
+{EQ.eq_peso(t2, n(pp_falta), n(P['altura'], 1))}
 <p><b>Planilla:</b> en «Flex comp PB paralelos», <code>D13:D20</code> tienen 0,01 m³ fijo en lugar de <code>B·C</code>: las piezas que caen en las
 filas 10 a 17 no suman su peso propio a N. <b>Guía y CIRSOC:</b> el peso propio entra siempre (en el CIRSOC, como D).</p>
 <p>En la torre de 34 pisos caen ahí {', '.join(sin_pp)}. T2 (F = {n(t2['F'], 3)} m², {n(P['altura'], 1)} m de alto) pierde
 {n(pp_falta)} t de peso propio: con la combinación corregida la compresión pasaría de {sig(t2['sigCompBien'])} a {sig(t2_comp)} kg/cm²
-(la planilla informa {sig(t2['sigCompPl'])}). En el ejemplo de la guía, si T1 cayera en esas filas, Ng bajaría de 293 a 155 t y la tracción subiría de
+(la planilla informa {sig(t2['sigCompPl'])}). En el ejemplo de la guía, si T1 cayera en esas filas, N<sub>0,7</sub> bajaría de 293 a 155 t y la tracción subiría de
 {sig(18.28)} a {sig(33.6)} kg/cm².</p>
 <div class="preg"><b>Pregunta.</b> ¿El 0,01 de D13:D20 es un resto de una versión anterior, o esas filas están pensadas para piezas sin peso
 (columnas metálicas, por ejemplo)? ¿Deberían llevar <code>=B·C</code> como las de arriba?</div>
@@ -208,6 +205,7 @@ filas 10 a 17 no suman su peso propio a N. <b>Guía y CIRSOC:</b> el peso propio
 
 <div class="duda">
 <h2>4. El tipo de fila manda sobre el tipo de pieza <span class="tag media">#DIV/0! o la pieza equivocada</span></h2>
+{EQ.eq_fila()}
 <p><b>Planilla:</b> el W lo elige la fila y no la pieza (filas 4 a 10: simétricas; 11 a 14: asimétricas; 21 a 23: tubos). Si una pieza
 asimétrica cae en una fila simétrica, la hoja lee un molde vacío y da 0/0. J25 lo avisa («se deberá cambiar el hipervínculo»): el
 alumno tiene que reescribir la fórmula. En la 2025, desde la fila 10 el área y el W salen de una fila de la hoja J y el momento de otra.
@@ -221,6 +219,7 @@ asimétricas no alcanzan las filas.</div>
 
 <div class="duda">
 <h2>5. Piezas de más de cuatro muros y el molde de la hoja J <span class="tag alta">cambia el reparto</span></h2>
+{EQ.eq_molde()}
 <p><b>Planilla:</b> el molde de cada pieza tiene un ala superior, un ala inferior y dos almas. Una pieza con más muros (un núcleo con
 tabiques interiores) se tiene que «armar» en ese molde. <b>Guía:</b> sección 7, armado simplificado de la cátedra (alas apiladas, almas
 unidas). <b>CIRSOC / estática:</b> no hay molde; la rigidez es la de la sección real.</p>
@@ -235,6 +234,7 @@ la sección real? ¿Se aceptan piezas partidas en dos filas (con el riesgo de qu
 
 <div class="duda">
 <h2>6. W de las piezas asimétricas y área sin ala inferior <span class="tag media">hasta 45 % en la flexión</span></h2>
+{EQ.eq_W()}
 <p><b>Planilla:</b> <code>AN = AM / (X/2 + AB/2 + AI/2)</code> divide el J por la mitad de la altura, pero en una pieza asimétrica el eje
 neutro no está en la mitad: hay un W por fibra. El área (columna O de la hoja J) suma <code>W·X + Z·AB + AE·AF</code> y no el ala
 inferior <code>AH·AI</code>. <b>Guía y CIRSOC:</b> cada fibra con su distancia al baricentro; el área completa.</p>
@@ -246,6 +246,7 @@ vez de 2,72 m² (−37 %): menos peso propio y otra N/F.</p>
 
 <div class="duda">
 <h2>7. Pieza entera o almas y alas por separado <span class="tag media">criterio</span></h2>
+{EQ.eq_entera()}
 <p><b>Planilla:</b> una sola tensión por fibra para la pieza entera (N total / área total ± M/W). <b>Guía:</b> separa almas y alas, cada una
 con su N (por su área de influencia) y su parte del momento. <b>CIRSOC:</b> el 201 verifica la sección con compatibilidad de deformaciones
 (secciones planas); si alas y alma están unidas trabaja la sección entera, con el ala que colabora. La app, en el método CIRSOC, hoy
@@ -259,6 +260,7 @@ Parte de la diferencia es el momento (duda 1) y parte es el criterio.</p>
 
 <div class="duda">
 <h2>8. El viento: G = 0,85 con frecuencias menores que 1 Hz <span class="tag media">el G cambia poco; la frecuencia, mucho</span></h2>
+{EQ.eq_viento()}
 <p><b>Planilla y guía:</b> calculan la frecuencia (F = 1/T) pero usan G = 0,85 igual. <b>CIRSOC 102:</b> con n1 &lt; 1 Hz el edificio es
 flexible y corresponde Gf (102-25, art. 1.9.5; el 102-2005 distingue lo mismo).</p>
 <table><tr><th>Ejemplo</th><th>F planilla (Hz)</th><th>G planilla</th><th>Gf con F de la planilla</th><th>n1 FEM</th><th>n1 aprox. 102-25</th><th>Q planilla (t)</th><th>Q FEM (t)</th><th>Q CIRSOC (t)</th></tr>{''.join(filas9)}</table>
@@ -276,12 +278,12 @@ la lista de la cátedra; acá van los números.)</div>
 <tr><td>«Flex comp PB»</td><td>Solo el viento A (cara mayor).</td><td>Las piezas del viento B no se verifican.</td><td>¿Hay que agregar el viento B?</td></tr>
 <tr><td>«Flex comp PB»</td><td>Una pieza puede tomar menos que la traslación sola por la rotación.</td><td>T2 y T4 de la torre asimétrica bajan 32 %.</td><td>¿Se toma el mayor de los dos sentidos del giro?</td></tr>
 <tr><td>Rotación</td><td>Las piezas perpendiculares entran enteras en su baricentro; la guía suma cada muro con su J.</td><td>En los dos ejemplos con rotación, poco: los perpendiculares aportan 2 % y 1 % de ΣJt·a².</td><td>¿Cuál se pide?</td></tr>
-<tr><td>Áreas de influencia</td><td>La guía carga 198 de 320 m² de losa en el ejemplo.</td><td>Ng de los tabiques.</td><td>¿Qué criterio: 45°, fajas, o una parte va a columnas fuera del modelo?</td></tr>
+<tr><td>Áreas de influencia</td><td>La guía carga 198 de 320 m² de losa en el ejemplo.</td><td>N de los tabiques.</td><td>¿Qué criterio: 45°, fajas, o una parte va a columnas fuera del modelo?</td></tr>
 </table>
 
 <h2>Lo que está bien</h2>
 <div class="caja ok"><ul>
-<li>σ = −N/F ± M/W, el núcleo central k = W/F y la comparación con e = M/Ng: correctos para una sección sin fisurar.</li>
+<li>σ = −N/F ± M/W, el núcleo central k = W/F y la comparación con e = M/N<sub>0,7</sub>: correctos para una sección sin fisurar.</li>
 <li>Unidades de la flexocompresión (t/m² × 0,1 = kg/cm²) y el W de las piezas simétricas.</li>
 <li>La rototraslación de la traslación (W·J/ΣJ) y el eje de inercia.</li>
 <li>El W del tubo ya está corregido en la planilla 2025 (la anterior daba 4 veces menos).</li>
