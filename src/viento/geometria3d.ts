@@ -23,6 +23,13 @@ export interface OpcionesGeo3 {
    */
   /** vecinos: prismas de «desde» (0 si falta) a «altura» (m sobre PB); un edificio con retiros va en varios */
   contexto?: { pol: P[]; altura: number; desde?: number }[] | null;
+  /**
+   * banda de pisos: solo la franja de z0 a z1 (m sobre PB), sin suelo, con planos deslizantes arriba y abajo (como una
+   * rebanada de una torre muy alta: el aire no puede subir ni bajar por los bordes). La torre va de borde a borde y el
+   * viento llega parejo (el de la altura de la banda). Con todas las celdas en la franja, cada piso tiene muchas más
+   * celdas que en la torre entera. Sin contexto.
+   */
+  banda?: { z0: number; z1: number } | null;
 }
 
 export interface Geometria3D {
@@ -47,6 +54,8 @@ export interface Geometria3D {
   vecinos: { pol: P[]; altura: number; desde: number }[];
   /** de la planta del proyecto (m) a la red: girar con (co, si) y llevar con la escala y el origen (ox, oy) */
   giro: { co: number; si: number; ox: number; oy: number };
+  /** banda de pisos (m sobre PB): la red va de z0 (z = 0) a z1 (z = nz), sin suelo; H es su alto */
+  banda?: { z0: number; z1: number };
 }
 /** un punto de la red (x, y en celdas; los centros en +0,5) a la planta del proyecto (m) */
 export function aPlantaProyecto(g: Geometria3D, x: number, y: number): P {
@@ -91,10 +100,10 @@ function corteEnPlanta(p: P[], ax: number, ay: number, bx: number, by: number): 
  * capa[z]: el contorno (en celdas) que rige en la altura z, o null; planos: las alturas (en coordenadas de la red) donde
  * cambia la planta.
  */
-export function paredes3D(nx: number, ny: number, nz: number, solido: Uint8Array, capa: (P[] | null)[], planos: number[]): Paredes3D {
+export function paredes3D(nx: number, ny: number, nz: number, solido: Uint8Array, capa: (P[] | null)[], planos: number[], conSuelo = true): Paredes3D {
   const celdas: number[] = [], qs: number[] = [];
   const sol = (x: number, y: number, z: number) => z >= 0 && z < nz && x >= 0 && x < nx && solido[(z * ny + ((y + ny) % ny)) * nx + x] === 1;
-  for (let z = 1; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+  for (let z = conSuelo ? 1 : 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const c = (z * ny + y) * nx + x;
     if (solido[c]) continue;
     let tiene = false;
@@ -104,7 +113,7 @@ export function paredes3D(nx: number, ny: number, nz: number, solido: Uint8Array
       if (!sol(sx, sy, sz)) continue;
       tiene = true;
       let q = 0.5;
-      if (sz === 0) q = 0.5;                                                   // el suelo, entre celdas
+      if (conSuelo && sz === 0) q = 0.5;                                       // el suelo, entre celdas
       else if (EXd[i] === 0 && EYd[i] === 0) {
         // vertical: la losa del retiro o la azotea está en un plano de cambio de planta entre las dos celdas
         const z0 = Math.min(z, sz) + 0.5, z1 = Math.max(z, sz) + 0.5;
@@ -133,6 +142,7 @@ function dentro(p: P[], x: number, y: number): boolean {
 }
 
 export function geometria3D(o: OpcionesGeo3): Geometria3D {
+  if (o.banda) return geometriaBanda(o, o.banda);
   const { nx, ny, nz } = o;
   const niv = o.niveles.filter(n => n.cota >= 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
   if (!niv.length) throw new Error('No hay niveles con planta sobre PB.');
@@ -202,6 +212,65 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
 }
 
 /**
+ * banda de pisos (ver OpcionesGeo3.banda): la planta de cada altura de la franja, sin suelo; la escala sale del ancho y
+ * del largo (como la torre entera) y del alto de la franja. La celda z tiene su centro a z0 + (z + ½)/escala.
+ */
+function geometriaBanda(o: OpcionesGeo3, banda: { z0: number; z1: number }): Geometria3D {
+  const { nx, ny, nz } = o;
+  const niv = o.niveles.filter(n => n.cota >= 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
+  if (!niv.length) throw new Error('No hay niveles con planta sobre PB.');
+  const Htorre = niv[niv.length - 1].cota;
+  const z0 = Math.max(0, Math.min(banda.z0, Htorre)), z1 = Math.max(z0, Math.min(banda.z1, Htorre)), hb = z1 - z0;
+  if (!(hb > 0)) throw new Error('La banda tiene que tener alto y estar dentro de la torre.');
+  const th = ((o.dir === 'A' ? -90 : 0) - (o.angulo ?? 0)) * (Math.PI / 180), co = Math.cos(th), si = Math.sin(th);
+  const rot = niv.map(n => ({ cota: n.cota, pol: n.silueta.map(q => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })) }));
+  // la planta que rige en la altura h: la del último nivel con cota ≤ h (debajo del primero, la del primero)
+  const plantaEn = <T extends { cota: number }>(xs: T[], h: number) => [...xs].reverse().find(q => q.cota <= h + 1e-9) ?? xs[0];
+  const enBanda = [...new Set([plantaEn(rot, z0), ...rot.filter(n => n.cota > z0 && n.cota < z1)])];
+  const todos = enBanda.flatMap(n => n.pol);
+  const xMin = Math.min(...todos.map(q => q.x)), xMax = Math.max(...todos.map(q => q.x));
+  const yMin = Math.min(...todos.map(q => q.y)), yMax = Math.max(...todos.map(q => q.y));
+  const B = yMax - yMin, L = xMax - xMin;
+  // la franja no tiene el alto que limite la escala: el ancho ocupado se baja a 1/5 (menos bloqueo lateral que en la
+  // torre entera, donde casi siempre manda el alto)
+  const escala = Math.min(nz / hb, (nx * 0.55) / (L + 3 * B), (ny * BLOQUEO_BANDA) / B);
+  const ox = Math.round(nx * 0.25) - xMin * escala, oy = (ny - B * escala) / 2 - yMin * escala;
+  const pols = rot.map(n => ({ cota: n.cota, pol: n.pol.map(q => ({ x: ox + q.x * escala, y: oy + q.y * escala })) }));
+  const solido = new Uint8Array(nx * ny * nz);
+  let celdas = 0;
+  const caja = { x0: nx, x1: 0, y0: ny, y1: 0 };
+  const capa: (P[] | null)[] = new Array(nz).fill(null);
+  for (let z = 0; z < nz; z++) {
+    const n = plantaEn(pols, Math.min(z1, z0 + (z + 0.5) / escala));
+    capa[z] = n.pol;
+    const bx0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...n.pol.map(q => q.x))));
+    const by0 = Math.max(0, Math.floor(Math.min(...n.pol.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...n.pol.map(q => q.y))));
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+      if (!dentro(n.pol, x + 0.5, y + 0.5)) continue;
+      solido[(z * ny + y) * nx + x] = 1; celdas++;
+      caja.x0 = Math.min(caja.x0, x); caja.x1 = Math.max(caja.x1, x); caja.y0 = Math.min(caja.y0, y); caja.y1 = Math.max(caja.y1, y);
+    }
+  }
+  // planos donde cambia la planta dentro de la franja (el centro de la celda z está en z + ½ = (h − z0)·escala)
+  const planos = pols.filter(q => q.cota > z0 && q.cota < z1).map(q => (q.cota - z0) * escala);
+  const cortes = [0, ...pols.filter(q => q.cota > z0 && q.cota < z1).map(q => q.cota - z0), hb];
+  const tramos = cortes.slice(0, -1).map((h0, k) => ({ h0, h1: cortes[k + 1], pol: plantaEn(pols, z0 + h0).pol })).filter(t => t.h1 > t.h0 + 1e-9);
+  return { nx, ny, nz, solido, escala, H: hb, hC: nz, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos, false), tramos, vecinos: [], giro: { co, si, ox, oy }, banda: { z0, z1 } };
+}
+/** la parte del ancho del túnel que ocupa la torre en la banda (bloqueo) */
+export const BLOQUEO_BANDA = 0.2;
+/**
+ * grilla de la banda con las mismas celdas que la de la torre entera (nTotal): el dominio en planta tiene las mismas
+ * proporciones (la torre a un cuarto del largo, 3 B de estela) y la torre ocupa un quinto del ancho y el alto es el de la franja
+ */
+export function grillaBanda(nTotal: number, B: number, L: number, hb: number): { nx: number; ny: number; nz: number } {
+  const Lx = (L + 3 * B) / 0.55, Ly = B / BLOQUEO_BANDA;
+  const e = Math.cbrt(nTotal / (Lx * Ly * hb));
+  const nz = Math.max(8, Math.round(hb * e)), e2 = Math.sqrt(nTotal / nz / (Lx * Ly));
+  return { nx: Math.max(32, Math.round(Lx * e2)), ny: Math.max(16, Math.round(Ly * e2)), nz };
+}
+
+/**
  * perfil de entrada del 102-25: u(z) = uH · √(Kz(z) / Kz(H)), con z ≥ 5 m (Kz constante abajo); uH en la altura de la
  * torre. Limitado a 1,3 uH arriba (estabilidad de la red).
  */
@@ -227,8 +296,10 @@ export type Cara = 'barlovento' | 'sotavento' | 'lateral' | 'cubierta';
 export function celdasDeCara(g: Geometria3D): { celda: number; cara: Cara; x: number; y: number; z: number; nx: number; ny: number; nz: number }[] {
   const { nx, ny, nz, solido } = g, out: ReturnType<typeof celdasDeCara> = [], torre = g.cuerpo ?? solido;
   // con contexto, solo las caras de la torre (las de los vecinos no se miden)
-  const s = (x: number, y: number, z: number) => x >= 0 && x < nx && y >= 0 && y < ny && z >= 1 && z < nz && torre[(z * ny + y) * nx + x] === 1;
-  for (let z = 1; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+  // en la banda no hay suelo: desde z = 0 (y la torre va de borde a borde: no tiene cubierta)
+  const zMin = g.banda ? 0 : 1;
+  const s = (x: number, y: number, z: number) => x >= 0 && x < nx && y >= 0 && y < ny && z >= zMin && z < nz && torre[(z * ny + y) * nx + x] === 1;
+  for (let z = zMin; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
     const c = (z * ny + y) * nx + x;
     if (solido[c]) continue;
     if (s(x + 1, y, z)) out.push({ celda: c, cara: 'barlovento', x, y, z, nx: -1, ny: 0, nz: 0 });

@@ -11,7 +11,8 @@ import { h, kpi, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
 import { datos102De } from '../engine/cargas/cirsoc102';
-import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
+import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, grillaBanda, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
+import { MedicionBanda } from '../viento/banda3d';
 import type { Lbm3dGpu } from '../viento/lbm3dGpu';
 import { mallaTorre, stlTorre } from '../viento/malla3d';
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../viento/salvaguardas';
@@ -67,7 +68,14 @@ const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angu
   /** flechas de la velocidad sobre los cortes: largo fijo con el color de la velocidad (por defecto), proporcionales o ninguna */
   flechas: 'fijas' as ModoFlechas,
   /** el estilo de las flechas al volver a prenderlas, los puntos de velocidad alta y las llaves de colores */
-  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', llave: true, simbolos: false };
+  estiloFlechas: 'fijas' as 'fijas' | 'proporcionales', llave: true, simbolos: false,
+  /**
+   * banda de pisos: en vez de la torre entera, una franja de pisos a la altura elegida (cota del medio, m sobre PB) y de
+   * «bandaPisos» pisos de alto, con todas las celdas de la grilla: mucho más detalle en esos pisos
+   */
+  banda: false, bandaCota: NaN, bandaPisos: 3,
+  /** dominio de la torre entera: alto de 1,5 H (normal) o 1,25 H (ajustado: más celdas en la torre, el techo más cerca) */
+  ajustado: false };
 // la fidelidad elegida antes (si hay) arma las opciones de entrada
 { const f = fidelidadGuardada(); if (f) Object.assign(cfg, FIDELIDAD[f].d3); }
 /** colores de las categorías Lawson (de quieto a incómodo; ni rojo ni azul, que son tracción y compresión) */
@@ -87,6 +95,8 @@ interface Corrida {
   corriendo: boolean; ocupado: boolean; k: number; mlups: number; ultimoCampo: number; ultimasLineas: number; sinMirar: number;
   /** salvaguardas: la velocidad más alta en unidades de la red y, si se rompió, dónde (y se pausa) */
   maxRed: number; roto: string | null;
+  /** banda de pisos: arrastre, fuerza lateral, Strouhal y Cp de la franja */
+  banda: MedicionBanda | null;
 }
 let corrida: Corrida | null = null;
 let soporteGpu: string | null | undefined;                    // undefined: todavía no se preguntó
@@ -95,7 +105,7 @@ let vista: { cont: HTMLElement; ren: THREE.WebGLRenderer; esc: THREE.Scene; cam:
 let panelEstado: H | null = null;
 
 // ------------------------------------------------------------------------------------------------ corrida
-function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento, cfg.contexto]); }
+function claveCorrida() { return JSON.stringify([estado.revision, estado.dir, cfg.tam, cfg.paredes, cfg.angulo, cfg.motor, cfg.lento, cfg.contexto, cfg.banda, cfg.bandaCota, cfg.bandaPisos, cfg.ajustado]); }
 /** los vecinos del contexto urbano que van al túnel (si se eligió usarlos) */
 // cada tramo de cada vecino (con sus retiros) es un prisma de su altura «desde» a su «altura»
 const vecinos3d = () => (cfg.contexto ? (estado.proyecto.contexto?.edificios ?? []).flatMap(e => tramosEdificio(e).map(t => ({ pol: t.v, desde: t.desde, altura: t.hasta }))) : []);
@@ -132,6 +142,13 @@ function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
   const caras = celdasDeCara(geo);
   // fuerzas: con la q y la ráfaga G del CIRSOC 102-25 para pasar de Cp a toneladas (si el proyecto no tiene datos del 102, sin fuerzas)
   let fz: Fuerzas3D | null = null, infoFz: Corrida['infoFz'] = null, dtPaso = NaN;
+  if (geo.banda) {
+    // la banda: sin suelo ni toda la altura, no hay fuerzas por piso, dinámica ni vereda; se mide la franja. El campo se
+    // lee por lo menos 12 veces por período de los remolinos (T ≈ B / (0,13 U) pasos)
+    const Bc = geo.B * geo.escala, nMuestra = Math.max(4, Math.floor(Bc / (0.13 * UH) / 12));
+    return { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz: null, infoFz: null, dtPaso: NaN, infoDin: null, nMuestra, pasosCampo: 0, plano: null,
+      corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null, banda: new MedicionBanda(caras, geo, UH, celdaReferencia(geo)) };
+  }
   try {
     const v = vientoCirsoc()[estado.dir], niv = [...v.niveles].filter(n => n.z > 1e-6).sort((a, b) => a.z - b.z);
     // PB toma la fachada de la mitad de abajo del primer piso, que el reglamento manda directo a la base (WPB)
@@ -144,20 +161,36 @@ function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
   // los remolinos de una torre tienen un período de ≈ B / (0,12 · V): se lee el campo por lo menos 10 veces por período
   const VHm = vientoDisenoEn(geo.H) ?? NaN, nMuestra = isFinite(dtPaso) && VHm > 0 ? Math.max(4, Math.floor(geo.B / (0.12 * VHm) / 10 / dtPaso)) : Infinity;
   return { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0, plano: new MediaPlano(geo, zEval(geo)),
-    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null };
+    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null, banda: null };
 }
 /** las opciones de la geometría de la corrida (se guardan en el archivo para rearmarla igual) */
-function opcionesGeo() { const T = tamActual(); return { niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: vecinos3d() }; }
+function opcionesGeo() {
+  const T = tamActual(), niveles = nivelesProyecto();
+  const banda = cfg.banda ? bandaElegida() : null;
+  if (!banda) return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: vecinos3d(), ...(cfg.ajustado ? { altoRel: 1.25 } : {}) };
+  // la grilla de la banda: las mismas celdas que la de la torre entera, repartidas en la franja (B y L de una geometría chica)
+  const g0 = geometria3D({ niveles, dir: estado.dir, angulo: cfg.angulo, nx: 64, ny: 64, nz: 8, banda });
+  const G = grillaBanda(T.nx * T.ny * T.nz, g0.B, g0.L, banda.z1 - banda.z0);
+  return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: G.nx, ny: G.ny, nz: G.nz, contexto: [], banda };
+}
+/** la altura de la torre sobre PB, el alto de un piso tipo y la banda elegida (m sobre PB) */
+function bandaElegida(): { z0: number; z1: number } {
+  const niv = nivelesProyecto(), H = Math.max(...niv.map(n => n.cota)), hp = H / Math.max(1, niv.length - 1);
+  const hb = Math.min(H, Math.max(1, cfg.bandaPisos) * hp), centro = isFinite(cfg.bandaCota) ? cfg.bandaCota : (2 / 3) * H;
+  const z0 = Math.max(0, Math.min(H - hb, centro - hb / 2));
+  return { z0, z1: z0 + hb };
+}
 
 async function iniciar() {
   detener();
-  const T = tamActual();
-  const ctx = vecinos3d();
+  const og = opcionesGeo(), T = { nx: og.nx, ny: og.ny, nz: og.nz };
+  const ctx = og.contexto ?? [];
   // con vecinos el aire se acelera en las calles: el túnel lento siempre
   UH = cfg.lento || ctx.length ? 0.05 : 0.08;
-  const geo = geometria3D(opcionesGeo());
+  const geo = geometria3D(og);
   const exp = datos102De(estado.proyecto).exposicion;
-  const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
+  // la banda: el viento llega parejo (el de su altura; con planos deslizantes arriba y abajo no puede tener perfil)
+  const uIn = geo.banda ? new Float32Array(T.nz).fill(UH) : perfil102(T.nz, geo.escala, geo.H, exp, UH);
   const c = armarCorrida(geo, uIn);
   corrida = c;
   try {
@@ -197,7 +230,8 @@ async function ciclo() {
         c.prom.sumar(c.campo, 4, 3);
         c.fz?.sumar(c.campo, c.campo[celdaReferencia(c.geo) * 4 + 3], c.gpu.pasos * (isFinite(c.dtPaso) ? c.dtPaso : 1));
         c.plano?.sumar(c.campo);
-        alMuestrear({ geo: c.geo, caras: c.caras, prom: c.prom, plano: c.plano, uIn: c.uIn, pasadas: (c.gpu.pasos * UH) / c.geo.nx, giro: cfg.angulo }, ctxRosa());
+        c.banda?.sumar(c.campo, c.gpu.pasos);
+        if (!c.geo.banda) alMuestrear({ geo: c.geo, caras: c.caras, prom: c.prom, plano: c.plano, uIn: c.uIn, pasadas: (c.gpu.pasos * UH) / c.geo.nx, giro: cfg.angulo }, ctxRosa());
       }
       if (corrida !== c) return;                              // se cambió la grilla o el giro mientras leía
       actualizarCampo();
@@ -254,6 +288,8 @@ function armarVista(cont: HTMLElement) {
   sol.target.position.copy(centroTorre(g)); esc.add(sol.target);
   const suelo = new THREE.Mesh(new THREE.PlaneGeometry(g.nx / g.escala, g.ny / g.escala), new THREE.MeshStandardMaterial({ color: 0xeef0f2 }));
   suelo.rotation.x = -Math.PI / 2; suelo.receiveShadow = true; esc.add(suelo);
+  // la banda no tiene suelo: abajo y arriba hay planos deslizantes (no se dibujan)
+  if (g.banda) suelo.visible = false;
   // la torre: con paredes exactas, su contorno real piso por piso (la superficie, coloreada con el Cp de la celda de
   // cara más cercana); en escalera, una cara por celda de cara, como la ve la simulación
   const pos: number[] = [], trozos: { desde: number; n: number; caras: number[] }[] = [];
@@ -343,7 +379,7 @@ function actualizarCampo() {
   const pintarCelda = (cel: number, out: THREE.Color, z: number) => {
     if (g.solido[cel]) return false;
     const u = F[4 * cel], w = F[4 * cel + 1], q = F[4 * cel + 2], r = F[4 * cel + 3];
-    if (cfg.vereda && z === zVereda(g)) {
+    if (cfg.vereda && !g.banda && z === zVereda(g)) {
       // vereda: la velocidad relativa a la del campo abierto a la misma altura (1 = como en el campo; > 1, más viento)
       const f = Math.hypot(u, w, q) / (c.uIn[z] || UH);
       if (cfg.lawson) { out.set(COL_LAWSON[categoriaLawson(f * u5Peaton()).codigo]); return true; }
@@ -366,7 +402,7 @@ function actualizarCampo() {
   v.planoH && (v.esc.remove(v.planoH), (v.planoH.material as THREE.MeshBasicMaterial).map?.dispose());
   v.planoV && (v.esc.remove(v.planoV), (v.planoV.material as THREE.MeshBasicMaterial).map?.dispose());
   v.planoH = v.planoV = null;
-  const zc = cfg.vereda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
+  const zc = cfg.vereda && !g.banda ? zVereda(g) : Math.max(1, Math.min(g.nz - 1, Math.round(cfg.zRel * g.H * g.escala + 0.5)));
   const antes = escalaV;
   escalaV = cfg.escalaVel === 'auto' ? escalaAutomatica(c, zc) : 1.6;
   if (Math.abs(antes - escalaV) > 0.05) armarLlaves3d();
@@ -530,6 +566,8 @@ function vigilar3d(c: Corrida): boolean {
 /** la altura (m) del viento de referencia: la del corte horizontal (o la vereda); sin corte horizontal, la de la torre */
 function zRef3d(): number {
   const g = corrida?.geo; if (!g) return 10;
+  // la banda: el viento llega parejo, el de la mitad de la franja
+  if (g.banda) return (g.banda.z0 + g.banda.z1) / 2;
   return cfg.vereda ? 1.5 : cfg.horizontal ? Math.max(1.5, cfg.zRel * g.H) : g.H;
 }
 /** una velocidad (en veces el viento que llega a esa altura) en la unidad elegida */
@@ -791,7 +829,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   if (cr.guardada && cr.campo) { cr.ultimasLineas = 0; actualizarCampo(); }
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}${g.banda ? `Banda de pisos de ${fmt(g.banda.z0, 1)} a ${fmt(g.banda.z1, 1)} m sobre PB (${g.nz} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda), sin suelo, con planos deslizantes arriba y abajo · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, parejo, con la velocidad de esa altura` : `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion})`} · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
   dibujar();
 }
 
@@ -850,6 +888,21 @@ export function panelTunel3d(c: H) {
     return h('label', { class: 'campo' }, h('span', {}, 'Viento medio anual del lugar a 10 m (m/s, estación meteorológica)'), i);
   })(),
   h('p', { class: 'nota' }, 'El viento A o B es el del selector de arriba. La grilla, las paredes y el giro empiezan la simulación de nuevo; los cortes y los colores, no.'));
+  // banda de pisos: todas las celdas en una franja de la torre (más detalle en esos pisos)
+  {
+    const niv = nivelesProyecto(), H = Math.max(...niv.map(n => n.cota)), b = bandaElegida();
+    const cotas = niv.map(n => n.cota).filter(z => z > 0).sort((a, b2) => a - b2);
+    d.append(sel('Qué se simula', [['torre', 'la torre entera (con el suelo y el perfil del viento)'], ['banda', 'una banda de pisos (más detalle)']], cfg.banda ? 'banda' : 'torre', x => { cfg.banda = x === 'banda'; }, true));
+    if (!cfg.banda) d.append(sel('Dominio', [['normal', 'normal: 1,5 veces la altura de la torre'], ['ajustado', 'ajustado: 1,25 veces (más celdas en la torre)']], cfg.ajustado ? 'ajustado' : 'normal', x => { cfg.ajustado = x === 'ajustado'; }, true),
+      h('p', { class: 'nota chica' }, 'Con el dominio ajustado la torre tiene un 20 % más de celdas por metro (si el alto es lo que limita la escala, lo común en torres altas); el techo del túnel queda más cerca de la azotea y el aire que pasa por arriba se acelera un poco más (bloqueo).'));
+    if (cfg.banda) {
+      const centro = (b.z0 + b.z1) / 2, cerca = cotas.reduce((m, z) => (Math.abs(z - centro) < Math.abs(m - centro) ? z : m), cotas[0] ?? 0);
+      d.append(h('div', { class: 'grilla2' },
+        sel('Altura de la banda (el medio)', cotas.map(z => [String(z), `${fmt(z, 1)} m${Math.abs(z - (2 / 3) * H) < H / (2 * cotas.length) ? ' (≈ 2/3 de la altura)' : ''}`] as [string, string]), String(cerca), x => { cfg.bandaCota = +x; }, true),
+        sel('Alto de la banda', ['1', '2', '3', '5', '8'].map(k => [k, `${k} piso${k === '1' ? '' : 's'}`] as [string, string]), String(cfg.bandaPisos), x => { cfg.bandaPisos = +x; }, true)),
+        h('p', { class: 'nota chica' }, `Banda de ${fmt(b.z0, 1)} a ${fmt(b.z1, 1)} m sobre PB, sin suelo: arriba y abajo hay planos deslizantes (el aire no sube ni baja por ellos, como en una rebanada de una torre muy alta) y el viento llega parejo, con la velocidad de esa altura. Todas las celdas de la grilla van a esos pisos: mucho más detalle en la fachada que con la torre entera. No hay fuerzas por piso contra el CIRSOC, dinámica de la torre ni vereda: se mide el arrastre, la fuerza lateral, el Strouhal y el Cp de cada cara de la franja.`));
+    }
+  }
   {
     const stl = h('button', { type: 'button', class: 'boton' }, '⤓ La torre en STL (piso por piso)');
     stl.addEventListener('click', () => {
@@ -869,7 +922,8 @@ export function panelTunel3d(c: H) {
     abrir.addEventListener('click', () => entrada.click());
     const lam = h('button', { type: 'button', class: 'boton primario', title: 'Una hoja por bloque: la torre en el túnel, las fuerzas, la fachada, la dinámica y la calle' }, 'Lámina «Estudio de viento» (imprimir o PDF)');
     lam.addEventListener('click', () => { void lamina(); });
-    d.append(h('div', { class: 'fila-acciones' }, lam), h('div', { class: 'fila-acciones' }, guardar, abrir, entrada));
+    // la banda no tiene lámina ni archivo propio (sus medidas son otras): se guardan las de la torre entera
+    if (!cfg.banda) d.append(h('div', { class: 'fila-acciones' }, lam), h('div', { class: 'fila-acciones' }, guardar, abrir, entrada));
     d.append(h('div', { class: 'fila-acciones' }, stl, of), h('p', { class: 'nota chica' }, 'STL: un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba, para imprimir en 3D o llevar la forma a un programa de CAD. Caso de OpenFOAM: el nivel de laboratorio (RANS k-ε con la capa límite del viento, malla de 0,2 a 1 millón de celdas); el LEAME.txt del .zip explica cómo correrlo.'));
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
@@ -931,6 +985,7 @@ function actualizarRosa(forzar = false) {
   const el = panelRosa;
   if (!el?.isConnected) return;
   if (!forzar && el.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement?.tagName ?? '')) return;
+  if (cfg.banda) { el.replaceChildren(h('p', { class: 'nota' }, 'No aplica a la banda de pisos: hace falta la torre entera (con el suelo y el perfil del viento). Elegí «la torre entera» en «Qué se simula».')); return; }
   seccionRosa(el, ctxRosa(), () => { actualizarRosa(true); if (corrida && corrida.plano?.z !== zEval(corrida.geo)) corrida.plano = new MediaPlano(corrida.geo, zEval(corrida.geo)); actualizarCampo(); armarLlaves3d(); });
 }
 let ultimoPanel = 0, ultimoFz = 0, panelFz: H | null = null, panelFach: H | null = null, panelDin: H | null = null;
@@ -939,6 +994,7 @@ function actualizarDinamica(forzar = false) {
   if (!el?.isConnected) return;
   if (!forzar && el.contains(document.activeElement) && document.activeElement?.tagName === 'SELECT') return;
   if (!c || !c.gpu) { el.replaceChildren(); return; }
+  if (c.geo.banda) { el.replaceChildren(h('p', { class: 'nota' }, 'No aplica a la banda de pisos: hace falta la torre entera (con el suelo y el perfil del viento). Elegí «la torre entera» en «Qué se simula».')); return; }
   seccionDinamica(el, c.fz, c.infoDin, () => actualizarDinamica(true));
 }
 alCambiarFachada(() => { actualizarCampo(); actualizarFachada(true); });
@@ -948,6 +1004,7 @@ function actualizarFachada(forzar = false) {
   if (!el?.isConnected) return;
   if (!forzar && el.contains(document.activeElement) && document.activeElement !== document.body && document.activeElement?.tagName !== 'BUTTON') return;
   if (!c || !c.gpu) { el.replaceChildren(); return; }
+  if (c.geo.banda) { el.replaceChildren(h('p', { class: 'nota' }, 'No aplica a la banda de pisos: hace falta la torre entera (con el suelo y el perfil del viento). Elegí «la torre entera» en «Qué se simula».')); return; }
   if (cfgFachada.unidad === 'kn' && !c.infoFz) cfgFachada.unidad = 'cp';
   seccionFachada(el, c.prom, c.caras, c.geo, { qh: c.infoFz?.qh ?? NaN, pasadas: (c.gpu.pasos * UH) / c.geo.nx, dir: estado.dir, cotas: nivelesProyecto().map(n => n.cota), menorDimension: Math.min(c.geo.B, c.geo.L) });
 }
@@ -958,6 +1015,7 @@ function actualizarFuerzas(forzar = false) {
   ultimoFz = performance.now();
   actualizarFachada(); actualizarDinamica(); actualizarRosa();
   if (!c || !c.gpu) { el.replaceChildren(); return; }
+  if (c.geo.banda) { el.replaceChildren(h('p', { class: 'nota' }, 'No aplica a la banda de pisos: hace falta la torre entera (con el suelo y el perfil del viento). Elegí «la torre entera» en «Qué se simula».')); return; }
   if (!c.fz || !c.infoFz) { el.replaceChildren(h('p', { class: 'nota' }, 'Faltan los datos del viento del CIRSOC 102-25 (Viento → CIRSOC 102-25) para pasar la simulación a toneladas.')); return; }
   const config = `${TAM[cfg.tam] ? `grilla ${cfg.motor === 'procesador' ? 'del procesador' : cfg.tam}` : ''}, paredes ${cfg.paredes}${cfg.angulo ? `, viento girado ${cfg.angulo}°` : ''}${cfg.contexto && vecinos3d().length ? `, con ${vecinos3d().length} vecinos` : ''}`;
   seccionFuerzas(el, c.fz, { ...c.infoFz, pasadas: (c.gpu.pasos * UH) / c.geo.nx, angulo: cfg.angulo, config });
@@ -970,6 +1028,7 @@ function actualizarPanel(forzar = false) {
   ultimoPanel = performance.now();
   if (!c || !c.gpu) { el.replaceChildren(h('p', { class: 'nota' }, soporteGpu === null && cfg.motor !== 'procesador' ? 'Sin WebGPU: elegí el procesador como motor.' : 'Arrancando…')); return; }
   const g = c.geo, pasadas = (c.gpu.pasos * UH) / g.nx, reg = cpReglamento(g), cp = c.prom.porCara();
+  if (g.banda && c.banda) { el.replaceChildren(...panelBanda(c, pasadas)); return; }
   const nombres: [Cara, string][] = [['barlovento', 'Barlovento'], ['lateral', 'Laterales'], ['sotavento', 'Sotavento'], ['cubierta', 'Cubierta']];
   const tabla = h('table', { class: 'tabla' },
     h('thead', {}, h('tr', {}, h('th', {}, 'Cara'), h('th', {}, 'Cp simulación'), h('th', {}, 'Cp CIRSOC 102-25'))),
@@ -1007,6 +1066,26 @@ function actualizarPanel(forzar = false) {
     ...(lawson ? [lawson] : []),
     h('p', { class: 'nota' }, `${c.prom.muestras ? `Cp promediado en ${c.prom.muestras} muestras (desde la primera pasada del aire), con qh de la altura de la torre y la presión de referencia aguas arriba.` : 'El Cp se empieza a promediar después de la primera pasada del aire.'} El reglamento da valores de diseño de un edificio aislado; la simulación, con la planta real, una sola dirección y un Reynolds de red ≈ ${fmt(RE, 0)}, da el orden de magnitud: en barlovento se parecen; en los costados y sotavento la simulación suele dar más succión. ${vereda}`),
   );
+}
+
+/** lo que se mide en la banda: arrastre, fuerza lateral, Strouhal y Cp de cada cara, con lo de referencia */
+function panelBanda(c: Corrida, pasadas: number): H[] {
+  const r = c.banda!.resultado(), g = c.geo, b = g.banda!, reg = cpReglamento(g);
+  const Bc = g.B * g.escala, hp = (g.H / Math.max(1, cfg.bandaPisos));
+  const nombres: [Cara, string][] = [['barlovento', 'Barlovento'], ['lateral', 'Laterales'], ['sotavento', 'Sotavento']];
+  const V = vientoDisenoEn(b.z1);
+  return [
+    h('div', { class: 'kpis' },
+      kpi('Tiempo', fmt(pasadas, 1), `pasadas del aire (${c.gpu?.pasos ?? 0} pasos)${c.corriendo ? '' : ' · en pausa'}`),
+      kpi('Detalle', `${fmt(Bc, 0)} celdas`, `en el ancho B = ${fmt(g.B, 1)} m (${fmt(g.escala * hp, 0)} por piso de alto)`),
+      kpi('Arrastre Cd', r.muestras ? fmt(r.Cd, 2) : '…', r.muestras ? `fluctúa ± ${fmt(r.cdRms, 2)} · por metro de alto: F = Cd · q · B` : 'después de la primera pasada'),
+      kpi('Fuerza lateral', r.muestras ? `± ${fmt(r.clRms, 2)}` : '…', 'Cl (desvío): la de los remolinos que se desprenden'),
+      kpi('Strouhal St', isFinite(r.St) ? fmt(r.St, 3) : '…', isFinite(r.St) ? `remolinos cada B / (St · V)${V ? `: con ${fmt(V, 0)} m/s, ${fmt(g.B / (r.St * V), 1)} s` : ''}` : 'hacen falta más muestras')),
+    h('table', { class: 'tabla' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Cara'), h('th', {}, 'Cp de la banda'), h('th', {}, 'Cp CIRSOC 102-25'))),
+      h('tbody', {}, ...nombres.map(([k, t]) => h('tr', {}, h('td', {}, t), h('td', { class: 'n' }, r.muestras && r.cp[k] !== null ? fmt(r.cp[k]!, 2) : '…'), h('td', { class: 'n' }, reg[k] === null ? '—' : fmt(reg[k]!, 2)))))),
+    h('p', { class: 'nota' }, `Banda de ${fmt(b.z0, 1)} a ${fmt(b.z1, 1)} m sobre PB. Cp y Cd con la velocidad que llega a la banda (no la de la azotea); ${r.muestras} muestras desde la primera pasada del aire. Como el aire no puede pasar por arriba ni por abajo, la banda se parece a un tramo de una torre infinita: el arrastre sale más alto que en la torre entera (en un prisma cuadrado, Cd ≈ 2,1 contra ≈ 1,3–1,5 de la torre con su punta) y los remolinos son más ordenados. Sirve para ver el detalle de la fachada en esos pisos, no para las fuerzas de toda la torre.`),
+  ];
 }
 
 /** al cambiar de proyecto o cerrar: suelta la placa */
