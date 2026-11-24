@@ -30,7 +30,8 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 15. ~~Revisar la matemática de «Flex comp PB paralelos»: revisión, hoja 7 del desglose, rótulos de O y P y #DIV/0! en Controles~~ (23/11, `docs/flexocompresion_planilla/`)
 21. ~~Editor del perfil de la torre y torre inclinada~~ (24/11): Diseño → Perfil, con dos alzados, manijas, fichas de forma (prisma, ahusada, panza, reloj de arena, escalonada, inclinada), polilínea, Bézier y spline con tensión y sesgo. «Aplicar a los niveles» escribe B, L y el corrimiento (dx, dy) de cada nivel, avisa los muros que quedan afuera y el 3D corre cada nivel. En Estabilidad, «Perfil variable» calcula la fachada inclinada, el peso corrido, el viento excéntrico y el P-Δ (pasos 2, 4, 5 y 7 del protocolo), con controles θ y vuelco con el perfil
 22. ~~Túnel 3D, etapa 1 de la propuesta de resultados: fuerzas en la base y por piso~~ (24/11): arrastre, lateral y torsor de cada nivel y de la base, con media, desvío, pico estimado y serie de tiempo; comparadas con el CIRSOC 102-25 (misma q y misma ráfaga G); simultaneidad; CSV para un programa de análisis estructural y Excel con fórmulas. Las líneas de corriente se pintan con la velocidad
-23. Túnel 3D, etapas 2 a 7 de `docs/propuesta_resultados_3d/` (fachada, vista y grabación, dinámica, rosa de vientos, lámina, vórtices)
+23. ~~Túnel 3D, etapa 2: presiones de fachada~~ (24/11): Cp medio, desvío y picos de cada celda (en Cp o kN/m², en bandas), la torre pintada con lo que se elige, la fachada desplegada con pisos y zonas de esquina, la tabla por zona contra componentes y revestimientos del CIRSOC 102 (con la presión interior y el área del elemento), CSV y hoja «Fachada» del Excel
+24. Túnel 3D, etapas 3 a 7 de `docs/propuesta_resultados_3d/` (vista y grabación, dinámica, rosa de vientos, lámina, vórtices)
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)

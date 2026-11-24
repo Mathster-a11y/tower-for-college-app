@@ -7,6 +7,7 @@ import { estado, fmt } from './estado';
 import { h, kpi, type H } from './comp';
 import { graficoAltura, tablaValores } from './diagramas';
 import { descargarCSV } from './csv';
+import { ultimasZonas } from './tunel3dFachada';
 import { FACTOR_PICO, picoEstimado, type Estad, type Fuerzas3D, type MuestraBase } from '../viento/fuerzas3d';
 
 export interface InfoFuerzas {
@@ -64,7 +65,7 @@ export function seccionFuerzas(cont: HTMLElement, fz: Fuerzas3D | null, info: In
     r.pisos.map((p, i) => [p.nombre, p.z, p.Fx.media, p.Fx.sigma, picoEstimado(p.Fx), p.Fy.media, p.Fy.sigma, picoEstimado(p.Fy), p.Mz.media, p.Mz.sigma, picoEstimado(p.Mz), info.regl[i]]), 3));
   const csvSerie = h('button', { type: 'button', class: 'mini', title: 'Las fuerzas de la base en cada muestra, con el tiempo en segundos reales' }, '⤓ CSV serie de la base');
   csvSerie.addEventListener('click', () => { const t0 = fz.serie[0]?.t ?? 0; descargarCSV(`tunel3d_base_viento${info.dir}.csv`, ['t (s)', 'Vx arrastre (t)', 'Vy lateral (t)', 'Mz torsor (tm)', 'Mx vuelco (tm)', 'My vuelco (tm)'], fz.serie.map(m => [m.t - t0, m.Vx, m.Vy, m.Mz, m.Mx, m.My]), 3); });
-  const xlsx = h('button', { type: 'button', class: 'mini', title: 'Hojas «Cargas por piso», «Base» y «Serie», con los picos y las comparaciones como fórmulas y gráficos' }, '⤓ Excel (.xlsx)');
+  const xlsx = h('button', { type: 'button', class: 'mini', title: 'Hojas «Cargas por piso», «Base», «Serie» y «Fachada», con los picos y las comparaciones como fórmulas y gráficos' }, '⤓ Excel (.xlsx)');
   xlsx.addEventListener('click', () => { void descargarLibro(fz, info).catch(e => { const m = document.getElementById('mensaje'); if (m) m.textContent = `No se pudo armar el Excel: ${e instanceof Error ? e.message : String(e)}`; }); });
   cont.replaceChildren(
     kpis,
@@ -97,7 +98,7 @@ function graficoSerie(serie: MuestraBase[], ancho: number): SVGSVGElement {
 
 async function descargarLibro(fz: Fuerzas3D, info: InfoFuerzas) {
   const { libroTunel3d } = await import('../xlsx/libros/libroTunel3d');
-  const bytes = await libroTunel3d({ proyecto: estado.proyecto.nombre || 'Torre', dir: info.dir, resumen: fz.resumen(), serie: fz.serie, regl: info.regl, qh: info.qh, G: info.G, config: info.config }).xlsx();
+  const bytes = await libroTunel3d({ proyecto: estado.proyecto.nombre || 'Torre', dir: info.dir, resumen: fz.resumen(), serie: fz.serie, regl: info.regl, qh: info.qh, G: info.G, config: info.config, fachada: ultimasZonas }).xlsx();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   a.download = `tunel3d_viento${info.dir}.xlsx`;

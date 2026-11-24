@@ -23,6 +23,7 @@ import { llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor'
 import { categoriaLawson, factorPeaton, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
+import { alCambiarFachada, cfgFachada, colorCp, llaveFachada, seccionFachada, valorTrozo } from './tunel3dFachada';
 import { vientoCirsoc } from './cirsoc102';
 import { KN_POR_T } from '../engine/cargas/cirsoc102';
 
@@ -283,11 +284,11 @@ function actualizarCampo() {
   };
   // caras de la torre: Cp promediado (si todavía no hay muestras, el instantáneo)
   const colA = v.torre!.geometry.getAttribute('color') as THREE.BufferAttribute, col = new THREE.Color();
-  const cpCara = (k: number) => (c.prom.muestras ? c.prom.cp(k) : (F[4 * c.caras[k].celda + 3] - ref) / 3 / (0.5 * UH * UH));
+  // con lo que se eligió en «Fachada» (Cp medio, desvío o picos); antes de la primera muestra, el Cp instantáneo
+  const cpInst = (ks: number[]) => { const vs = ks.map(k => (F[4 * c.caras[k].celda + 3] - ref) / 3 / (0.5 * UH * UH)); return cfgFachada.est === 'media' && vs.length ? vs.reduce((a2, b2) => a2 + b2, 0) / vs.length : NaN; };
   v.trozos.forEach(t => {
-    let s = 0, n = 0;
-    for (const k of t.caras) { const cp = cpCara(k); if (isFinite(cp)) { s += cp; n++; } }
-    colCp(n ? s / n : NaN, col);
+    const rgb = colorCp(c.prom.muestras ? valorTrozo(c.prom, t.caras) : cpInst(t.caras));
+    col.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
     for (let i = 0; i < t.n; i++) colA.setXYZ(t.desde + i, col.r, col.g, col.b);
   });
   colA.needsUpdate = true;
@@ -413,7 +414,8 @@ function armarLlaves3d() {
   if (!llaves3d) return;
   if (!cfg.llave && !cfg.simbolos) { llaves3d.replaceChildren(); return; }
   const fondo = '#ffffff', az = css('--compresion', '#378add'), ro = css('--traccion', '#e24b4a');
-  const caras: Llave = { titulo: 'Caras de la torre: Cp promedio', colores: [ro, fondo, az], marcas: [[0, '≤ −1,2 succiona'], [1.2 / 2.2, '0'], [1, '+1 empuja']] };
+  if (cfgFachada.unidad === 'kn' && !(corrida?.infoFz?.qh)) cfgFachada.unidad = 'cp';
+  const caras: Llave = llaveFachada(corrida?.infoFz?.qh ?? NaN);
   let corte: Llave | null = null;
   if (cfg.vereda && cfg.lawson) corte = { titulo: 'Vereda (1,5 m): confort Lawson', colores: LAWSON_LDDC.map(k => COL_LAWSON[k.codigo]), marcas: [[0, 'A sentarse'], [0.5, 'C parado'], [1, 'E incómodo']] };
   else if (cfg.vereda) corte = { titulo: 'Vereda (1,5 m): el viento comparado con el del campo abierto', colores: [fondo, css('--deformada', '#1d9e75'), css('--elegido', '#ef9f27')], marcas: [[0, 'quieto'], [1 / 1.6, 'igual'], [1, '+60 % o más']] };
@@ -577,15 +579,28 @@ export function panelTunel3d(c: H) {
   panelEstado = h('div', {}); m.append(panelEstado);
   const sf = seccion('Fuerzas: base y piso por piso').cuerpo; c.append(sf.parentElement!);
   panelFz = h('div', {}); sf.append(panelFz); ultimoFz = 0;
+  const sfa = seccion('Fachada: presiones pico y zonas').cuerpo; c.append(sfa.parentElement!);
+  panelFach = h('div', {}); sfa.append(panelFach);
   actualizarPanel(true);
 }
 
-let ultimoPanel = 0, ultimoFz = 0, panelFz: H | null = null;
+let ultimoPanel = 0, ultimoFz = 0, panelFz: H | null = null, panelFach: H | null = null;
+alCambiarFachada(() => { actualizarCampo(); actualizarFachada(true); });
+/** la fachada: no se rehace mientras se está eligiendo algo en ella (se cerraría la lista desplegable) */
+function actualizarFachada(forzar = false) {
+  const el = panelFach, c = corrida;
+  if (!el?.isConnected) return;
+  if (!forzar && el.contains(document.activeElement) && document.activeElement !== document.body && document.activeElement?.tagName !== 'BUTTON') return;
+  if (!c || !c.gpu) { el.replaceChildren(); return; }
+  if (cfgFachada.unidad === 'kn' && !c.infoFz) cfgFachada.unidad = 'cp';
+  seccionFachada(el, c.prom, c.caras, c.geo, { qh: c.infoFz?.qh ?? NaN, pasadas: (c.gpu.pasos * UH) / c.geo.nx, dir: estado.dir, cotas: nivelesProyecto().map(n => n.cota), menorDimension: Math.min(c.geo.B, c.geo.L) });
+}
 function actualizarFuerzas(forzar = false) {
   const el = panelFz, c = corrida;
   if (!el?.isConnected) return;
   if (!forzar && performance.now() - ultimoFz < 2500) return;
   ultimoFz = performance.now();
+  actualizarFachada();
   if (!c || !c.gpu) { el.replaceChildren(); return; }
   if (!c.fz || !c.infoFz) { el.replaceChildren(h('p', { class: 'nota' }, 'Faltan los datos del viento del CIRSOC 102-25 (Viento → CIRSOC 102-25) para pasar la simulación a toneladas.')); return; }
   const config = `${TAM[cfg.tam] ? `grilla ${cfg.motor === 'procesador' ? 'del procesador' : cfg.tam}` : ''}, paredes ${cfg.paredes}${cfg.angulo ? `, viento girado ${cfg.angulo}°` : ''}${cfg.contexto && vecinos3d().length ? `, con ${vecinos3d().length} vecinos` : ''}`;

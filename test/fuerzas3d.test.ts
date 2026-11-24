@@ -54,7 +54,7 @@ describe('Excel del túnel 3D', () => {
     const { libroTunel3d } = await import('../src/xlsx/libros/libroTunel3d');
     const f = new Fuerzas3D(caras, g, pisos, uH, qhG);
     for (let k = 0; k < 5; k++) f.sumar(campo(c => (c.cara === 'barlovento' ? 0.8 + 0.1 * k : 0)), 1, k);
-    const L = libroTunel3d({ proyecto: 'prueba', dir: 'A', resumen: f.resumen(), serie: f.serie, regl: pisos.map(() => 1), qh: 1000, G: 0.85, config: 'prueba' });
+    const L = libroTunel3d({ proyecto: 'prueba', dir: 'A', resumen: f.resumen(), serie: f.serie, regl: pisos.map(() => 1), qh: 1000, G: 0.85, config: 'prueba', fachada: { zonas: [{ zona: 4, nombre: 'centro', cpMas: 1, cpMenos: -1, pMas: 1.2, pMenos: -1.2, pMasRegl: 1, pMenosRegl: -1 }], area: 4.5, a: 1.2, qh: 1000 } });
     const bytes = await L.xlsx();
     expect(bytes.length).toBeGreaterThan(5000);
   });

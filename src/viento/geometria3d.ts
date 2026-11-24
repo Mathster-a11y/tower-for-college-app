@@ -234,20 +234,38 @@ export function cpReglamento(g: Geometria3D): Record<Cara, number | null> {
 }
 
 /**
- * Cp promediado en el tiempo: se van sumando las densidades de las celdas de cara en cada muestra. Cp = (ρ − ρ∞)/3 /
- * (½ uH²), con la velocidad de entrada a la altura de la torre (como qh del reglamento) y la presión de referencia
- * ρ∞ de una celda lejos, aguas arriba y a la altura de la torre (como la toma estática de un túnel).
+ * Cp en el tiempo, celda por celda: se acumula la diferencia de densidad con la referencia en cada muestra (su suma, su
+ * suma de cuadrados, el mínimo y el máximo) para tener el Cp medio, el desvío (RMS de la parte que fluctúa) y los
+ * extremos. Cp = (ρ − ρ∞)/3 / (½ uH²), con la velocidad de entrada a la altura de la torre (como qh del reglamento) y la
+ * presión de referencia ρ∞ de una celda lejos, aguas arriba y a la altura de la torre (como la toma estática de un túnel).
  */
 export class PromedioCp {
-  readonly suma: Float64Array; muestras = 0; sumaRef = 0;
-  constructor(readonly caras: ReturnType<typeof celdasDeCara>, readonly uH: number, readonly celdaRef = -1) { this.suma = new Float64Array(caras.length); }
+  readonly suma: Float64Array; readonly suma2: Float64Array; readonly min: Float64Array; readonly max: Float64Array;
+  muestras = 0;
+  private readonly k0: number;
+  constructor(readonly caras: ReturnType<typeof celdasDeCara>, readonly uH: number, readonly celdaRef = -1) {
+    const n = caras.length;
+    this.suma = new Float64Array(n); this.suma2 = new Float64Array(n); this.min = new Float64Array(n).fill(Infinity); this.max = new Float64Array(n).fill(-Infinity);
+    this.k0 = 1 / 3 / (0.5 * uH * uH);
+  }
   /** rho: la densidad de cada celda (o un campo de 4 valores por celda con ρ en el 4.º, si paso = 4) */
   sumar(rho: ArrayLike<number>, paso = 1, desplaz = 0) {
-    for (let k = 0; k < this.caras.length; k++) this.suma[k] += rho[this.caras[k].celda * paso + desplaz];
-    this.sumaRef += this.celdaRef >= 0 ? rho[this.celdaRef * paso + desplaz] : 1;
+    const ref = this.celdaRef >= 0 ? rho[this.celdaRef * paso + desplaz] : 1;
+    for (let k = 0; k < this.caras.length; k++) {
+      const d = rho[this.caras[k].celda * paso + desplaz] - ref;
+      this.suma[k] += d; this.suma2[k] += d * d;
+      if (d < this.min[k]) this.min[k] = d;
+      if (d > this.max[k]) this.max[k] = d;
+    }
     this.muestras++;
   }
-  cp(k: number): number { return this.muestras ? ((this.suma[k] - this.sumaRef) / this.muestras) / 3 / (0.5 * this.uH * this.uH) : NaN; }
+  /** Cp medio */
+  cp(k: number): number { return this.muestras ? (this.suma[k] / this.muestras) * this.k0 : NaN; }
+  /** desvío del Cp en el tiempo (RMS de lo que fluctúa alrededor de la media) */
+  rms(k: number): number { if (!this.muestras) return NaN; const m = this.suma[k] / this.muestras; return Math.sqrt(Math.max(0, this.suma2[k] / this.muestras - m * m)) * this.k0; }
+  /** el Cp más bajo y el más alto que pasaron por la celda */
+  cpMin(k: number): number { return this.muestras ? this.min[k] * this.k0 : NaN; }
+  cpMax(k: number): number { return this.muestras ? this.max[k] * this.k0 : NaN; }
   /** el promedio de cada cara (pesado por celda) */
   porCara(): Record<Cara, number> {
     const s: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 }, n: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 };

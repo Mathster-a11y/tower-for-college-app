@@ -1806,3 +1806,7 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .grafico-serie .gs-nota { font: 10px var(--fuente); fill: var(--ink2); }
 .grafico-serie .gs-arrastre { fill: none; stroke: var(--carga); stroke-width: 1.6; }
 .grafico-serie .gs-lateral { fill: none; stroke: var(--corte); stroke-width: 1.6; }
+/* Túnel 3D: fachada desplegada y tabla por zona */
+.fachada-desplegada { display: block; max-width: 100%; margin: 4px 0; }
+.llave-sim.en-flujo { position: static; margin: 6px 0; min-width: 0; max-width: 100%; }
+.tabla td.marca { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--elegido) 18%, transparent); }

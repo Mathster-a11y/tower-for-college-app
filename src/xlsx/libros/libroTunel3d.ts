@@ -5,6 +5,7 @@
 import { abs, LibroK, rc } from '../kit/libro';
 import type { MuestraBase, ResumenFuerzas } from '../../viento/fuerzas3d';
 import { FACTOR_PICO } from '../../viento/fuerzas3d';
+import type { FilaZona } from '../../viento/fachada3d';
 
 export interface DatosLibroTunel3d {
   proyecto: string; dir: 'A' | 'B';
@@ -14,6 +15,8 @@ export interface DatosLibroTunel3d {
   /** q_h (N/m²) y G con los que se pasó de Cp a fuerza */
   qh: number; G: number;
   config: string;
+  /** fachada: el peor valor de cada zona contra componentes y revestimientos del CIRSOC (etapa 2) */
+  fachada?: { zonas: FilaZona[]; area: number; a: number; qh: number } | null;
 }
 
 export function libroTunel3d(d: DatosLibroTunel3d): LibroK {
@@ -25,11 +28,12 @@ export function libroTunel3d(d: DatosLibroTunel3d): LibroK {
     '• Cargas por piso: la fuerza de cada nivel en el sentido del viento (arrastre, Fx), de costado (lateral, Fy) y el torsor (Mz), con su media, su desvío en el tiempo y el pico estimado = |media| + g · desvío (fórmula). Al lado, la fuerza del CIRSOC 102-25 y el cociente simulación / reglamento. Se pegan en un programa de análisis estructural como cargas por nivel.',
     '• Base: el cortante, el vuelco y el torsor en la base, y la simultaneidad (en el instante del máximo de cada fuerza, cuánto valen las otras dos, como fracción de su propio máximo).',
     '• Serie: las fuerzas de la base en el tiempo (en segundos reales), con su gráfico.',
+    '• Fachada (si se miró): el peor pico de cada zona (centro de las caras y esquinas) en kN/m², contra los componentes y revestimientos del CIRSOC 102, con la presión interior. Las presiones son fórmulas de los Cp.',
     `Cómo se pasa de la simulación a toneladas: cada celda pegada a la torre da su Cp; la presión es Cp · qh · G con qh = ${d.qh.toFixed(0)} N/m² (la del CIRSOC 102-25 a la altura de la torre) y G = ${d.G.toFixed(2)} (la misma ráfaga que usa el reglamento), por el área de la celda. Así lo único que cambia entre la simulación y el reglamento es la forma (los Cp).`,
     `Muestras: ${r.muestras}, en ${r.tiempo.toFixed(0)} s reales. Con pocas muestras el desvío y los picos son poco confiables; la media se estabiliza antes.`,
     `Simulación: ${d.config}.`,
   ].forEach((t, i) => le.put(1, 4 + i, t, { papel: i ? 'texto' : 'textoB', ajustar: true }));
-  for (let i = 0; i < 7; i++) le.altos.set(4 + i, i && i < 6 ? 46 : 20);
+  for (let i = 0; i < 8; i++) le.altos.set(4 + i, i && i < 7 ? 46 : 20);
 
   // ------------------------------------------------------------------------------------------------ cargas por piso
   const h = L.hoja('Cargas por piso', [12, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 10]);
@@ -91,6 +95,24 @@ export function libroTunel3d(d: DatosLibroTunel3d): LibroK {
     t.fijar = { fila: s0, col: 1 };
     t.graficos.push({ tipo: 'dispersion', titulo: 'Cortante en la base', ejeX: 't (s)', ejeY: 't', desde: [8, 2], hasta: [18, 22],
       series: [{ nombre: 'arrastre', x: col(1), y: col(2), color: 'D85A30', sinMarcas: true }, { nombre: 'lateral', x: col(1), y: col(3), color: '7F77DD', sinMarcas: true }] });
+  }
+  // ------------------------------------------------------------------------------------------------ fachada
+  if (d.fachada && d.fachada.zonas.length) {
+    const fa = L.hoja('Fachada', [30, 12, 12, 13, 13, 14, 14]);
+    fa.encabezado('Presiones de fachada por zona', 'p = qh · (Cp pico ± GCpi) / 1000 (kN/m²). Cp pico = Cp medio ± g · desvío. El CIRSOC: componentes y revestimientos, h > 18 m.', 7);
+    fa.put(1, 4, 'qh (N/m²)', 'textoB'); fa.put(2, 4, d.fachada.qh, { papel: 'dato', fmt: '0' });
+    fa.put(1, 5, 'GCpi (edificio cerrado)', 'textoB'); fa.put(2, 5, 0.18, { papel: 'dato', fmt: '0.00' });
+    fa.put(1, 6, 'Área del elemento (m²) · ancho de la zona de esquina a (m)', 'textoB'); fa.put(2, 6, d.fachada.area, { papel: 'dato', fmt: '0.0' }); fa.put(3, 6, d.fachada.a, { papel: 'dato', fmt: '0.00' });
+    const q = abs(2, 4), gi = abs(2, 5);
+    fa.cabecera(8, 1, ['Zona', 'Cp pico + sim.', 'Cp pico − sim.', 'Empuje sim. (kN/m²)', 'Succión sim. (kN/m²)', 'Empuje CIRSOC (kN/m²)', 'Succión CIRSOC (kN/m²)']);
+    d.fachada.zonas.forEach((z, i) => {
+      const f = 9 + i;
+      fa.put(1, f, z.nombre, 'textoB'); fa.put(2, f, isFinite(z.cpMas) ? z.cpMas : null, { papel: 'coef', fmt: '0.00' }); fa.put(3, f, isFinite(z.cpMenos) ? z.cpMenos : null, { papel: 'coef', fmt: '0.00' });
+      fa.f(4, f, `${q}*(${rc(2, f)}+${gi})/1000`, { papel: 'calc', fmt: '0.00' }); fa.f(5, f, `${q}*(${rc(3, f)}-${gi})/1000`, { papel: 'calc', fmt: '0.00' });
+      fa.put(6, f, z.pMasRegl, { papel: 'texto', fmt: '0.00' }); fa.put(7, f, z.pMenosRegl, { papel: 'texto', fmt: '0.00' });
+    });
+    fa.put(1, 12, 'Positiva: el viento empuja la fachada hacia adentro (la comprime). Negativa: la succiona hacia afuera (la tracciona). Donde la simulación da más que el reglamento conviene reforzar el anclaje o el vidrio.', 'nota');
+    fa.combinar(1, 12, 7, 12); fa.altos.set(12, 30);
   }
   return L;
 }
