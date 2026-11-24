@@ -32,6 +32,8 @@ export interface OpcionesLbm3 {
   colision?: 'bgk' | 'trt';
   /** piso de ω− en la TRT (por defecto OMEGA_MENOS_MIN) */
   omegaMenosMin?: number;
+  /** perturbación inicial de costado, como fracción del viento (0,02 por defecto; 0 = flujo inicial exacto) */
+  perturbacion?: number;
   /**
    * paredes exactas con la interpolación lineal (por defecto) o la cuadrática (false). La cuadrática se vuelve
    * inestable con viscosidad de red muy baja: con una torre alta y ancha en la grilla liviana (τ ≈ 0,5007) se rompía
@@ -78,7 +80,7 @@ export class Lbm3D {
     this.nx = o.nx; this.ny = o.ny; this.nz = o.nz; this.N = o.nx * o.ny * o.nz;
     this.tau0 = 3 * o.nu + 0.5; this.cs = o.cs ?? 0; this.uIn = o.uIn; this.solido = o.solido;
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
-    inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
+    inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido, o.perturbacion);
     this.g.set(this.f);
     this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN; this.lineal = o.paredesLineales ?? true;
     if (o.paredes) {
@@ -150,12 +152,19 @@ export function origen3(nx: number, ny: number, nz: number, solido: Uint8Array):
   return o;
 }
 
-/** el estado inicial: el perfil de entrada en todo el fluido (lo usa también la GPU) */
-export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uIn: Float32Array, solido: Uint8Array) {
+/**
+ * el estado inicial: el perfil de entrada en todo el fluido (lo usan también la GPU y WebAssembly), con una
+ * perturbación chica de costado (una fracción del viento, con una semilla fija: siempre la misma). Sin ella, una torre
+ * simétrica en un flujo simétrico no tiene nada que la saque de la simetría y los remolinos nunca se desprenden (la
+ * fuerza lateral queda en cero); en un túnel real siempre hay algo de turbulencia. Es lo mismo que hace el 2D.
+ */
+export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uIn: Float32Array, solido: Uint8Array, perturbacion = 0.02) {
   const N = nx * ny * nz;
+  let semilla = 12345;
+  const azar = () => { semilla = (semilla * 1664525 + 1013904223) >>> 0; return semilla / 4294967296 - 0.5; };
   for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const c = (z * ny + y) * nx + x, u = solido[c] ? 0 : uIn[z];
-    for (let i = 0; i < 19; i++) f[i * N + c] = feq3(i, 1, u, 0, 0);
+    const c = (z * ny + y) * nx + x, u = solido[c] ? 0 : uIn[z], v = solido[c] || x === 0 ? 0 : perturbacion * uIn[z] * azar();
+    for (let i = 0; i < 19; i++) f[i * N + c] = feq3(i, 1, u, v, 0);
   }
 }
 

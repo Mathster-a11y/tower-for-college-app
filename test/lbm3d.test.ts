@@ -15,7 +15,7 @@ describe('D3Q19 de referencia', () => {
   it('sin obstáculos ni suelo, el flujo uniforme queda uniforme', () => {
     const nx = 12, ny = 6, nz = 6, u0 = 0.05;
     const uIn = new Float32Array(nz).fill(u0);
-    const m = new Lbm3D({ nx, ny, nz, nu: 0.05, uIn, solido: new Uint8Array(nx * ny * nz) });
+    const m = new Lbm3D({ nx, ny, nz, nu: 0.05, uIn, solido: new Uint8Array(nx * ny * nz), perturbacion: 0 });
     for (let k = 0; k < 40; k++) m.paso();
     for (let c = 0; c < m.N; c++) { const q = m.macro(c); expect(Math.abs(q.u - u0)).toBeLessThan(1e-6); expect(Math.abs(q.v) + Math.abs(q.w)).toBeLessThan(1e-6); }
   });

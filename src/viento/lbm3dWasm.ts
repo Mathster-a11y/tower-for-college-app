@@ -32,7 +32,7 @@ export class Lbm3DWasm {
     if (falta > 0) this.x.memory.grow(Math.ceil(falta / 65536));
     const b = this.x.memory.buffer;
     const f = new Float32Array(b, pf, 19 * N);
-    inicial3(f, o.nx, o.ny, o.nz, o.uIn, o.solido);
+    inicial3(f, o.nx, o.ny, o.nz, o.uIn, o.solido, o.perturbacion);
     new Float32Array(b, pg, 19 * N).set(f);
     new Int32Array(b, po, 19 * N).set(origen3(o.nx, o.ny, o.nz, o.solido));
     new Float32Array(b, pu, o.nz).set(o.uIn);

@@ -1799,3 +1799,10 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .grafico-modulo .gm-punto.no { fill: var(--cero); opacity: .55; }
 .grafico-modulo .gm-punto.mejor { fill: var(--elegido); }
 .grafico-modulo .gm-punto.actual { stroke: var(--ink); stroke-width: 2; }
+/* Túnel 3D: fuerzas en la base en el tiempo */
+.grafico-serie { display: block; max-width: 100%; height: auto; }
+.grafico-serie .gs-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-serie .gs-cero { stroke: var(--cero); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico-serie .gs-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-serie .gs-arrastre { fill: none; stroke: var(--carga); stroke-width: 1.6; }
+.grafico-serie .gs-lateral { fill: none; stroke: var(--corte); stroke-width: 1.6; }
