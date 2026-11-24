@@ -92,6 +92,13 @@ type Oyente = () => void;
 
 /** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
 const nombrePieza = (g: string, ms: import('../engine/modelo').Muro[]) => `${ms[0].pieza?.tipo ? `${ms[0].pieza.tipo[0].toUpperCase()}${ms[0].pieza.tipo.slice(1)} ` : 'Pieza '}${g}`;
+/**
+ * Controles que se calculan después del cálculo principal porque usan sus resultados (el exoesqueleto): cada módulo
+ * registra una función y el estado la llama al recalcular. Así el estado no importa esos módulos (sin ciclos).
+ */
+const controlesExtra: (() => Control[])[] = [];
+export function registrarControles(f: () => Control[]) { controlesExtra.push(f); }
+
 class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
@@ -226,6 +233,11 @@ class Estado {
     Object.assign(config, configMotor(this.config));
     try {
       this.calculo = { ...calcularProyecto(this.proyecto), revision: this.revision };
+      if (controlesExtra.length) {
+        const extra: Control[] = [];
+        for (const f of controlesExtra) { try { extra.push(...f()); } catch { /* un control extra que falla no tumba el cálculo */ } }
+        if (extra.length) this.calculo = { ...this.calculo, controles: [...this.calculo.controles, ...extra] };
+      }
     } catch (e) {
       // se conservan los resultados del último cálculo bueno (con su revisión) para que las vistas no se rompan,
       // pero quedan marcados: no son vigentes y no se exportan

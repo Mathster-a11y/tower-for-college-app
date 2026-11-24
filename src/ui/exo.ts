@@ -3,7 +3,8 @@
  * (barras en tracción en rojo y en compresión en azul, el grosor según |N|), los diagramas de M de columnas y vigas,
  * el reparto del viento entre tabiques y exoesqueleto piso por piso y la deformada con y sin exoesqueleto.
  */
-import { estado, fmt } from './estado';
+import { estado, fmt, registrarControles } from './estado';
+import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
@@ -214,6 +215,35 @@ export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string 
   if (w) { const limD = datos201De(estado.proyecto).limiteDeriva; return { u: d.r.u[n] * w.servicio.relacion, lim: d.h / limD, texto: `deriva de servicio (${fmt(w.servicio.relacion * 100, 0)} % del viento de cálculo) ≤ h/${limD}` }; }
   return { u: d.r.u[n], lim: d.h / (d.def.limiteH ?? 500), texto: `flecha ≤ h/${d.def.limiteH ?? 500}` };
 }
+/**
+ * Los controles del exoesqueleto en la lista general (Resumen, informe, lámina): el desplazamiento de la azotea con el
+ * exo y las barras (CIRSOC 301/302 con el método CIRSOC o FEM; tensión y pandeo con los del curso), en cada viento.
+ */
+export function controlesExo(): Control[] {
+  const def = estado.proyecto.exo;
+  if (!def) return [];
+  const out: Control[] = [];
+  const reglamento = !!vientoReglamento() && def.material !== 'hormigon';
+  for (const dir of ['A', 'B'] as const) {
+    const d = datosExo(dir, def);
+    if (!d) { out.push({ grupo: 'Exoesqueleto', nombre: `Exoesqueleto, viento ${dir}`, criterio: 'que se pueda calcular', fuente: 'etapa 08', planilla: null, guia: null, unidad: '', estado: 'atención', nota: 'Faltan datos para calcular el exoesqueleto (niveles, piezas o viento).' }); continue; }
+    const fl = flechaExo(d);
+    out.push({ grupo: 'Exoesqueleto', nombre: `Desplazamiento de la azotea con el exo, viento ${dir}`, criterio: fl.texto, fuente: 'etapa 08 · ménsula + exo', planilla: null, guia: fl.u * 1000, unidad: 'mm',
+      estado: fl.u <= fl.lim ? 'verifica' : 'no verifica', nota: `límite ${fmt(fl.lim * 1000, 0)} mm; el exo toma el ${fmt(d.r.fraccionExo * 100, 0)} % del momento` });
+    if (reglamento) {
+      const v = verif301(d), peor = v.reduce((m, x) => (x.ratio > m.ratio ? x : m), v[0]), malos = v.filter(x => !x.verifica).length;
+      out.push({ grupo: 'Exoesqueleto', nombre: `Barras del exo (CIRSOC 301/302), viento ${dir}`, criterio: 'interacción ≤ 1 y pared no esbelta en todas', fuente: 'CIRSOC 301, cap. H; 302, tabla 2.2.1', planilla: null, guia: peor?.ratio ?? null, unidad: '',
+        estado: malos ? 'no verifica' : 'verifica', nota: peor ? `la más cargada: ${peor.id} (${peor.clase}, ${peor.combinacion})${malos ? `; ${malos} de ${v.length} no verifican` : ''}` : undefined });
+    } else {
+      const cs = d.r.controles, malos = cs.filter(c => c.estado !== 'verifica').length, peor = cs.reduce((m, c) => (c.sigma > m.sigma ? c : m), cs[0]);
+      out.push({ grupo: 'Exoesqueleto', nombre: `Barras del exo (tensión y pandeo), viento ${dir}`, criterio: `σ ≤ σadm = ${fmt(def.sigmaAdm / 10, 0)} kg/cm² y sin pandeo`, fuente: 'etapa 08', planilla: null, guia: peor ? peor.sigma / 10 : null, unidad: 'kg/cm²',
+        estado: malos ? 'no verifica' : 'verifica', nota: peor ? `la más cargada: ${peor.id} (${peor.clase})${malos ? `; ${malos} de ${cs.length} no verifican` : ''}` : undefined });
+    }
+  }
+  return out;
+}
+registrarControles(controlesExo);
+
 export function estadoExo(): EstadoChip {
   if (!estado.proyecto.exo) return 'pendiente';
   const ds = (['A', 'B'] as const).map(d => datosExo(d));
