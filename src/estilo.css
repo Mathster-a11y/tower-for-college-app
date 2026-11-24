@@ -1889,3 +1889,26 @@ button.enlace:hover { background: none; text-decoration: underline; }
 .ayuda-plegable.con-llave { margin: 0; }
 @media (pointer: coarse) { .nota.llave > .ayuda-boton { min-height: 0; padding: 4px 0; } }
 .ayuda-plegable.con-llave:has(> .ayuda-texto[hidden]) { display: none; }
+
+/* hilo del cálculo arriba del panel de cada etapa (ui/hilo.ts) */
+.hilo { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--rolb, var(--accent)) 7%, var(--field)); border: 1px solid color-mix(in srgb, var(--rolb, var(--accent)) 25%, transparent); font-size: 12.5px; }
+.hilo-hace { margin: 0 0 4px; color: var(--ink); }
+.hilo-fila { display: grid; grid-template-columns: 52px 1fr; align-items: baseline; margin-top: 3px; }
+.hilo-pasos { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.hilo-rot { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); }
+.hilo-paso { display: inline-flex; align-items: baseline; gap: 5px; }
+button.hilo-etapa { border: 0; background: none; padding: 0; min-height: 0; color: var(--rolb, var(--accent)); font-weight: 600; font-size: 12.5px; border-radius: 0; }
+button.hilo-etapa:hover { background: none; text-decoration: underline; }
+.hilo-que { color: var(--ink2); }
+.hilo-aviso { margin: 6px 0 0; padding: 5px 8px; border-radius: 6px; background: var(--revisar-fill, #fff7e0); color: var(--ink); }
+@media (pointer: coarse) { button.hilo-etapa { min-height: 28px; } }
+/* indicadores: el número que llega de otra etapa lo dice */
+.kpi .cap .kpi-origen { float: right; font-size: 10.5px; font-weight: 600; color: var(--ink2); background: var(--tint); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+/* Resumen: qué revisar */
+.que-revisar { border: 1px solid var(--edge); border-left: 4px solid var(--revisar, #b7791f); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; background: var(--field); }
+.que-revisar h3 { margin: 0 0 2px; font-size: 14px; }
+.qr-lista { list-style: none; padding: 0; margin: 6px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 16px; }
+.qr-lista > li > ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
+.qr-lista > li > ul > li { margin: 2px 0; }
+.qr-cab { display: flex; align-items: baseline; gap: 8px; }
+.qr-cab .enlace { margin-left: auto; }

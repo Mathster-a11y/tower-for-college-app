@@ -14,7 +14,8 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarTodas } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
+import { hiloDeEtapa } from './ui/hilo';
 import { leerProyecto, textoErrores } from './engine/lector';
 import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
@@ -100,12 +101,27 @@ function dibujarPanel() {
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
   }
   try { e.panel(p, sub); } catch (err) { console.error(err); p.append(h('p', { class: 'error' }, `No se pudo armar el panel: ${String(err)}`)); }
+  // el hilo del cálculo: qué se hace en esta etapa, qué usa y a quién le pasa el resultado
+  const hilo = hiloDeEtapa(e.id);
+  if (hilo) p.prepend(hilo);
   // las secciones vienen plegadas: un renglón para abrirlas o plegarlas todas juntas
   const secs = p.querySelectorAll('section.seccion.plegable');
   if (secs.length > 1) {
     const ab = h('button', { type: 'button', class: 'enlace' }, 'Abrir todas'), pl = h('button', { type: 'button', class: 'enlace' }, 'Plegar todas');
     ab.addEventListener('click', () => plegarTodas(p, false)); pl.addEventListener('click', () => plegarTodas(p, true));
-    secs[0].before(h('div', { class: 'plegar-todas' }, h('span', { class: 'nota chica' }, `${secs.length} secciones`), ab, pl));
+    // recorrer: abre las secciones de a una, en orden (para seguir una explicación o un tutorial)
+    const rec = h('button', { type: 'button', class: 'enlace', title: 'Abre las secciones de a una, en orden' }, 'Recorrer ›');
+    let k = -1;
+    rec.addEventListener('click', () => {
+      const lista = [...p.querySelectorAll<HTMLElement>('section.seccion.plegable')];
+      k = (k + 1) % lista.length;
+      plegarTodas(p, true);
+      const s = lista[k]; s.classList.remove('plegada'); s.querySelector(':scope > .cab')?.setAttribute('aria-expanded', 'true');
+      if (s.dataset.clave) plegarSeccion(s.dataset.clave, false);
+      s.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      rec.textContent = k === lista.length - 1 ? `${k + 1} de ${lista.length} · volver al principio ›` : `${k + 1} de ${lista.length} · siguiente ›`;
+    });
+    secs[0].before(h('div', { class: 'plegar-todas' }, h('span', { class: 'nota chica' }, `${secs.length} secciones`), rec, ab, pl));
   }
   requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
@@ -527,6 +543,7 @@ async function descargarTabla() {
     descargar(nombreArchivo('_tabla.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { fallo('No se pudo armar la tabla', e); }
 }
+document.addEventListener('torre:ir-etapa', ev => irA((ev as CustomEvent<string>).detail));
 document.addEventListener('torre:importar', () => $<HTMLInputElement>('b-abrir').click());
 document.addEventListener('torre:tabla', () => { void descargarTabla(); });
 

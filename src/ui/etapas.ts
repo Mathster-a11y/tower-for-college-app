@@ -3,6 +3,7 @@
  * 06 Rototraslación · 07 Flexión, más Resumen y Ayuda. Cada etapa tiene su color de rol, su panel (datos, indicadores,
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
+import { etapaDeGrupo, irAEtapa } from './hilo';
 import { centroTunel, panelTunel } from './tunel2d';
 
 import { describirConfig } from '../engine/metodos/tipos';
@@ -263,7 +264,7 @@ const fuerzas: Etapa = {
   panel(c) {
     const d = datos();
     const m = d.R.mnyq, A = d.dir === 'A';
-    c.append(h('div', { class: 'kpis' }, kpi('W, viento total', `${fmt(d.W, 1)} t`, A ? 'M,NyQ!H61' : 'suma de la cara menor'), kpi('hw', `${fmt(d.hw)} m`, 'altura de la resultante sobre la base'), kpi('Mv', `${fmt(d.Mv, 0)} tm`, A ? 'momento volcador · M,NyQ!J61' : 'M,NyQ!O61')));
+    c.append(h('div', { class: 'kpis' }, kpi('W, viento total', `${fmt(d.W, 1)} t`, A ? 'M,NyQ!H61' : 'suma de la cara menor', undefined, '← Viento'), kpi('hw', `${fmt(d.hw)} m`, 'altura de la resultante sobre la base'), kpi('Mv', `${fmt(d.Mv, 0)} tm`, A ? 'momento volcador · M,NyQ!J61' : 'M,NyQ!O61')));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
       formula('Fuerza en cada nivel', `${v('W', 'i')}${op('=')}${v('D')} · ${A ? v('E') : v('F')} · ${v('p', 'neta')}`, `M,NyQ!H${5}…  (D = altura de influencia; ${A ? 'E = ancho B' : 'F = ancho L'})`),
@@ -430,7 +431,7 @@ const rototrasl: Etapa = {
     const hoja = d.dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor';
     const guia = dp.metodo === 'guia';
     const e = Math.abs(dp.Xr);
-    c.append(h('div', { class: 'kpis' }, kpi('ΣJ paralelos', `${fmt(dp.SJ, 2)} m⁴`, `${hoja}!B25`), kpi('Excentricidad e', `${fmt(e, 2)} m`, 'eje de simetría → eje de inercia'), kpi('Mt = W·e', `${fmt(Math.abs(dp.Mt), 0)} tm`, 'momento que hace girar la planta')));
+    c.append(h('div', { class: 'kpis' }, kpi('ΣJ paralelos', `${fmt(dp.SJ, 2)} m⁴`, `${hoja}!B25`, undefined, '← Rigidez'), kpi('Excentricidad e', `${fmt(e, 2)} m`, 'eje de simetría → eje de inercia'), kpi('Mt = W·e', `${fmt(Math.abs(dp.Mt), 0)} tm`, 'momento que hace girar la planta')));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
       formula('Eje de inercia (Varignon): resultante de los J', `${v('X', 'r')}${op('=')}Σ ${v('J', 'j')}·${v('x', 'j')} / Σ ${v('J', 'j')}${op('=')}${r(d.dir === 'A' ? dp.Xr : -dp.Xr, 2, 'm')}`, `${hoja}!J7 · el viento actúa en el eje de simetría, así que e = Xr`),
@@ -906,6 +907,20 @@ const resumen: Etapa = {
     if (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación') { centroCombinado(c); return; }
     const cs = estado.calculo.controles ?? [];
     const grupos = [...new Set(cs.map(x => x.grupo))];
+    // qué revisar: lo que no verifica o pide atención, agrupado, con el botón a la etapa donde se resuelve
+    const malos = cs.filter(x => x.estado === 'no verifica' || x.estado === 'atención');
+    if (malos.length) {
+      const orden = (x: Control) => (x.estado === 'no verifica' ? 0 : 1);
+      const filas = grupos.filter(g => malos.some(x => x.grupo === g)).map(g => {
+        const xs = malos.filter(x => x.grupo === g).sort((a, b) => orden(a) - orden(b));
+        const et = etapaDeGrupo(g);
+        const ir = et ? h('button', { type: 'button', class: 'enlace' }, `Ir a ${et[1]} →`) : null;
+        ir?.addEventListener('click', () => irAEtapa(et![0]));
+        return h('li', {}, h('div', { class: 'qr-cab' }, h('b', {}, g), h('span', { class: 'nota chica' }, `${xs.length}`), ...(ir ? [ir] : [])),
+          h('ul', {}, ...xs.slice(0, 4).map(x => h('li', {}, chip(x.estado as EstadoChip), ' ', x.nombre)), ...(xs.length > 4 ? [h('li', { class: 'nota chica' }, `y ${xs.length - 4} más (en la tabla de abajo)`)] : [])));
+      });
+      c.append(h('div', { class: 'que-revisar' }, h('h3', {}, 'Qué revisar'), h('p', { class: 'nota' }, '«No verifica»: resolverlo. «Atención»: mirar el valor.'), h('ul', { class: 'qr-lista' }, ...filas)));
+    }
     c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const dg = cs.filter(x => x.grupo === g && x.estado !== 'informativo'), e = dg.length ? peor(dg) : 'informativo'; return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
     // centro ancho: tabla; si queda angosto (tablet vertical), las mismas tarjetas que en los paneles
     const ancha = tablaControlesImpresa(cs), angosta = tablaControles(cs);

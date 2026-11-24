@@ -63,8 +63,9 @@ export type EstadoChip = 'verifica' | 'no verifica' | 'revisar' | 'completa' | '
 export const chip = (e: EstadoChip, texto: string = e) => h('span', { class: `chip-estado ${e.replace(' ', '-')}` }, texto);
 
 /** Indicador: título en versalitas, valor grande en mono, nota; el color dice el estado. */
-export function kpi(cap: string, valor: string, nota: string, color = 'var(--accent)'): H {
-  const k = h('div', { class: 'kpi' }, h('div', { class: 'cap' }, cap), h('div', { class: 'val' }, valor), h('div', { class: 'not' }, nota));
+export function kpi(cap: string, valor: string, nota: string, color = 'var(--accent)', origen?: string): H {
+  // origen: de qué etapa llega el número («← Viento»); sin origen, se calcula en esta etapa
+  const k = h('div', { class: 'kpi' }, h('div', { class: 'cap' }, cap, ...(origen ? [h('span', { class: 'kpi-origen', title: `Este número llega de la etapa ${origen.replace('← ', '')}` }, origen)] : [])), h('div', { class: 'val' }, valor), h('div', { class: 'not' }, nota));
   k.style.setProperty('--c', color);
   return k;
 }
