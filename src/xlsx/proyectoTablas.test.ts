@@ -126,3 +126,19 @@ describe('aberturas en T3D Muros', () => {
     expect(r.proyecto.muros[1].refLado).toBe(-1);
   });
 });
+
+describe('exoesqueleto y torre inclinada en las tablas', () => {
+  it('los ejemplos reales del exo y una torre inclinada vuelven iguales (T3D Exo, corrimientos y perfil)', async () => {
+    const { ejemploHearst, ejemploHancock } = await import('../engine/ejemplosExo');
+    const { aplicarPerfil, formaPerfil, medidasNiveles } = await import('../engine/perfilTorre');
+    for (const p of [ejemploHearst(), ejemploHancock()]) {
+      const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(p))), ejemploGuia())!;
+      expect(r.proyecto.exo).toEqual(p.exo);
+    }
+    const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
+    const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
+    const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;
+    expect(r.proyecto.niveles.map(n => n.dy ?? 0)).toEqual(inc.niveles.map(n => n.dy ?? 0));
+    expect(r.proyecto.perfil).toEqual(pf);
+  });
+});

@@ -23,6 +23,8 @@ import type { ValorCelda } from '../xlsx/xml';
 export const HOJA_NIVELES = 'T3D Niveles', HOJA_MUROS = 'T3D Muros';
 /** hojas que la app escribe y vuelve a leer (las tablas del proyecto) */
 export const HOJAS_TABLAS = Object.values(T) as string[];
+/** las tablas que conoce el script de la versión 2 (antes de «T3D Exo»): con un script viejo se manda solo esto */
+const HOJAS_DEL_SCRIPT_V2 = ['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías'];
 /** celdas de datos de la hoja «viento» que se leen de vuelta */
 export const CELDAS_SITIO: Record<string, keyof Proyecto['sitio']> = { C4: 'V', D4: 'Kd', E4: 'I', F4: 'zg', G4: 'alfa', I4: 'Kzt', J4: 'G', K4: 'Cpb', L4: 'Cps', O4: 'GCpi' };
 
@@ -124,9 +126,20 @@ export class SincroSheets {
     return this.enSerie(async () => {
       if (this.conflicto !== null && !forzar) return;                 // se espera la decisión de la app
       try {
-        const r = await this.pedir<{ version: number }>({ accion: 'escribir' }, { accion: 'escribir', ...pq, base: this.ultima >= 0 ? this.ultima : null, forzar });
+        const base = this.ultima >= 0 ? this.ultima : null;
+        let r: { version: number }, aviso = '';
+        try { r = await this.pedir<{ version: number }>({ accion: 'escribir' }, { accion: 'escribir', ...pq, base, forzar }); }
+        catch (e) {
+          // un script de Apps Script anterior no conoce las hojas nuevas (como «T3D Exo») y rechaza el paquete entero:
+          // se vuelve a mandar sin ellas (el proyecto completo igual va en «T3D») y se avisa que conviene actualizarlo
+          const m = e instanceof Error ? /^Tabla no permitida: (.+)$/.exec(e.message) : null;
+          if (!m) throw e;
+          const nuevas = pq.tablas.filter(t => !HOJAS_DEL_SCRIPT_V2.includes(t.nombre)).map(t => t.nombre);
+          r = await this.pedir<{ version: number }>({ accion: 'escribir' }, { accion: 'escribir', ...pq, tablas: pq.tablas.filter(t => HOJAS_DEL_SCRIPT_V2.includes(t.nombre)), base, forzar });
+          aviso = ` · el script de la planilla es de una versión anterior: no escribió ${nuevas.join(', ')} (el proyecto completo igual quedó en «T3D»). Volvé a pegar docs/sheets/Codigo.gs para tenerlas.`;
+        }
         this.ultima = r.version; this.conflicto = null;
-        this.al.estado(`Sincronizado con Google Sheets · versión ${r.version}`);
+        this.al.estado(`Sincronizado con Google Sheets · versión ${r.version}${aviso}`, !!aviso);
       } catch (e) {
         if (e instanceof ConflictoSheets) { this.conflicto = e.version; this.al.conflicto?.(e.version); return; }
         throw e;

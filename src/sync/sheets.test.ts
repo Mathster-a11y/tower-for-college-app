@@ -52,3 +52,24 @@ describe('sincronización con Google Sheets', () => {
     expect(leido).toBe(true);
   });
 });
+
+describe('script de Apps Script anterior', () => {
+  it('si no conoce «T3D Exo», se reintenta sin esa hoja y se avisa', async () => {
+    const { SincroSheets, paquete } = await import('./sheets');
+    const { ejemploHearst } = await import('../engine/ejemplosExo');
+    const enviados: string[][] = [];
+    const fetchFn = async (_url: string, init?: RequestInit) => {
+      const cuerpo = JSON.parse(String(init?.body ?? '{}'));
+      const nombres = (cuerpo.tablas ?? []).map((t: { nombre: string }) => t.nombre);
+      enviados.push(nombres);
+      const j = nombres.includes('T3D Exo') ? { error: 'Tabla no permitida: T3D Exo' } : { version: 7 };
+      return new Response(JSON.stringify(j), { status: 200 });
+    };
+    let aviso = '', error = false;
+    const c = new SincroSheets('https://script.google.com/macros/s/X/exec', { remoto: () => {}, estado: (t, e) => { aviso = t; error = !!e; } }, fetchFn);
+    await c.escribir(paquete(ejemploHearst(), {}));
+    expect(enviados).toHaveLength(2);
+    expect(enviados[0]).toContain('T3D Exo'); expect(enviados[1]).not.toContain('T3D Exo');
+    expect(aviso).toMatch(/versión anterior/); expect(error).toBe(true);
+  });
+});
