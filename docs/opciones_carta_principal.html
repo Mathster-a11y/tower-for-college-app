@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Carta principal: las cuatro opciones</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--ink:#1f2328;--ink2:#5f6b76;--dim:#8a949e;--edge:#c3cad1;--hair:#dfe3e7;--panel:#f0f0ee;--acc:#1a6bbd;--tint:#dbe8f6;--ok:#1a7a3a;--okf:#eaf6ec;--warn:#8a5f00;--warnf:#fbf1dc;--mal:#c62828;--malf:#fbe9e9;--viento:#b8401a;--rig:#8a5f00;--roto:#6a3d9a;--flex:#ad1457;--res:#2e7d32}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.5 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.pag{max-width:1000px;margin:0 auto;padding:28px 32px 48px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px}
+h2{font-size:17px;margin:34px 0 10px;padding-top:12px;border-top:2px solid var(--acc);display:flex;align-items:center;gap:10px;break-after:avoid}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;flex:none}
+h3{font-size:14px;margin:16px 0 6px;color:var(--ink);break-after:avoid}
+p{margin:6px 0}
+ul,ol{margin:6px 0 6px 20px;padding:0}
+li{margin:3px 0}
+.tarjeta{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;break-inside:avoid}
+.tarjeta.gris{background:var(--panel);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--tint);color:var(--acc)}
+.chip.ok{background:var(--okf);color:var(--ok)}.chip.warn{background:var(--warnf);color:var(--warn)}.chip.mal{background:var(--malf);color:var(--mal)}.chip.gris{background:var(--panel);color:var(--ink2)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th{background:var(--panel);text-align:left;padding:6px 8px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--edge)}
+td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+td.c,th.c{text-align:center}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.cols{grid-template-columns:1fr}}
+.paso{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:8px 0;break-inside:avoid}
+.paso .b{width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.paso b{display:block}
+.paso small{color:var(--ink2)}
+code,.f{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);padding:1px 5px;border-radius:4px}
+.eq{font-family:'IBM Plex Math','Times New Roman',serif;font-size:16px;text-align:center;margin:10px 0;padding:8px;background:#fafbfc;border:1px solid var(--hair);border-radius:6px}
+.var{font-size:12.5px;color:var(--ink2);margin:0 0 8px}
+.aviso{border-left:4px solid var(--warn);background:var(--warnf);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+.nota{color:var(--ink2);font-size:12.5px}
+.linea{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:start;padding:7px 0;border-bottom:1px solid var(--hair)}
+.linea .d{font-weight:700}
+.pie{margin-top:40px;padding-top:10px;border-top:1px solid var(--hair);color:var(--dim);font-size:11.5px}
+@media print{body{font-size:12px}.pag{max-width:none;padding:0}h2{margin-top:26px}.tarjeta{page-break-inside:avoid}}
+@page{size:A4;margin:16mm 14mm}
+
+.carta{margin:12px 0 6px;border:1px solid var(--edge);border-radius:8px;overflow:hidden;break-inside:avoid}
+.carta img{display:block;width:100%;height:auto}
+.op{break-before:page}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pc div{border-radius:6px;padding:8px 12px}
+.pc .a{background:var(--okf)} .pc .c{background:var(--warnf)}
+.pc b{display:block;margin-bottom:2px}
+@media print{.pag{padding:0 8px}}
+</style>
+</head>
+<body><div class="pag">
+<h1>Carta principal: las cuatro opciones</h1>
+<p class="sub">Qué muestra cada carta de la etapa «Carta», dónde aparece hoy y cuál conviene como principal. Capturas con el ejemplo de la guía 2024 (Neuquén), viento A.</p>
+
+<h2><span class="n">?</span>Qué hay que decidir</h2>
+<p>La app dibuja la hoja «M,NyQ» de cuatro maneras (las cartas A, B, C y D). Las cuatro siguen existiendo; la decisión es <b>cuál es la principal</b>: la que se abre primero en la etapa «Carta», la que va en la portada del informe y de la Carta PDF, y la que representa la torre en la lámina de entrega. Hoy cada salida usa un orden distinto, porque la elección quedó abierta:</p>
+<table>
+<tr><th>Dónde</th><th>Qué carta usa hoy</th></tr>
+<tr><td>Etapa «Carta» (al abrir)</td><td>A</td></tr>
+<tr><td>Carta PDF (Exportar ▾)</td><td>C, A, D y B, en ese orden</td></tr>
+<tr><td>Informe imprimible</td><td>B en la portada; después A, D y C</td></tr>
+<tr><td>Lámina de entrega A3</td><td>B y D arriba, A abajo</td></tr>
+<tr><td>Desglose (PDF y PowerPoint)</td><td>A y D</td></tr>
+</table>
+<p>Las opciones son una de las cuatro, o una combinación (por ejemplo, una de portada y otra como lámina técnica).</p>
+
+<div class="op">
+<h2><span class="n">A</span>Lámina M, N y Q</h2>
+<p>El alzado de la torre y, a la misma altura, el viento de cada piso (Wi), el corte (Q), el momento (M) y el peso (N), con la tabla de niveles de la hoja y siete recuadros con los totales.</p>
+<div class="carta"><img src="opciones_carta/carta_A.png" alt="Carta A: lámina M, N y Q"></div>
+<div class="pc"><div class="a"><b>A favor</b>Es la hoja «M,NyQ» renglón por renglón, con la columna de la planilla de cada valor: el docente la corrige contra el Excel sin buscar nada. Los cuatro diagramas en altura muestran cómo crecen Q y M hacia abajo.</div>
+<div class="c"><b>En contra</b>Es una lámina técnica: no muestra la planta ni la deformada, y a primera vista no dice si la torre verifica.</div></div>
+</div>
+
+<div class="op">
+<h2><span class="n">B</span>Ficha de la torre</h2>
+<p>La planta con las piezas, su J y el centro de rotación; el alzado con la resultante W en hW y la deformada; los valores principales y la lista de controles.</p>
+<div class="carta"><img src="opciones_carta/carta_B.png" alt="Carta B: ficha de la torre"></div>
+<div class="pc"><div class="a"><b>A favor</b>Es la única que junta planta y alzado: se ve qué piezas toman el viento y cuánto se mueve la azotea. Trae los controles con su estado: sirve de resumen.</div>
+<div class="c"><b>En contra</b>Tiene mucho texto y poca escala; los nombres de los controles se cortan. Repite valores que están en las otras.</div></div>
+</div>
+
+<div class="op">
+<h2><span class="n">C</span>Axonometría de la ménsula</h2>
+<p>La torre en el espacio como una ménsula: el viento como volumen de presiones con su resultante, la torre deformada (exagerada) con su sombra, el diagrama de momentos al costado y las reacciones en PB.</p>
+<div class="carta"><img src="opciones_carta/carta_C.png" alt="Carta C: axonometría de la ménsula"></div>
+<div class="pc"><div class="a"><b>A favor</b>Se entiende de un vistazo, aun sin conocer la planilla: el viento empuja, la torre se dobla como una ménsula y la base responde con Q, N y M. Es la que mejor explica el modelo. Ya es la primera de la Carta PDF.</div>
+<div class="c"><b>En contra</b>Tiene pocos números (los totales y la flecha) y no se puede corregir contra la planilla nivel por nivel.</div></div>
+</div>
+
+<div class="op">
+<h2><span class="n">D</span>Vuelco y tensiones en el suelo</h2>
+<p>El esquema de abajo de las tablas de «M,NyQ», a escala: el viento de cada piso, W en hW, el peso P, la resultante, el punto de giro, el núcleo central b′/6 y las tensiones en el suelo, con las dos tablas de la hoja (vuelco y tensiones en la base).</p>
+<div class="carta"><img src="opciones_carta/carta_D.png" alt="Carta D: vuelco y tensiones en el suelo"></div>
+<div class="pc"><div class="a"><b>A favor</b>Responde las dos preguntas de estabilidad (¿se vuelca?, ¿el suelo aguanta?) con las celdas de la hoja (H99 a N99, filas 80 a 90) y el coeficiente de seguridad.</div>
+<div class="c"><b>En contra</b>Trata solo la estabilidad global: nada de rigidez ni de reparto entre tabiques.</div></div>
+<p class="aviso">Al armar este documento encontré un error de colores en esta carta: la flecha del momento volcador (Mv) y la resultante R = W + P están en rojo, que en toda la app es solo para la tracción. Hay que pasarlas a los colores de las cargas.</p>
+</div>
+
+<div class="op">
+<h2><span class="n">✓</span>Recomendación</h2>
+<p>Una combinación: <b>C de portada y A como lámina principal</b>.</p>
+<ul>
+<li><b>C</b> en la portada del informe, de la Carta PDF y arriba en la lámina A3: explica la torre entera en una imagen.</li>
+<li><b>A</b> como la lámina que se corrige: es la hoja de la cátedra dibujada, con la columna de cada valor.</li>
+<li><b>D</b> se queda como la página de estabilidad (ya va así en el informe y en el desglose).</li>
+<li><b>B</b> pasa a ser el resumen del final (controles y planta), no la portada.</li>
+</ul>
+<p>Si la cátedra prefiere que la entrega se parezca lo más posible a la planilla, la alternativa es <b>A sola como principal</b>, con C y D detrás.</p>
+<p class="nota">Cuando elijas, ordeno las salidas para que todas usen el mismo orden (etapa «Carta», informe, Carta PDF y lámina A3).</p>
+</div>
+</div></body></html>
