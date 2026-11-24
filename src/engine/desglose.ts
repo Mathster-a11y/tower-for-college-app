@@ -91,6 +91,14 @@ export interface EntradaDesglose {
   hormigon: string;
   /** ancho B y largo L en PB (para la carga mínima) */
   BPB: number;
+  /**
+   * el exoesqueleto (hoja 8), viento A: lo que necesita el cálculo a mano de la propuesta y lo que dio el pórtico plano
+   * de la app (en la columna «Excel», que acá es la app: la planilla de la cátedra no tiene exo)
+   */
+  exo?: {
+    tipo: string; nombreTipo: string; E: number; Eh: number; h: number; W: number; ancho: number; Ac: number; Ad: number; hMod: number; Jtab: number;
+    app: { u: number; fraccion: number; Jeq: number };
+  } | null;
 }
 
 // ------------------------------------------------------------------ 1 · viento
@@ -496,7 +504,49 @@ function hojaFlex(x: EntradaDesglose): HojaDesglose {
 
 /** el desglose de las siete hojas */
 export function desglosar(x: EntradaDesglose): HojaDesglose[] {
-  return [hojaViento(x), hojaMNyQ(x), hojaJ(x, false), hojaJ(x, true), hojaRoto(x, false), hojaRoto(x, true), hojaFlex(x)];
+  return [hojaViento(x), hojaMNyQ(x), hojaJ(x, false), hojaJ(x, true), hojaRoto(x, false), hojaRoto(x, true), hojaFlex(x), ...(x.exo ? [hojaExo(x)] : [])];
+}
+
+/**
+ * Hoja 8 · Exoesqueleto (viento A): el cálculo a mano de la propuesta (las columnas de esquina como un tubo, con la
+ * relación de módulos; las cruces como rigidez al corte; la torre y el exo como dos resortes en paralelo) contra el
+ * pórtico plano de la app (barras, nudos y la ménsula de los tabiques resueltos juntos). La mano supone la carga pareja
+ * en altura (8EJ) y un exo de tubo arriostrado en X; las diferencias con el pórtico son esperables y se explican.
+ */
+function hojaExo(x: EntradaDesglose): HojaDesglose {
+  const e = x.exo!, hoja = 'Exoesqueleto';
+  const n = e.E / e.Eh, d = e.ancho / 2, Jexo = n * 4 * e.Ac * d * d;
+  const th = Math.atan2(e.hMod, e.ancho), S = 4 * e.E * e.Ad * Math.cos(th) ** 2 * Math.sin(th);
+  const dF = (e.W * e.h ** 3) / (8 * e.Eh * Jexo), dC = (e.W * e.h) / (2 * S), dExo = dF + dC;
+  const Kexo = e.W / dExo, dTab = (e.W * e.h ** 3) / (8 * e.Eh * e.Jtab), Ktab = e.W / dTab;
+  const dJunto = e.W / (Ktab + Kexo), frac = Kexo / (Ktab + Kexo), Jeq = (e.W * e.h ** 3) / (8 * e.Eh * dExo);
+  const app = 'etapa 08 (pórtico)', deg = (th * 180) / Math.PI;
+  const pasos: Paso[] = [
+    { titulo: 'Relación de módulos', formula: 'n = E acero / E hormigón', sustitucion: `n = ${num(e.E, 0)} / ${num(e.Eh, 0)}`, analitico: n, excel: null, celda: '—', unidad: '', dec: 2, nota: 'El acero se pasa a hormigón multiplicando su J por n, como en las secciones mixtas.' },
+    { titulo: 'J de las columnas de esquina (en hormigón)', formula: 'J exo = n · Σ Ac · d²  (4 columnas a d = ancho / 2)', sustitucion: `J = ${num(n, 2)} · 4 · ${num(e.Ac, 4)} · ${num(d, 2)}²`, analitico: Jexo, excel: null, celda: '—', unidad: 'm⁴', dec: 1 },
+    { titulo: 'Ángulo de las diagonales', formula: 'θ = atan(h módulo / ancho)', sustitucion: `θ = atan(${num(e.hMod, 2)} / ${num(e.ancho, 2)})`, analitico: deg, excel: null, celda: '—', unidad: '°', dec: 1 },
+    { titulo: 'Rigidez al corte de las cruces', formula: 'S = Σ E · Ad · cos²θ · sen θ  (2 caras × 2 diagonales)', sustitucion: `S = 4 · ${num(e.E, 0)} · ${num(e.Ad, 4)} · ${num(Math.cos(th) ** 2, 3)} · ${num(Math.sin(th), 3)}`, analitico: S, excel: null, celda: '—', unidad: 't', dec: 0 },
+    { titulo: 'Flecha del exo solo: flexión + corte', formula: 'δ exo = W h³ / (8 E J exo) + W h / (2 S)', sustitucion: `δ = ${num(dF * 1000, 1)} + ${num(dC * 1000, 1)} mm`, analitico: dExo * 1000, excel: null, celda: '—', unidad: 'mm', dec: 1, nota: 'Un reticulado se deforma también por corte (los tabiques llenos casi no): por eso su J equivalente es menor que el de las columnas solas.' },
+    { titulo: 'Flecha de los tabiques solos', formula: 'δ tab = W h³ / (8 E ΣJ)', sustitucion: `δ = ${num(e.W, 1)} · ${num(e.h, 2)}³ / (8 · ${num(e.Eh, 0)} · ${num(e.Jtab, 2)})`, analitico: dTab * 1000, excel: null, celda: '—', unidad: 'mm', dec: 1 },
+    { titulo: 'Flecha de la torre con el exo (dos resortes en paralelo)', formula: 'δ = W / (K tab + K exo), K = W / δ', sustitucion: `δ = ${num(e.W, 1)} / (${num(Ktab, 0)} + ${num(Kexo, 0)})`, analitico: dJunto * 1000, excel: e.app.u * 1000, celda: app, unidad: 'mm', dec: 1, nota: 'El pórtico de la app usa el viento real de cada piso (no parejo) y las barras con sus uniones: la diferencia mide cuánto simplifica la cuenta a mano.' },
+    { titulo: 'Parte del viento que toma el exo', formula: 'K exo / (K tab + K exo)', sustitucion: `${num(Kexo, 0)} / (${num(Ktab, 0)} + ${num(Kexo, 0)})`, analitico: frac * 100, excel: e.app.fraccion * 100, celda: app, unidad: '%', dec: 0 },
+    { titulo: 'J equivalente del exo (el que va a la hoja J)', formula: 'J eq = W h³ / (8 E δ exo)', sustitucion: `J eq = ${num(e.W, 1)} · ${num(e.h, 2)}³ / (8 · ${num(e.Eh, 0)} · ${num(dExo, 4)})`, analitico: Jeq, excel: e.app.Jeq, celda: app, unidad: 'm⁴', dec: 1, nota: 'La app da el J equivalente de una cara; la cuenta a mano, el de las dos caras juntas.' },
+  ];
+  const lim = e.h / 500;
+  return {
+    hoja,
+    temas: [{ titulo: 'El exoesqueleto como otra ménsula', texto: 'El exo es una ménsula más ancha puesta por fuera: las losas lo atan a los tabiques, se deforman juntos y cada uno toma el viento según su rigidez, como dos resortes en paralelo.', fuente: 'propuesta del exoesqueleto, pág. 3' }],
+    datos: [
+      { nombre: 'Ficha', valor: e.nombreTipo }, { nombre: 'Ancho de la cara', valor: `${num(e.ancho, 2)} m` }, { nombre: 'Altura', valor: `${num(e.h, 2)} m` },
+      { nombre: 'Viento total (A)', valor: `${num(e.W, 1)} t` }, { nombre: 'Columna / diagonal', valor: `${num(e.Ac * 1e4, 0)} / ${num(e.Ad * 1e4, 0)} cm²` }, { nombre: 'ΣJ de los tabiques', valor: `${num(e.Jtab, 2)} m⁴` },
+    ],
+    pasos, tablas: [],
+    controles: [{ nombre: 'Flecha de la azotea con el exo', criterio: `δ ≤ h/500 = ${num(lim * 1000, 0)} mm`, unidad: 'mm', dec: 1, analitico: dJunto * 1000, excel: e.app.u * 1000, cumpleAnalitico: dJunto <= lim, cumpleExcel: e.app.u <= lim }],
+    diferencias: [
+      ...(e.tipo !== 'D' ? [`La cuenta a mano es la de un tubo arriostrado en X (ficha D); con la ficha ${e.nombreTipo} solo sirve de orden de magnitud.`] : []),
+      'En la columna «Excel» va el resultado del pórtico plano de la app: la planilla de la cátedra no tiene exoesqueleto.',
+    ],
+  };
 }
 
 /** resumen de una hoja: cuántos pasos coinciden y si los controles verifican con los dos cálculos */

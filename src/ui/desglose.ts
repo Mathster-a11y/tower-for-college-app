@@ -1,9 +1,13 @@
 /**
  * Desglose por hoja de la planilla, en PDF (diálogo de impresión, como el informe) y en PowerPoint (.pptx):
  * los temas de cada hoja y el cálculo analítico paso por paso al lado del resultado de la planilla (Excel),
- * con los controles verificados con los dos. Las siete hojas, de «viento» a «Flex comp PB paralelos».
+ * con los controles verificados con los dos. Las siete hojas, de «viento» a «Flex comp PB paralelos», y la octava del
+ * exoesqueleto si el proyecto tiene uno.
  */
 import { estado } from './estado';
+import { datosExo } from './exo';
+import { rigidez } from '../engine/diagramas';
+import { propsSeccion, TIPOS_EXO } from '../engine/exo';
 import { AUTOR, AVISO } from '../autoria';
 import { h, mat } from './comp';
 import { dibujosPorHoja, type Dibujo } from './dibujosDesglose';
@@ -16,6 +20,21 @@ export function entradaDesglose(): EntradaDesglose {
     d: c.asig.datos, r: c.res, filaNivel: c.asig.filaNivel, nombresNivel: p.niveles.map(n => n.nombre),
     piezas: c.asig.piezas.map(z => ({ nombre: z.nombre, dir: z.dir, fila: z.filaHoja })), hormigon: p.hormigon || 'H30',
     BPB: p.niveles.slice(0, iPB + 1).reduce<number | null>((v, n) => n.B ?? v, null) ?? 0,
+    exo: entradaExoDesglose(),
+  };
+}
+/** la hoja 8: el exoesqueleto con el viento A (si el proyecto tiene uno) */
+function entradaExoDesglose(): EntradaDesglose['exo'] {
+  const def = estado.proyecto.exo;
+  if (!def) return null;
+  const d = datosExo('A', def);
+  if (!d) return null;
+  const n = d.r.u.length - 1, zs = d.r.zs, hp = zs.length > 1 ? (zs[zs.length - 1] - zs[0]) / (zs.length - 1) : 3;
+  const Jtab = rigidez(estado.calculo.valores, estado.proyecto.hormigon || 'H30').find(x => x.dir === 'A')?.J ?? NaN;
+  return {
+    tipo: def.tipo, nombreTipo: TIPOS_EXO[def.tipo].nombre, E: def.E, Eh: d.Eh, h: d.h, W: d.entrada.W.reduce((a, b) => a + b, 0), ancho: d.ancho,
+    Ac: propsSeccion(def.columna).A, Ad: propsSeccion(def.diagonal).A, hMod: Math.max(1, Math.round(def.modulo)) * hp, Jtab,
+    app: { u: d.r.u[n], fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? NaN },
   };
 }
 
@@ -132,6 +151,7 @@ const META = [
   { corto: 'Roto. mayor', color: '6A3D9A', etapa: '06 Rototrasl. · viento A', pregunta: '¿Cómo se reparte el corte del viento A entre las piezas?', recibe: 'Q y Mv (M,NyQ) y los J (hojas J)', entrega: 'el momento de cada pieza → flexocompresión' },
   { corto: 'Roto. menor', color: '6A3D9A', etapa: '06 Rototrasl. · viento B', pregunta: '¿Cómo se reparte el corte del viento B entre las piezas?', recibe: 'Q y Mv (M,NyQ, columnas N y O) y los J', entrega: 'el momento de cada pieza (viento B)' },
   { corto: 'Flexocomp.', color: 'AD1457', etapa: '07 Flexión', pregunta: '¿Cada muro resiste la compresión y la tracción?', recibe: 'el momento de cada pieza y su peso', entrega: 'las tensiones de cada pieza → armadura (Controles)' },
+  { corto: 'Exoesqueleto', color: '5B2C83', etapa: '08 Exoesqueleto', pregunta: '¿Cuánto rigidiza el exoesqueleto y cuánto viento les saca a los tabiques?', recibe: 'el viento de cada piso, el ΣJ de los tabiques y las barras del exo', entrega: 'la flecha con el exo, el reparto y el J equivalente' },
 ];
 
 /** arma el .pptx (pptxgenjs se carga recién al usarlo) y devuelve el archivo */
@@ -164,7 +184,7 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string, d
     const m = META[i] ?? { color: AZUL, corto: '', etapa: '' };
     s.background = { color: 'FFFFFF' };
     s.addShape('rect', { x: 0, y: 0, w: 13.33, h: 0.42, fill: { color: m.color } });
-    txt(s, i >= 0 ? `HOJA ${i + 1} DE 7 · ${(hojas[i]?.hoja ?? META[i].corto).toUpperCase()} · ${seccion.toUpperCase()}` : seccion.toUpperCase(), { x: 0.4, y: 0, w: 9, h: 0.42, fontSize: 11, bold: true, color: 'FFFFFF', valign: 'middle', charSpacing: 1 });
+    txt(s, i >= 0 ? `HOJA ${i + 1} DE ${hojas.length} · ${(hojas[i]?.hoja ?? META[i].corto).toUpperCase()} · ${seccion.toUpperCase()}` : seccion.toUpperCase(), { x: 0.4, y: 0, w: 9, h: 0.42, fontSize: 11, bold: true, color: 'FFFFFF', valign: 'middle', charSpacing: 1 });
     if (i >= 0) txt(s, `en la app: ${m.etapa}`, { x: 8.9, y: 0, w: 4.03, h: 0.42, fontSize: 10, color: 'FFFFFF', align: 'right', valign: 'middle' });
     txt(s, titulo, { x: 0.4, y: 0.55, w: 12.5, h: 0.55, fontSize: 24, bold: true });
     if (sub) txt(s, sub, { x: 0.4, y: 1.08, w: 12.5, h: 0.35, fontSize: 12.5, color: GRIS });
@@ -193,7 +213,7 @@ export async function armarPPTX(hojas: HojaDesglose[], nombreProyecto: string, d
   // ---------------------------------------------------------------- portada
   const s0 = pptx.addSlide(); n++;
   s0.background = { color: '14202B' };
-  META.forEach((m, k) => s0.addShape('rect', { x: k * (13.33 / 7), y: 0, w: 13.33 / 7, h: 0.18, fill: { color: m.color } }));
+  META.slice(0, hojas.length).forEach((m, k) => s0.addShape('rect', { x: k * (13.33 / hojas.length), y: 0, w: 13.33 / hojas.length, h: 0.18, fill: { color: m.color } }));
   txt(s0, 'TORRE 3D · EDIFICIOS EN TORRE · FAUD-UNMDP', { x: 0.7, y: 1.6, w: 12, h: 0.4, fontSize: 13, bold: true, color: '9FB3C6', charSpacing: 2 });
   txt(s0, 'Desglose analítico de la planilla', { x: 0.7, y: 2.1, w: 12, h: 1, fontSize: 40, bold: true, color: 'FFFFFF' });
   txt(s0, nombreProyecto, { x: 0.7, y: 3.1, w: 12, h: 0.6, fontSize: 22, color: 'DCE4EC' });

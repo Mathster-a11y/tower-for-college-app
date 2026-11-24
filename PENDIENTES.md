@@ -40,7 +40,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
-17. Exoesqueletos: el diagrid avanzó (24/11: sigue el perfil de la torre inclinada o corrida y tiene el barrido «¿qué módulo conviene?» con el ángulo de las diagonales). Falta decidir qué sigue: tubo arriostrado, megapórtico u otros
+17. Exoesqueletos: el diagrid avanzó (24/11: sigue el perfil de la torre inclinada o corrida y tiene el barrido «¿qué módulo conviene?» con el ángulo de las diagonales). Hecho también (24/11): los controles del exo en la lista general (Resumen, informe, lámina), el editor con «repetir en cada módulo» y «simétrica», y la hoja 8 del desglose (PDF y PowerPoint: la cuenta a mano de la propuesta contra el pórtico). Falta decidir qué tipo sigue (tubo arriostrado, megapórtico u otros) y quedan: la torsión con el exo, el exo dibujado en la planta y la tabla «T3D Exo» en Sheets
 18. Elegir la carta principal (A, B, C, D o una combinación)
 19. Medir el 3D en una notebook típica de estudiante (necesita tu computadora)
 

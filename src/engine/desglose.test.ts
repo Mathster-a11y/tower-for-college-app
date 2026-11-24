@@ -53,3 +53,19 @@ describe('desglose analítico', () => {
     expect(comparar(mt.analitico, mt.excel)).toBe('coincide');
   });
 });
+
+describe('hoja 8 · exoesqueleto', () => {
+  it('reproduce los números de la propuesta (n = 6,18; J exo = 94,9 m⁴) y compara con el pórtico', () => {
+    // los datos de la pág. 3 de la propuesta: columnas de 600 cm² a d = 8 m, diagonales de 150 cm², E acero 2,1·10⁷, E hormigón 3,4·10⁶ t/m²
+    const x = { ...entrada(ejemploGuia()), exo: { tipo: 'D', nombreTipo: 'Tubo arriostrado en X', E: 2.1e7, Eh: 3.4e6, h: 60, W: 300, ancho: 16, Ac: 0.06, Ad: 0.015, hMod: 12, Jtab: 22.08, app: { u: 0.02, fraccion: 0.7, Jeq: 30 } } };
+    const hs = desglosar(x), h8 = hs[7];
+    expect(hs).toHaveLength(8);
+    expect(h8.hoja).toBe('Exoesqueleto');
+    expect(h8.pasos[0].analitico).toBeCloseTo(6.18, 2);
+    expect(h8.pasos[1].analitico).toBeCloseTo(94.9, 0);
+    // S = 4 E A cos²θ sen θ con tg θ = 12 / 16 (cos = 0,8, sen = 0,6): 483 840 t
+    expect(h8.pasos[3].analitico).toBeCloseTo(483840, -1);
+    expect(h8.controles[0].excel).toBeCloseTo(20, 6);
+    expect(desglosar(entrada(ejemploGuia()))).toHaveLength(7);
+  });
+});
