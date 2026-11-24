@@ -48,3 +48,14 @@ describe('fuerzas del túnel 3D', () => {
     expect(segundosPorPaso(g, 0.08, 40)).toBeCloseTo(0.08 / (g.escala * 40), 12);
   });
 });
+
+describe('Excel del túnel 3D', () => {
+  it('arma el libro con cargas por piso, base y serie', async () => {
+    const { libroTunel3d } = await import('../src/xlsx/libros/libroTunel3d');
+    const f = new Fuerzas3D(caras, g, pisos, uH, qhG);
+    for (let k = 0; k < 5; k++) f.sumar(campo(c => (c.cara === 'barlovento' ? 0.8 + 0.1 * k : 0)), 1, k);
+    const L = libroTunel3d({ proyecto: 'prueba', dir: 'A', resumen: f.resumen(), serie: f.serie, regl: pisos.map(() => 1), qh: 1000, G: 0.85, config: 'prueba' });
+    const bytes = await L.xlsx();
+    expect(bytes.length).toBeGreaterThan(5000);
+  });
+});
