@@ -49,8 +49,7 @@ export function hiloDeEtapa(id: string): H | null {
   const el = h('div', { class: 'hilo' }, h('p', { class: 'hilo-hace' }, h('b', {}, 'En esta etapa. '), x.hace));
   if (x.usa.length) el.append(h('div', { class: 'hilo-fila' }, h('span', { class: 'hilo-rot' }, 'Usa'), h('span', { class: 'hilo-pasos' }, ...x.usa.map(p => chip(p, '←')))));
   if (x.pasa.length) el.append(h('div', { class: 'hilo-fila' }, h('span', { class: 'hilo-rot' }, 'Pasa a'), h('span', { class: 'hilo-pasos' }, ...x.pasa.map(p => chip(p, '→')))));
-  if (id === 'exo' && metodoCatedra())
-    el.append(h('p', { class: 'hilo-aviso' }, `Con el método ${estado.config.metodo === 'guia' ? 'Guía' : 'Planilla'} el exoesqueleto es un estudio aparte: la cátedra no lo tiene en cuenta y no cambia ningún resultado. Para que entre en el cálculo, elegí CIRSOC o FEM.`));
+  // con Planilla o Guía, el aviso de que el exo no entra en el cálculo lo da el panel de la etapa (también sin tutorial)
   return el;
 }
 

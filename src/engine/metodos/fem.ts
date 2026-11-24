@@ -95,7 +95,9 @@ export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): Resu
   const modos = mo.z.length ? modal(mo, masas, inercias) : [];
   const primero = (d: 'x' | 'y') => modos.find(m => m.dominante === d && m.f > 1e-6)?.f ?? 0;
   const n1 = { A: primero('y'), B: primero('x') };
-  const w = viento102(p, n1);
+  // el modelo es de tabiques: no tiene la rigidez del exoesqueleto. Con exo (o si los tabiques casi no toman viento),
+  // su frecuencia no es la de la torre y el viento usa la aproximada del 102-25 (art. 1.9.3)
+  const w = viento102(p, p.exo ? undefined : n1);
   // fuerzas del viento en cada piso del modelo (t)
   const Wdir = (d: 'A' | 'B') => mo.z.map(z => w[d].niveles.find(x => Math.abs(x.z - z) < 1e-6)?.W ?? 0);
   const WA = Wdir('A'), WB = Wdir('B');

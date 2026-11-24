@@ -1,7 +1,7 @@
 /** Los cuatro edificios reales: entran en la planilla, los módulos caen en niveles y el exo dimensionado verifica. */
 import { describe, expect, it } from 'vitest';
 import { ejemploCiticorp, type Proyecto } from './modelo';
-import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './ejemplosExo';
+import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './ejemplosExo';
 import { ejemploGuia } from './modelo';
 import { aPlanilla } from './mapping';
 import { calcularPlanilla } from './planilla';
@@ -27,7 +27,7 @@ function exo(p: Proyecto, dir: 'A' | 'B') {
 }
 
 describe('edificios reales con exoesqueleto', () => {
-  [ejemploCiticorp(), ejemploHancock(), ejemploHearst(), ejemploOnterie(), ejemploShanghai()].forEach(p => describe(p.nombre, () => {
+  [ejemploCiticorp(), ejemploHancock(), ejemploHearst(), ejemploOnterie(), ejemploShanghai(), ejemploGherkin()].forEach(p => describe(p.nombre, () => {
     it('entra en la planilla (≤ 49 niveles sobre PB) y cada módulo cae en un nivel', () => {
       const asig = aPlanilla(p);
       expect(p.niveles.filter(n => n.cota > 0).length).toBeLessThanOrEqual(49);

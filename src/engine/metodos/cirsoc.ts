@@ -187,7 +187,9 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
   /** ΣJ de cada dirección (la rototraslación de la guía, con el J de la sección real) */
   SJ: { A: number; B: number } | undefined,
   /** método FEM: la deformada de servicio del modelo (ya escalada al viento de servicio), en lugar de la ménsula equivalente */
-  derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>): Control[] {
+  derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>,
+  /** con exoesqueleto: la torre con el exo (manda sobre la ménsula de tabiques y el FEM) */
+  exo?: Record<'A' | 'B', { r: { u: number[] }; z: number[]; h: number }>): Control[] {
   // fuera los de la guía que el reglamento hace distinto (y los del suelo y la resultante, que acá salen del 102-25)
   const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula|^Excentricidad|^Tensión máxima en el suelo|^Tensión mínima en el suelo|^Resultante W \+ G/.test(c.nombre);
   // el J mínimo de la cátedra (h/500 con el viento de cálculo) queda como referencia: lo que manda es la deriva de servicio
@@ -227,8 +229,10 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     const alt = [{ nivel: 'PB', z: 0, M: d102.MPB }, ...d102.niveles.map(n => ({ nivel: n.nivel, z: n.z, M: n.M }))] as unknown as PuntoAltura[];
     const J = SJ?.[dir] ?? rigidez(valores, p.hormigon || 'H30').find(x => x.dir === dir)!.J;
     const W = d102.QPB;
-    const fem = derivaFem?.[dir];
-    const def = fem
+    const fem = derivaFem?.[dir], ex = exo?.[dir];
+    const def = ex
+      ? { puntos: ex.z.map((z, i) => ({ z, d: ex.r.u[i], nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: ex.r.u[ex.r.u.length - 1], h: ex.h }
+      : fem
       ? { puntos: fem.z.map((z, i) => ({ z, d: fem.d[i] / w.servicio.relacion, nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: fem.d[fem.d.length - 1] / w.servicio.relacion, h: fem.h }
       : deformada(alt, W, E, J);
     const f = w.servicio.relacion;
@@ -236,7 +240,7 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     let peorPiso = 0, dondePiso = '';
     for (let i = 1; i < pts.length; i++) { const dz = pts[i].z - pts[i - 1].z; if (dz > 0) { const r = ((pts[i].d - pts[i - 1].d) * f) / dz; if (r > peorPiso) { peorPiso = r; dondePiso = pts[i].nivel; } } }
     const top = def.dTop * f;
-    out.push({ grupo: 'Rigidez', nombre: `Deriva de servicio, viento ${dir}`, criterio: `azotea ≤ h/${lim} y cada piso ≤ entrepiso/${lim}`, fuente: `CIRSOC 102-25, comentario C B.4.2 (orientativo: 1/600 a 1/400)${fem ? '; desplazamientos del modelo FEM, borde más desfavorable' : ''}`,
+    out.push({ grupo: 'Rigidez', nombre: `Deriva de servicio, viento ${dir}`, criterio: `azotea ≤ h/${lim} y cada piso ≤ entrepiso/${lim}`, fuente: `CIRSOC 102-25, comentario C B.4.2 (orientativo: 1/600 a 1/400)${exo ? '; torre con el exoesqueleto' : fem ? '; desplazamientos del modelo FEM, borde más desfavorable' : ''}`,
       planilla: null, guia: top, unidad: 'm', estado: est(top <= def.h / lim && peorPiso <= 1 / lim),
       nota: `Viento de servicio de ${w.servicio.recurrencia} años (${nf(f * 100, 0)} % de la presión de cálculo). Azotea ${nf(top * 1000, 1)} mm (límite ${nf((def.h / lim) * 1000, 1)} mm); peor piso ${dondePiso}: 1/${peorPiso > 0 ? Math.round(1 / peorPiso) : '∞'}.` });
   }
