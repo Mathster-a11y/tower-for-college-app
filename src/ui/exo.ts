@@ -222,7 +222,7 @@ export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string 
  */
 export function controlesExo(): Control[] {
   const def = estado.proyecto.exo;
-  if (!def) return [];
+  if (!def || !exoEnElCalculo()) return [];
   const out: Control[] = [];
   const reglamento = !!vientoReglamento() && def.material !== 'hormigon';
   for (const dir of ['A', 'B'] as const) {
@@ -353,6 +353,7 @@ export function panelExo(c: H) {
   sw.append(cb, ' Agregar un exoesqueleto de acero por fuera de la fachada');
   c.append(h('p', { class: 'nota' }, 'Una estructura de acero por fuera que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.'), sw);
   if (!def) return;
+  if (!exoEnElCalculo()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'guia' ? 'Guía' : estado.config.metodo === 'combinado' ? 'comparación' : 'Planilla'}: el método de la cátedra no tiene en cuenta el exoesqueleto. Acá es un estudio aparte: no cambia ningún resultado del método (tabiques, flexocompresión, resumen, desglose ni el Excel). Para que entre en el cálculo, elegí el método CIRSOC o FEM.`));
   if (def.notas?.length) {
     const ul = h('ul', { class: 'notas-fuentes' }, ...def.notas.map(t => h('li', {}, t)));
     c.append(seccion('De dónde sale cada número', ul, h('p', { class: 'nota chica' }, 'Lo que dice «supuesto» no está publicado: se puede cambiar o dimensionar.')).el);
@@ -814,8 +815,17 @@ function editorBarra(e: EsfuerzoBarra) {
  * Momento que les queda a los tabiques en cada cota con el exoesqueleto (para las fibras de la etapa 07 y la capa σ),
  * o undefined si no hay exo o se eligió ver los tabiques solos (como la planilla del curso).
  */
+/**
+ * ¿el exo entra en el cálculo? Solo con los métodos CIRSOC y FEM. Los de la cátedra (Planilla, Guía y la comparación,
+ * que parte de la planilla) no tienen en cuenta estas estructuras: ahí el exo es un estudio aparte, que no cambia
+ * ningún resultado (tabiques, flexocompresión, resumen, desglose ni el Excel).
+ */
+export function exoEnElCalculo(): boolean {
+  const m = estado.config.metodo;
+  return !!estado.proyecto.exo && (m === 'cirsoc' || m === 'fem');
+}
 export function momentoTabiques(dir: 'A' | 'B'): ((z: number) => number) | undefined {
-  if (!estado.proyecto.exo || !estado.flexConExo) return undefined;
+  if (!exoEnElCalculo() || !estado.flexConExo) return undefined;
   const d = datosExo(dir);
   if (!d) return undefined;
   const zs = d.r.zs, M = d.r.Mtab;

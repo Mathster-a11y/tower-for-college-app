@@ -30,7 +30,7 @@ import { TENSION_ADM, type Control } from '../engine/verificaciones';
 import { alturaDesde, fibrasDireccion } from '../engine/fibras';
 import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
-import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
+import { panelExo, centroExo, estadoExo, momentoTabiques, exoEnElCalculo } from './exo';
 import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
 import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
 import { centroRigidezFem, panelRigidezFem, seccionRepartoFem } from './fem';
@@ -723,7 +723,7 @@ const flexion: Etapa = {
     });
     sel.addEventListener('change', () => { estado.nivelFlex = Number(sel.value); estado.avisarPanel(); });
     c.append(h('label', { class: 'campo-nivel-flex' }, 'Verificar en la base del piso sobre ', sel));
-    if (d.p.exo) {
+    if (d.p.exo && exoEnElCalculo()) {
       const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = estado.flexConExo;
       cb.addEventListener('change', () => { estado.flexConExo = cb.checked; estado.avisarPanel(); });
       const Mx = momentoTabiques(d.dir);

@@ -6,7 +6,7 @@
  */
 import { estado, fmt } from './estado';
 import { rigidez, rigidezPorNivel } from '../engine/diagramas';
-import { datosExo } from './exo';
+import { datosExo, exoEnElCalculo } from './exo';
 import type { PlanillaRes } from '../engine/planilla';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -26,7 +26,7 @@ export function datosDiagramaJ(dir: 'A' | 'B' = estado.dir) {
   if (!rg) return null;
   const niv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
   let Jexo = 0;
-  if (p.exo) { const d = datosExo(dir); if (d) Jexo = d.r.caras.reduce((s, c) => s + (c.Jeq || 0), 0); }
+  if (p.exo && exoEnElCalculo()) { const d = datosExo(dir); if (d) Jexo = d.r.caras.reduce((s, c) => s + (c.Jeq || 0), 0); }
   return { niv, Jmin: rg.minimos.h500, Jexo, J: rg.J };
 }
 

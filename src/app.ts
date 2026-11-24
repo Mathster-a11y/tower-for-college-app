@@ -31,7 +31,7 @@ import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { datos201De } from './engine/metodos/cirsoc';
 import { datosGuia } from './engine/metodos/guiaPasos';
-import { datosExo } from './ui/exo';
+import { datosExo, exoEnElCalculo } from './ui/exo';
 import { montarDiagramaJ } from './ui/diagramaJ';
 import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
 import { TIPOS_EXO, propsSeccion, pesoExo, type EntradaExo } from './engine/exo';
@@ -398,7 +398,7 @@ async function exportar() {
         }
         // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
         if (!g) return;
-        if (estado.proyecto.exo) {
+        if (estado.proyecto.exo && exoEnElCalculo()) {
           const hoja = (dir: 'A' | 'B') => { const d = datosExo(dir); if (!d) return null; return {
             ficha: `${d.def.tipo} · ${TIPOS_EXO[d.def.tipo].nombre}`, ancho: d.ancho, t: d.tCaras[1], Eh: d.Eh, Eacero: d.def.E, colA: propsSeccion(d.def.columna).A,
             fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, limiteH: d.def.limiteH ?? 500, peso: pesoExo(d.def, (['A', 'B'] as const).map(x => datosExo(x)?.entrada).filter(Boolean) as EntradaExo[]), niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin, Mtab: d.r.Mtab,
