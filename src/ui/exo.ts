@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { anguloDiagonal, barridoModulo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -140,7 +140,9 @@ function leyendaModo(svg: SVGSVGElement, x: number, y: number, escala: number) {
 
 export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho: number; tCaras: number[]; niveles: string[]; h: number; Eh: number;
   /** caras que siguen la planta: ancho y posición (|t|) de la cara en cada cota de zs */
-  anchos?: number[]; ts?: number[] }
+  anchos?: number[]; ts?: number[];
+  /** torre inclinada o corrida (Diseño → Perfil): corrimiento del centro de la torre en cada cota de zs, a lo largo de la cara (corr) y de costado (tc) */
+  corr?: number[]; tc?: number[] }
 
 /** el cálculo del exoesqueleto para el viento elegido (null si el proyecto no tiene exo o faltan datos) */
 /** lo que necesita el motor para un viento: pisos, viento de cada piso, rigidez de los tabiques y dónde van las caras */
@@ -182,9 +184,13 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
       anchos = plz.map(q => (A ? q.L : q.B) + 2 * def.separacion);
       ts = plz.map(q => (A ? q.B : q.L) / 2 + def.separacion);
     }
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos);
+    // torre inclinada o corrida: cada nivel corrido (dx, dy) respecto de PB; las caras lo siguen
+    const nivEn = (z: number) => p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6);
+    const corrido = (f: (nv: typeof p.niveles[number]) => number | null | undefined) => { const v = zs.map(z => { const nv = nivEn(z); return (nv && f(nv)) || 0; }); return v.some(x => Math.abs(x) > 1e-9) ? v : undefined; };
+    const corr = corrido(nv => (A ? nv.dy : nv.dx)), tc = corrido(nv => (A ? nv.dx : nv.dy));
+    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr);
     const h0 = zs[zs.length - 1] - zPB;
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos } };
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
 let ultimoError = '';
@@ -200,7 +206,7 @@ export function verif301(d: DatosExo & { entrada: EntradaExo }) {
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
   const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
-  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro });
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, corr: en.corr });
 }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
 export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {
@@ -214,6 +220,72 @@ export function estadoExo(): EstadoChip {
   if (ds.some(d => !d)) return 'revisar';
   const reglamento = !!vientoReglamento() && estado.proyecto.exo.material !== 'hormigon';
   return ds.every(d => (reglamento ? verif301(d!).every(x => x.verifica) : d!.r.controles.every(c => c.estado === 'verifica')) && flechaExo(d!).u <= flechaExo(d!).lim) ? 'verifica' : 'no verifica';
+}
+
+// ------------------------------------------------------------------ qué módulo conviene
+let barrido: { clave: string; filas: FilaModulo[] } | null = null;
+/** el último barrido vale mientras no cambie el exo ni el proyecto (sin contar el módulo, que es lo que se barre) */
+const claveBarrido = (def: ExoDef, ens: EntradaExo[]) => JSON.stringify([{ ...def, modulo: 0, columna: 0, diagonal: 0, viga: 0, barras: 0, nuevas: 0, cortes: 0 }, ens.map(en => [en.zs, en.W, en.ancho, en.anchos, en.corr, en.zs.map(z => en.EJ(z))])]);
+function seccionModulo(def: ExoDef, ens: EntradaExo[], corr?: number[]): HTMLElement {
+  const diagrid = def.tipo === 'A';
+  const hp = (ens[0].zs[ens[0].zs.length - 1] - ens[0].zs[0]) / (ens[0].zs.length - 1);
+  const ang = ens.map(en => anguloDiagonal(def, en.ancho, def.modulo * hp));
+  const cuerpo = h('div', {});
+  cuerpo.append(
+    h('p', { class: 'nota' }, `Con un módulo de ${def.modulo} pisos las diagonales van a ${fmt(ang[0], 0)}° con el viento A y a ${fmt(ang[1], 0)}° con el B. ${diagrid ? 'Acostadas (unos 35°), el reticulado es muy rígido al corte; paradas (cerca de 90°, como columnas), a la flexión. En las torres altas y esbeltas el óptimo del diagrid suele quedar entre 60° y 70° y sube con la esbeltez (Moon, Connor y Fernández, 2007).' : 'Las cruces acostadas toman bien el corte pero son largas y pandean; las paradas, al revés.'} El barrido dimensiona el exo con cada módulo y compara el peso de acero: el más liviano que verifica es el que conviene para esta torre.`),
+    ...(corr ? [h('p', { class: 'nota chica' }, 'La torre está inclinada o corrida (Diseño → Perfil): las caras del exo siguen a cada nivel y las columnas de esquina quedan inclinadas.')] : []));
+  const boton = h('button', { type: 'button', class: 'boton' }, 'Probar módulos de 2 a 20 pisos');
+  const res = h('div', {});
+  const mostrar = (filas: FilaModulo[]) => {
+    res.replaceChildren();
+    const ok = filas.filter(f => f.verifica);
+    const mejor = ok.length ? ok.reduce((a, b) => (b.peso < a.peso ? b : a)) : null;
+    res.append(graficoModulo(filas, mejor, def.modulo));
+    if (mejor && mejor.modulo === def.modulo && JSON.stringify([def.columna, def.diagonal, def.viga]) === JSON.stringify([mejor.def.columna, mejor.def.diagonal, mejor.def.viga]))
+      res.append(h('p', { class: 'nota estado verifica' }, `Ya usás el módulo más liviano: ${mejor.modulo} pisos (${fmt(mejor.angulos[0], 0)}°, ${fmt(mejor.peso, 0)} t).`));
+    else if (mejor) {
+      const usar = h('button', { type: 'button', class: 'primario' }, `Usar el módulo de ${mejor.modulo} pisos (${fmt(mejor.angulos[0], 0)}°, ${fmt(mejor.peso, 0)} t)`);
+      usar.addEventListener('click', () => estado.cambiar(() => { const x = estado.proyecto.exo; if (!x) return; x.modulo = mejor.modulo; x.columna = mejor.def.columna; x.diagonal = mejor.def.diagonal; x.viga = mejor.def.viga; delete x.barras; delete x.nuevas; delete x.cortes; }));
+      res.append(h('div', { class: 'fila-acciones' }, usar));
+    } else res.append(h('p', { class: 'aviso-linea' }, 'Ningún módulo verifica con los tubos del catálogo: probá más separación, otra ficha o más vanos.'));
+    const t = tablaValores(['Módulo (pisos)', 'Ángulo A (°)', 'Ángulo B (°)', 'Acero (t)', 'δ / límite', ''], filas.map(f => [f.modulo, f.angulos[0], f.angulos[1], f.peso, f.flecha, f.verifica ? (f === mejor ? 'el más liviano' : 'verifica') : 'no verifica']), [0, 0, 0, 0, 2, 0]);
+    res.append(t);
+  };
+  boton.addEventListener('click', () => {
+    boton.setAttribute('disabled', ''); document.body.style.cursor = 'progress';
+    const msg = document.getElementById('mensaje'); if (msg) msg.textContent = 'Dimensionando el exo con cada módulo…';
+    setTimeout(() => {
+      try { const filas = barridoModulo(def, ens); barrido = { clave: claveBarrido(def, ens), filas }; mostrar(filas); if (msg) msg.textContent = `Listo: ${filas.length} módulos probados.`; }
+      finally { boton.removeAttribute('disabled'); document.body.style.cursor = ''; }
+    }, 30);
+  });
+  cuerpo.append(h('div', { class: 'fila-acciones' }, boton), res);
+  if (barrido && barrido.clave === claveBarrido(def, ens)) mostrar(barrido.filas);
+  return seccion(diagrid ? '¿Qué módulo conviene? El ángulo del diagrid' : '¿Qué módulo conviene? El ángulo de las cruces', cuerpo).el;
+}
+/** acero (t) contra el ángulo de las diagonales: un punto por módulo, el más liviano marcado y la franja de 60° a 70° */
+function graficoModulo(filas: FilaModulo[], mejor: FilaModulo | null, actual: number): SVGSVGElement {
+  const W = 420, H = 230, m = { l: 48, r: 14, t: 14, b: 38 };
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'grafico-modulo', role: 'img', 'aria-label': 'Peso de acero según el ángulo de las diagonales' }) as SVGSVGElement;
+  const pts = filas.filter(f => isFinite(f.angulos[0]) && f.peso > 0);
+  if (!pts.length) return svg;
+  const pMax = Math.max(...pts.map(f => f.peso)) * 1.1;
+  const X = (a: number) => m.l + (a / 90) * (W - m.l - m.r), Y = (q: number) => H - m.b - (q / pMax) * (H - m.t - m.b);
+  svg.append(el('rect', { x: X(60), y: m.t, width: X(70) - X(60), height: H - m.t - m.b, class: 'gm-franja' }));
+  svg.append(el('text', { x: (X(60) + X(70)) / 2, y: m.t + 11, class: 'gm-nota', 'text-anchor': 'middle' }, '60–70°'));
+  svg.append(el('line', { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, class: 'gm-eje' }), el('line', { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, class: 'gm-eje' }));
+  for (const a of [0, 15, 30, 45, 60, 75, 90]) svg.append(el('text', { x: X(a), y: H - m.b + 14, class: 'gm-nota', 'text-anchor': 'middle' }, `${a}°`));
+  for (const k of [0, 0.5, 1]) svg.append(el('text', { x: m.l - 6, y: Y(pMax * k / 1.1) + 3, class: 'gm-nota', 'text-anchor': 'end' }, fmt((pMax * k) / 1.1, 0)));
+  svg.append(el('text', { x: (W + m.l) / 2, y: H - 6, class: 'gm-tit', 'text-anchor': 'middle' }, 'ángulo de las diagonales con la horizontal (viento A)'));
+  svg.append(el('text', { x: 12, y: (H - m.b + m.t) / 2, class: 'gm-tit', 'text-anchor': 'middle', transform: `rotate(-90 12 ${(H - m.b + m.t) / 2})` }, 'acero (t)'));
+  svg.append(el('polyline', { points: pts.map(f => `${X(f.angulos[0]).toFixed(1)},${Y(f.peso).toFixed(1)}`).join(' '), class: 'gm-linea' }));
+  pts.forEach(f => {
+    const c = el('circle', { cx: X(f.angulos[0]), cy: Y(f.peso), r: f === mejor ? 6 : 4, class: `gm-punto${f.verifica ? '' : ' no'}${f === mejor ? ' mejor' : ''}${f.modulo === actual ? ' actual' : ''}` });
+    c.append(el('title', {}, `${f.modulo} pisos · ${fmt(f.angulos[0], 0)}° · ${fmt(f.peso, 0)} t${f.verifica ? '' : ' · no verifica'}`));
+    svg.append(c);
+  });
+  if (mejor) svg.append(el('text', { x: X(mejor.angulos[0]), y: Y(mejor.peso) - 10, class: 'gm-tit', 'text-anchor': 'middle' }, `${mejor.modulo} pisos`));
+  return svg;
 }
 
 // ------------------------------------------------------------------ panel
@@ -260,6 +332,7 @@ export function panelExo(c: H) {
       if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} de las cuatro caras: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
+    if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
   }
   const fo = h('div', { class: 'formulario' });
   campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });

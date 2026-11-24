@@ -1788,3 +1788,14 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .perfil-torre .pf-manija { fill: var(--lienzo, #fff); stroke: var(--r-diseno); stroke-width: 2; cursor: grab; }
 .perfil-torre .pf-manija.sel { fill: var(--r-diseno); }
 .perfil-torre .pf-tangente { fill: #ef9f27; stroke: #fff; stroke-width: 1; cursor: grab; }
+/* Exoesqueleto: ¿qué módulo conviene? (acero contra el ángulo de las diagonales) */
+.grafico-modulo { display: block; width: 100%; max-width: 460px; height: auto; margin: 6px 0; }
+.grafico-modulo .gm-franja { fill: color-mix(in srgb, var(--deformada) 12%, transparent); }
+.grafico-modulo .gm-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-modulo .gm-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-modulo .gm-tit { font: 600 10.5px var(--fuente); fill: var(--ink); }
+.grafico-modulo .gm-linea { fill: none; stroke: var(--ink2); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.grafico-modulo .gm-punto { fill: var(--ink); stroke: var(--lienzo, #fff); stroke-width: 1.5; }
+.grafico-modulo .gm-punto.no { fill: var(--cero); opacity: .55; }
+.grafico-modulo .gm-punto.mejor { fill: var(--elegido); }
+.grafico-modulo .gm-punto.actual { stroke: var(--ink); stroke-width: 2; }

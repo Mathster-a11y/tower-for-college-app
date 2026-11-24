@@ -353,12 +353,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       d.r.caras.forEach(c => c.esfuerzos.forEach(e => {
         if ((e.fraccion ?? 1) !== 1) return;                 // las alas son los mástiles de las otras caras: se dibujan con ellas
         // caras que siguen la planta (Hancock): la cara se mete hacia adentro con la altura
-        const tEn = (z: number) => {
-          if (!d.ts) return c.t;
+        const interp = (vs: number[], z: number) => {
           const zs = d.r.zs, k = zs.findIndex(zz => zz >= z - 1e-9);
-          const v = k <= 0 ? d.ts[Math.max(0, k)] : d.ts[k - 1] + (d.ts[k] - d.ts[k - 1]) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
-          return Math.sign(c.t) * v;
+          return k <= 0 ? vs[Math.max(0, k)] : vs[k - 1] + (vs[k] - vs[k - 1]) * ((z - zs[k - 1]) / (zs[k] - zs[k - 1] || 1));
         };
+        // torre inclinada: la cara también se corre de costado con su nivel (tc)
+        const tEn = (z: number) => (d.ts ? Math.sign(c.t) * interp(d.ts, z) : c.t) + (d.tc ? interp(d.tc, z) : 0);
         const pa = aPlanta(e.a.s, tEn(e.a.z)), pb = aPlanta(e.b.s, tEn(e.b.z));
         const A = new THREE.Vector3(pa.x, e.a.z, -pa.y), Bv = new THREE.Vector3(pb.x, e.b.z, -pb.y);
         const L = A.distanceTo(Bv);

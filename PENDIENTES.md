@@ -32,7 +32,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 
 ### Esperan una decisión tuya
 16. Documento particular del contexto urbano (cuando lo pases)
-17. Exoesqueletos nuevos (diagrid, tubo arriostrado, megapórtico): qué tipos van primero (la torre inclinada ya está: punto 21)
+17. Exoesqueletos: el diagrid avanzó (24/11: sigue el perfil de la torre inclinada o corrida y tiene el barrido «¿qué módulo conviene?» con el ángulo de las diagonales). Falta decidir qué sigue: tubo arriostrado, megapórtico u otros
 18. Elegir la carta principal (A, B, C, D o una combinación)
 19. Medir el 3D en una notebook típica de estudiante (necesita tu computadora)
 
