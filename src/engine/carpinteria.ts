@@ -151,7 +151,11 @@ type P3 = Punto & { z: number };
  *  - plana: las caras son planos (el poliedro de la piel); la panelería va por cara, con su propia grilla vertical.
  *  - montantes: cada punto es un montante (la piel curva continua: los montantes suben piso a piso).
  */
-export interface BandaFachada { z0: number; z1: number; modo: 'losa' | 'continua'; a: Punto[]; b: Punto[]; plana?: boolean; montantes?: boolean }
+export interface BandaFachada {
+  z0: number; z1: number; modo: 'losa' | 'continua'; a: Punto[]; b: Punto[]; plana?: boolean; montantes?: boolean;
+  /** con envolvente: la losa de abajo y cuánto puede pasar la piel (retiro); donde la losa no llega a la piel, la piel sigue de largo (sin travesaño ni antepecho) */
+  losa?: Punto[]; vuelo?: number;
+}
 
 const ccwP = (q: Punto[]) => (area(q) < 0 ? [...q].reverse() : q);
 /** el punto del anillo más cerca de q (t: índice del lado + fracción) */
@@ -226,6 +230,8 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
   const modo = (z: number): ModoCarpinteria => tramoEn(p, z)?.modo ?? 'continua';
   const mod = moduloFacetas(p);
   const out: BandaFachada[] = [];
+  // con envolvente diseñada aparte, cada banda sabe dónde está su losa (para cortar la piel solo donde la losa la toca)
+  const losaDe = (j: number): { losa?: Punto[]; vuelo?: number } => (p.envolvente ? { losa: ccwP(puntosSilueta(plantaDeNivel(p, nivs[j].i).silueta, 8)), vuelo: Math.max(0, tramoEn(p, nivs[j].n.cota)?.retiro ?? 0) } : {});
   let k = 0;
   while (k + 1 < nivs.length) {
     const md = modo(nivs[k].n.cota);
@@ -245,7 +251,7 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
         // vértice con vértice si los dos pisos tienen los mismos lados (torre ahusada, con perfil, recortada sin
         // cambiar de lados); si no, por cercanía. Se queda la unión con menos caras alabeadas.
         const [a, b] = mejorUnion(rs[j], rs[j + 1], z0, z1);
-        out.push({ z0, z1, modo: 'continua', a, b, plana: true });
+        out.push({ z0, z1, modo: 'continua', a, b, plana: true, ...losaDe(k + j) });
       }
     } else {
       // curva: los montantes arrancan en la losa de abajo y suben al punto más cercano de cada losa
@@ -256,7 +262,7 @@ export function bandasFachada(p: Proyecto, _preparar?: unknown): BandaFachada[] 
         const keep: number[] = []; let ult = -Infinity; const n1 = rs[j + 1].length, t0 = sig[0]?.t ?? 0;
         sig.forEach((c, i) => { const u = ((c.t - t0) % n1 + n1) % n1; if (i === 0 || u >= ult - 1e-9) { keep.push(i); ult = u; } });
         const a = keep.map(i => pts[i]), b = keep.map(i => sig[i].p);
-        out.push({ z0: nivs[k + j].n.cota, z1: nivs[k + j + 1].n.cota, modo: 'continua', a, b, montantes: true });
+        out.push({ z0: nivs[k + j].n.cota, z1: nivs[k + j + 1].n.cota, modo: 'continua', a, b, montantes: true, ...losaDe(k + j) });
         pts = b;
       }
     }
@@ -299,7 +305,7 @@ export function divisiones(L: number, rep: Reparto): number[] {
 }
 /** un paño: polígono plano (3 o más puntos; en las caras planas, recortado por el borde de la cara) */
 export interface Panel { p: P3[]; opaco: boolean; area: number }
-export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
+export interface ResultadoPaneleria { paneles: Panel[]; montantes: [P3, P3][]; /** travesaños: en cada losa (donde la toca), el antepecho, los intermedios y el remate de arriba */ travesanos: [P3, P3][]; vidrio: { n: number; area: number }; opacos: { n: number; area: number }; largoMontantes: number; largoTravesanos: number; /** paños que no son planos (alabeados más de 5 mm) */ alabeados: number; /** caras planas de la piel (el poliedro) */ caras: number }
 
 /** índices (con fracción) de los montantes sobre un anillo: en las esquinas (giro > 10°) y cada «modulo» m entre ellas */
 function montantesAnillo(r: Punto[], rep: Reparto): number[] {
@@ -345,6 +351,17 @@ function filas(h: number, ap: number, inter: number): { t: number; opaco: boolea
   return fr;
 }
 type SZ = { s: number; z: number };
+/** ¿la losa de la banda llega a la piel en el punto p? (sin losa conocida: sí) */
+function tocaLosa(bd: BandaFachada, p: Punto): boolean {
+  const L = bd.losa; if (!L || L.length < 3) return true;
+  let dentro = false;
+  for (let i = 0, j = L.length - 1; i < L.length; j = i++) { const a = L[i], b = L[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) dentro = !dentro; }
+  if (dentro) return true;
+  let d = Infinity;
+  for (let i = 0; i < L.length; i++) { const a = L[i], b = L[(i + 1) % L.length], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(a.x + dx * t - p.x, a.y + dy * t - p.y)); }
+  return d <= (bd.vuelo ?? 0) + 0.15;
+}
+const travesano = (res: ResultadoPaneleria, a: P3, b: P3) => { const l = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z); if (l < 1e-6) return; res.travesanos.push([a, b]); res.largoTravesanos += l; };
 /** recorta un polígono convexo (s, z) por el semiplano f(q) ≥ 0, con f lineal */
 function recortarSZ(q: SZ[], f: (p: SZ) => number): SZ[] {
   const out: SZ[] = [];
@@ -365,7 +382,7 @@ const clave = (a: P3, b: P3) => { const r = (x: number) => Math.round(x * 1000) 
  * horizontales en cada losa, el antepecho y los intermedios. Cada paño es el rectángulo de la grilla recortado por el
  * borde de la cara (en un borde inclinado queda un trapecio o un triángulo): siempre plano.
  */
-function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>) {
+function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter: number, res: ResultadoPaneleria, vistos: Set<string>, zTope: number) {
   type Cara = { q: P3[]; bd: BandaFachada };
   type Grupo = { n: { x: number; y: number; z: number }; d: number; caras: Cara[] };
   const grupos: Grupo[] = [];
@@ -408,13 +425,17 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
         if (z.length >= 2) { const lo = z.reduce((x, y) => (y.z < x.z ? y : x)), hi = z.reduce((x, y) => (y.z > x.z ? y : x)); montante(a3({ s: sk, z: lo.z }), a3({ s: sk, z: hi.z })); }
       });
       for (let k = 0; k + 1 < cols.length; k++) {
-        for (let j = 0; j + 1 < fr.length; j++) {
-          const z0 = c.bd.z0 + hb * fr[j].t, z1 = c.bd.z0 + hb * fr[j + 1].t;
+        // donde la losa no llega a la piel, la piel sigue de largo: sin antepecho ni travesaño en esa losa
+        const toca = tocaLosa(c.bd, a3({ s: (cols[k] + cols[k + 1]) / 2, z: c.bd.z0 }));
+        const frk = toca ? fr : filas(hb, 0, inter);
+        for (let j = 0; j + 1 < frk.length; j++) {
+          const z0 = c.bd.z0 + hb * frk[j].t, z1 = c.bd.z0 + hb * frk[j + 1].t;
           let q = recortarSZ(poli, x => x.s - cols[k]); q = recortarSZ(q, x => cols[k + 1] - x.s); q = recortarSZ(q, x => x.z - z0); q = recortarSZ(q, x => z1 - x.z);
           if (q.length < 3 || areaSZ(q) < 1e-6) continue;
           const p3 = q.map(a3);
-          res.paneles.push({ p: p3, opaco: fr[j].opaco, area: newell(p3).area });
-          p3.forEach((x, i) => { const y = p3[(i + 1) % p3.length]; if (Math.abs(x.z - z0) < 1e-6 && Math.abs(y.z - z0) < 1e-6) res.largoTravesanos += Math.hypot(x.x - y.x, x.y - y.y); });
+          res.paneles.push({ p: p3, opaco: frk[j].opaco, area: newell(p3).area });
+          const abajo = j > 0 || toca, arriba = j + 2 === frk.length && Math.abs(c.bd.z1 - zTope) < 1e-6;
+          p3.forEach((x, i) => { const y = p3[(i + 1) % p3.length]; if ((abajo && Math.abs(x.z - z0) < 1e-6 && Math.abs(y.z - z0) < 1e-6) || (arriba && Math.abs(x.z - z1) < 1e-6 && Math.abs(y.z - z1) < 1e-6)) travesano(res, x, y); });
         }
       }
     });
@@ -422,11 +443,12 @@ function paneleriaPlana(bandas: BandaFachada[], rep: Reparto, ap: number, inter:
 }
 
 export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): ResultadoPaneleria {
-  const res: ResultadoPaneleria = { paneles: [], montantes: [], vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
+  const res: ResultadoPaneleria = { paneles: [], montantes: [], travesanos: [], vidrio: { n: 0, area: 0 }, opacos: { n: 0, area: 0 }, largoMontantes: 0, largoTravesanos: 0, alabeados: 0, caras: 0 };
   const ap = Math.max(0, pn.antepecho ?? 0), inter = Math.max(0, Math.round(pn.intermedios ?? 0)), mod = Math.max(0.3, pn.modulo);
   const vistos = new Set<string>();
   const rep: Reparto = { ...pn, modulo: mod };
-  paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos);
+  const zTope = Math.max(...bandas.map(b => b.z1));
+  paneleriaPlana(bandas.filter(b => b.plana), rep, ap, inter, res, vistos, zTope);
   bandas.filter(b => !b.plana).forEach(bd => {
     const h = bd.z1 - bd.z0; if (h <= 1e-6) return;
     const ts = bd.montantes ? bd.a.map((_, i) => i) : montantesAnillo(bd.a, rep);
@@ -436,12 +458,14 @@ export function calcularPaneleria(bandas: BandaFachada[], pn: Paneleria): Result
       const t2 = k + 1 < ts.length ? ts[k + 1] : ts[0] + bd.a.length;
       const pa = P(t, 0), pb = P(t, 1);
       res.montantes.push([pa, pb]); res.largoMontantes += Math.hypot(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
-      for (let j = 0; j + 1 < fr.length; j++) {
-        const q = [P(t, fr[j].t), P(t2, fr[j].t), P(t2, fr[j + 1].t), P(t, fr[j + 1].t)];
+      const m0 = P((t + t2) / 2, 0), toca = tocaLosa(bd, m0), frk = toca ? fr : filas(h, 0, inter);
+      for (let j = 0; j + 1 < frk.length; j++) {
+        const q = [P(t, frk[j].t), P(t2, frk[j].t), P(t2, frk[j + 1].t), P(t, frk[j + 1].t)];
         const ar = newell([q[0], q[1], q[2]]).area + newell([q[0], q[2], q[3]]).area;
         if (ar < 1e-9) continue;
-        res.paneles.push({ p: q, opaco: fr[j].opaco, area: ar });
-        res.largoTravesanos += Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y, q[1].z - q[0].z);
+        res.paneles.push({ p: q, opaco: frk[j].opaco, area: ar });
+        if (j > 0 || toca) travesano(res, q[0], q[1]);
+        if (j + 2 === frk.length && Math.abs(bd.z1 - zTope) < 1e-6) travesano(res, q[3], q[2]);
         if (alabeo(q) > 0.005) res.alabeados++;
       }
     });

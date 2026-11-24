@@ -12,7 +12,7 @@ import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
-import { envolventeDesdeLosas } from '../engine/envolvente';
+import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
 import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
 import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
 import { prepararSecciones } from '../engine/loft';
@@ -621,9 +621,19 @@ export function montarPlanta(cont: HTMLElement) {
   /** editar a mano la carpintería de un piso que calcula un tramo la suelta (los tramos dejan de recalcularla) */
   const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual && !estado.proyecto.carpinteriaFija) { n.carpManual = true; delete n.carpinteriaPartida; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
+  /** ver en la planta el nivel k (como el selector de planta) */
+  const irANivel = (k: number) => { const p = estado.proyecto, iPB = p.niveles.reduce((j, x, i) => (x.cota >= 0 ? i : j), -1); estado.nivelPlanta = k === iPB ? null : p.niveles[k].cota; dibujar(); estado.avisarSeleccion(); };
+  /** la sección de la envolvente en el nivel i (si la piel va por secciones y este piso es una): se edita en la planta */
+  const seccionEnv = (i: number) => {
+    const p = estado.proyecto, n = p.niveles[i], env = p.envolvente;
+    if (!n || !env || !seccionesEnvolvente(env) || n.carpManual || p.carpinteriaFija || tramoEn(p, n.cota)?.modo !== 'continua') return null;
+    return env.secciones!.find(x => Math.abs(x.cota - n.cota) < 1e-6) ?? null;
+  };
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
     if (editaCarp) {
+      const sec = seccionEnv(iNivel);
+      if (sec) return sec.v;                                   // editar la sección de la envolvente (no suelta el piso)
       soltarCarp(n);
       if (!n.carpinteria || n.carpinteria.length < 3) n.carpinteria = (carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta).map(v => ({ ...v }));
       return n.carpinteria;
@@ -632,7 +642,7 @@ export function montarPlanta(cont: HTMLElement) {
     return n.silueta;
   };
   /** los vértices que se están editando (losa o carpintería), propios o heredados */
-  const verticesEd = (): Vertice[] => (editaCarp ? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
+  const verticesEd = (): Vertice[] => (editaCarp ? seccionEnv(iNivel)?.v ?? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
   /** la relación losa ↔ carpintería, a la vista: si la carpintería sigue a las losas (tramos) se puede fijar */
   function estadoCarpLosas(): HTMLElement[] {
     const p = estado.proyecto, tramos = tramosCarpinteria(p).length > 0;
@@ -668,7 +678,7 @@ export function montarPlanta(cont: HTMLElement) {
       const u = ((await pedirTexto('Unidad del dibujo', `Escribí m, cm o mm. El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF.`, guess, 'Importar')) ?? '').trim().toLowerCase();
       const factor = u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : u === 'm' ? 1 : NaN;
       if (!isFinite(factor)) return;
-      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) { soltarCarp(nv); nv.carpinteria = c; } else nv.silueta = c; });
+      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); const sec = editaCarp ? seccionEnv(iNivel) : null; if (sec) sec.v = c; else if (editaCarp) { soltarCarp(nv); nv.carpinteria = c; } else nv.silueta = c; });
     });
     const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
     ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; pintarLosaCarp(modo); armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
@@ -703,7 +713,7 @@ export function montarPlanta(cont: HTMLElement) {
       ponerModo('mover');
       edc.abrirContorno({
         titulo: `${carp ? 'Carpintería' : 'Losa'} del nivel ${nombre}`, v: v0,
-        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) { soltarCarp(nv); nv.carpinteria = v; } else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
+        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel], sec = carp ? seccionEnv(nivel) : null; if (sec) sec.v = v; else if (carp) { soltarCarp(nv); nv.carpinteria = v; } else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
       });
     }, 'Arcos (por tres puntos o por radio), empalmes, chaflanes, dividir lados, largo y ángulo exactos, desfasar, simetría, girar, escalar y formas (círculo, polígono, elipse). El mismo editor que el contorno de los muros.');
     filaV.append(agregar, borrar, cad);
@@ -775,8 +785,27 @@ export function montarPlanta(cont: HTMLElement) {
           } else {
             const bp = boton('Recortar con un plano…', () => { ponerModo('mover'); corte.abrir('envolvente'); }, 'En el corte de la torre: dos puntos y el plano recorta la envolvente (las losas no se tocan)');
             const nPl = p.envolvente.planos?.length ?? 0;
+            // la forma: por perfil o por secciones (pisos clave que se editan en la planta; los de en medio pasan de una a otra)
+            const secs = seccionesEnvolvente(p.envolvente);
+            const forma: HTMLElement[] = [];
+            if (secs) {
+              const lista = document.createElement('div'); lista.className = 'secciones-env';
+              secs.forEach(sx => {
+                const nv = p.niveles.find(x => Math.abs(x.cota - sx.cota) < 1e-6);
+                const it = document.createElement('span'); it.className = 'seccion-item';
+                const ir = boton(nv?.nombre ?? `${String(sx.cota).replace('.', ',')} m`, () => { const k = p.niveles.findIndex(x => Math.abs(x.cota - sx.cota) < 1e-6); if (k >= 0) irANivel(k); }, 'Ir a este piso para editar la sección');
+                const x = boton('✕', () => estado.cambiar(pp => { if (!pp.envolvente) return; const xs = (pp.envolvente.secciones ?? []).filter(q => Math.abs(q.cota - sx.cota) > 1e-6); pp.envolvente = { ...pp.envolvente, secciones: xs.length ? xs : null }; }), 'Quitar esta sección'); x.className = 'quitar-tramo';
+                it.append(ir, x); lista.append(it);
+              });
+              const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'Paso entre secciones');
+              ([[false, 'Recto', 'De una sección a la otra en línea recta (aristas en las secciones)'], [true, 'Suave', 'Curva suave que pasa por todas las secciones']] as const).forEach(([v, t, ti]) => { const bx = boton(t, () => estado.cambiar(pp => { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, suave: v || null }; }), ti); bx.setAttribute('aria-pressed', String(!!p.envolvente!.suave === v)); sg.append(bx); });
+              forma.push(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: `Forma por secciones (${secs.length})` }), lista, sg,
+                nota('Cada sección se edita en su piso, en la planta, arrastrando los vértices. Para otra: andá a un piso y «Hacer sección en este piso».'),
+                h2(boton('Volver al perfil', () => estado.cambiar(pp => { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, secciones: null }; }), 'Se quitan las secciones: la piel vuelve a la planta base con su perfil')));
+            } else forma.push(seccionPerfil('envolvente'),
+              nota('Para darle forma piso por piso (como un loft): andá a un piso y «Hacer sección en este piso»; se editan sus vértices en la planta.'));
             segue.append(nota(`Diseñada aparte: las losas se editan sin tocarla. En la planta se ve su sombra en cada piso.${nPl ? ` ${nPl} ${nPl === 1 ? 'plano la recorta' : 'planos la recortan'}.` : ''}`),
-              seccionPerfil('envolvente'),
+              ...forma,
               h2(bp,
                 boton('Planta base = la losa', () => estado.cambiar(pp => { if (!pp.envolvente) return; const e2 = envolventeDesdeLosas(pp, tEnv.retiro ?? 0); pp.envolvente = { ...pp.envolvente, planta: e2.planta }; }), 'La planta base de la piel vuelve a ser la losa base metida el retiro (la forma en altura y los planos quedan)'),
                 boton('Que siga a las losas', () => estado.cambiar(pp => { delete pp.envolvente; }), 'Se quita la envolvente: la piel vuelve a pasar por el borde de cada losa')));
@@ -819,8 +848,12 @@ export function montarPlanta(cont: HTMLElement) {
         if (tn && tn.modo !== 'sin' && !p.carpinteriaFija) {
           const pt = n.carpinteriaPartida;
           if (!n.carpManual) {
-            if (tn.modo === 'continua' && p.envolvente) piso.push(linea('la genera la envolvente: en la planta se ve su sombra; se diseña en «Envolvente», más abajo'),
-              h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { pp.niveles[iNivel].carpManual = true; }), 'Este piso deja de seguir a la envolvente y se edita a mano (un balcón o un retiro puntual). Los avisos controlan que no quede sobre un vacío.')));
+            const sec = seccionEnv(iNivel);
+            if (tn.modo === 'continua' && p.envolvente && sec) piso.push(linea('este piso es una sección de la envolvente: arrastrá sus vértices (o «Herramientas CAD…»); los pisos de en medio pasan de una sección a la otra'), filaV,
+              h2(boton('Quitar esta sección', () => estado.cambiar(pp => { if (!pp.envolvente) return; const xs = (pp.envolvente.secciones ?? []).filter(x => Math.abs(x.cota - n.cota) > 1e-6); pp.envolvente = { ...pp.envolvente, secciones: xs.length ? xs : null }; }), 'Este piso vuelve a ser uno de en medio (con dos o más secciones; si queda una sola, la piel vuelve al perfil)')));
+            else if (tn.modo === 'continua' && p.envolvente) piso.push(linea('la genera la envolvente: en la planta se ve su sombra; se diseña en «Envolvente», más abajo, o haciendo una sección en este piso'),
+              h2(boton('Hacer sección en este piso', () => estado.cambiar(pp => { if (!pp.envolvente) return; pp.envolvente = { ...pp.envolvente, secciones: conSeccion(pp, n.cota) }; }), 'La forma de la piel en este piso pasa a editarse acá, con sus vértices; los pisos de en medio pasan suave o recto de una sección a otra (como un loft)'),
+                boton('Soltar este piso', () => estado.cambiar(pp => { pp.niveles[iNivel].carpManual = true; }), 'Este piso deja de seguir a la envolvente y se edita a mano (un balcón o un retiro puntual). Los avisos controlan que no quede sobre un vacío.')));
             else piso.push(linea(pt ? `lo común a esta losa y la de arriba son ${pt.piezas} piezas separadas: la carpintería va por la más grande y ${String(pt.area).replace('.', ',')} m² quedan sin carpintería (ver avisos)` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
               h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.carpManual = true; delete nv.carpinteriaPartida; }), 'Queda con la forma de ahora y el tramo deja de recalcularla. Si pasa sobre un vacío, aparece un aviso.')));
           } else {
@@ -2269,7 +2302,8 @@ export function montarPlanta(cont: HTMLElement) {
     // la carpintería que calcula un tramo (no soltada ni fija) no se edita acá; la de la envolvente se ve como su sombra
     const tCar = p.niveles[iN] ? tramoEn(p, p.niveles[iN].cota) : null;
     const carGenerada = !!tCar && tCar.modo !== 'sin' && !p.niveles[iN]?.carpManual && !p.carpinteriaFija;
-    const carSombra = carGenerada && tCar!.modo === 'continua' && !!p.envolvente;
+    const esSecc = !!seccionEnv(iN);
+    const carSombra = carGenerada && tCar!.modo === 'continua' && !!p.envolvente && !esSecc;
     if (car) {
       const pc = puntosSilueta(car.v);
       svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
@@ -2295,7 +2329,7 @@ export function montarPlanta(cont: HTMLElement) {
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
       // las losas que genera un loft no se editan a mano (se recalculan solas): sin manijas
-      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && carGenerada) ? [] : vEd).forEach((v, i) => {
+      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && carGenerada && !esSecc) ? [] : vEd).forEach((v, i) => {
         // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
         const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));
@@ -3397,7 +3431,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (modo === 'silueta') {
       if (arrastreV === null || !pasoUmbral(ev)) return;
-      const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? nv.carpinteria : nv.silueta;
+      const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? (seccionEnv(iNivel)?.v ?? nv.carpinteria) : nv.silueta;
       if (v && v[arrastreV]) {
         // los puntos de control de las Bézier que llegan y salen de este vértice se mueven con él
         const k = arrastreV, a = v[k], dx = aj(q.x) - a.x, dy = aj(q.y) - a.y, pr = v[(k - 1 + v.length) % v.length];

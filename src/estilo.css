@@ -1924,3 +1924,6 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 /* la carpintería que genera la envolvente: su sombra en la planta (no se edita acá) */
 .planta .carpinteria.sombra-env { stroke-dasharray: 6 4; stroke-width: 1.8; fill: color-mix(in srgb, var(--carpinteria) 5%, transparent); }
 .planta .carpinteria.editando.sombra-env { pointer-events: none; cursor: default; }
+.sigue-losa .secciones-env { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+.sigue-losa .seccion-item { display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--edge); border-radius: 999px; padding-right: 2px; background: var(--panel); }
+.sigue-losa .seccion-item > button:first-child { border: 0; background: none; }
