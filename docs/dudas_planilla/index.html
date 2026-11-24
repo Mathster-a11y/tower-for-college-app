@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dudas sobre la planilla</title>
+<style>
+:root { --tinta: #1f2328; --gris: #5b6472; --suave: #eef1f5; --acento: #1565c0; --ok: #2e7d32; --aviso: #8a5f00;
+  /* la convención de la app: rojo tracción, azul compresión */
+  --traccion: #e24b4a; --compresion: #378add; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: var(--tinta); font: 14.5px/1.55 "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+h1 { font-size: 27px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 34px 0 8px; border-bottom: 2px solid var(--suave); padding-bottom: 4px; break-after: avoid; }
+h3 { font-size: 15.5px; margin: 16px 0 4px; break-after: avoid; } p, li { max-width: 82ch; } .sub { color: var(--gris); margin: 0 0 16px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0 10px; } th, td { border-bottom: 1px solid #e3e7ec; padding: 5px 7px; text-align: left; vertical-align: top; }
+th { background: var(--suave); font-weight: 600; } td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.caja { background: var(--suave); border-radius: 8px; padding: 10px 14px; margin: 10px 0; } .caja.ok { background: #e8f5e9; } .caja.aviso { background: #fff7e0; }
+.preg { border-left: 4px solid var(--acento); background: #f3f7fc; padding: 8px 14px; margin: 10px 0; border-radius: 0 8px 8px 0; }
+.preg b:first-child { color: var(--acento); }
+.grilla { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 8px 0; }
+.grilla > div { border: 1px solid #e3e7ec; border-radius: 8px; padding: 8px 12px; font-size: 13.5px; }
+.grilla h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--gris); }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--suave); color: var(--gris); white-space: nowrap; }
+.tag.alta { background: #fdecea; color: #a1302b; } .tag.media { background: #fff7e0; color: var(--aviso); } .tag.baja { background: var(--suave); }
+.comp { color: var(--compresion); font-weight: 600; } .trac { color: var(--traccion); font-weight: 600; } .err { color: var(--gris); font-style: italic; }
+code { background: var(--suave); padding: 0 4px; border-radius: 3px; font-size: 12.5px; }
+.f { font-family: "IBM Plex Mono", Consolas, monospace; font-size: 13px; }
+.duda { break-inside: auto; }
+@media print { main { max-width: none; padding: 0 4mm; } table, .caja, .preg, .grilla { break-inside: avoid; } h2 { break-before: auto; } }
+@media (max-width: 700px) { .grilla { grid-template-columns: 1fr; } table { font-size: 12px; } }
+</style></head><body><main>
+<h1>Dudas sobre el método de la planilla</h1>
+<p class="sub">Torre 3D · comparación con el método de la guía y con el CIRSOC, en tres ejemplos · 24 de noviembre de 2026 ·
+preparado para llevar a la cátedra antes de proponer cualquier cambio.</p>
+
+<div class="caja">
+<b>Criterio de este documento.</b> La planilla y la guía son de la cátedra: la app las reproduce tal como están y <b>no las
+cambia</b>. El método CIRSOC y el FEM dependen solo del reglamento (102-25, 101-25 y 201-2005): ahí la app sigue el CIRSOC y,
+ante una duda, manda el CIRSOC. Por eso cada duda está armada igual: <b>qué hace la planilla</b> (con la celda), <b>qué hace la
+guía</b>, <b>qué pide el CIRSOC o la estática</b>, <b>cuánto cambia en tres ejemplos</b> y <b>la pregunta concreta</b>. Ninguna
+duda presupone que la cátedra se equivocó: varias pueden ser simplificaciones a propósito, y la pregunta es si lo son.
+</div>
+
+<h2>En pocas palabras</h2>
+<ul>
+<li><b>Dos dudas cambian números de verdad y conviene llevarlas primero:</b> el momento de cada pieza en «Rototrasl.» (columna O,
+que suma un momento y una fuerza: hasta +66 % en la torre de 34 pisos) y la combinación de
+cargas de la flexocompresión (la carga mayor va con la tracción y la menor con la compresión: hasta +87 %
+de tracción).</li>
+<li><b>Tres dudas hacen que la hoja de flexocompresión no dé resultado o dé un resultado de otra pieza:</b> ocho filas sin peso propio,
+el tipo de fila que manda sobre el tipo de pieza (#DIV/0!) y las piezas de más de cuatro muros que no entran en el molde de la hoja J.
+En la torre de 34 pisos, 10 de las 12 piezas del viento A quedan sin tensión.</li>
+<li><b>El viento:</b> la planilla usa G = 0,85 aunque su propia frecuencia da menos de 1 Hz. Con esa frecuencia el Gf del reglamento
+da apenas 2 a 10 % más; lo que multiplica el corte por 2,3 a 3,4 en el FEM y el CIRSOC es <b>qué frecuencia</b> se usa, no el G.</li>
+<li>En el ejemplo de la guía (simétrico) casi todo coincide: las diferencias aparecen con excentricidad y con piezas complejas,
+que es justo lo que traen los alumnos.</li>
+</ul>
+
+<h2>Los tres ejemplos</h2>
+<table><tr><th>Ejemplo</th><th>Qué es</th><th>Pisos</th><th>Altura (m)</th><th>e (m)</th><th>Piezas viento A</th><th>Q en −1 (t)</th><th>Mv en −1 (tm)</th></tr><tr><td>Ejemplo de la guía</td><td>Neuquén, 20 pisos, simétrico</td><td class=n>22</td><td class=n>64,0</td><td class=n>0,00</td><td class=n>6</td><td class=n>129,5</td><td class=n>4.985</td></tr><tr><td>Torre asimétrica</td><td>ejemplo de la app</td><td class=n>22</td><td class=n>64,0</td><td class=n>2,00</td><td class=n>6</td><td class=n>129,5</td><td class=n>4.985</td></tr><tr><td>Torre de 34 pisos</td><td>planta del usuario</td><td class=n>35</td><td class=n>122,4</td><td class=n>1,74</td><td class=n>12</td><td class=n>640,4</td><td class=n>44.748</td></tr></table>
+<p>Ejemplo de la guía: el de la guía 2024, simétrico (e = 0). Torre asimétrica: el caso particular del Anexo de la guía (T5 aislado, un
+tabique de 4,00 × 0,20 m), donde la planta rota. Torre de 34 pisos: una planta real con núcleos de seis muros. Todo sale de la app con la planilla anterior y el armado
+«App»; los números se reproducen con <code>DUDAS=1 npx vitest run tools/dudas</code> y la planilla exportada da lo mismo en
+Excel y LibreOffice (la app se verifica celda por celda contra las dos).</p>
+
+<div class="duda">
+<h2>1. El momento de cada pieza: O = G + N suma un momento y una fuerza <span class="tag alta">cambia hasta 66 %</span></h2>
+<div class="grilla">
+<div><h4>Planilla</h4>«Rototrasl. cara mayor», columna <code>O = G + N</code>. <code>G = Mv·J/ΣJ</code> es el momento de traslación (tm);
+<code>N = Mt·J·a/ΣJt·a²</code> es el <b>corte</b> de rotación (t). «Flex comp PB paralelos» toma <code>J = O</code> como el momento de la pieza.</div>
+<div><h4>Guía</h4>Reparte el momento con el mismo porcentaje que el corte: cada tabique toma (traslación ± rotación) / Q del viento,
+y ese porcentaje se aplica a M (Anexo de rototraslación).</div>
+<div><h4>CIRSOC / estática</h4>Con losa rígida y piezas que se deforman igual, cada pieza toma su parte del corte en todos los pisos,
+así que su momento es esa misma parte del momento: <span class="f">Mj = (Qtras + Qrot)/Q · Mv = G + N·hW</span>, con hW = Mv/Q.
+El método CIRSOC de la app lo hace así, en los cuatro casos de carga del 102-25.</div></div>
+<table><tr><th>Ejemplo</th><th>Pieza</th><th>G (tm)</th><th>N (t)</th><th>hW (m)</th><th>O = G + N (planilla)</th><th>G + N·hW</th><th>Planilla contra corregido</th></tr>
+<tr><td>Ejemplo de la guía</td><td>T1</td><td class=n>343</td><td class=n>0,00</td><td class=n>38,48</td><td class=n><b>343</b></td><td class=n><b>343</b></td><td class=n>0 %</td></tr><tr><td></td><td>T5</td><td class=n>1.807</td><td class=n>0,00</td><td class=n>38,48</td><td class=n><b>1.807</b></td><td class=n><b>1.807</b></td><td class=n>0 %</td></tr><tr><td>Torre asimétrica</td><td>T1</td><td class=n>500</td><td class=n>6,23</td><td class=n>38,48</td><td class=n><b>506</b></td><td class=n><b>740</b></td><td class=n>−32 %</td></tr><tr><td></td><td>T2</td><td class=n>500</td><td class=n>−4,14</td><td class=n>38,48</td><td class=n><b>496</b></td><td class=n><b>341</b></td><td class=n>+45 %</td></tr><tr><td></td><td>T5</td><td class=n>351</td><td class=n>3,09</td><td class=n>38,48</td><td class=n><b>354</b></td><td class=n><b>470</b></td><td class=n>−25 %</td></tr><tr><td></td><td>T6</td><td class=n>2.634</td><td class=n>−7,28</td><td class=n>38,48</td><td class=n><b>2.627</b></td><td class=n><b>2.354</b></td><td class=n>+12 %</td></tr><tr><td>Torre de 34 pisos</td><td>T1</td><td class=n>2.815</td><td class=n>15,92</td><td class=n>69,88</td><td class=n><b>2.831</b></td><td class=n><b>3.928</b></td><td class=n>−28 %</td></tr><tr><td></td><td>T3</td><td class=n>18.551</td><td class=n>46,45</td><td class=n>69,88</td><td class=n><b>18.598</b></td><td class=n><b>21.797</b></td><td class=n>−15 %</td></tr><tr><td></td><td>T4</td><td class=n>2.815</td><td class=n>−16,12</td><td class=n>69,88</td><td class=n><b>2.799</b></td><td class=n><b>1.689</b></td><td class=n>+66 %</td></tr><tr><td></td><td>T6</td><td class=n>18.551</td><td class=n>−47,80</td><td class=n>69,88</td><td class=n><b>18.503</b></td><td class=n><b>15.211</b></td><td class=n>+22 %</td></tr></table>
+<p>Sin excentricidad (ejemplo de la guía) N = 0 y da igual. Con excentricidad, la planilla le saca casi toda la rotación al momento:
+las piezas del lado que se suma quedan cortas (T1 de la torre asimétrica: 506 en vez de 740 tm) y las del lado que se resta, largas.
+Como N está en toneladas y G en tm, el resultado además cambia si se cambian las unidades.</p>
+<div class="preg"><b>Pregunta.</b> ¿La columna O de «Rototrasl.» quiere ser el momento de la pieza? Si es así, ¿N no debería pasar a momento
+con el brazo de la resultante (N·Mv/Q), o aplicarse el porcentaje total (E + N)/Q a Mv, como hace la guía? Si O es otra cosa
+(por ejemplo, un índice para ordenar las piezas), ¿qué momento debería leer la hoja de flexocompresión?</div>
+</div>
+
+<div class="duda">
+<h2>2. La combinación de cargas en la flexocompresión <span class="tag alta">del lado inseguro</span></h2>
+<div class="grilla">
+<div><h4>Planilla</h4>«Flex comp PB paralelos»: <code>O = (−H/B − J/W)·0,1</code> (compresión con Ng, el edificio <b>descargado</b>) y
+<code>P = (−I/B + J/W)·0,1</code> (tracción con Nq, el edificio <b>cargado</b>).</div>
+<div><h4>Guía</h4>Verifica la compresión con el edificio cargado (0,9 t/m²) y la tracción con el descargado (0,7 t/m²).</div>
+<div><h4>CIRSOC</h4>El 101-25 arma la compresión máxima con <b>1,2 D + 1,0 W + L</b> y la tracción máxima (y el vuelco) con
+<b>0,9 D + 1,0 W</b>: la carga mayor con la compresión y la menor con la tracción. Es el mismo principio con cargas de servicio.</div></div>
+<table><tr><th>Ejemplo</th><th>Pieza</th><th>Ng (t)</th><th>Nq (t)</th><th>Compresión planilla</th><th>Compresión con Nq</th><th>Tracción planilla</th><th>Tracción con Ng</th></tr>
+<tr><td>Ejemplo de la guía</td><td>T1</td><td class=n>293</td><td class=n>337</td><td class=n><span class="comp">−83,3</span></td><td class=n><span class="comp">−88,2</span></td><td class=n><span class="trac">+13,4</span></td><td class=n><span class="trac">+18,3</span></td></tr><tr><td>Torre asimétrica</td><td>T1</td><td class=n>293</td><td class=n>337</td><td class=n><span class="comp">−107,5</span></td><td class=n><span class="comp">−112,4</span></td><td class=n><span class="trac">+37,6</span></td><td class=n><span class="trac">+42,5</span></td></tr><tr><td></td><td>T2</td><td class=n>293</td><td class=n>337</td><td class=n><span class="comp">−105,9</span></td><td class=n><span class="comp">−110,8</span></td><td class=n><span class="trac">+36,0</span></td><td class=n><span class="trac">+40,9</span></td></tr><tr><td></td><td>T5</td><td class=n>376</td><td class=n>448</td><td class=n><span class="comp">−113,4</span></td><td class=n><span class="comp">−122,4</span></td><td class=n><span class="trac">+10,4</span></td><td class=n><span class="trac">+19,4</span></td></tr><tr><td>Torre de 34 pisos</td><td>T2</td><td class=n>808</td><td class=n>1.039</td><td class=n><span class="comp">−70,8</span></td><td class=n><span class="comp">−86,0</span></td><td class=n><span class="comp">−50,3</span></td><td class=n><span class="comp">−35,1</span></td></tr><tr><td></td><td>T5</td><td class=n>1.055</td><td class=n>1.356</td><td class=n><span class="comp">−86,8</span></td><td class=n><span class="comp">−106,6</span></td><td class=n><span class="comp">−71,3</span></td><td class=n><span class="comp">−51,6</span></td></tr></table>
+<p>Tensiones en kg/cm², con el mismo momento O de la planilla, para separar esta duda de la anterior
+(<span class="trac">rojo: tracción</span>, <span class="comp">azul: compresión</span>). La diferencia es siempre (Nq − Ng)/F y en las dos
+tensiones va del lado inseguro: menos compresión y menos tracción que las que corresponden.</p>
+<div class="preg"><b>Pregunta.</b> ¿Las columnas O y P cruzan las cargas a propósito? Si no, ¿la compresión debería usar Nq (columna I) y la
+tracción Ng (columna H)?</div>
+</div>
+
+<div class="duda">
+<h2>3. Ocho filas sin peso propio <span class="tag media">según la fila donde cae la pieza</span></h2>
+<p><b>Planilla:</b> en «Flex comp PB paralelos», <code>D13:D20</code> tienen 0,01 m³ fijo en lugar de <code>B·C</code>: las piezas que caen en las
+filas 10 a 17 no suman su peso propio a N. <b>Guía y CIRSOC:</b> el peso propio entra siempre (en el CIRSOC, como D).</p>
+<p>En la torre de 34 pisos caen ahí T2, T5, T37, T38. T2 (F = 1,524 m², 122,4 m de alto) pierde
+448 t de peso propio: con la combinación corregida la compresión pasaría de <span class="comp">−86,0</span> a <span class="comp">−115,4</span> kg/cm²
+(la planilla informa <span class="comp">−70,8</span>). En el ejemplo de la guía, si T1 cayera en esas filas, Ng bajaría de 293 a 155 t y la tracción subiría de
+<span class="trac">+18,3</span> a <span class="trac">+33,6</span> kg/cm².</p>
+<div class="preg"><b>Pregunta.</b> ¿El 0,01 de D13:D20 es un resto de una versión anterior, o esas filas están pensadas para piezas sin peso
+(columnas metálicas, por ejemplo)? ¿Deberían llevar <code>=B·C</code> como las de arriba?</div>
+</div>
+
+<div class="duda">
+<h2>4. El tipo de fila manda sobre el tipo de pieza <span class="tag media">#DIV/0! o la pieza equivocada</span></h2>
+<p><b>Planilla:</b> el W lo elige la fila y no la pieza (filas 4 a 10: simétricas; 11 a 14: asimétricas; 21 a 23: tubos). Si una pieza
+asimétrica cae en una fila simétrica, la hoja lee un molde vacío y da 0/0. J25 lo avisa («se deberá cambiar el hipervínculo»): el
+alumno tiene que reescribir la fórmula. En la 2025, desde la fila 10 el área y el W salen de una fila de la hoja J y el momento de otra.
+<b>Guía y CIRSOC:</b> cada pieza con su propia sección.</p>
+<p>Ejemplo de la guía: los núcleos T5, T6 dan #DIV/0!. Torre asimétrica: T6.
+Torre de 34 pisos: 10 de 12 (T1, T3, T4, T6, T27, T28, T29, T36, T37, T38). Las piezas más cargadas son justo las que no tienen tensión.</p>
+<div class="preg"><b>Pregunta.</b> ¿Se espera que el alumno reescriba los vínculos a mano? Si es así, ¿hay una regla para hacerlo (qué columna de
+la hoja J usar para cada tipo de pieza)? La app puede ordenar las piezas para que caigan en la fila de su tipo, pero en plantas con muchas
+asimétricas no alcanzan las filas.</div>
+</div>
+
+<div class="duda">
+<h2>5. Piezas de más de cuatro muros y el molde de la hoja J <span class="tag alta">cambia el reparto</span></h2>
+<p><b>Planilla:</b> el molde de cada pieza tiene un ala superior, un ala inferior y dos almas. Una pieza con más muros (un núcleo con
+tabiques interiores) se tiene que «armar» en ese molde. <b>Guía:</b> sección 7, armado simplificado de la cátedra (alas apiladas, almas
+unidas). <b>CIRSOC / estática:</b> no hay molde; la rigidez es la de la sección real.</p>
+<p>En la torre de 34 pisos, T1 tiene seis muros. Su J da <b>17,93 m⁴</b> con el armado de la app, <b>31,19 m⁴</b> con el de la cátedra y
+<b>34,98 m⁴</b> con la sección real; T3 da 118,14, 65,44 y 102,87 m⁴. Como la rototraslación reparte por J, cambia cuánto toma cada pieza:</p>
+<table><tr><th>Ejemplo</th><th>Pieza</th><th>Planilla (molde)</th><th>Guía (sección real)</th><th>CIRSOC</th><th>FEM (Timoshenko)</th></tr><tr><td>Torre asimétrica</td><td>T1</td><td class=n>14,8 %</td><td class=n>14,7 %</td><td class=n>14,7 %</td><td class=n>16,3 %</td></tr><tr><td></td><td>T2</td><td class=n>6,8 %</td><td class=n>6,9 %</td><td class=n>6,9 %</td><td class=n>13,9 %</td></tr><tr><td></td><td>T6</td><td class=n>47,2 %</td><td class=n>47,3 %</td><td class=n>47,3 %</td><td class=n>27,3 %</td></tr><tr><td>Torre de 34 pisos</td><td>T1</td><td class=n>8,8 %</td><td class=n>16,1 %</td><td class=n>16,1 %</td><td class=n>18,5 %</td></tr><tr><td></td><td>T3</td><td class=n>48,7 %</td><td class=n>40,8 %</td><td class=n>40,8 %</td><td class=n>29,1 %</td></tr><tr><td></td><td>T4</td><td class=n>3,8 %</td><td class=n>8,1 %</td><td class=n>8,1 %</td><td class=n>13,0 %</td></tr><tr><td></td><td>T6</td><td class=n>34,0 %</td><td class=n>30,3 %</td><td class=n>30,3 %</td><td class=n>24,2 %</td></tr></table>
+<p>Parte del viento A que toma cada pieza en el caso 1. Guía y CIRSOC coinciden porque usan el mismo reparto con la sección real; el FEM
+además cuenta el corte de las almas, que baja la parte de los núcleos grandes.</p>
+<div class="preg"><b>Pregunta.</b> Para piezas que no entran en el molde, ¿qué J se espera en la entrega: el del armado de la sección 7 o el de
+la sección real? ¿Se aceptan piezas partidas en dos filas (con el riesgo de que no trabajen juntas)?</div>
+</div>
+
+<div class="duda">
+<h2>6. W de las piezas asimétricas y área sin ala inferior <span class="tag media">hasta 45 % en la flexión</span></h2>
+<p><b>Planilla:</b> <code>AN = AM / (X/2 + AB/2 + AI/2)</code> divide el J por la mitad de la altura, pero en una pieza asimétrica el eje
+neutro no está en la mitad: hay un W por fibra. El área (columna O de la hoja J) suma <code>W·X + Z·AB + AE·AF</code> y no el ala
+inferior <code>AH·AI</code>. <b>Guía y CIRSOC:</b> cada fibra con su distancia al baricentro; el área completa.</p>
+<p>Una T con ala de 4 × 0,2 m y alma de 0,2 × 4 m: J = 2,83 m⁴, eje a 1,15 m del ala; la hoja usa W = 1,35 m³, pero en la punta del alma
+(a 3,05 m) W = 0,93 m³: la tensión de flexión es 45 % mayor que la de la hoja. En los núcleos del ejemplo de la guía el área da 1,72 m² en
+vez de 2,72 m² (−37 %): menos peso propio y otra N/F.</p>
+<div class="preg"><b>Pregunta.</b> ¿Se verifica cada fibra con su W (J/y sup. y J/y inf.)? ¿La columna O debería sumar AH·AI?</div>
+</div>
+
+<div class="duda">
+<h2>7. Pieza entera o almas y alas por separado <span class="tag media">criterio</span></h2>
+<p><b>Planilla:</b> una sola tensión por fibra para la pieza entera (N total / área total ± M/W). <b>Guía:</b> separa almas y alas, cada una
+con su N (por su área de influencia) y su parte del momento. <b>CIRSOC:</b> el 201 verifica la sección con compatibilidad de deformaciones
+(secciones planas); si alas y alma están unidas trabaja la sección entera, con el ala que colabora. La app, en el método CIRSOC, hoy
+verifica muro por muro como la guía (del lado seguro para las alas). <i>El ancho de ala que colabora hay que confirmarlo en el texto del
+201, que no tenemos en el repositorio.</i></p>
+<p>Ejemplo: T1 de la torre asimétrica da <span class="trac">+42,5</span> de tracción con la planilla corregida (pieza entera) y
+<span class="trac">+65,1</span> con la guía (muro por muro); la compresión, <span class="comp">−112,4</span> y <span class="comp">−135,0</span> kg/cm².
+Parte de la diferencia es el momento (duda 1) y parte es el criterio.</p>
+<div class="preg"><b>Pregunta.</b> Para la entrega, ¿la verificación es la de la planilla (pieza entera) o la de la guía (almas y alas)?</div>
+</div>
+
+<div class="duda">
+<h2>8. El viento: G = 0,85 con frecuencias menores que 1 Hz <span class="tag media">el G cambia poco; la frecuencia, mucho</span></h2>
+<p><b>Planilla y guía:</b> calculan la frecuencia (F = 1/T) pero usan G = 0,85 igual. <b>CIRSOC 102:</b> con n1 &lt; 1 Hz el edificio es
+flexible y corresponde Gf (102-25, art. 1.9.5; el 102-2005 distingue lo mismo).</p>
+<table><tr><th>Ejemplo</th><th>F planilla (Hz)</th><th>G planilla</th><th>Gf con F de la planilla</th><th>n1 FEM</th><th>n1 aprox. 102-25</th><th>Q planilla (t)</th><th>Q FEM (t)</th><th>Q CIRSOC (t)</th></tr><tr><td>Ejemplo de la guía</td><td class=n>0,87</td><td class=n>0,85</td><td class=n>0,86 a 0,89</td><td class=n>0,36</td><td class=n>0,17</td><td class=n>126</td><td class=n>319</td><td class=n>422</td></tr><tr><td>Torre asimétrica</td><td class=n>0,87</td><td class=n>0,85</td><td class=n>0,86 a 0,89</td><td class=n>0,34</td><td class=n>0,17</td><td class=n>126</td><td class=n>324</td><td class=n>419</td></tr><tr><td>Torre de 34 pisos</td><td class=n>0,47</td><td class=n>0,85</td><td class=n>0,86 a 0,90</td><td class=n>0,23</td><td class=n>0,10</td><td class=n>632</td><td class=n>1.474</td><td class=n>2.037</td></tr></table>
+<p>Gf con exposición B o C del 102-25 y 2 % de amortiguamiento. Con la frecuencia de la planilla, Gf supera a 0,85 en 2 a 10 %: poco. Lo
+que separa a los métodos es la frecuencia: la del FEM (análisis modal de la torre) es 2 a 2,4 veces menor que la de la planilla y la aproximada del
+102-25 para tabiques, 5 veces menor. Con esas frecuencias el corte en PB crece 2,3 a 3,4 veces (también cambian V, Kz y la carga mínima del 102-25).</p>
+<div class="preg"><b>Pregunta.</b> ¿Qué frecuencia se espera usar y, si da menos de 1 Hz, se pide Gf o se acepta 0,85? (La pregunta ya está en
+la lista de la cátedra; acá van los números.)</div>
+</div>
+
+<h2>9. Dudas chicas</h2>
+<table><tr><th>Dónde</th><th>Qué pasa</th><th>Efecto</th><th>Pregunta</th></tr>
+<tr><td>Planilla anterior, «Rototrasl. cara menor» B51 e I51</td><td>Suman hasta la fila 38; L51, M51 y la planilla 2025 llegan a la 50.</td><td>Las piezas 9 a 20 del viento A no cuentan para el CR del viento B.</td><td>¿Deberían sumar hasta la 50?</td></tr>
+<tr><td>«J Tabiques paralelos», filas 8 y 9</td><td>Faltan fórmulas en la planilla virgen.</td><td>Esas piezas no aportan J si no se completan a mano.</td><td>¿Es a propósito?</td></tr>
+<tr><td>«Flex comp PB»</td><td>Solo el viento A (cara mayor).</td><td>Las piezas del viento B no se verifican.</td><td>¿Hay que agregar el viento B?</td></tr>
+<tr><td>«Flex comp PB»</td><td>Una pieza puede tomar menos que la traslación sola por la rotación.</td><td>T2 y T4 de la torre asimétrica bajan 32 %.</td><td>¿Se toma el mayor de los dos sentidos del giro?</td></tr>
+<tr><td>Rotación</td><td>Las piezas perpendiculares entran enteras en su baricentro; la guía suma cada muro con su J.</td><td>En los dos ejemplos con rotación, poco: los perpendiculares aportan 2 % y 1 % de ΣJt·a².</td><td>¿Cuál se pide?</td></tr>
+<tr><td>Áreas de influencia</td><td>La guía carga 198 de 320 m² de losa en el ejemplo.</td><td>Ng de los tabiques.</td><td>¿Qué criterio: 45°, fajas, o una parte va a columnas fuera del modelo?</td></tr>
+</table>
+
+<h2>Lo que está bien</h2>
+<div class="caja ok"><ul>
+<li>σ = −N/F ± M/W, el núcleo central k = W/F y la comparación con e = M/Ng: correctos para una sección sin fisurar.</li>
+<li>Unidades de la flexocompresión (t/m² × 0,1 = kg/cm²) y el W de las piezas simétricas.</li>
+<li>La rototraslación de la traslación (W·J/ΣJ) y el eje de inercia.</li>
+<li>El W del tubo ya está corregido en la planilla 2025 (la anterior daba 4 veces menos).</li>
+<li>En el ejemplo de la guía, planilla, guía y CIRSOC dan el mismo reparto (6,9 % y 36,2 %).</li>
+</ul></div>
+
+<h2>Erratas de la guía (para no confundirlas con dudas del método)</h2>
+<ul>
+<li>Anexo de rototraslación: con las posiciones que da (T1 a T4 a ±10 m, T5 a −6 m, T6 a +4,14 m) el eje de inercia queda a 1,77 m, no a 0,37 m.</li>
+<li>T1: el largo traccionado del triángulo figura como 78 cm (y 1,05 m en el esquema); con σ = +137,78 / −788 t/m² sale 0,67 m.</li>
+<li>τ adm: la guía da 24 kg/cm² para H30; para otros hormigones la app usa 0,08·σbk (proporcional). Hay que confirmarlo.</li>
+</ul>
+
+<h2>Cómo lo vamos a llevar</h2>
+<ol>
+<li>Primero las dudas 1 y 2, con la tabla de la torre asimétrica: es la que más se parece a una entrega.</li>
+<li>Las dudas 3, 4 y 5 juntas: son las que dejan piezas sin verificar.</li>
+<li>La 8 como pregunta de criterio (no es un error: es qué reglamento se aplica).</li>
+<li>Hasta tener las respuestas, la app sigue dando los números de la planilla tal cual en el método Planilla, y muestra al lado lo de la
+guía y lo del CIRSOC para que se vea la diferencia.</li>
+</ol>
+</main></body></html>
