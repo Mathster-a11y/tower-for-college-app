@@ -26,7 +26,11 @@ import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
 import { CAMARAS, camara, centroTorre, graficoEnLienzo, grabar, grupoTubos, Particulas, type NombreCamara, type Recorrido, type Trazo } from './tunel3dVista';
 import { alCambiarFachada, cfgFachada, colorCp, llaveFachada, seccionFachada, valorTrozo } from './tunel3dFachada';
 import { vientoCirsoc } from './cirsoc102';
-import { KN_POR_T } from '../engine/cargas/cirsoc102';
+import { FACTOR_SERVICIO, KN_POR_T } from '../engine/cargas/cirsoc102';
+import { seccionDinamica, type InfoDinamica } from './tunel3dDinamica';
+import { moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
+import { medidasNiveles } from '../engine/perfilTorre';
+import { datos201De } from '../engine/metodos/cirsoc';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
   rapida: { nx: 96, ny: 48, nz: 40, texto: 'rápida (96 × 48 × 40, 0,2 M celdas: gruesa)' },
@@ -67,6 +71,8 @@ interface Corrida {
   prom: PromedioCp; caras: ReturnType<typeof celdasDeCara>; campo: Float32Array | null;
   /** fuerzas por piso y en la base (etapa 1 de la propuesta de resultados) y lo del reglamento para comparar; segundos reales por paso */
   fz: Fuerzas3D | null; infoFz: Omit<InfoFuerzas, 'pasadas' | 'angulo' | 'config'> | null; dtPaso: number;
+  /** dinámica (etapa 4); y el muestreo: cada cuántos pasos como máximo se lee el campo (para que el espectro no mienta) */
+  infoDin: InfoDinamica | null; nMuestra: number; pasosCampo: number;
   corriendo: boolean; ocupado: boolean; k: number; mlups: number; ultimoCampo: number; ultimasLineas: number; sinMirar: number;
   /** salvaguardas: la velocidad más alta en unidades de la red y, si se rompió, dónde (y se pausa) */
   maxRed: number; roto: string | null;
@@ -89,6 +95,26 @@ function nivelesProyecto() {
   return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(contornoAlViento(p, x.i).v, 12) }));
 }
 
+/** lo que necesita la dinámica: frecuencias, viento de 5 y 10 años, masas, fuerzas del CIRSOC y la rigidez de cada nivel */
+function datosDinamica(geo: Geometria3D, infoFz: Corrida['infoFz']): InfoDinamica | null {
+  if (!infoFz) return null;
+  const p = estado.proyecto, w = vientoCirsoc(), dir = estado.dir, otra = dir === 'A' ? 'B' : 'A';
+  const VH = vientoDisenoEn(geo.H), V23 = vientoDisenoEn((2 / 3) * geo.H);
+  if (!VH || !V23) return null;
+  const masas = medidasNiveles(p).filter(m => m.z > 1e-6).map(m => ({ z: m.z, m: 0.7 * m.B * m.L * (m.n.pisos && m.n.pisos > 0 ? m.n.pisos : 1) }));
+  const niv = [...w[dir].niveles].filter(n => n.z > 1e-6).sort((a, b) => a.z - b.z);
+  const { asig } = estado.calculo, R = estado.calculo.valores, E = moduloHormigon(p.hormigon || 'H30');
+  const rg = rigidez(R, p.hormigon || 'H30').find(x => x.dir === dir)!;
+  const zPB = p.niveles.reduce((v, n) => (n.cota >= 0 ? n.cota : v), 0);
+  const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
+  return {
+    dir, B: geo.B, H: geo.H, VH, V23, n1Viento: w[dir].n1, n1Costado: w[otra].n1, masas,
+    f5: (FACTOR_SERVICIO[5] * w.V50) / w.V, f10: (FACTOR_SERVICIO[10] * w.V50) / w.V,
+    regl: [{ z: 0, F: w[dir].WPB }, ...niv.map(n => ({ z: n.z, F: n.W }))], servicio: w.servicio.relacion,
+    EJ: z => E * ((Jniv.find(q => q.z >= z + zPB - 1e-6)?.J ?? rg.J) || rg.J), limD: datos201De(p).limiteDeriva,
+  };
+}
+
 async function iniciar() {
   detener();
   const T = tamActual();
@@ -108,7 +134,11 @@ async function iniciar() {
     infoFz = { dir: estado.dir, regl: [v.WPB, ...niv.map(n => n.W)], WRegl: v.WPB + niv.reduce((s2, n) => s2 + n.W, 0), MRegl: v.MPB, qh: v.qh, G: v.Gusado };
     dtPaso = segundosPorPaso(geo, UH, vientoDisenoEn(geo.H) ?? NaN);
   } catch { fz = null; }
-  const c: Corrida = { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso,
+  let infoDin: InfoDinamica | null = null;
+  try { infoDin = datosDinamica(geo, infoFz); } catch { infoDin = null; }
+  // los remolinos de una torre tienen un período de ≈ B / (0,12 · V): se lee el campo por lo menos 10 veces por período
+  const VHm = vientoDisenoEn(geo.H) ?? NaN, nMuestra = isFinite(dtPaso) && VHm > 0 ? Math.max(4, Math.floor(geo.B / (0.12 * VHm) / 10 / dtPaso)) : Infinity;
+  const c: Corrida = { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0,
     corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null };
   corrida = c;
   try {
@@ -138,10 +168,10 @@ async function ciclo() {
     if (corrida !== c) return;
     const dt = performance.now() - t0;
     c.mlups = (c.k * c.geo.nx * c.geo.ny * c.geo.nz) / (dt / 1000) / 1e6;
-    c.k = Math.max(1, Math.min(200, Math.round(c.k * (25 / Math.max(1, dt)))));      // ~25 ms de placa por cuadro
+    c.k = Math.max(1, Math.min(200, c.nMuestra, Math.round(c.k * (25 / Math.max(1, dt)))));      // ~25 ms de placa por cuadro
     const ahora = performance.now();
-    if (ahora - c.ultimoCampo > 1200) {
-      c.campo = await c.gpu.campo(); c.ultimoCampo = performance.now();
+    if (ahora - c.ultimoCampo > 1200 || c.gpu.pasos - c.pasosCampo >= c.nMuestra) {
+      c.campo = await c.gpu.campo(); c.ultimoCampo = performance.now(); c.pasosCampo = c.gpu.pasos;
       if (vigilar3d(c)) { estado.avisarPanel(); return; }               // se rompió: se pausa y se dice dónde
       // se promedia pasada una pasada del aire por el canal
       if (c.gpu.pasos > (0.8 * c.geo.nx) / UH) {
@@ -762,10 +792,19 @@ export function panelTunel3d(c: H) {
   panelFz = h('div', {}); sf.append(panelFz); ultimoFz = 0;
   const sfa = seccion('Fachada: presiones pico y zonas').cuerpo; c.append(sfa.parentElement!);
   panelFach = h('div', {}); sfa.append(panelFach);
+  const sdi = seccion('Dinámica: remolinos, aceleración y deriva').cuerpo; c.append(sdi.parentElement!);
+  panelDin = h('div', {}); sdi.append(panelDin);
   actualizarPanel(true);
 }
 
-let ultimoPanel = 0, ultimoFz = 0, panelFz: H | null = null, panelFach: H | null = null;
+let ultimoPanel = 0, ultimoFz = 0, panelFz: H | null = null, panelFach: H | null = null, panelDin: H | null = null;
+function actualizarDinamica(forzar = false) {
+  const el = panelDin, c = corrida;
+  if (!el?.isConnected) return;
+  if (!forzar && el.contains(document.activeElement) && document.activeElement?.tagName === 'SELECT') return;
+  if (!c || !c.gpu) { el.replaceChildren(); return; }
+  seccionDinamica(el, c.fz, c.infoDin, () => actualizarDinamica(true));
+}
 alCambiarFachada(() => { actualizarCampo(); actualizarFachada(true); });
 /** la fachada: no se rehace mientras se está eligiendo algo en ella (se cerraría la lista desplegable) */
 function actualizarFachada(forzar = false) {
@@ -781,7 +820,7 @@ function actualizarFuerzas(forzar = false) {
   if (!el?.isConnected) return;
   if (!forzar && performance.now() - ultimoFz < 2500) return;
   ultimoFz = performance.now();
-  actualizarFachada();
+  actualizarFachada(); actualizarDinamica();
   if (!c || !c.gpu) { el.replaceChildren(); return; }
   if (!c.fz || !c.infoFz) { el.replaceChildren(h('p', { class: 'nota' }, 'Faltan los datos del viento del CIRSOC 102-25 (Viento → CIRSOC 102-25) para pasar la simulación a toneladas.')); return; }
   const config = `${TAM[cfg.tam] ? `grilla ${cfg.motor === 'procesador' ? 'del procesador' : cfg.tam}` : ''}, paredes ${cfg.paredes}${cfg.angulo ? `, viento girado ${cfg.angulo}°` : ''}${cfg.contexto && vecinos3d().length ? `, con ${vecinos3d().length} vecinos` : ''}`;

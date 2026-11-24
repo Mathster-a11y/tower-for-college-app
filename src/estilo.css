@@ -1810,3 +1810,11 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .fachada-desplegada { display: block; max-width: 100%; margin: 4px 0; }
 .llave-sim.en-flujo { position: static; margin: 6px 0; min-width: 0; max-width: 100%; }
 .tabla td.marca { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--elegido) 18%, transparent); }
+/* Túnel 3D: espectro de la fuerza lateral (dinámica) */
+.grafico-espectro { display: block; max-width: 100%; height: auto; }
+.grafico-espectro .ge-barra { fill: color-mix(in srgb, var(--corte) 70%, transparent); }
+.grafico-espectro .ge-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-espectro .ge-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-espectro .ge-pico { font: 600 10.5px var(--fuente); fill: var(--corte); }
+.grafico-espectro .ge-torre { stroke: var(--deformada); stroke-width: 2; stroke-dasharray: 5 3; }
+.grafico-espectro .ge-torre-t { font: 600 10.5px var(--fuente); fill: var(--deformada); }
