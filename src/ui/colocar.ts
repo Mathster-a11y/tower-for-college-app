@@ -8,6 +8,7 @@
  */
 import { estado, fmt } from './estado';
 import { agregarVecino } from '../viento/contexto';
+import { medidasNiveles } from '../engine/perfilTorre';
 import { confirmar } from './tarjeta';
 import type { Camino, Cota } from '../engine/modelo';
 import type { Justificacion } from '../engine/colocar';
@@ -559,6 +560,23 @@ export function montarColocar(api: ApiPlanta) {
       const cx = e.v.reduce((a, q) => a + q.x, 0) / e.v.length, cy = e.v.reduce((a, q) => a + q.y, 0) / e.v.length;
       g.append(el('text', { x: X(cx), y: Y(cy), class: 'vecino-rot', 'text-anchor': 'middle' }, `${e.id} · ${fmt(Math.max(e.altura, ...(e.retiros ?? []).map(r => r.altura)), 0)} m`));
     });
+    // el exoesqueleto (etapa 08): su contorno a la separación de la fachada, las columnas de esquina y las de las alas,
+    // en el nivel a la vista (si la torre está corrida o las caras siguen la planta, como en ese nivel)
+    if (p.exo) {
+      const ms = medidasNiveles(p), pb = ms.find(m => Math.abs(m.z) < 1e-6) ?? ms[ms.length - 1];
+      const nv = (estado.nivelPlanta !== null ? ms.find(m => Math.abs(m.n.cota - estado.nivelPlanta!) < 1e-6) : undefined) ?? pb;
+      if (pb && nv) {
+        const ref = p.exo.anchoVariable ? nv : pb, sep = p.exo.separacion, hx = ref.B / 2 + sep, hy = ref.L / 2 + sep, cx = nv.dx, cy = nv.dy, lado = Math.max(0.25, p.exo.columna.b);
+        const ge = el('g', { class: 'exo-planta' });
+        ge.append(el('rect', { x: X(cx - hx), y: Y(cy + hy), width: X(cx + hx) - X(cx - hx), height: Y(cy - hy) - Y(cy + hy), class: 'exo-contorno' }));
+        const columna = (x: number, y: number) => ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna' }));
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) columna(cx + sx * hx, cy + sy * hy);
+        const na = Math.max(0, Math.round(p.exo.alas ?? 0));
+        for (let i = 1; i <= na; i++) { const t = -1 + (2 * i) / (na + 1); for (const s2 of [-1, 1]) { columna(cx + t * hx, cy + s2 * hy); columna(cx + s2 * hx, cy + t * hy); } }
+        ge.append(el('text', { x: X(cx - hx) + 4, y: Y(cy + hy) - 5, class: 'exo-rot' }, `exoesqueleto · a ${fmt(sep, 2)} m de la fachada`));
+        g.append(ge);
+      }
+    }
     // caminos
     (p.caminos ?? []).forEach(c => {
       const ps = puntosCamino(c, 3);

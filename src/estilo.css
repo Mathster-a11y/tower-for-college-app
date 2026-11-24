@@ -1830,3 +1830,8 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .lamina-viento .diagrama svg, .lamina-viento .grafico-altura svg { max-width: 120mm; max-height: 95mm; height: auto; }
 .lamina-viento .diagrama { break-inside: avoid; }
 .lamina-viento .tabla-valores { font-size: 9px; }
+/* Planta: el exoesqueleto (etapa 08), por fuera de la fachada */
+.exo-planta { pointer-events: none; }
+.exo-planta .exo-contorno { fill: none; stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 1.5; stroke-dasharray: 7 4; }
+.exo-planta .exo-columna { fill: var(--r-rototrasl, #6a3d9a); opacity: .85; }
+.exo-planta .exo-rot { font: 600 11px var(--fuente); fill: var(--r-rototrasl, #6a3d9a); }
