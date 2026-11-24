@@ -701,7 +701,66 @@ function editorBarra(e: EsfuerzoBarra) {
   quitar.addEventListener('click', () => { poner(c => { c.quitar = true; }); barraSel = null; });
   const volver = h('button', { type: 'button' }, 'Como estaba');
   volver.addEventListener('click', () => poner(c => { delete c.relA; delete c.relB; delete c.sec; delete c.quitar; }));
+  // repetir en cada módulo y simétrica: las barras equivalentes (corridas un número entero de módulos en altura, o
+  // reflejadas respecto del medio de la cara) reciben lo mismo; si la barra es agregada a mano, se agregan copias
+  const d = datosExo(), cara = d?.r.caras[0], zs = d?.r.zs ?? [], m = Math.max(1, Math.round(def.modulo));
+  const iz = (z: number) => zs.findIndex(q => Math.abs(q - z) < 1e-3);
+  const centro = (z: number) => { const ns = (cara?.esfuerzos ?? []).flatMap(x => [x.a, x.b]).filter(q => Math.abs(q.z - z) < 1e-3).map(q => q.s); return ns.length ? (Math.min(...ns) + Math.max(...ns)) / 2 : 0; };
+  const mismo = (a: { s: number; z: number }, b: { s: number; z: number }) => Math.abs(a.s - b.s) < 1e-3 && Math.abs(a.z - b.z) < 1e-3;
+  const corridas = (): { a: [number, number]; b: [number, number] }[] => {
+    // la barra entera se corre la altura de j módulos, medida desde el extremo que cae en un piso (el otro puede ser un
+    // nudo a media altura, como el cruce de una X); si ninguno cae en un piso, con la altura media de los pisos
+    const out: { a: [number, number]; b: [number, number] }[] = [], k0 = iz(e.a.z) >= 0 ? iz(e.a.z) : iz(e.b.z);
+    const hp = zs.length > 1 ? (zs[zs.length - 1] - zs[0]) / (zs.length - 1) : 3, zMax = zs[zs.length - 1] ?? 0, zMin = zs[0] ?? 0;
+    for (let j = -Math.ceil(zs.length / m); j <= Math.ceil(zs.length / m); j++) {
+      if (!j) continue;
+      const k = k0 + j * m;
+      const dz = k0 >= 0 ? (k >= 0 && k < zs.length ? zs[k] - zs[k0] : NaN) : j * m * hp;
+      if (!isFinite(dz)) continue;
+      const za = e.a.z + dz, zb = e.b.z + dz;
+      if (Math.min(za, zb) < zMin - 1e-6 || Math.max(za, zb) > zMax + 1e-6) continue;
+      out.push({ a: [e.a.s, za], b: [e.b.s, zb] });
+    }
+    return out;
+  };
+  const espejo = (): { a: [number, number]; b: [number, number] } => ({ a: [2 * centro(e.a.z) - e.a.s, e.a.z], b: [2 * centro(e.b.z) - e.b.s, e.b.z] });
+  const aplicar = (destinos: { a: [number, number]; b: [number, number] }[], texto: string) => {
+    const nueva = e.id.startsWith('N');
+    let n = 0;
+    estado.cambiar(() => {
+      const x = p.exo!;
+      if (nueva) {
+        const ya = (q: { a: [number, number]; b: [number, number] }) => (x.nuevas ?? []).some(nb => (mismo({ s: nb.a[0], z: nb.a[1] }, { s: q.a[0], z: q.a[1] }) && mismo({ s: nb.b[0], z: nb.b[1] }, { s: q.b[0], z: q.b[1] })) || (mismo({ s: nb.a[0], z: nb.a[1] }, { s: q.b[0], z: q.b[1] }) && mismo({ s: nb.b[0], z: nb.b[1] }, { s: q.a[0], z: q.a[1] })));
+        const orig = (x.nuevas ?? [])[+e.id.slice(1) - 1];
+        const nuevos = destinos.filter(q => !ya(q)).map(q => ({ ...orig, clase: e.clase, a: q.a, b: q.b }));
+        n = nuevos.length; x.nuevas = [...(x.nuevas ?? []), ...nuevos];
+      } else {
+        // las barras de la ficha que caen en los destinos reciben el mismo cambio
+        const c0 = x.barras?.[e.id];
+        if (!c0) return;
+        x.barras = { ...(x.barras ?? {}) };
+        // con pisos de distinta altura el nudo a media altura (el cruce de una X) no cae justo: se busca la barra de la
+        // misma clase más cercana a los dos extremos, a menos de media altura de piso en z y casi en el mismo s
+        const hp = zs.length > 1 ? (zs[zs.length - 1] - zs[0]) / (zs.length - 1) : 3;
+        const dist = (y: EsfuerzoBarra, q: { a: [number, number]; b: [number, number] }) => {
+          const dd = (u: { s: number; z: number }, v: [number, number]) => (Math.abs(u.s - v[0]) < 0.05 && Math.abs(u.z - v[1]) < 0.6 * hp ? Math.abs(u.z - v[1]) : Infinity);
+          return Math.min(dd(y.a, q.a) + dd(y.b, q.b), dd(y.a, q.b) + dd(y.b, q.a));
+        };
+        for (const q of destinos) {
+          let f: EsfuerzoBarra | undefined, dMin = Infinity;
+          for (const y of cara?.esfuerzos ?? []) { if (y.clase !== e.clase || y.id === e.id) continue; const dv = dist(y, q); if (dv < dMin) { dMin = dv; f = y; } }
+          if (f && isFinite(dMin)) { x.barras[f.id] = { ...c0 }; n++; }
+        }
+      }
+    });
+    const msg = document.getElementById('mensaje'); if (msg) msg.textContent = n ? `${texto}: ${n} barra${n === 1 ? '' : 's'}. Ctrl+Z deshace.` : `${texto}: no hay barras equivalentes${nueva ? ' nuevas' : ' (cambiá primero la sección, las uniones o sacala)'}.`;
+  };
+  const rep = h('button', { type: 'button', title: 'Lo mismo en esta posición de todos los módulos, de abajo arriba' }, '↕ Repetir en cada módulo');
+  rep.addEventListener('click', () => aplicar(corridas(), 'Repetida en cada módulo'));
+  const sim = h('button', { type: 'button', title: 'Lo mismo en la barra reflejada respecto del medio de la cara' }, '⇆ Simétrica');
+  sim.addEventListener('click', () => aplicar([espejo()], 'Simétrica'));
   return h('div', { class: 'fila-acciones exo-editor' },
+    rep, sim,
     sel('Unión en a', e.relA ? 'art' : 'rig', un, v => poner(c => { c.relA = v === 'art'; })),
     sel('Unión en b', e.relB ? 'art' : 'rig', un, v => poner(c => { c.relB = v === 'art'; })),
     sel('Sección', iSec >= 0 ? String(iSec) : '', tubos, v => poner(c => { if (v === '') delete c.sec; else c.sec = CATALOGO_TUBOS[+v]; })),
