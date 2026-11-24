@@ -107,7 +107,7 @@ export function seccionFachada(cont: HTMLElement, p: PromedioCp, caras: ReturnTy
 /** lo último que se calculó por zona, para el Excel */
 export let ultimasZonas: { zonas: FilaZona[]; area: number; a: number; qh: number } | null = null;
 
-function tablaZonas(zs: FilaZona[]): H {
+export function tablaZonas(zs: FilaZona[]): H {
   const f = (v: number, d = 2) => (isFinite(v) ? fmt(v, d) : '—');
   const fila = (z: FilaZona) => {
     const peorS = z.pMenos < z.pMenosRegl, peorE = z.pMas > z.pMasRegl;
@@ -123,7 +123,7 @@ function tablaZonas(zs: FilaZona[]): H {
 }
 
 /** la fachada desplegada en un lienzo: cada celda con su color, los pisos y las zonas de esquina */
-function dibujarDesplegada(d: Desplegada, p: PromedioCp, info: InfoFachada, a: number, ancho: number): HTMLCanvasElement {
+export function dibujarDesplegada(d: Desplegada, p: PromedioCp | null, info: { cotas: number[] }, a: number, ancho: number, valor?: (k: number) => number): HTMLCanvasElement {
   const arriba = 16, abajo = 4, izq = 4;
   const px = Math.max(2, Math.min(14, Math.floor((ancho - izq * 2) / Math.max(1, d.ancho)), Math.floor(320 / Math.max(1, d.alto))));
   const W = Math.max(ancho, d.ancho * px + izq * 2), H = d.alto * px + arriba + abajo, k = window.devicePixelRatio || 1;
@@ -136,7 +136,7 @@ function dibujarDesplegada(d: Desplegada, p: PromedioCp, info: InfoFachada, a: n
     // las celdas que caen en el mismo lugar (entrantes de la planta): la de valor más extremo
     const lugar = new Map<string, number>();
     for (const q of pn.celdas) {
-      const v = valorCelda(p, q.k, cfgFachada.est), key = `${q.s},${q.z}`, w = lugar.get(key);
+      const v = valor ? valor(q.k) : valorCelda(p!, q.k, cfgFachada.est), key = `${q.s},${q.z}`, w = lugar.get(key);
       if (w === undefined || Math.abs(v) > Math.abs(w)) lugar.set(key, v);
     }
     lugar.forEach((v, key) => { const [s, z] = key.split(',').map(Number); const c = colorCp(v); g.fillStyle = `rgb(${c.map(Math.round).join(',')})`; g.fillRect(X(pn.s0 + s), Y(z + 1), px + 0.5, px + 0.5); });

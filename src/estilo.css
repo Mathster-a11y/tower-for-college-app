@@ -1818,3 +1818,8 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .grafico-espectro .ge-pico { font: 600 10.5px var(--fuente); fill: var(--corte); }
 .grafico-espectro .ge-torre { stroke: var(--deformada); stroke-width: 2; stroke-dasharray: 5 3; }
 .grafico-espectro .ge-torre-t { font: 600 10.5px var(--fuente); fill: var(--deformada); }
+/* Túnel 3D: rosa de vientos y mapa de confort con todos los rumbos */
+.mapa-confort { display: block; max-width: 100%; margin: 4px 0; border: 1px solid var(--edge); border-radius: 4px; }
+.leyenda .caja.rayada { background: repeating-linear-gradient(135deg, #fff 0 3px, #1d1d24 3px 4px); }
+.rosa-tabla input.corto { width: 72px; }
+.rosa-tabla td, .rosa-tabla th { padding: 3px 6px; }

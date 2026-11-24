@@ -90,11 +90,17 @@ export interface FilaZona {
  * @param qh presión dinámica a la altura de la torre (N/m²); area: área de influencia del elemento (m²)
  */
 export function zonasFachada(p: PromedioCp, d: Desplegada, a: number, qh: number, area: number, g = G_PICO): FilaZona[] {
+  return zonasDe(k => valorCelda(p, k, 'picoMas', g), k => valorCelda(p, k, 'picoMenos', g), d, a, qh, area);
+}
+/** lo mismo con el pico de cada celda dado (por ejemplo, la envolvente de varias direcciones) */
+export function zonasDe(mas: (k: number) => number, menos: (k: number) => number, d: Desplegada, a: number, qh: number, area: number): FilaZona[] {
   return ([4, 5] as const).map(zona => {
     let cpMas = -Infinity, cpMenos = Infinity;
     for (const pn of d.paneles) for (const q of pn.celdas) {
       if ((q.dEsquina < a) !== (zona === 5)) continue;
-      cpMas = Math.max(cpMas, valorCelda(p, q.k, 'picoMas', g)); cpMenos = Math.min(cpMenos, valorCelda(p, q.k, 'picoMenos', g));
+      const ma = mas(q.k), me = menos(q.k);
+      if (isFinite(ma)) cpMas = Math.max(cpMas, ma);
+      if (isFinite(me)) cpMenos = Math.min(cpMenos, me);
     }
     const gc = gcpComponentes(zona, area), kN = qh / 1000;
     return { zona, nombre: zona === 4 ? 'Centro de las caras (zona 4)' : 'Esquinas (zona 5)', cpMas, cpMenos,

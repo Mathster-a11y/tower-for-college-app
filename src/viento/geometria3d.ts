@@ -45,6 +45,18 @@ export interface Geometria3D {
   /** con contexto: las celdas sólidas de la torre (las caras y el Cp son solo de ella) y los vecinos en la red */
   cuerpo?: Uint8Array;
   vecinos: { pol: P[]; altura: number; desde: number }[];
+  /** de la planta del proyecto (m) a la red: girar con (co, si) y llevar con la escala y el origen (ox, oy) */
+  giro: { co: number; si: number; ox: number; oy: number };
+}
+/** un punto de la red (x, y en celdas; los centros en +0,5) a la planta del proyecto (m) */
+export function aPlantaProyecto(g: Geometria3D, x: number, y: number): P {
+  const { co, si, ox, oy } = g.giro, rx = (x - ox) / g.escala, ry = (y - oy) / g.escala;
+  return { x: rx * co + ry * si, y: -rx * si + ry * co };
+}
+/** un punto de la planta del proyecto (m) a la red (celdas) */
+export function aRed(g: Geometria3D, p: P): P {
+  const { co, si, ox, oy } = g.giro;
+  return { x: ox + (p.x * co - p.y * si) * g.escala, y: oy + (p.x * si + p.y * co) * g.escala };
 }
 
 /**
@@ -186,7 +198,7 @@ export function geometria3D(o: OpcionesGeo3): Geometria3D {
   const planos = [...new Set([...pols.map(q => q.cota), ...vecinos.flatMap(v => (v.desde > 0 ? [v.desde, v.altura] : [v.altura]))])].map(h => h * escala + 1);
   // los tramos: cada nivel rige de su cota a la del siguiente (el primero, desde el suelo); el último es la azotea
   const tramos = pols.slice(0, -1).map((n, k) => ({ h0: k === 0 ? 0 : n.cota, h1: pols[k + 1].cota, pol: n.pol })).filter(t => t.h1 > t.h0 + 1e-9);
-  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos, cuerpo, vecinos };
+  return { nx, ny, nz, solido, escala, H, hC, B, L, caja, celdas, paredes: paredes3D(nx, ny, nz, solido, capa, planos), tramos, cuerpo, vecinos, giro: { co, si, ox, oy } };
 }
 
 /**
