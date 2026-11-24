@@ -98,20 +98,7 @@ export class Lbm3D {
    * sólido (rebota). Así el paso no recalcula vecinos ni bordes en cada celda (unas 20 veces más rápido en JavaScript).
    */
   private origen: Int32Array | null = null;
-  private armarOrigen(): Int32Array {
-    const { nx, ny, nz, N, solido } = this, o = new Int32Array(19 * N);
-    for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-      const c = (z * ny + y) * nx + x;
-      for (let i = 0; i < 19; i++) {
-        const sx = x - EX3[i], sz = z - EZ3[i];
-        let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
-        if (sz >= nz || sz < 0) { o[i * N + c] = -1; continue; }             // tapa (y fondo sin suelo): refleja
-        const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx < 0 ? 0 : sx); // salida: la de atrás
-        o[i * N + c] = solido[s] ? -2 : s;
-      }
-    }
-    return o;
-  }
+  private armarOrigen(): Int32Array { return origen3(this.nx, this.ny, this.nz, this.solido); }
 
   paso() {
     const { nx, ny, nz, N, f, g, solido, uIn } = this;
@@ -145,6 +132,22 @@ export class Lbm3D {
     return { r, u: jx / r, v: jy / r, w: jz / r };
   }
   masa(): number { let m = 0; for (let c = 0; c < this.N; c++) if (!this.solido[c]) for (let i = 0; i < 19; i++) m += this.f[i * this.N + c]; return m; }
+}
+
+/** de dónde tira cada población de cada celda: ≥ 0 la celda de atrás; −1 la tapa (refleja); −2 un sólido (rebota) */
+export function origen3(nx: number, ny: number, nz: number, solido: Uint8Array): Int32Array {
+  const N = nx * ny * nz, o = new Int32Array(19 * N);
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const c = (z * ny + y) * nx + x;
+    for (let i = 0; i < 19; i++) {
+      const sx = x - EX3[i], sz = z - EZ3[i];
+      let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
+      if (sz >= nz || sz < 0) { o[i * N + c] = -1; continue; }             // tapa (y fondo sin suelo): refleja
+      const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx < 0 ? 0 : sx); // salida: la de atrás
+      o[i * N + c] = solido[s] ? -2 : s;
+    }
+  }
+  return o;
 }
 
 /** el estado inicial: el perfil de entrada en todo el fluido (lo usa también la GPU) */

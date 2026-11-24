@@ -16,7 +16,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 7. ~~Contexto urbano: calcar el sitio desde un PDF~~ (23/11: con el PDF de fondo en la planta, Colocar → Forma → «edificio vecino» con su alto, o un camino cerrado → ⌂; los vecinos se ven punteados en la planta)
 8. ~~Cp y fuerza por piso del túnel como hoja del Excel~~ (23/11: «⤓ Excel (.xlsx)» con Piso por piso, Interferencia y Cp del perímetro, fórmulas y gráficos)
 9. P7 · Más detalle donde importa en el 3D: banda de pisos periódica y dominio ajustado
-10. 3D en el procesador más rápido: varios núcleos o WebAssembly
+10. ~~3D en el procesador más rápido~~ (24/11: WebAssembly con SIMD, unas 2 veces más rápido, igual al de JavaScript en 1e-6; varios núcleos no: necesitan memoria compartida, que el navegador solo da con encabezados que GitHub Pages no manda)
 11. ~~Niveles de fidelidad (básica → máxima)~~ (23/11: selector «Fidelidad» en los dos túneles, con la que conviene para la computadora; se recuerda)
 12. ~~Exportar el caso a OpenFOAM~~ (23/11: Túnel 3D → «⤓ Caso de OpenFOAM (.zip)»; probado con OpenFOAM v1912: malla OK y simpleFoam converge; Cd de un prisma de 60 m = 1,00)
 13. ~~Túnel 2D: modo «solo los muros»~~ (23/11: Planta → «solo los muros»; al menos 40 celdas por ancho y los tabiques de menos de 1,2 celdas engrosados, con aviso)
@@ -216,7 +216,7 @@ Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fech
 - [x] P3 · Túnel piso por piso con el 2D (2,5D): cada planta distinta en paralelo (un worker por núcleo, hasta 4), Cd/Cl/St por planta, fuerza por nivel con el qz del CIRSOC 102-25 y corte y momento en PB contra el reglamento (Viento → Túnel 2D → «Torre piso por piso»)
 - [x] P4 · Corrida larga con grabación (.torreviento: velocidad, presión y giro en 8 bits, hasta 360 cuadros) que se reabre y reproduce sin simular, y video WebM (Túnel 2D → «Grabar y reproducir»)
 - [x] P5 · Datos: Cp promedio a lo largo del perímetro (gráfico, puntos sobre el contorno y CSV), fuerza por piso (CSV), confort Lawson LDDC en la vereda del 3D con el viento medio del lugar. El CSV también va como hoja del Excel (hecho)
-- [x] P6 (parcial) · 3D sin placa: el D3Q19 en un worker del procesador (≈ 3,5 M celdas/s, grilla 80 × 40 × 32: una pasada del aire por minuto). Falta: repartir en varios núcleos o WebAssembly
+- [x] P6 (parcial) · 3D sin placa: el D3Q19 en un worker del procesador (≈ 3,5 M celdas/s, grilla 80 × 40 × 32: una pasada del aire por minuto). WebAssembly hecho (≈ 2 veces); varios núcleos no, por los encabezados de GitHub Pages
 - [ ] P7 · Más detalle donde importa: banda de pisos periódica en el 3D, dominio ajustado, refinamiento local en el 2D
 - [x] **Ventana de detalle en el 2D (pedido del usuario), hecha con anidamiento en un sentido (×2 o ×4, Túnel 2D → «Ventana de detalle»):** arrastrar un recuadro sobre la planta (por ejemplo, una esquina) y simular solo esa zona con mucha más definición, con vientos fuertes, para ver cómo se comporta el flujo ahí. Técnicamente: un bloque refinado (2× o 4×) dentro de la grilla general, o una segunda simulación de la zona con las condiciones de borde que da la corrida gruesa (anidamiento)
 - [x] Ejemplo de contexto urbano (docs/contexto_urbano): la torre de 34 pisos con 5 torres vecinas y 3 edificios bajos, en el 2D a 12, 60 y 105 m, aislada y con contexto (tools/contexto/simular.test.ts)
