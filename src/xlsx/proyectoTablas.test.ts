@@ -135,6 +135,10 @@ describe('exoesqueleto y torre inclinada en las tablas', () => {
       const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(p))), ejemploGuia())!;
       expect(r.proyecto.exo).toEqual(p.exo);
     }
+    // las losas apoyadas en el exo (franja, peso y sobrecarga)
+    const conLosas = ejemploHearst(); conLosas.exo!.losas = { franja: 6, qD: 0.45, qL: 0.25 };
+    const rl = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(conLosas))), ejemploGuia())!;
+    expect(rl.proyecto.exo!.losas).toEqual({ franja: 6, qD: 0.45, qL: 0.25 });
     const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
     const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
     const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;

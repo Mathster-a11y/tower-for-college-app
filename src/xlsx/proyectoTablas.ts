@@ -40,6 +40,8 @@ const DATOS_EXO: [string, string, (x: Exo) => Valor, (x: Exo, v: Valor) => void]
   ['Tubos sin costura', 'sí: límites de la pared de la Tabla 2.2.1 del CIRSOC 302 para tubos sin costura', x => b2s(x.sinCostura), (x, v) => { if (sino(v)) x.sinCostura = true; }],
   ['Columnas a los cuartos (ficha E)', 'como el Citicorp: columnas a los cuartos de la cara y viga a medio módulo', x => b2s(x.cuartos), (x, v) => { if (sino(v)) x.cuartos = true; }],
   ['Esquina cortada (ficha E)', 'la columna de esquina termina un piso abajo del nudo de cada módulo', x => b2s(x.esquinaCortada), (x, v) => { if (sino(v)) x.esquinaCortada = true; }],
+  ['Losas en el exo', 'las losas apoyan en el exo: «franja; peso; sobrecarga» en m y t/m² (vacío: solo lo atan)', x => (x.losas ? [x.losas.franja, x.losas.qD ?? 0.7, x.losas.qL ?? 0.2].join('; ') : null),
+    (x, v) => { const c = txt(v).split(';').map(t => Number(t.trim().replace(',', '.'))); if (c[0] > 0) x.losas = { franja: c[0], ...(isFinite(c[1]) && c[1] !== 0.7 ? { qD: c[1] } : {}), ...(isFinite(c[2]) && c[2] !== 0.2 ? { qL: c[2] } : {}) }; }],
   ['Mástil de la base (ficha E)', 'otra pieza debajo del primer módulo: «lado x espesor hasta cota», en m', x => (x.mastilBase ? `${secTxt(x.mastilBase.sec)} hasta ${x.mastilBase.hasta}` : null),
     (x, v) => { const r = /^(.+?)\s+hasta\s+([\d.,-]+)\s*$/i.exec(txt(v)); const sc = r && secLeer(r[1]); if (r && sc) x.mastilBase = { sec: sc, hasta: Number(r[2].replace(',', '.')) }; }],
   ['Cortes de los módulos (m)', 'cotas de los bordes de los módulos, de abajo arriba, separadas por «;» (mandan sobre el módulo)', x => (x.cortes?.length ? x.cortes.join('; ') : null),

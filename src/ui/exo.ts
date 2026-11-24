@@ -8,7 +8,7 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -189,7 +189,8 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     const nivEn = (z: number) => p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6);
     const corrido = (f: (nv: typeof p.niveles[number]) => number | null | undefined) => { const v = zs.map(z => { const nv = nivEn(z); return (nv && f(nv)) || 0; }); return v.some(x => Math.abs(x) > 1e-9) ? v : undefined; };
     const corr = corrido(nv => (A ? nv.dy : nv.dx)), tc = corrido(nv => (A ? nv.dx : nv.dy));
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr);
+    // con las losas en el exo, la tensión admisible del curso va con peso y sobrecarga (0,9 t/m², el «cargado» de la planilla)
+    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp: ts?.map(x => 2 * x) });
     const h0 = zs[zs.length - 1] - zPB;
     return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
@@ -420,6 +421,22 @@ export function panelExo(c: H) {
   const pp = h('label', { class: 'campo-linea' }); const cbp = h('input', { type: 'checkbox' }) as HTMLInputElement; cbp.checked = def.pesoPropio !== false;
   cbp.addEventListener('change', () => set(x => { x.pesoPropio = cbp.checked; })); pp.append(cbp, ' Peso propio del acero (carga repartida en cada barra)');
   fu.append(pp);
+  // las losas apoyan en el exo (lo usual en los exos reales: Hearst, Hancock, Citicorp); si no, solo lo atan
+  const pl = plantaDeNivel(p, Math.max(0, p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1)));
+  const lo = h('label', { class: 'campo-linea', title: 'Una franja de losa a lo largo de cada fachada apoya en el exo: le baja su peso y su sobrecarga en cada piso. El resto de la losa va al núcleo y a los tabiques.' });
+  const cbl = h('input', { type: 'checkbox' }) as HTMLInputElement; cbl.checked = !!def.losas;
+  cbl.addEventListener('change', () => set(x => { x.losas = cbl.checked ? { franja: Math.max(1, Math.round((Math.min(pl.B, pl.L) / 8) * 2) / 2) } : undefined; }));
+  lo.append(cbl, ' Las losas apoyan en el exo (peso y sobrecarga de una franja junto a cada fachada)');
+  fu.append(lo);
+  if (def.losas) {
+    const L0 = def.losas;
+    campo(fu, 'Franja de losa que toma el exo', 'exo-franja', L0.franja, nu((x, v) => { if (x.losas) x.losas.franja = v; }), { tipo: 'number', unidad: 'm', ayuda: 'desde la fachada hacia adentro; lo usual es la mitad de la luz entre la fachada y el núcleo (la otra mitad apoya en el núcleo). Arranca en un octavo del lado menor de la planta' });
+    campo(fu, 'Peso de la losa (D)', 'exo-qd', L0.qD ?? LOSA_QD, nu((x, v) => { if (x.losas) x.losas.qD = v; }), { tipo: 'number', unidad: 't/m²', ayuda: 'el de la planilla: 0,7 t/m² (descargado)' });
+    campo(fu, 'Sobrecarga (L)', 'exo-ql', L0.qL ?? LOSA_QL, v => { const y = parseFloat(v.replace(',', '.')); if (isFinite(y) && y >= 0) set(x => { if (x.losas) x.losas.qL = y; }); }, { tipo: 'number', unidad: 't/m²', ayuda: 'la planilla usa 0,9 t/m² cargado: 0,2 t/m² más que el peso' });
+    const B = pl.L + 2 * def.separacion, Lp = pl.B + 2 * def.separacion, q = (L0.qD ?? LOSA_QD) + (L0.qL ?? LOSA_QL);
+    const porPiso = losaPorPiso(q, L0.franja, B, Lp), planta = pl.B * pl.L * q;
+    fu.append(h('p', { class: 'nota chica' }, `Cada piso le baja al exo hasta ${fmt(porPiso, 0)} t (${fmt(planta > 0 ? (porPiso / planta) * 100 : 0, 0)} % de la planta, con ${fmt(q, 1)} t/m²). Las columnas lo llevan a la base: con 1,2 D + 1,6 L y con el viento (1,2 D + 0,5 L + W) en el CIRSOC 301; el peso, además, le resta tracción a las columnas de barlovento. La planilla de la cátedra sigue cargando toda la losa en los tabiques: para su compresión queda del lado seguro, para su tracción no.`));
+  }
   if (def.material !== 'hormigon') {
     const sc = h('label', { class: 'campo-linea', title: 'CIRSOC 302, Tabla 2.2.1: los tubos sin costura admiten paredes un poco más esbeltas (1,12 y 1,40 √(E/Fy) en lugar de 1,05 y 1,30)' });
     const cbs = h('input', { type: 'checkbox' }) as HTMLInputElement; cbs.checked = !!def.sinCostura;

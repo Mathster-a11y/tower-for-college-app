@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -262,3 +263,37 @@ describe('torsión con el exoesqueleto', async () => {
     expect(t.parteExo).toBeGreaterThan(0.5);
   });
 });
+
+describe('exoesqueleto · las losas apoyan en el exo', () => {
+  const zs = Array.from({ length: 21 }, (_, i) => i * 3.5), W = zs.slice(1).map(() => 10), cero = W.map(() => 0);
+  it('equilibrio: las reacciones de la base suman lo que bajan las losas, en todas las fichas', () => {
+    for (const tipo of ['A', 'B', 'C', 'D', 'E'] as const) {
+      const def: ExoDef = { ...EXO_POR_DEFECTO, tipo, pesoPropio: false, losas: { franja: 5 } };
+      const r = calcularExo(def, zs, cero, () => 3e6 * 50, 30, [-10, 10], 3e6);
+      const cargas = [-10, 10].reduce((s, _t, i) => s + (cargarCara(armarCara(def, 30, zs, `cara ${i + 1}`), def, zs, cero, { q: LOSA_QD + LOSA_QL, franja: 5, ancho: () => 30, centro: () => 0, anchoPerp: () => 20 }).cargasNudo ?? []).reduce((a, c) => a + c.P, 0), 0);
+      const V = r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+      expect(cargas).toBeGreaterThan(0);
+      expect(V).toBeCloseTo(cargas, 3);
+    }
+  });
+  it('tubo con columnas solo en las esquinas: el exo toma toda la franja perimetral, q·(2f(B+L) − 4f²) por piso', () => {
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'B', pesoPropio: false, losas: { franja: 5 } };
+    const r = calcularExo(def, zs, cero, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    const V = r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+    expect(V).toBeCloseTo(20 * losaPorPiso(LOSA_QD + LOSA_QL, 5, 30, 20), 3);
+  });
+  it('CIRSOC 301: entra 1,2 D + 1,6 L y la columna de esquina de la base lleva su parte de la losa', () => {
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'B', losas: { franja: 5 } };
+    const sin = cirsoc301({ ...def, losas: undefined }, zs, W, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    const con = cirsoc301(def, zs, W, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    expect(con.some(b => b.combinacion === '1,2 D + 1,6 L')).toBe(true);
+    const col = (v: typeof con) => v.filter(b => b.clase === 'columna').reduce((m, b) => Math.max(m, -b.Pu), 0);
+    // cada esquina: medio frente de 30 m y medio de 20 m, con la franja de 5 m menos la esquina → 5·(12,5 + 7,5) = 100 m² por piso
+    const losa = 20 * 100 * (1.2 * LOSA_QD + 1.6 * LOSA_QL);
+    expect(col(con) - col(sin)).toBeGreaterThan(0.95 * losa);
+    expect(col(con)).toBeGreaterThan(losa);
+    // sin las losas, nada cambia (las combinaciones son las de siempre)
+    expect(sin.every(b => !/L/.test(b.combinacion))).toBe(true);
+  });
+});
+

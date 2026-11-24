@@ -57,6 +57,11 @@ export interface ExoDef {
   viento?: 'losas' | 'fachada';
   /** peso propio del acero (γ = 7,85 t/m³) como carga repartida en cada barra; por defecto sí */
   pesoPropio?: boolean;
+  /**
+   * las losas apoyan en el exo: una franja de «franja» m a lo largo de cada fachada baja al exo en cada piso (el resto
+   * va al núcleo y a los tabiques). qD: peso (0,7 t/m², el de la planilla); qL: sobrecarga (0,2 t/m²: 0,9 − 0,7).
+   */
+  losas?: LosasExo;
   /** ficha E: piso donde empiezan los chevrones (abajo, solo el mástil) y la sección del mástil */
   pisoInicio?: number; mastil?: Seccion;
   /** ficha E: debajo del primer módulo el mástil es otra pieza (Citicorp: la supercolumna de 7,3 m), hasta la cota «hasta» */
@@ -100,6 +105,9 @@ export interface ExoDef {
   /** de dónde sale cada número del ejemplo (fuentes y supuestos), para mostrar en la etapa 08 */
   notas?: string[];
 }
+export interface LosasExo { franja: number; qD?: number; qL?: number }
+/** peso de las losas y sobrecarga por m² (t/m²): los mismos de la planilla (0,7 descargado, 0,9 cargado) */
+export const LOSA_QD = 0.7, LOSA_QL = 0.2;
 export interface TramoSeccion { clase: ClaseBarra | 'mastil'; desde: number; sec: Seccion }
 export interface BarraNueva { clase: ClaseBarra; a: [number, number]; b: [number, number]; sec?: Seccion; relA?: boolean; relB?: boolean }
 export const EXO_POR_DEFECTO: ExoDef = {
@@ -126,7 +134,11 @@ export interface Barra {
   /** parte de la sección que representa (ala: la mitad del mástil de una cara perpendicular, compartido por dos caras) */
   fraccion?: number;
 }
-export interface Cara { nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean }
+export interface Cara {
+  nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean;
+  /** cargas verticales en los nudos (t, hacia abajo): lo que bajan las losas en cada piso */
+  cargasNudo?: { nudo: number; P: number }[];
+}
 
 /**
  * Arma una cara (pórtico plano en s, z) del tipo pedido, con sus uniones y los cambios barra por barra.
@@ -336,8 +348,9 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
  * un cuarto del viento total por borde). Se escala para que el viento sobre la fachada sume exactamente ΣW (la parte
  * del primer tramo que queda por debajo del primer piso baja directo a la base).
  */
-export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[]): Cara {
+export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], losa?: CargaLosa): Cara {
   const n = zs.length - 1, peso = def.pesoPropio !== false;
+  const cargasNudo = losa && losa.q > 0 && losa.franja > 0 ? cargasDeLosa(cara, zs, losa) : undefined;
   // viento por metro de altura en cada piso (t/m, de toda la torre): W_k / D_k
   const D = (k: number) => ((k < n ? zs[k + 1] : zs[k]) - zs[k - 1]) / (k < n ? 2 : 2);
   const w = zs.map((_, k) => (k === 0 ? 0 : W[k - 1] / Math.max(D(k), 1e-9)));
@@ -353,7 +366,7 @@ export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[]): 
     // cada cara tiene dos bordes; con las dos caras, cada borde lleva 1/4: tot es lo de una cara → por 2
     f = tot > 0 ? sumW / (2 * tot) : 1;
   }
-  return { ...cara, barras: cara.barras.map(b => {
+  return { ...cara, cargasNudo, barras: cara.barras.map(b => {
     const A = cara.nudos[b.a], B = cara.nudos[b.b], L = Math.hypot(B.s - A.s, B.z - A.z) || 1;
     const c: CargaBarra = { xa: 0, za: 0, xb: 0, zb: 0 };
     if (peso) { c.za = c.zb = -gammaExo(def) * b.A; }
@@ -365,6 +378,52 @@ export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[]): 
     return c.xa || c.xb || c.za || c.zb ? { ...b, carga: c } : b;
   }) };
 }
+
+/** lo que bajan las losas a una cara: q (t/m²), la franja (m), el ancho de la cara y el de la cara perpendicular en cada cota */
+export interface CargaLosa { q: number; franja: number; ancho: (k: number) => number; centro: (k: number) => number; anchoPerp: (k: number) => number }
+/**
+ * Cargas de las losas en los nudos de una cara. En cada piso k (no la base) la franja de la cara baja
+ * P = q · f · (a − f) (a: ancho de la cara; las esquinas f × f se reparten entre las dos caras que se cruzan), repartida
+ * entre los nudos del piso por su ancho de influencia a lo largo de la cara. Las columnas de esquina reciben además lo que
+ * les baja la cara perpendicular (la que no se modela con este viento), con la misma proporción que la esquina de esta
+ * cara: q · f · (a⊥ − f) · (ancho de influencia de la esquina / a). Los pisos que no tienen nudos en la cara (el diagrid
+ * entre diamantes, los pisos colgados) pasan su carga a los pisos con nudos de abajo y de arriba, por la distancia
+ * (como una viga simplemente apoyada: se pierde la flexión local de la barra, no el equilibrio).
+ */
+export function cargasDeLosa(cara: Cara, zs: number[], l: CargaLosa): { nudo: number; P: number }[] {
+  const n = zs.length - 1, f = l.franja;
+  const porPiso = new Map<number, Nudo[]>();
+  cara.nudos.forEach(q => { if (q.piso > 0) porPiso.set(q.piso, [...(porPiso.get(q.piso) ?? []), q]); });
+  const conNudos = [...porPiso.keys()].sort((a, b) => a - b);
+  if (!conNudos.length) return [];
+  // carga de cada piso que va a la cara (en el piso con nudos que la recibe)
+  const carga = new Map<number, number>(), perp = new Map<number, number>();
+  const sumar = (m: Map<number, number>, k: number, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+  for (let k = 1; k <= n; k++) {
+    const a = l.ancho(k), P = l.q * f * Math.max(0, a - f), Pp = l.q * f * Math.max(0, l.anchoPerp(k) - f);
+    if (porPiso.has(k)) { sumar(carga, k, P); sumar(perp, k, Pp); continue; }
+    const abajo = [...conNudos].reverse().find(j => j < k), arriba = conNudos.find(j => j > k);
+    if (abajo === undefined || arriba === undefined) { const j = (abajo ?? arriba)!; sumar(carga, j, P); sumar(perp, j, Pp); continue; }
+    const t = (zs[k] - zs[abajo]) / (zs[arriba] - zs[abajo]);
+    sumar(carga, abajo, P * (1 - t)); sumar(carga, arriba, P * t); sumar(perp, abajo, Pp * (1 - t)); sumar(perp, arriba, Pp * t);
+  }
+  const out: { nudo: number; P: number }[] = [];
+  for (const k of conNudos) {
+    const P = carga.get(k) ?? 0, Pp = perp.get(k) ?? 0;
+    const qs = [...porPiso.get(k)!].sort((a, b) => a.s - b.s), a = l.ancho(k), c = l.centro(k), s0 = c - a / 2, s1 = c + a / 2;
+    const lim = qs.map((q, i) => [i === 0 ? s0 : (qs[i - 1].s + q.s) / 2, i === qs.length - 1 ? s1 : (q.s + qs[i + 1].s) / 2]);
+    const anchoInf = lim.map(([x0, x1]) => Math.max(0, x1 - x0)), tot = anchoInf.reduce((s, v) => s + v, 0) || 1;
+    qs.forEach((q, i) => {
+      let v = (P * anchoInf[i]) / tot;
+      // esquinas: el nudo más cerca de cada borde, si está sobre el borde
+      if ((i === 0 && Math.abs(q.s - s0) < 1e-6) || (i === qs.length - 1 && Math.abs(q.s - s1) < 1e-6)) v += (Pp * anchoInf[i]) / tot;
+      if (v > 0) out.push({ nudo: q.id, P: v });
+    });
+  }
+  return out;
+}
+/** carga total de las losas sobre el exo en un piso (t, las cuatro caras): q · (2 f (B + L) − 4 f²) */
+export const losaPorPiso = (q: number, f: number, B: number, L: number) => q * Math.max(0, 2 * f * (B + L) - 4 * f * f);
 
 // ------------------------------------------------------------------ álgebra densa
 type Mat = number[][];
@@ -514,6 +573,8 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     }
     return { b, A, B, r, g };
   });
+  // lo que bajan las losas: fuerza vertical hacia abajo en el gdl w del nudo
+  (cara.cargasNudo ?? []).forEach(c => { const g = mapa.get(c.nudo); if (g && g[1] >= 0) Fg[g[1]] -= c.P; });
   // giros sin rigidez (nudos donde todas las barras llegan articuladas): se fijan (no cambia nada)
   // (con las articulaciones condensadas, ese giro puede quedar con un resto de redondeo: se compara con la rigidez típica)
   const maxDiag = Kg.reduce((m, f, i) => (i >= nPisos ? Math.max(m, Math.abs(f[i])) : m), 0);
@@ -607,10 +668,17 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
  * @param anchoCara distancia entre columnas de esquina en el sentido del viento (m); tCaras: posición transversal de cada cara
  * @param Eh módulo del hormigón (t/m²), para el J equivalente de cada cara
  */
-export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[]): ResultadoExo {
+export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
+  op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
   const n = zs.length - 1;
   const Kt = rigidezTabiques(zs, EJ);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`, anchos, corr), def, zs, W), def.E, n) }));
+  const qLosa = op.qLosa ?? (def.losas ? (def.losas.qD ?? LOSA_QD) + (def.losas.qL ?? LOSA_QL) : 0);
+  const dPerp = tCaras.length > 1 ? Math.max(...tCaras) - Math.min(...tCaras) : anchoCara;
+  const losa: CargaLosa | undefined = def.losas && qLosa > 0 ? {
+    q: qLosa, franja: def.losas.franja, ancho: k => (anchos && anchos[k] > 0 ? anchos[k] : anchoCara),
+    centro: k => (def.tipo !== 'E' && corr ? corr[k] ?? 0 : 0), anchoPerp: k => op.anchosPerp?.[k] ?? dPerp,
+  } : undefined;
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`, anchos, corr), def, zs, W, losa), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
@@ -812,7 +880,15 @@ export interface Cirsoc301Barra {
  * (quartering): la cara toma la fracción W de su viento de frente y las columnas de esquina, además, «otro» del
  * viento perpendicular (son de las dos caras).
  */
-export interface CombExo { nombre: string; D: number; W: number; otro?: number }
+export interface CombExo { nombre: string; D: number; W: number; otro?: number; /** sobrecarga de las losas (solo si apoyan en el exo) */ L?: number }
+/**
+ * con las losas en el exo entra la sobrecarga: f1 = 0,5 con el viento (oficinas y viviendas, CIRSOC 101) y la
+ * combinación de gravedad 1,2 D + 1,6 L
+ */
+export function combosConLosas(combos: CombExo[]): CombExo[] {
+  const conL = combos.map(c => (c.D >= 1.2 - 1e-9 && c.W > 0 ? { ...c, L: 0.5, nombre: c.nombre.replace(/ D \+ /, ' D + 0,5 L + ') } : c));
+  return [{ nombre: '1,2 D + 1,6 L', D: 1.2, W: 0, L: 1.6 }, ...conL];
+}
 /** la del curso (viento de servicio del 102-2005): 1,2·D + 1,6·W */
 export const COMBOS_CURSO: CombExo[] = [{ nombre: '1,2 D + 1,6 W', D: 1.2, W: 1.6 }];
 /** CIRSOC 101-25 con el viento de resistencia del 102-25 (1,0 W): 1,4 D; 1,2 D + 1,0 W; 0,9 D + 1,0 W */
@@ -871,13 +947,18 @@ export const limitesPared = (E: number, Fy: number, costura = true) => { const k
  */
 export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24,
   op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** torre inclinada: corrimiento de la cara en cada cota */ corr?: number[] } = {}): Cirsoc301Barra[] {
-  const combos = (op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
-  const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr);
-  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr)) : null;
-  const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr);
+  const losas = !!def.losas && def.losas.franja > 0;
+  const combos = (losas ? combosConLosas(op.combos ?? COMBOS_CURSO) : op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
+  const anchosPerp = op.otro ? op.otro.zs.map((_, k) => op.otro!.anchos?.[k] ?? op.otro!.ancho) : undefined;
+  const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: 0 });
+  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0 })) : null;
+  // D: el peso propio y el peso de las losas; L: la sobrecarga de las losas (si apoyan en el exo)
+  const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: def.losas?.qD ?? LOSA_QD, anchosPerp });
+  const qL = def.losas?.qL ?? LOSA_QL;
+  const rL = losas && qL > 0 ? calcularExo({ ...def, pesoPropio: false }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: qL, anchosPerp }) : null;
   const out: Cirsoc301Barra[] = [];
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
-    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id);
+    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id), eL = rL?.caras[ic].esfuerzos.find(x => x.id === eW.id);
     if (!eD) return;
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
     const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
@@ -903,11 +984,11 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
       if (cb.otro && !otro) continue;
       let Pc = 0, Pt = 0, Mu = 0, MuC = 0, MuT = 0;
       for (let i = 0; i <= 20; i++) {
-        const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20);
+        const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20), fl = eL && cb.L ? esfuerzosEn(eL, i / 20) : { N: 0, M: 0 }, cL = cb.L ?? 0;
         // la parte del viento perpendicular suma con el mismo signo (la peor esquina); la flexión de la otra cara se suma
         // (flexión en los dos planos de un tubo cuadrado, del lado seguro)
         const Nw = sg * fw.N, extraN = cb.otro && otro ? cb.otro * otro.N * (Nw >= 0 ? 1 : -1) : 0;
-        const N = cb.D * fd.N + cb.W * Nw + extraN, M = Math.abs(cb.D * fd.M + cb.W * sg * fw.M) + (cb.otro && otro ? cb.otro * otro.M : 0);
+        const N = cb.D * fd.N + cL * fl.N + cb.W * Nw + extraN, M = Math.abs(cb.D * fd.M + cL * fl.M + cb.W * sg * fw.M) + (cb.otro && otro ? cb.otro * otro.M : 0);
         if (-N > Pc) { Pc = -N; MuC = M; } else if (-N === Pc) MuC = Math.max(MuC, M);
         if (N > Pt) { Pt = N; MuT = M; } else if (N === Pt) MuT = Math.max(MuT, M);
         Mu = Math.max(Mu, M);
