@@ -110,7 +110,7 @@ function dibujarPanel() {
     const ab = h('button', { type: 'button', class: 'enlace' }, 'Abrir todas'), pl = h('button', { type: 'button', class: 'enlace' }, 'Plegar todas');
     ab.addEventListener('click', () => plegarTodas(p, false)); pl.addEventListener('click', () => plegarTodas(p, true));
     // recorrer: abre las secciones de a una, en orden (para seguir una explicación o un tutorial)
-    const rec = h('button', { type: 'button', class: 'enlace', title: 'Abre las secciones de a una, en orden' }, 'Recorrer ›');
+    const rec = h('button', { type: 'button', class: 'enlace b-recorrer', title: 'Abre las secciones de a una, en orden' }, 'Recorrer ›');
     let k = -1;
     rec.addEventListener('click', () => {
       const lista = [...p.querySelectorAll<HTMLElement>('section.seccion.plegable')];
@@ -312,8 +312,20 @@ function dibujarModoCalculo() {
     bc.addEventListener('click', () => estado.calcularAhora());
     partes.push(bc);
   }
-  zonaModo.replaceChildren(...partes);
+  // tutorial: «En esta etapa», de dónde llega cada indicador, «Recorrer» y las explicaciones plegables. Se apaga para
+  // ganar lugar cuando ya se conoce la app (se recuerda en este navegador)
+  const bt = h('button', { type: 'button', class: 'chico b-tutorial', 'aria-pressed': String(tutorialPrendido()),
+    'data-globo': 'Tutorial|Prendido: arriba de cada etapa, qué se calcula y de dónde llega cada dato, «Recorrer» las secciones y las explicaciones («Ver la explicación», «Cómo leer este gráfico»). Apagado: solo las herramientas y los resultados.' }, tutorialPrendido() ? 'Tutorial: sí' : 'Tutorial: no');
+  bt.addEventListener('click', () => { ponerTutorial(!tutorialPrendido()); dibujarModoCalculo(); });
+  zonaModo.replaceChildren(bt, ...partes);
 }
+const CLAVE_TUTORIAL = 'torre3d.tutorial';
+function tutorialPrendido(): boolean { try { return localStorage.getItem(CLAVE_TUTORIAL) !== 'no'; } catch { return true; } }
+function ponerTutorial(si: boolean) {
+  try { localStorage.setItem(CLAVE_TUTORIAL, si ? 'si' : 'no'); } catch { /* sin almacenamiento */ }
+  document.body.classList.toggle('sin-tutorial', !si);
+}
+document.body.classList.toggle('sin-tutorial', !tutorialPrendido());
 /** aviso sobre los diagramas del centro cuando quedaron del cálculo anterior */
 function marcarCentroViejo() {
   const dib = $('centro-dibujos');

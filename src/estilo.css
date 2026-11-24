@@ -1912,3 +1912,8 @@ button.hilo-etapa:hover { background: none; text-decoration: underline; }
 .qr-lista > li > ul > li { margin: 2px 0; }
 .qr-cab { display: flex; align-items: baseline; gap: 8px; }
 .qr-cab .enlace { margin-left: auto; }
+
+/* tutorial apagado (botón «Tutorial» de la barra de arriba): fuera lo que explica, quedan las herramientas y los resultados */
+body.sin-tutorial .hilo, body.sin-tutorial .kpi-origen, body.sin-tutorial .b-recorrer,
+body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tutorial details.como-leer { display: none !important; }
+.b-tutorial[aria-pressed="true"] { background: var(--tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
