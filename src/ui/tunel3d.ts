@@ -22,6 +22,8 @@ import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, v
 import { llaveEnLienzo, llaveHtml, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { MediaPlano } from '../viento/direcciones';
+import { aBase64, deBase64, desempaquetar, empaquetar, FORMATO_3D, huella, VERSION_3D } from '../viento/archivo3d';
+import { abrirLamina } from './tunel3dLamina';
 import { alMuestrear, cfgRosa, factorEval, seccionRosa, zEval, type CtxRosa } from './tunel3dRosa';
 import { Fuerzas3D, segundosPorPaso } from '../viento/fuerzas3d';
 import { seccionFuerzas, type InfoFuerzas } from './tunel3dFuerzas';
@@ -77,6 +79,8 @@ interface Corrida {
   infoDin: InfoDinamica | null; nMuestra: number; pasosCampo: number;
   /** velocidad media a la altura de evaluación del confort (etapa 5) */
   plano: MediaPlano | null;
+  /** abierta de un archivo (el nombre): no se simula, se miran sus resultados */
+  guardada: string | null;
   corriendo: boolean; ocupado: boolean; k: number; mlups: number; ultimoCampo: number; ultimasLineas: number; sinMirar: number;
   /** salvaguardas: la velocidad más alta en unidades de la red y, si se rompió, dónde (y se pausa) */
   maxRed: number; roto: string | null;
@@ -119,15 +123,8 @@ function datosDinamica(geo: Geometria3D, infoFz: Corrida['infoFz']): InfoDinamic
   };
 }
 
-async function iniciar() {
-  detener();
-  const T = tamActual();
-  const ctx = vecinos3d();
-  // con vecinos el aire se acelera en las calles: el túnel lento siempre
-  UH = cfg.lento || ctx.length ? 0.05 : 0.08;
-  const geo = geometria3D({ niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: ctx });
-  const exp = datos102De(estado.proyecto).exposicion;
-  const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
+/** la corrida nueva (sin motor): las mediciones con el proyecto abierto (fuerzas, dinámica, vereda) */
+function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
   const caras = celdasDeCara(geo);
   // fuerzas: con la q y la ráfaga G del CIRSOC 102-25 para pasar de Cp a toneladas (si el proyecto no tiene datos del 102, sin fuerzas)
   let fz: Fuerzas3D | null = null, infoFz: Corrida['infoFz'] = null, dtPaso = NaN;
@@ -142,8 +139,22 @@ async function iniciar() {
   try { infoDin = datosDinamica(geo, infoFz); } catch { infoDin = null; }
   // los remolinos de una torre tienen un período de ≈ B / (0,12 · V): se lee el campo por lo menos 10 veces por período
   const VHm = vientoDisenoEn(geo.H) ?? NaN, nMuestra = isFinite(dtPaso) && VHm > 0 ? Math.max(4, Math.floor(geo.B / (0.12 * VHm) / 10 / dtPaso)) : Infinity;
-  const c: Corrida = { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0, plano: new MediaPlano(geo, zEval(geo)),
-    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null };
+  return { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0, plano: new MediaPlano(geo, zEval(geo)),
+    corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null };
+}
+/** las opciones de la geometría de la corrida (se guardan en el archivo para rearmarla igual) */
+function opcionesGeo() { const T = tamActual(); return { niveles: nivelesProyecto(), dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: vecinos3d() }; }
+
+async function iniciar() {
+  detener();
+  const T = tamActual();
+  const ctx = vecinos3d();
+  // con vecinos el aire se acelera en las calles: el túnel lento siempre
+  UH = cfg.lento || ctx.length ? 0.05 : 0.08;
+  const geo = geometria3D(opcionesGeo());
+  const exp = datos102De(estado.proyecto).exposicion;
+  const uIn = perfil102(T.nz, geo.escala, geo.H, exp, UH);
+  const c = armarCorrida(geo, uIn);
   corrida = c;
   try {
     const anchoC = geo.B * geo.escala;
@@ -659,10 +670,76 @@ function grabarVideo() {
   estado.avisarPanel();
 }
 
+// ------------------------------------------------------------------------------------------------ archivo y lámina (etapa 6)
+async function guardarCorrida() {
+  const c = corrida, msg = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+  if (!c || !c.gpu || !c.campo) { msg('Todavía no hay nada para guardar: esperá a que la simulación arranque.'); return; }
+  const o = opcionesGeo();
+  const datos = {
+    formato: FORMATO_3D, version: VERSION_3D, fecha: new Date().toISOString(), proyecto: estado.proyecto.nombre || '', huella: huella(o.niveles),
+    cfg: { tam: cfg.tam, paredes: cfg.paredes, angulo: cfg.angulo, motor: cfg.motor, lento: cfg.lento, contexto: cfg.contexto, alturaEval: cfgRosa.alturaEval }, dir: estado.dir, UH,
+    opc: { ...o, angulo: cfg.angulo }, uIn: [...c.uIn], pasos: c.gpu.pasos,
+    prom: c.prom.exportar(), fz: c.fz?.exportar() ?? null, plano: c.plano?.exportar() ?? null, campo: aBase64(c.campo),
+  };
+  const blob = await empaquetar(datos);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `tunel3d_viento${estado.dir}${cfg.angulo ? `_giro${cfg.angulo}` : ''}.torreviento3d`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  msg(`Corrida guardada (${fmt(blob.size / 1e6, 1)} MB).`);
+}
+async function abrirCorrida(f: File) {
+  const msg = (t: string) => { const e = document.getElementById('mensaje'); if (e) e.textContent = t; };
+  try {
+    const d = await desempaquetar(f) as any;      // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (d?.formato !== FORMATO_3D) throw new Error('no es una corrida del túnel 3D');
+    if (d.version > VERSION_3D) throw new Error('es de una versión más nueva de la app');
+    detener();
+    Object.assign(cfg, { tam: d.cfg.tam, paredes: d.cfg.paredes, angulo: d.cfg.angulo, motor: d.cfg.motor, lento: d.cfg.lento, contexto: d.cfg.contexto });
+    cfgRosa.alturaEval = d.cfg.alturaEval ?? cfgRosa.alturaEval;
+    if (d.dir !== estado.dir) estado.dir = d.dir;
+    UH = d.UH;
+    const geo = geometria3D(d.opc), uIn = new Float32Array(d.uIn), c = armarCorrida(geo, uIn);
+    c.prom.importar(d.prom);
+    if (d.fz && c.fz) c.fz.importar(d.fz);
+    if (d.plano && c.plano) c.plano.importar(d.plano);
+    c.campo = deBase64(d.campo);
+    const N = geo.nx * geo.ny * geo.nz, campo = c.campo;
+    c.gpu = { nx: geo.nx, ny: geo.ny, nz: geo.nz, N, pasos: d.pasos, mlups: 0, adaptador: 'corrida guardada', avanzar: () => undefined, esperar: async () => undefined, leer: async () => new Float32Array(0), corte: async () => new Float32Array(0), campo: async () => campo, destruir: () => undefined };
+    c.cargando = false; c.corriendo = false; c.guardada = f.name;
+    corrida = c;
+    const otra = huella(opcionesGeo().niveles) !== d.huella;
+    msg(`Corrida abierta: ${f.name}${d.proyecto ? ` (${d.proyecto})` : ''}.${otra ? ' Ojo: la torre del proyecto abierto no es la misma que la de la corrida; las comparaciones con el CIRSOC usan el proyecto abierto.' : ''}`);
+    estado.avisarPanel();
+    requestAnimationFrame(() => { if (corrida === c) { c.ultimasLineas = 0; actualizarCampo(); actualizarPanel(true); } });
+  } catch (e) { msg(`No se pudo abrir la corrida: ${e instanceof Error ? e.message : String(e)}`); }
+}
+async function lamina() {
+  const c = corrida;
+  if (!c || !c.gpu) return;
+  dibujar();
+  const pasadas = (c.gpu.pasos * UH) / c.geo.nx;
+  const datos = [
+    `Torre de ${fmt(c.geo.H, 1)} m, ${fmt(c.geo.B, 1)} m de ancho y ${fmt(c.geo.L, 1)} m de largo al viento; viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''}`,
+    `Viento de diseño en la azotea: ${fmt((vientoDisenoEn(c.geo.H) ?? NaN) * 3.6, 0)} km/h (CIRSOC 102-25, exposición ${datos102De(estado.proyecto).exposicion}), con su perfil en altura`,
+    `Grilla de ${c.geo.nx} × ${c.geo.ny} × ${c.geo.nz} celdas de ${fmt(1 / c.geo.escala, 2)} m; ${cfg.motor === 'procesador' ? 'procesador' : 'placa de video'}; paredes ${cfg.paredes}`,
+    `Tiempo simulado: ${fmt(pasadas, 1)} pasadas del aire por el túnel${isFinite(c.dtPaso) ? ` (${fmt(c.gpu.pasos * c.dtPaso, 0)} s reales)` : ''}${c.guardada ? ` · corrida guardada «${c.guardada}»` : ''}`,
+    ...(c.geo.vecinos.length ? [`Con ${c.geo.vecinos.length} edificios vecinos del contexto urbano`] : []),
+  ];
+  await abrirLamina(vista?.ren.domElement ?? null, datos, [
+    { titulo: '1 · Estructura: fuerzas en la base y por piso', el: panelFz, nota: 'Las cargas de la simulación son un estudio complementario: la media sirve para comparar formas; los picos dependen de cuánto se simuló.' },
+    { titulo: '2 · Fachada: presiones pico y zonas', el: panelFach, nota: 'Los picos de las esquinas son los menos precisos con una grilla gruesa: sirven para ver dónde están y comparar formas.' },
+    { titulo: '3 · Confort en la torre: remolinos, aceleración y deriva', el: panelDin, nota: 'El viento de entrada no tiene la turbulencia del viento real: la aceleración en el sentido del viento queda corta; la de costado es la confiable.' },
+    { titulo: '4 · Calle: rosa de vientos y envolvente', el: panelRosa, nota: 'El confort depende de la rosa de vientos de la estación meteorológica: sin ella el mapa es un ejercicio.' },
+  ]);
+}
+
 // ------------------------------------------------------------------------------------------------ centro y panel
 export function centroTunel3d(c: H, _tam: Tam) {
   c.append(h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'));
-  if (soporteGpu === undefined) {
+  if (corrida?.guardada) {
+    const b = h('button', { type: 'button', class: 'boton' }, 'Volver a simular');
+    b.addEventListener('click', () => { corrida = null; estado.avisarPanel(); });
+    c.append(h('p', { class: 'aviso-linea' }, `Corrida guardada «${corrida.guardada}»: se miran sus resultados, no se simula. `, b));
+  } else if (soporteGpu === undefined) {
     c.append(h('p', { class: 'nota' }, 'Buscando la placa de video…'));
     void import('../viento/lbm3dGpu').then(m => m.hayWebGpu()).then(r => { soporteGpu = r; estado.avisarPanel(); });
     return;
@@ -675,7 +752,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
     c.append(h('p', { class: 'aviso-viejo' }, 'Este navegador no tiene WebGPU, la placa de video del túnel 3D (Chrome y Edge sí; Safari desde la versión 26; Firefox, todavía no en Linux, Android ni Mac con Intel). Se puede simular igual con el procesador, con una grilla gruesa (0,1 millones de celdas) y bastante más lento: una pasada del aire tarda alrededor de un minuto. El túnel 2D funciona en cualquier navegador.'), h('div', { class: 'fila-acciones' }, cpu, b));
     return;
   }
-  if (!corrida || corrida.clave !== claveCorrida()) { void iniciar(); }
+  if (!corrida || (!corrida.guardada && corrida.clave !== claveCorrida())) { void iniciar(); }
   const cr = corrida!;
   if (cr.cargando) { c.append(h('p', { class: 'nota' }, cfg.motor === 'procesador' ? 'Preparando la torre…' : 'Preparando la torre y la placa de video…')); return; }
   if (cr.error) { c.append(h('p', { class: 'aviso-viejo' }, `No se pudo arrancar el túnel 3D: ${cr.error}`)); return; }
@@ -688,6 +765,8 @@ export function centroTunel3d(c: H, _tam: Tam) {
   llaves3d = h('div', {}); marco.append(llaves3d); armarLlaves3d();
   c.append(marco);
   armarVista(marco);
+  // una corrida guardada no tiene ciclo que pinte: se pinta acá (el campo ya está)
+  if (cr.guardada && cr.campo) { cr.ultimasLineas = 0; actualizarCampo(); }
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
   c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion}) · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
@@ -760,6 +839,15 @@ export function panelTunel3d(c: H) {
     const of = h('button', { type: 'button', class: 'boton' }, '⤓ Caso de OpenFOAM (.zip)');
     of.title = 'La torre, los vecinos, la malla, la capa límite del viento y la medición del arrastre, para correr con OpenFOAM (el simulador libre de los laboratorios)';
     of.addEventListener('click', () => { void exportarOpenFOAM().catch(e => { const m = document.getElementById('mensaje'); if (m) m.textContent = `No se pudo armar el caso: ${e instanceof Error ? e.message : String(e)}`; }); });
+    const guardar = h('button', { type: 'button', class: 'boton', title: 'Las estadísticas de la fachada, las fuerzas en el tiempo, la vereda y el último campo: se vuelve a abrir sin simular' }, '⤓ Guardar la corrida (.torreviento3d)');
+    guardar.addEventListener('click', () => { void guardarCorrida(); });
+    const entrada = h('input', { type: 'file', accept: '.torreviento3d', hidden: '' }) as HTMLInputElement;
+    entrada.addEventListener('change', () => { const f = entrada.files?.[0]; if (f) void abrirCorrida(f); });
+    const abrir = h('button', { type: 'button', class: 'boton' }, 'Abrir una corrida guardada');
+    abrir.addEventListener('click', () => entrada.click());
+    const lam = h('button', { type: 'button', class: 'boton primario', title: 'Una hoja por bloque: la torre en el túnel, las fuerzas, la fachada, la dinámica y la calle' }, 'Lámina «Estudio de viento» (imprimir o PDF)');
+    lam.addEventListener('click', () => { void lamina(); });
+    d.append(h('div', { class: 'fila-acciones' }, lam), h('div', { class: 'fila-acciones' }, guardar, abrir, entrada));
     d.append(h('div', { class: 'fila-acciones' }, stl, of), h('p', { class: 'nota chica' }, 'STL: un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba, para imprimir en 3D o llevar la forma a un programa de CAD. Caso de OpenFOAM: el nivel de laboratorio (RANS k-ε con la capa límite del viento, malla de 0,2 a 1 millón de celdas); el LEAME.txt del .zip explica cómo correrlo.'));
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular

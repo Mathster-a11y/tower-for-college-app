@@ -1823,3 +1823,10 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .leyenda .caja.rayada { background: repeating-linear-gradient(135deg, #fff 0 3px, #1d1d24 3px 4px); }
 .rosa-tabla input.corto { width: 72px; }
 .rosa-tabla td, .rosa-tabla th { padding: 3px 6px; }
+/* Túnel 3D: lámina «Estudio de viento» */
+.lamina-viento .lamina-vista { display: block; width: 100%; max-height: 120mm; object-fit: contain; border: 1px solid var(--edge); border-radius: 4px; margin: 8px 0; }
+.lamina-viento .lamina-advertencia { margin-top: 10px; padding: 6px 8px; border-left: 3px solid var(--elegido); background: color-mix(in srgb, var(--elegido) 10%, transparent); }
+.lamina-viento img.fachada-desplegada, .lamina-viento img.mapa-confort { max-width: 100%; height: auto; }
+.lamina-viento .diagrama svg, .lamina-viento .grafico-altura svg { max-width: 120mm; max-height: 95mm; height: auto; }
+.lamina-viento .diagrama { break-inside: avoid; }
+.lamina-viento .tabla-valores { font-size: 9px; }

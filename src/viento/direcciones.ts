@@ -43,6 +43,8 @@ export class MediaPlano {
     this.muestras++;
   }
   media(k: number) { return this.muestras ? this.suma[k] / this.muestras : NaN; }
+  exportar() { return { z: this.z, muestras: this.muestras, suma: [...this.suma], suma2: [...this.suma2] }; }
+  importar(d: ReturnType<MediaPlano['exportar']>) { if (d.suma.length !== this.suma.length) return; this.suma.set(d.suma); this.suma2.set(d.suma2); this.muestras = d.muestras; }
   sigma(k: number) { if (!this.muestras) return NaN; const m = this.suma[k] / this.muestras; return Math.sqrt(Math.max(0, this.suma2[k] / this.muestras - m * m)); }
 }
 

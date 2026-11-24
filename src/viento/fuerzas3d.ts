@@ -45,8 +45,8 @@ export class Fuerzas3D {
   readonly serie: MuestraBase[] = [];
   private readonly piso: Int32Array;
   private readonly px: Float64Array; private readonly py: Float64Array; private readonly pz: Float64Array;
-  private readonly acPiso: { Fx: Acum; Fy: Acum; Mz: Acum }[];
-  private readonly acBase = { Vx: vacia(), Vy: vacia(), Mz: vacia(), Mx: vacia(), My: vacia() };
+  readonly acPiso: { Fx: Acum; Fy: Acum; Mz: Acum }[];
+  readonly acBase = { Vx: vacia(), Vy: vacia(), Mz: vacia(), Mx: vacia(), My: vacia() };
   muestras = 0;
   /**
    * @param caras celdas de cara de la torre (con su normal hacia el aire)
@@ -85,6 +85,15 @@ export class Fuerzas3D {
     sumarA(b.Vx, Vx); sumarA(b.Vy, Vy); sumarA(b.Mz, Mzb); sumarA(b.Mx, Mx); sumarA(b.My, My);
     this.serie.push({ t, Vx, Vy, Mz: Mzb, Mx, My });
     this.muestras++;
+  }
+  /** el estado acumulado, para guardar la corrida */
+  exportar() { return { muestras: this.muestras, serie: this.serie, acPiso: this.acPiso, acBase: this.acBase }; }
+  importar(d: ReturnType<Fuerzas3D['exportar']>) {
+    if (d.acPiso.length !== this.acPiso.length) throw new Error('La corrida guardada tiene otra cantidad de niveles.');
+    const fijar = (a: Acum, b: Acum) => { a.s = b.s; a.s2 = b.s2; a.min = b.min ?? Infinity; a.max = b.max ?? -Infinity; };
+    d.acPiso.forEach((x, i) => { fijar(this.acPiso[i].Fx, x.Fx); fijar(this.acPiso[i].Fy, x.Fy); fijar(this.acPiso[i].Mz, x.Mz); });
+    (Object.keys(this.acBase) as (keyof Fuerzas3D['acBase'])[]).forEach(k => fijar(this.acBase[k], d.acBase[k]));
+    this.serie.length = 0; this.serie.push(...d.serie); this.muestras = d.muestras;
   }
   resumen(): ResumenFuerzas {
     const n = this.muestras, b = this.acBase, s = this.serie;

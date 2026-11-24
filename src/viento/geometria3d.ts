@@ -278,6 +278,12 @@ export class PromedioCp {
   /** el Cp más bajo y el más alto que pasaron por la celda */
   cpMin(k: number): number { return this.muestras ? this.min[k] * this.k0 : NaN; }
   cpMax(k: number): number { return this.muestras ? this.max[k] * this.k0 : NaN; }
+  /** el estado acumulado, para guardar la corrida (y volver a abrirla sin simular) */
+  exportar() { return { muestras: this.muestras, suma: [...this.suma], suma2: [...this.suma2], min: [...this.min], max: [...this.max] }; }
+  importar(d: ReturnType<PromedioCp['exportar']>) {
+    if (d.suma.length !== this.suma.length) throw new Error('La corrida guardada no corresponde a esta torre (otra cantidad de celdas de fachada).');
+    this.suma.set(d.suma); this.suma2.set(d.suma2); this.min.set(d.min.map(v => (v === null ? Infinity : v))); this.max.set(d.max.map(v => (v === null ? -Infinity : v))); this.muestras = d.muestras;
+  }
   /** el promedio de cada cara (pesado por celda) */
   porCara(): Record<Cara, number> {
     const s: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 }, n: Record<Cara, number> = { barlovento: 0, sotavento: 0, lateral: 0, cubierta: 0 };
