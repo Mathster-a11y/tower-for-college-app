@@ -43,7 +43,8 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     await pg.evaluate(async () => { localStorage.clear(); localStorage.setItem('torre3d.indicaciones', '1'); const { estado } = await import('/src/ui/estado.ts'); const { ejemploGuia } = await import('/src/engine/modelo.ts'); estado.reemplazar(ejemploGuia()); });
     await pg.reload(); await espera(1600);
   }
-  const boton = async (tipo, sel) => { const c = await caja(sel); if (!c) throw new Error('no está ' + sel); await toque(tipo, [c[0], c[1]]); };
+  // (el botón se lleva a la vista antes, como haría una persona: en una carta larga puede estar más abajo)
+  const boton = async (tipo, sel) => { await pg.locator(sel).first().scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {}); const c = await caja(sel); if (!c) throw new Error('no está ' + sel); await toque(tipo, [c[0], c[1]]); };
 
   for (const tipo of ['mouse', 'pen', 'touch']) {
     if (SOLO && SOLO !== tipo) continue;
@@ -62,18 +63,21 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     await pg.keyboard.press('Control+z'); await espera(300);
     // 3 · tocar el fondo suelta la selección
     const sv = await caja('svg.planta');
-    await espera(700); await toque(tipo, [sv[2].x + sv[2].width * 0.2, sv[2].y + sv[2].height * 0.22]);
+    // el fondo libre empieza debajo de la tira de pasos y de la barra de herramientas (en una notebook ocupan arriba)
+    const libre = await pg.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.pasos-torre, .herr-planta')].filter(e => !e.hidden).map(e => e.getBoundingClientRect().bottom)));
+    const yFondo = Math.max(sv[2].y + sv[2].height * 0.22, libre + 30), yDib = Math.max(sv[2].y + 90, libre + 40);
+    await espera(700); await toque(tipo, [sv[2].x + sv[2].width * 0.2, yFondo]);
     anota(tipo, 'tocar el fondo suelta', await est(e => e.seleccion) === null, String(await est(e => e.seleccion)));
     // 4 · desplazar la vista arrastrando el fondo
     const m0 = (await caja('[data-muro="M2"] polygon, [data-muro="M2"] rect'))[0];
-    await gesto(tipo, [[sv[2].x + sv[2].width * 0.2, sv[2].y + sv[2].height * 0.22], [sv[2].x + sv[2].width * 0.2 + 100, sv[2].y + sv[2].height * 0.22]]);
+    await gesto(tipo, [[sv[2].x + sv[2].width * 0.2, yFondo], [sv[2].x + sv[2].width * 0.2 + 100, yFondo]]);
     const m1 = (await caja('[data-muro="M2"] polygon, [data-muro="M2"] rect'))[0];
     await espera(1000);
     anota(tipo, 'correr la vista con el fondo', Math.abs(m1 - m0 - 100) < 15, `${(m1 - m0).toFixed(0)} px`);
     // 5 · dibujar un muro (dos toques) y terminar con doble toque / Esc
     await boton(tipo, '.herr-planta button:text-is("Dibujar")');
     const n0 = await est(e => e.proyecto.muros.length);
-    const pA = [sv[2].x + sv[2].width * 0.35, sv[2].y + 90], pB = [sv[2].x + sv[2].width * 0.6, sv[2].y + 90];
+    const pA = [sv[2].x + sv[2].width * 0.35, yDib], pB = [sv[2].x + sv[2].width * 0.6, yDib];
     await toque(tipo, pA, { espera: 450 }); await toque(tipo, pB, { espera: 450 });
     const n1 = await est(e => e.proyecto.muros.length);
     anota(tipo, 'dibujar un muro con dos toques', n1 === n0 + 1, `${n0} → ${n1}`);
