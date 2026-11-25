@@ -94,7 +94,9 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     const c = carpinteriaDeNivel(p, i);
     const conEnv = !!p.envolvente && tramoEn(p, n.cota)?.modo === 'continua' && !n.carpManual;
     if (c && conEnv) {
-      const max = Math.max(0, ...densos(puntosSilueta(pl.silueta, 8)).map(q => (adentro(q, puntosSilueta(c.v, 8)) ? 0 : distanciaBorde(q, puntosSilueta(c.v, 8)))));
+      // la losa que tapa el piso de abajo (el techo de un cajón, con su carpintería por piso) tampoco sale de la piel
+      const pc = puntosSilueta(c.v, 8), abajo = p.niveles[i + 1] && p.niveles[i + 1].cota >= -1e-6 && tramoEn(p, p.niveles[i + 1].cota)?.modo === 'losa' ? carpinteriaDeNivel(p, i + 1) : null, pa = abajo ? puntosSilueta(abajo.v, 8) : null;
+      const max = Math.max(0, ...densos(puntosSilueta(pl.silueta, 8)).map(q => (adentro(q, pc) || (pa && adentro(q, pa)) ? 0 : Math.min(distanciaBorde(q, pc), pa ? distanciaBorde(q, pa) : Infinity))));
       // el borde de la losa puede pasar la piel lo que mide el retiro del tramo (la nariz de la losa): eso no es salir
       const vuelo = Math.max(0, tramoEn(p, n.cota)?.retiro ?? 0);
       if (max > TOL + vuelo * Math.SQRT2) { fueraEnv.cotas.push(n.cota); fueraEnv.max = Math.max(fueraEnv.max, max); }   // en las esquinas, el retiro × √2

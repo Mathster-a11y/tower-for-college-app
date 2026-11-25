@@ -125,6 +125,28 @@ export interface BarraNueva {
   clase: ClaseBarra; a: [number, number]; b: [number, number]; sec?: Seccion; relA?: boolean; relB?: boolean;
   /** s de a y b como fracción del medio ancho de la cara en su cota (−1 = un borde, 0 = el medio, 1 = el otro): la barra cae en el mismo lugar en las caras de los dos vientos aunque tengan distinto ancho */
   enFraccion?: boolean;
+  /** solo en las caras de un viento: A (las caras que ve el viento A) o B; vacío = en las de los dos */
+  dir?: 'A' | 'B' | null;
+  /** solo en una de las dos caras del viento: la de +t (1: norte o este) o la de −t (−1: sur u oeste); vacío = en las dos */
+  lado?: 1 | -1 | null;
+  /**
+   * ala: el mástil (supercolumna) de la cara perpendicular, puesto en el borde de esta cara (media sección, como en la
+   * ficha E): trabaja con la cara pero se dibuja y se pesa con la otra
+   */
+  ala?: boolean;
+  /** (interno) en las caras de este viento no va: se saltea sin cambiar la numeración N1, N2… */
+  fuera?: boolean;
+}
+/** el exo para la cara de posición t (lado +1 o −1): las barras a mano del otro lado quedan afuera (con su número) */
+export function paraLado(def: ExoDef, t: number): ExoDef {
+  if (!def.nuevas?.some(n => n.lado)) return def;
+  const sg = t >= 0 ? 1 : -1;
+  return { ...def, nuevas: def.nuevas.map(n => (n.lado && n.lado !== sg ? { ...n, fuera: true } : n)) };
+}
+/** el exo para las caras del viento dir: las barras a mano de solo el otro viento quedan afuera (con su número) */
+export function paraViento(def: ExoDef, dir?: 'A' | 'B' | null): ExoDef {
+  if (!dir || !def.nuevas?.some(n => n.dir)) return def;
+  return { ...def, nuevas: def.nuevas.map(n => (n.dir && n.dir !== dir ? { ...n, fuera: true } : n)) };
 }
 export const EXO_POR_DEFECTO: ExoDef = {
   tipo: 'D', separacion: 1, modulo: 4,
@@ -353,6 +375,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   });
   // barras agregadas a mano (entre nudos que ya existen o en un piso)
   (def.nuevas ?? []).forEach((nb, i) => {
+    if (nb.fuera) return;                                     // de las caras del otro viento
     // en fracción del ancho: se lleva a metros y se pega al nudo que ya esté ahí (a menos de 0,1 mm), así una barra
     // dibujada sobre un nudo de la ficha se une a él aunque la fracción esté redondeada
     const sDe = (q: [number, number]) => {
@@ -365,6 +388,7 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     if (a === b) return;
     const sec = nb.sec ?? (nb.clase === 'columna' ? def.columna : nb.clase === 'diagonal' ? def.diagonal : def.viga), p = propsSeccion(sec);
     const rel = un[nb.clase] === 'articulada';
+    if (nb.ala) { barras.push({ id: `N${i + 1}`, clase: 'columna', a, b, A: p.A / 2, I: p.I / 2, sec, relA: nb.relA ?? rel, relB: nb.relB ?? rel, borde: false, fraccion: 0.5, deMastil: true }); return; }
     barras.push({ id: `N${i + 1}`, clase: nb.clase, a, b, A: p.A, I: p.I, sec, relA: nb.relA ?? rel, relB: nb.relB ?? rel, borde: enBorde(a) && enBorde(b) });
   });
   // cambios barra por barra
@@ -658,7 +682,7 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
 export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[]): ResultadoExo {
   const n = zs.length - 1;
   const Kt = rigidezTabiques(zs, EJ);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(def, anchoCara, zs, `cara ${i + 1}`, anchos), def, zs, W), def.E, n) }));
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(armarCara(paraLado(def, t), anchoCara, zs, `cara ${i + 1}`, anchos), def, zs, W), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
@@ -715,20 +739,20 @@ export const CATALOGO_HORMIGON: Seccion[] = Array.from({ length: 18 }, (_, i) =>
 const catalogo = (def: ExoDef) => (def.material === 'hormigon' ? CATALOGO_HORMIGON : CATALOGO_TUBOS);
 
 /** lo que necesita calcularExo para un viento */
-export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[] }
+export interface EntradaExo { /** viento de estas caras (para las barras de un solo viento) */ dir?: 'A' | 'B'; zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[] }
 
 /** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
-  return entradas.reduce((s, en, i) => {
-    const c = armarCara(def, en.ancho, en.zs, 'cara', en.anchos);
+  return entradas.reduce((s, en, i) => s + en.tCaras.reduce((s2, t) => {
+    const c = armarCara(paraLado(paraViento(def, en.dir), t), en.ancho, en.zs, 'cara', en.anchos);
     const anchoEn = (k: number) => (c.nudos[k].piso >= 0 ? en.anchos?.[c.nudos[k].piso] ?? en.ancho : en.ancho);
     const esquina = (b: Barra) => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s) - anchoEn(k) / 2) < 1e-6);
     // las alas del mástil (ficha E) son de otra cara: no se cuentan; las alas del tubo (columnas intermedias de las caras
     // perpendiculares) sí, con su cantidad (cada cara perpendicular aparece una vez en cada viento como ala)
     const factor = (b: Barra) => (b.fraccion === undefined || b.fraccion === 1 ? 1 : b.deMastil ? 0 : b.fraccion);
-    return s + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
-  }, 0);
+    return s2 + c.barras.reduce((q, b) => { if ((i > 0 && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
+  }, 0), 0);
 }
 
 export interface Dimensionado { def: ExoDef; verifica: boolean; peso: number; pasos: number; motivo: string }
@@ -753,13 +777,13 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
     const falla = { columna: false, diagonal: false, viga: false };
     let flecha = false;
     entradas.forEach(en => {
-      const r = calcularExo(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos);
+      const r = calcularExo(paraViento(def, en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos);
       r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
     // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
-      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
+      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
     (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
@@ -885,10 +909,11 @@ export const limitesPared = (E: number, Fy: number, costura = true) => { const k
  *  - pared del tubo: b/t ≤ 1,40·√(E/Fy) (si no, la pared abolla antes: se avisa como que no verifica).
  */
 export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24,
-  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo } = {}): Cirsoc301Barra[] {
+  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** viento de estas caras */ dir?: 'A' | 'B' } = {}): Cirsoc301Barra[] {
   const combos = (op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
+  const def0 = def; def = paraViento(def0, op.dir);
   const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos);
-  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos)) : null;
+  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...paraViento(def0, op.otro.dir), pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos)) : null;
   const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos);
   const out: Cirsoc301Barra[] = [];
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {

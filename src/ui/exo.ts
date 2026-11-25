@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { armarCara, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { armarCara, calcularExo, paraViento, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
@@ -176,9 +176,9 @@ export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undef
     // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
     const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
     const { ancho, t, anchos, ts } = anchosCara(dir, def, zs);
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos);
+    const r = calcularExo(paraViento(def, dir), zs, W, EJ, ancho, [-t, t], E, anchos);
     const h0 = zs[zs.length - 1] - zPB;
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos } };
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, entrada: { dir, zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
 let ultimoError = '';
@@ -209,7 +209,7 @@ export function geometriaExo(dir: 'A' | 'B', def: ExoDef | null | undefined = es
     const zs = [zPB, ...alt.filter(x => x.z > zPB + 1e-6).sort((a, b) => a.z - b.z).map(x => x.z)];
     if (zs.length < 3) return null;
     const g = anchosCara(dir, def, zs);
-    return { zs, ...g, tCaras: [-g.t, g.t], cara: armarCara(def, g.ancho, zs, 'cara', g.anchos) };
+    return { zs, ...g, tCaras: [-g.t, g.t], cara: armarCara(paraViento(def, dir), g.ancho, zs, 'cara', g.anchos) };
   } catch { return null; }
 }
 
@@ -224,7 +224,7 @@ export function verif301(d: DatosExo & { entrada: EntradaExo }) {
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
   const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
-  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro });
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, dir: d.dir });
 }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
 export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {

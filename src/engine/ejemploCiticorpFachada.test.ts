@@ -1,34 +1,81 @@
 import { describe, expect, it } from 'vitest';
 import { ejemploCiticorpFachada } from './ejemploCiticorpFachada';
 import { aplicarCarpinteriaTramos, bandasFachada, calcularPaneleria } from './carpinteria';
-import { aplicarPlanosCorte } from './planos_corte';
 import { avisosDiseno } from './avisos';
 import { leerProyecto } from './lector';
 import { cajaSilueta, carpinteriaDeNivel } from './silueta';
+import { armarCara, paraLado, paraViento } from './exo';
+import { adentro } from './avisos';
+
+const armar = () => { const p = ejemploCiticorpFachada(); aplicarCarpinteriaTramos(p); return p; };
+/** la piel a la cota z: el anillo de la banda que la contiene, interpolado entre abajo y arriba */
+function pielEn(p: ReturnType<typeof armar>, z: number) {
+  const b = bandasFachada(p).find(x => z >= x.z0 - 1e-6 && z <= x.z1 + 1e-6);
+  if (!b) return null;
+  const f = Math.min(1, Math.max(0, (z - b.z0) / (b.z1 - b.z0)));
+  return b.a.map((q, i) => ({ x: q.x + (b.b[i].x - q.x) * f, y: q.y + (b.b[i].y - q.y) * f }));
+}
 
 describe('Citicorp Center: forma y fachada', () => {
-  const armar = () => { const p = ejemploCiticorpFachada(); aplicarPlanosCorte(p); aplicarCarpinteriaTramos(p); return p; };
-  it('se lee como proyecto válido', () => { expect(leerProyecto(JSON.parse(JSON.stringify(ejemploCiticorpFachada()))).ok).toBe(true); });
-  it('la corona a 45°: la losa de arriba es una franja al norte; el piso 56 queda entero', () => {
-    const p = armar();
-    const c = cajaSilueta(p.niveles[0].silueta!);
-    expect(c.L).toBeCloseTo(1, 1); expect(c.cy).toBeGreaterThan(22);
-    const i56 = p.niveles.findIndex(n => n.nombre.startsWith('56º'));
-    expect(cajaSilueta(p.niveles[i56].silueta ?? [{ x: -23.925, y: -23.925 }, { x: 23.925, y: 23.925 }]).L).toBeCloseTo(47.85, 1);
+  it('se lee como proyecto válido y entra en los 49 niveles de la planilla', () => {
+    const p = ejemploCiticorpFachada();
+    expect(leerProyecto(JSON.parse(JSON.stringify(p))).ok).toBe(true);
+    expect(p.niveles.filter(n => n.cota > 0).length).toBeLessThanOrEqual(49);
   });
-  it('plaza sin carpintería, oficinas por piso, corona envolvente con la cara inclinada opaca', () => {
+  it('la corona: cajón en todo el ancho, pendiente a 45° y la franja plana arriba', () => {
     const p = armar();
-    const iPB = p.niveles.findIndex(n => n.cota === 0);
-    expect(carpinteriaDeNivel(p, iPB)).toBeNull();
+    const iC = p.niveles.findIndex(n => n.nombre.startsWith('Corona: techo del cajón'));
+    expect(cajaSilueta(carpinteriaDeNivel(p, iC + 1)!.v).L).toBeCloseTo(47.85, 2);        // el piso 56 (el cajón): todo el ancho
+    const top = cajaSilueta(carpinteriaDeNivel(p, 0)!.v);
+    expect(top.L).toBeCloseTo(7.97, 1);
     const r = calcularPaneleria(bandasFachada(p), p.paneleria!);
-    expect(r.alabeados).toBe(0);
     const inc = r.carasInfo.filter(c => c.inclinacion >= 30 && c.inclinacion <= 60);
-    expect(inc.length).toBeGreaterThan(0);
-    expect(r.paneles.filter(x => inc.some(c => c.id === x.cara)).every(x => x.opaco)).toBe(true);
-    // sin avisos de carpintería sobre un vacío ni fuera de la losa
-    expect(avisosDiseno(p).filter(a => a.tipo.startsWith('carpinteria') || a.tipo === 'losa-fuera-envolvente' || a.tipo === 'fuera-losa' || a.tipo === 'bl-caja')).toEqual([]);
-    // la planilla: el piso 56 y los de abajo con 47,85 × 47,85 m (no heredan la franja de la corona)
+    expect(inc.map(c => c.inclinacion)).toEqual([45]);
+    expect(r.paneles.filter(x => x.cara === inc[0].id).every(x => x.opaco)).toBe(true);
+    expect(r.alabeados).toBe(0);
+  });
+  it('la estructura siempre adentro de la piel (del cajón de transición para arriba)', () => {
+    const p = armar(), def = p.exo!;
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
+    const zBase = 34.75, fuera: string[] = [];
+    (['A', 'B'] as const).forEach(dir => {
+      const ancho = 47.85 + 2 * def.separacion, t = ancho / 2;
+      [-t, t].forEach(tc => {
+        const c = armarCara(paraLado(paraViento(def, dir), tc), ancho, zs);
+        c.barras.forEach(b => {
+          if ((b.fraccion ?? 1) !== 1) return;                                    // alas: son barras de otra cara
+          const A = c.nudos[b.a], B = c.nudos[b.b];
+          for (let k = 0; k <= 10; k++) {
+            const s = A.s + (B.s - A.s) * k / 10, z = A.z + (B.z - A.z) * k / 10;
+            if (z < zBase + 1e-6) continue;
+            const piel = pielEn(p, z); if (!piel) { fuera.push(`${dir}${tc > 0 ? '+' : '−'} ${b.id} z=${z.toFixed(1)} sin piel`); break; }
+            const q = dir === 'A' ? { x: tc, y: s } : { x: s, y: tc };
+            if (!adentro(q, piel, 0.01)) { fuera.push(`${dir}${tc > 0 ? '+' : '−'} ${b.id} (${q.x.toFixed(1)}, ${q.y.toFixed(1)}, ${z.toFixed(1)})`); break; }
+          }
+        });
+      });
+    });
+    expect(fuera).toEqual([]);
+  });
+  it('sin avisos de la piel, de las losas ni de la planilla', () => {
+    const p = armar();
+    expect(avisosDiseno(p).filter(a => a.tipo !== 'sin-pieza').map(a => a.texto)).toEqual([]);
     const i56 = p.niveles.findIndex(n => n.nombre.startsWith('56º'));
     expect([p.niveles[i56].B, p.niveles[i56].L]).toEqual([47.85, 47.85]);
+  });
+});
+
+describe('Citicorp: la base', () => {
+  it('debajo del cajón solo baja la supercolumna a media cara (sin esquinas ni diagonales en la plaza)', () => {
+    const p = ejemploCiticorpFachada(), def = p.exo!;
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
+    const ancho = 47.85 + 2 * def.separacion;
+    (['A', 'B'] as const).forEach(dir => {
+      const c = armarCara(paraLado(paraViento(def, dir), ancho / 2), ancho, zs);
+      // las que se dibujan (las alas son las supercolumnas de las otras caras: se dibujan con ellas)
+      const abajo = c.barras.filter(b => (b.fraccion ?? 1) === 1 && Math.min(c.nudos[b.a].z, c.nudos[b.b].z) < 34.75 - 1e-6);
+      expect(abajo.length).toBe(1);
+      expect(abajo.every(b => b.clase === 'columna' && Math.abs(c.nudos[b.a].s) < 1e-6 && Math.abs(c.nudos[b.b].s) < 1e-6)).toBe(true);
+    });
   });
 });
