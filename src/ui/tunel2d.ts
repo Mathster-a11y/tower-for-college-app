@@ -15,6 +15,7 @@ import { celdaRef2D, perimetro, PromedioPerimetro } from '../viento/perimetro';
 import { descargarCSV } from './csv';
 import { abrirGrabacion, cuadroDe, empaquetar, Grabadora, type GrabacionAbierta } from '../viento/grabacion';
 import { contornoAlViento, puntosAlViento } from '../engine/silueta';
+import { poligonosMuros } from '../engine/murosPlanta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
@@ -27,7 +28,7 @@ import { avisoArcoiris, textoEspectro, colorTermico, coloresTermico, dibujarFlec
 import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, esquinaVivaCerca, ladoMetro, promedioArea, puntosAltos, SALVAGUARDAS, type PuntoAlto } from '../viento/salvaguardas';
 import { agregarRetiro, armarEscenario, cajaDe, tramosEdificio, contextoDesdeCAD, ESCENARIOS, pisaLaTorre, vecinosEnCorte, type Escenario } from '../viento/contexto';
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
-import { muroEn, presenteEn, rectangulos, tipoDe, type EdificioVecino } from '../engine/modelo';
+import type { EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion' | 'media' | 'rafagas';
@@ -141,20 +142,14 @@ let engrosado = 0;
 /** celdas por ancho, como mínimo, con «solo los muros» */
 const D_MUROS = 40;
 function murosDelNivel(i: number, D: number): { x: number; y: number }[][] {
-  const p = estado.proyecto, zTop = p.niveles[0]?.cota ?? 0, zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, z = p.niveles[i].cota;
-  const ms = p.muros.filter(m => presenteEn(m, z, zFund, zTop)).map(m => muroEn(m, z));
-  const rs = ms.filter(m => tipoDe(m) !== 'tubo-circ').flatMap(m => rectangulos(m)).filter(r => r.ax > 1e-3 && r.ay > 1e-3);
-  const circ = ms.filter(m => tipoDe(m) === 'tubo-circ');
-  const xs = [...rs.flatMap(r => [r.x - r.ax / 2, r.x + r.ax / 2]), ...circ.flatMap(m => [m.x - m.largo / 2, m.x + m.largo / 2])];
-  const ys = [...rs.flatMap(r => [r.y - r.ay / 2, r.y + r.ay / 2]), ...circ.flatMap(m => [m.y - m.largo / 2, m.y + m.largo / 2])];
-  if (!xs.length) return [];
-  // el ancho que enfrenta el viento (A sopla en y: el ancho es en x) y lo que mide una celda
+  // el ancho que enfrenta el viento (A sopla en y: el ancho es en x) y lo que mide una celda: los tabiques más finos se engrosan
+  const todos = poligonosMuros(estado.proyecto, i).pols;
+  if (!todos.length) return [];
+  const xs = todos.flat().map(q => q.x), ys = todos.flat().map(q => q.y);
   const ancho = estado.dir === 'A' ? Math.max(...xs) - Math.min(...xs) : Math.max(...ys) - Math.min(...ys), emin = (1.2 * ancho) / D;
-  engrosado = rs.some(r => Math.min(r.ax, r.ay) < emin) ? emin : 0;
-  return [
-    ...rs.map(r => { const ax = Math.max(r.ax, emin), ay = Math.max(r.ay, emin); return [{ x: r.x - ax / 2, y: r.y - ay / 2 }, { x: r.x + ax / 2, y: r.y - ay / 2 }, { x: r.x + ax / 2, y: r.y + ay / 2 }, { x: r.x - ax / 2, y: r.y + ay / 2 }]; }),
-    ...circ.map(m => Array.from({ length: 24 }, (_, k) => ({ x: m.x + (m.largo / 2) * Math.cos((2 * Math.PI * k) / 24), y: m.y + (m.largo / 2) * Math.sin((2 * Math.PI * k) / 24) }))),
-  ];
+  const r = poligonosMuros(estado.proyecto, i, emin);
+  engrosado = r.engrosados ? emin : 0;
+  return r.pols;
 }
 function iniciar() {
   if (repro) { if (repro.reloj !== null) clearInterval(repro.reloj); repro = null; }   // empezar de nuevo sale de la reproducción

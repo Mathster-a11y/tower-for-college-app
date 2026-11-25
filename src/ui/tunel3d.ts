@@ -11,6 +11,7 @@ import { h, kpi, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
 import { puntosAlViento } from '../engine/silueta';
 import { tramoEn } from '../engine/carpinteria';
+import { poligonosMuros } from '../engine/murosPlanta';
 /** paredes: exactas en planta y en altura (la piel interpolada entre pisos), exactas solo en planta (un prisma por piso) o en escalera */
 export type Paredes3DModo = 'exactas' | 'planta' | 'escalera';
 import { datos102De } from '../engine/cargas/cirsoc102';
@@ -123,8 +124,13 @@ const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
-  // continua: la carpintería del tramo sigue de este piso al de arriba (no es «por losa», con escalón en cada piso)
-  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosAlViento(p, x.i), continua: tramoEn(p, x.n.cota)?.modo !== 'losa' }));
+  // continua: la carpintería del tramo sigue de este piso al de arriba (no es «por losa», con escalón en cada piso).
+  // Un piso abierto (carpintería «sin»: una PB libre sobre columnas) no tiene fachada: el viento ve sus muros y columnas
+  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => {
+    const modo = tramoEn(p, x.n.cota)?.modo;
+    const piezas = modo === 'sin' && !x.n.carpinteria?.length ? poligonosMuros(p, x.i).pols : [];
+    return { cota: x.n.cota - zPB, silueta: puntosAlViento(p, x.i), continua: modo !== 'losa', ...(piezas.length ? { piezas } : {}) };
+  });
 }
 
 /** lo que necesita la dinámica: frecuencias, viento de 5 y 10 años, masas, fuerzas del CIRSOC y la rigidez de cada nivel */

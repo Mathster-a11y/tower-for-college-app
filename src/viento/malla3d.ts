@@ -78,7 +78,9 @@ export function mallaTorre(g: Geometria3D, caras: CeldaCara[]): MallaTorre {
       if (k > 0 && !antes?.polArriba) tapa(antihorario(a), z0, false);
       return;
     }
-    const pol = antihorario(t.pol);
+    // un piso abierto: cada pieza (columna, muro) es un prisma suelto, con su tapa arriba y abajo
+    for (const pieza of t.piezas?.length ? t.piezas : [t.pol]) {
+    const pol = antihorario(pieza);
     // fachadas: cada lado partido en pedazos de una celda, y en filas de una celda de alto
     for (let i = 0; i < pol.length; i++) {
       const a = pol[i], b = pol[(i + 1) % pol.length], lx = b.x - a.x, ly = b.y - a.y, L = Math.hypot(lx, ly);
@@ -93,7 +95,8 @@ export function mallaTorre(g: Geometria3D, caras: CeldaCara[]): MallaTorre {
     // tapa de arriba (la azotea o el retiro); la de abajo, si el piso vuela sobre el de abajo (no si abajo hay una piel
     // que termina en esta misma planta); el suelo no
     tapa(pol, z1, true);
-    if (k > 0 && !antes?.polArriba) tapa(pol, z0, false);
+    if ((k > 0 || t.piezas?.length) && !antes?.polArriba) tapa(pol, z0, false);
+    }
   });
   return { pos: Float32Array.from(pos), trozos };
 }
@@ -130,7 +133,7 @@ export function stlTorre(niveles: NivelPlanta[], op: { alturaExacta?: boolean } 
   };
   // ¿del nivel k al k + 1 la piel sigue? (la regla del túnel)
   const sigue = (k: number) => {
-    if (!alturaExacta || niv[k].continua === false) return false;
+    if (!alturaExacta || niv[k].continua === false || niv[k].piezas?.length || niv[k + 1].piezas?.length) return false;
     const dz = niv[k + 1].cota - niv[k].cota;
     if (!(dz > 0)) return false;
     const c = alinearPlantas(niv[k].silueta, niv[k + 1].silueta).corre;
@@ -140,9 +143,12 @@ export function stlTorre(niveles: NivelPlanta[], op: { alturaExacta?: boolean } 
   while (k < niv.length - 1) {
     const z0 = k === 0 ? 0 : niv[k].cota;
     if (!sigue(k)) {
-      // un prisma: la planta del nivel de su cota a la del de arriba
-      const pol = antihorario(niv[k].silueta), z1 = niv[k + 1].cota;
-      if (z1 > z0) { costados(pol, pol, z0, z1); tapa(pol, z1, true); tapa(pol, z0, false); }
+      // un prisma: la planta del nivel de su cota a la del de arriba (un piso abierto: un prisma por pieza)
+      const z1 = niv[k + 1].cota;
+      for (const pieza of niv[k].piezas?.length ? niv[k].piezas! : [niv[k].silueta]) {
+        const pol = antihorario(pieza);
+        if (z1 > z0) { costados(pol, pol, z0, z1); tapa(pol, z1, true); tapa(pol, z0, false); }
+      }
       k++; continue;
     }
     // una piel: todos los pisos seguidos que siguen, con las plantas con los mismos puntos (cada una alineada con la de abajo)

@@ -113,6 +113,39 @@ describe('túnel 3D · paredes exactas en altura', () => {
   });
 });
 
+
+describe('túnel 3D · piso abierto (torre sobre columnas)', () => {
+  // un cuadrado de 40 m que arranca a 30 m sobre cuatro columnas de 6 m a media cara (como el Citicorp) y una fina de 0,3 m
+  const cuadro = (cx: number, cy: number, a: number): P[] => [{ x: cx - a / 2, y: cy - a / 2 }, { x: cx + a / 2, y: cy - a / 2 }, { x: cx + a / 2, y: cy + a / 2 }, { x: cx - a / 2, y: cy + a / 2 }];
+  const columnas = [cuadro(0, -17, 6), cuadro(17, 0, 6), cuadro(0, 17, 6), cuadro(-17, 0, 6), cuadro(10, 10, 0.3)];
+  const niveles: NivelPlanta[] = [{ cota: 0, silueta: cuadro(0, 0, 40), piezas: columnas }, { cota: 30, silueta: cuadro(0, 0, 40) }, { cota: 120, silueta: cuadro(0, 0, 40) }];
+  it('debajo de la torre pasa el aire: solo las columnas son sólidas', () => {
+    const g = geometria3D({ niveles, dir: 'B', nx: 160, ny: 96, nz: 64, alturaExacta: true });
+    const cx = Math.floor((g.caja.x0 + g.caja.x1 + 1) / 2), cy = Math.floor((g.caja.y0 + g.caja.y1 + 1) / 2);
+    const sol = (x: number, y: number, h: number) => g.solido[(Math.round(h * g.escala + 0.5) * g.ny + y) * g.nx + x] === 1;
+    expect(sol(cx, cy, 15)).toBe(false);                 // la plaza, debajo del centro de la torre
+    expect(sol(cx, cy, 60)).toBe(true);                  // la torre, arriba
+    // las celdas sólidas a 15 m: las cuatro columnas (6 × 6 m) y la fina (al menos una celda)
+    let n = 0; const z = Math.round(15 * g.escala + 0.5);
+    for (let y = 0; y < g.ny; y++) for (let x = 0; x < g.nx; x++) if (g.solido[(z * g.ny + y) * g.nx + x]) n++;
+    const porColumna = (6 * g.escala) ** 2;
+    expect(n).toBeGreaterThan(4 * porColumna * 0.6);
+    expect(n).toBeLessThan(4 * porColumna * 1.8 + 4);
+    // los tramos: el primero con las piezas sueltas
+    expect(g.tramos[0].piezas?.length).toBe(5);
+  });
+  it('el dibujo y el STL: un prisma por pieza, cerrado', () => {
+    const g = geometria3D({ niveles, dir: 'B', nx: 160, ny: 96, nz: 64, alturaExacta: true });
+    const m = mallaTorre(g, []);
+    expect(m.pos.length % 9).toBe(0);
+    const tris = leerStl(stlTorre(niveles));
+    // las cinco columnas (cada una 12 triángulos: 8 de costados y 2 + 2 de tapas) y la torre de arriba (12)
+    expect(tris.length).toBe(6 * 12);
+    const vol = tris.reduce((s2, [a, b, c]) => s2 + (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6, 0);
+    expect(vol).toBeCloseTo(4 * 36 * 30 + 0.09 * 30 + 1600 * 90, 0);
+  });
+});
+
 /** los triángulos de un STL binario: tres vértices [x, y, z] cada uno */
 function leerStl(buf: ArrayBuffer): number[][][] {
   const dv = new DataView(buf), n = dv.getUint32(80, true), out: number[][][] = [];

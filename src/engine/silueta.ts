@@ -127,3 +127,4 @@ export function puntosAlViento(p: Proyecto, i: number, porArco = 12): { x: numbe
   const dx = p.niveles[i]?.dx ?? 0, dy = p.niveles[i]?.dy ?? 0;
   return puntosSilueta(contornoAlViento(p, i).v, porArco).map(q => ({ x: q.x + dx, y: q.y + dy }));
 }
+
