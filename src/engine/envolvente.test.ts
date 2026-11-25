@@ -3,7 +3,7 @@ import { contornoEnvolvente, envolventeDesdeLosas } from './envolvente';
 import { aplicarCarpinteriaTramos } from './carpinteria';
 import { avisosDiseno } from './avisos';
 import { ejemploGuia } from './modelo';
-import { cajaSilueta, rectangulo } from './silueta';
+import { cajaSilueta, puntosAlViento, rectangulo } from './silueta';
 
 const torre = () => { const p = ejemploGuia(); p.niveles.forEach(n => { n.silueta = rectangulo(20, 16); }); p.carpinteriaTramos = [{ desde: 0, modo: 'continua', retiro: 0.3 }]; return p; };
 
@@ -15,6 +15,21 @@ describe('envolvente', () => {
     p.envolvente = envolventeDesdeLosas(p, 0.3);
     aplicarCarpinteriaTramos(p);
     p.niveles.filter(n => n.cota >= 0).forEach((n, k) => { const c = cajaSilueta(n.carpinteria!); expect(c.B).toBeCloseTo(antes[k].B, 6); expect(c.L).toBeCloseTo(antes[k].L, 6); });
+  });
+  it('torre inclinada (un nivel corrido entero): la piel queda donde está y la carpintería va en las coordenadas del nivel', () => {
+    const p = torre();
+    p.envolvente = envolventeDesdeLosas(p, 0.3);
+    aplicarCarpinteriaTramos(p);
+    const k = p.niveles.findIndex(n => n.cota > 10), sin = cajaSilueta(p.niveles[k].carpinteria!);
+    p.niveles[k].dx = 1.5; p.niveles[k].dy = -0.5;
+    aplicarCarpinteriaTramos(p);
+    const con = cajaSilueta(p.niveles[k].carpinteria!);
+    // (la caja se mide en las coordenadas del nivel: corrida al revés del nivel; sumada al corrimiento, la misma de antes)
+    expect(con.cx + 1.5).toBeCloseTo(sin.cx, 6); expect(con.cy - 0.5).toBeCloseTo(sin.cy, 6);
+    expect(con.B).toBeCloseTo(sin.B, 6); expect(con.L).toBeCloseTo(sin.L, 6);
+    // el viento (túneles y presiones) ve el contorno en el terreno: el de antes, aunque el nivel se haya corrido
+    const enObra = puntosAlViento(p, k), xs = enObra.map(q => q.x), ys = enObra.map(q => q.y);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(sin.cx, 6); expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(sin.cy, 6);
   });
   it('las losas se editan sin tocar la piel; si una sale, hay aviso (y no el de carpintería fuera de la losa)', () => {
     const p = torre();

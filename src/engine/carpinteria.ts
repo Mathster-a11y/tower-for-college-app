@@ -112,7 +112,16 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
     if (t.modo === 'continua' && p.envolvente) {
       const ve = contornoEnvolvente(p, i);
       if (!ve) { nv.carpinteria = null; return; }
-      hecho.set(i, [ve.map(q => ({ ...q }))]);
+      // la piel está fija en el terreno; la carpintería va en las coordenadas del nivel, que en una torre inclinada
+      // (Diseño → Perfil) se corre entero (dx, dy): se descuenta el corrimiento para que la piel quede donde está
+      const ex = nv.dx ?? 0, ey = nv.dy ?? 0;
+      const mover = <T extends { x: number; y: number }>(q: T): T => ({ ...q, x: q.x - ex, y: q.y - ey });
+      hecho.set(i, [ve.map(q => {
+        const r = mover(q) as Vertice & { c1?: { x: number; y: number }; c2?: { x: number; y: number } };
+        if (r.c1) r.c1 = mover(r.c1);
+        if (r.c2) r.c2 = mover(r.c2);
+        return r;
+      })]);
       return;
     }
     let bases: Vertice[][] = [sil.get(i)!];

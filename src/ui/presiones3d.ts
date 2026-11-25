@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { estado, fmt } from './estado';
 import { vientoCirsoc } from './cirsoc102';
-import { contornoAlViento, puntosSilueta } from '../engine/silueta';
+import { puntosAlViento } from '../engine/silueta';
 import { factoresCaso, ladosConNormal, mapaCirsoc, mapaPlanilla, presionCara, rolDeCara, type BandaViento, type Caso, type MapaPresiones } from '../viento/presiones';
 
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
@@ -47,7 +47,7 @@ export function capaPresiones(): { objetos: THREE.Object3D[]; maxP: number; minP
     const oculta = !!bCorte && banda.z0 >= corte! - 1e-9;
     const iN = p.niveles.findIndex(n => n.nombre === banda.nivel && n.cota === banda.cota);
     if (iN < 0) continue;
-    const pol = puntosSilueta(contornoAlViento(p, iN).v, 12);
+    const pol = puntosAlViento(p, iN);
     if (pol.length < 3) continue;
     const zc = (banda.z0 + banda.z1) / 2;
     for (const l of ladosConNormal(pol)) caras.push({ a: { x: l.a.x + l.nx * 0.08, y: l.a.y + l.ny * 0.08 }, b: { x: l.b.x + l.nx * 0.08, y: l.b.y + l.ny * 0.08 }, z0: banda.z0, z1: banda.z1, p: presionCara(m, caso, dir, l.nx, l.ny, zc), p1: presionCara(m, 1, dir, l.nx, l.ny, zc), oculta });
@@ -79,7 +79,7 @@ export function capaPresiones(): { objetos: THREE.Object3D[]; maxP: number; minP
   let enCorte: { cota: number; nivel: string; lados: { p: number; rol: string }[] } | null = null;
   if (bCorte) {
     const iN = p.niveles.findIndex(n => n.nombre === bCorte.nivel && n.cota === bCorte.cota);
-    const pol = iN >= 0 ? puntosSilueta(contornoAlViento(p, iN).v, 12) : [];
+    const pol = iN >= 0 ? puntosAlViento(p, iN) : [];
     const ext = pol.length ? Math.min(Math.max(...pol.map(q => q.x)) - Math.min(...pol.map(q => q.x)), Math.max(...pol.map(q => q.y)) - Math.min(...pol.map(q => q.y))) : 10;
     const k = (0.35 * ext) / Math.max(esc.max, -esc.min, 1e-9);
     const zc = corte!;
@@ -128,7 +128,7 @@ export function capaPresiones(): { objetos: THREE.Object3D[]; maxP: number; minP
     for (const b of vv.bandas) {
       if (bCorte && b.z0 >= corte! - 1e-9) continue;
       const iN = p.niveles.findIndex(n => n.nombre === b.nivel && n.cota === b.cota);
-      const pol = iN >= 0 ? puntosSilueta(contornoAlViento(p, iN).v, 12) : [];
+      const pol = iN >= 0 ? puntosAlViento(p, iN) : [];
       if (!pol.length) continue;
       const largo = 2 + 9 * ((fc[d].f * b.W) / Wmax), zc = (b.z0 + b.z1) / 2;
       // barlovento: la cara de y mínima (viento A) o de x mínima (viento B); la flecha llega a ella

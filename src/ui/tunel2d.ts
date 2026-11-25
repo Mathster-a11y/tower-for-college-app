@@ -14,7 +14,7 @@ import MedicionWorker from '../viento/medicion.worker?worker&inline';
 import { celdaRef2D, perimetro, PromedioPerimetro } from '../viento/perimetro';
 import { descargarCSV } from './csv';
 import { abrirGrabacion, cuadroDe, empaquetar, Grabadora, type GrabacionAbierta } from '../viento/grabacion';
-import { contornoAlViento, puntosSilueta } from '../engine/silueta';
+import { contornoAlViento, puntosAlViento } from '../engine/silueta';
 import { chaflanar, geometria2D, type Geometria2D } from '../viento/geometria2d';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
 import type { CuadroTunel, MensajeTunel } from '../viento/tunel.worker';
@@ -163,7 +163,7 @@ function iniciar() {
   corrida = null;
   const ne = nivelElegido();
   if (!ne) return;
-  let pol = puntosSilueta(contornoAlViento(estado.proyecto, ne.i).v, 12).map(q => ({ x: q.x, y: q.y }));
+  let pol = puntosAlViento(estado.proyecto, ne.i);
   if (pol.length < 3) return;
   // para comparar: la misma planta con esquinas vivas (su caja)
   if (cfg.forma === 'vivas') {
@@ -777,7 +777,7 @@ function armarCapas(el: H) {
 /** la torre (la planta del corte elegido) y su altura sobre PB, para armar escenarios y dibujar el plano chico */
 function torreParaContexto() {
   const p = estado.proyecto, ne = nivelElegido();
-  const pol = ne ? puntosSilueta(contornoAlViento(p, ne.i).v, 12).map(q => ({ x: q.x, y: q.y })) : [];
+  const pol = ne ? puntosAlViento(p, ne.i) : [];
   const iPB = p.niveles.reduce((k, n, j) => (n.cota >= 0 ? j : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
   return { pol, H: Math.max(...p.niveles.map(n => n.cota)) - zPB, z: ne ? alturaCorte(ne.i) : 0 };
 }

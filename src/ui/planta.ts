@@ -2226,6 +2226,40 @@ export function montarPlanta(cont: HTMLElement) {
   let zoom = 1, centroVista = { x: 0, y: 0 };
   /** ancho útil de la última vista (sin el cuadro flotante de la derecha): el centro del zoom se mide sobre él */
   let wUtilVista = 0, firmaReservas = '0|0';
+  /** altura en pantalla del centro de la vista (debajo de la tira de pasos y la barra): la usan el zoom y el pellizco */
+  let cyVista = 0;
+  /** el tamaño del dibujo congelado mientras se dibuja un encadenado (null: se mide en cada dibujo) */
+  let extFija: number | null = null;
+  /**
+   * cuánto tapan arriba la tira de pasos y la barra de herramientas (px): la planta se encuadra debajo, así ningún muro
+   * queda escondido detrás (en una notebook la barra va en dos líneas y la tira desplegada ocupa bastante). A lo sumo,
+   * el 45 % del alto.
+   */
+  function reservaArriba(h: number): number {
+    const R = svg.getBoundingClientRect();
+    if (!R.height) return 0;
+    let abajo = 0;
+    cont.querySelectorAll<HTMLElement>(':scope > .pasos-torre, :scope > .herr-planta').forEach(e => {
+      if (e.hidden) return;
+      const r = e.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.top > R.top + R.height / 2) return;
+      abajo = Math.max(abajo, r.bottom - R.top + 6);
+    });
+    return Math.min(Math.max(0, abajo), h * 0.45);
+  }
+  /** lo mismo abajo: la leyenda y el cartel de la herramienta (a lo sumo el 25 % del alto) */
+  function reservaAbajo(h: number): number {
+    const R = svg.getBoundingClientRect();
+    if (!R.height) return 0;
+    let arriba = R.bottom;
+    [ley, indic].forEach(e => {
+      if (e.hidden || e.parentElement !== cont) return;
+      const r = e.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom < R.top + R.height / 2) return;
+      arriba = Math.min(arriba, r.top - 6);
+    });
+    return Math.min(Math.max(0, R.bottom - arriba), h * 0.25);
+  }
   /**
    * cuánto tapan las cartas abiertas a cada costado de la planta (px): las del dock y las sueltas que no se movieron a
    * mano. Las que aparecen solas al elegir algo (medidas del muro, precisión) no cuentan: si no, la planta saltaría al
@@ -2290,13 +2324,19 @@ export function montarPlanta(cont: HTMLElement) {
     const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
     const zN = nivel?.cota ?? 0;
     const w = svg.clientWidth || 600, h = svg.clientHeight || 500;
-    const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
+    let ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
+    // mientras se dibuja un encadenado la vista no salta: cada muro nuevo agrandaba el dibujo y la planta se volvía a
+    // encuadrar, así el último punto se corría de abajo del dedo (y tocarlo para terminar hacía otro muro)
+    if (modo === 'dibujar' && inicio) { if (extFija === null) extFija = ext; ext = extFija; } else extFija = null;
     // con un cuadro flotante abierto a la derecha (calar, insertar, silueta) la planta se encuadra en lo que queda
     // libre a su izquierda: si no, el cuadro tapaba justo los muros de ese lado
     // las cartas abiertas que el usuario no movió se reservan su costado (izquierdo o derecho, según dónde estén)
     const { izq: reservaI, der: reservaD } = w > 640 ? reservasCartas(w) : { izq: 0, der: 0 }, wUtil = w - reservaI - reservaD;
-    escala = (Math.min(wUtil, h) / ext) * zoom;
-    ox = reservaI + wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
+    // (y arriba, lo que tapan la tira de pasos y la barra de herramientas)
+    const reservaA = reservaArriba(h), hUtil = h - reservaA - reservaAbajo(h);
+    escala = (Math.min(wUtil, hUtil) / ext) * zoom;
+    cyVista = reservaA + hUtil / 2;
+    ox = reservaI + wUtil / 2 - centroVista.x * escala; oy = cyVista + centroVista.y * escala;
     // (el centro de la vista en pantalla queda en wUtilVista / 2: lo usan el zoom y el pellizco)
     wUtilVista = 2 * reservaI + wUtil;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -2898,7 +2938,7 @@ export function montarPlanta(cont: HTMLElement) {
     const z2 = Math.max(ZMIN, Math.min(ZMAX, zoom * f));
     const s2 = escala * (z2 / zoom);
     zoom = z2;
-    centroVista = { x: q.x - (sx - w / 2) / s2, y: q.y + (sy - h / 2) / s2 };
+    centroVista = { x: q.x - (sx - w / 2) / s2, y: q.y + (sy - (cyVista || h / 2)) / s2 };
     dibujar();
   };
   const encuadrar = () => { zoom = 1; centroVista = { x: 0, y: 0 }; dibujar(); };
@@ -3029,9 +3069,9 @@ export function montarPlanta(cont: HTMLElement) {
       const base = escala / zoom;                                     // escala con zoom 1
       const z2 = Math.max(ZMIN, Math.min(ZMAX, pellizco.z * Math.hypot(a.x - b.x, a.y - b.y) / pellizco.d));
       const s0 = base * pellizco.z, s2 = base * z2;
-      const q = { x: pellizco.c.x + (pellizco.mx - w / 2) / s0, y: pellizco.c.y - (pellizco.my - h / 2) / s0 };   // punto bajo el centro del pellizco
+      const q = { x: pellizco.c.x + (pellizco.mx - w / 2) / s0, y: pellizco.c.y - (pellizco.my - (cyVista || h / 2)) / s0 };   // punto bajo el centro del pellizco
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      zoom = z2; centroVista = { x: q.x - (mx - w / 2) / s2, y: q.y + (my - h / 2) / s2 };
+      zoom = z2; centroVista = { x: q.x - (mx - w / 2) / s2, y: q.y + (my - (cyVista || h / 2)) / s2 };
       pedirDibujo();
       return;
     }
@@ -3053,7 +3093,7 @@ export function montarPlanta(cont: HTMLElement) {
   svg.addEventListener('pointercancel', finPuntero, true);
   // botones de la vista
   const zoomBar = document.createElement('div'); zoomBar.className = 'zoom-planta';
-  ([['+', 'Acercar', () => acercarEn(1.4, (wUtilVista || svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['−', 'Alejar', () => acercarEn(1 / 1.4, (wUtilVista || svg.clientWidth || 600) / 2, (svg.clientHeight || 500) / 2)], ['⤢', 'Encuadrar: toda la planta', encuadrar]] as const).forEach(([t, a, f]) => {
+  ([['+', 'Acercar', () => acercarEn(1.4, (wUtilVista || svg.clientWidth || 600) / 2, cyVista || (svg.clientHeight || 500) / 2)], ['−', 'Alejar', () => acercarEn(1 / 1.4, (wUtilVista || svg.clientWidth || 600) / 2, cyVista || (svg.clientHeight || 500) / 2)], ['⤢', 'Encuadrar: toda la planta', encuadrar]] as const).forEach(([t, a, f]) => {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = `${a} (también: rueda del mouse o pellizcar; arrastrar el fondo para desplazar)`; b.setAttribute('aria-label', a); b.addEventListener('click', f); zoomBar.append(b);
   });
   cont.appendChild(zoomBar);
@@ -3095,10 +3135,13 @@ export function montarPlanta(cont: HTMLElement) {
       const bb = barra.getBoundingClientRect(), abajo = bb.bottom - R.top + 6;
       const bajar = (e: HTMLElement, base: number) => { e.style.top = ''; if (!e.classList.contains('movido') && e.getBoundingClientRect().top - R.top < abajo && e.getBoundingClientRect().left < bb.right) e.style.top = `${Math.max(base, abajo)}px`; };
       bajar(dock, 44); bajar(selNivel, 46);
+      // las cartas que aparecen solas arriba a la derecha (precisión, medidas, insertar, calar, avisos): si la barra va en
+      // dos líneas, quedaban encima de sus botones (tapaban «Colocar» y «Calar»)
+      [panelMed, panelIns, panelCal, panelAv].forEach(e => { if (!e.hidden && e.parentElement === cont && getComputedStyle(e).position === 'absolute') bajar(e, 84); });
       const sn = selNivel.getBoundingClientRect(); bAvisos.style.top = `${Math.round(sn.bottom - R.top + 6)}px`;
     }
     // si cambió lo que tapan las cartas (se abrió, se cerró, se plegó o se agrandó una), la planta se vuelve a encuadrar
-    const w0 = svg.clientWidth || 600, rs = w0 > 640 ? reservasCartas(w0) : { izq: 0, der: 0 }, firma = `${Math.round(rs.izq)}|${Math.round(rs.der)}`;
+    const w0 = svg.clientWidth || 600, rs = w0 > 640 ? reservasCartas(w0) : { izq: 0, der: 0 }, firma = `${Math.round(rs.izq)}|${Math.round(rs.der)}|${Math.round(reservaArriba(svg.clientHeight || 500))}|${Math.round(reservaAbajo(svg.clientHeight || 500))}`;
     if (firma !== firmaReservas) { firmaReservas = firma; pedirDibujo(); }
     // con la herramienta «Mover», la indicación es la de la carta abierta del costado (colocar, cotas o guías)
     if (modo === 'mover' || modo === 'lazo') {
@@ -3138,6 +3181,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (visible(panelPrec) && getComputedStyle(panelPrec).position === 'absolute') {
       panelPrec.style.top = ''; panelPrec.style.maxHeight = '';
       let r = panelPrec.getBoundingClientRect();
+      // (debajo de la barra de herramientas: en dos líneas, la carta quedaba encima de «Colocar» y «Calar»)
+      { const bb = barra.getBoundingClientRect(); if (solapan(r, bb)) { panelPrec.style.top = `${Math.ceil(bb.bottom - R.top + 6)}px`; r = panelPrec.getBoundingClientRect(); } }
       if (visible(selNivel)) { const s = selNivel.getBoundingClientRect(); if (solapan(r, s)) { panelPrec.style.top = `${Math.ceil(s.bottom - R.top + 6)}px`; r = panelPrec.getBoundingClientRect(); } }
       const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top).reduce((m, p) => Math.min(m, p.top), R.bottom);
       if (r.bottom > abajo - 6) { panelPrec.style.maxHeight = `${Math.max(80, Math.floor(abajo - 6 - r.top))}px`; panelPrec.style.overflowY = 'auto'; }

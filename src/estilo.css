@@ -2182,3 +2182,8 @@ button.hilo-etapa:hover { background: none; text-decoration: underline; }
 body.sin-tutorial .hilo, body.sin-tutorial .kpi-origen, body.sin-tutorial .b-recorrer,
 body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tutorial details.como-leer { display: none !important; }
 .b-tutorial[aria-pressed="true"] { background: var(--tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+/* pantallas táctiles: los botones chicos de la planta (plegar los pasos, el chip de avisos y cerrar la indicación), de 32 px para el dedo */
+@media (pointer: coarse) {
+  .pasos-plegar, .chip-avisos { min-height: 32px; min-width: 32px; }
+  .indicacion-planta > button { min-height: 32px !important; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
+}
