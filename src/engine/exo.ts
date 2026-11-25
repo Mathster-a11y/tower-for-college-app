@@ -558,31 +558,49 @@ export const losaPorPiso = (q: number, f: number, B: number, L: number) => q * M
 // ------------------------------------------------------------------ álgebra densa
 type Mat = number[][];
 const ceros = (r: number, c: number): Mat => Array.from({ length: r }, () => new Array<number>(c).fill(0));
-/** resuelve A·X = B (B con varias columnas) por eliminación de Gauss con pivoteo parcial; A y B se copian */
-function resolver(A0: Mat, B0: Mat): Mat {
-  const n = A0.length, A = A0.map(f => [...f]), B = B0.map(f => [...f]), m = B[0]?.length ?? 0;
+/**
+ * Factorización LU con pivoteo parcial (PA = LU), una sola vez por matriz: después se resuelve con cualquier B sin volver
+ * a eliminar. La matriz de un exo es rala (cada nudo toca a sus vecinos): la eliminación solo recorre los términos no nulos
+ * de la fila pivote, y las sustituciones, los de cada columna de L y cada fila de U.
+ */
+interface LU { A: Mat; perm: number[]; colL: number[][]; filaU: number[][]; n: number }
+function factorizar(A0: Mat): LU {
+  const n = A0.length, A = A0.map(f => [...f]), perm = Array.from({ length: n }, (_, i) => i);
   // pivote nulo respecto de la escala de la matriz (un mecanismo deja un resto de redondeo, no un cero exacto)
   const escala = A0.reduce((mx, f, i) => Math.max(mx, Math.abs(f[i])), 0), cero = Math.max(1e-14, escala * 1e-13);
   for (let c = 0; c < n; c++) {
     let p = c;
     for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
     if (Math.abs(A[p][c]) < cero) throw new Error('El exoesqueleto es un mecanismo (falta una barra para que sea estable).');
-    [A[c], A[p]] = [A[p], A[c]]; [B[c], B[p]] = [B[p], B[c]];
+    if (p !== c) { [A[c], A[p]] = [A[p], A[c]]; [perm[c], perm[p]] = [perm[p], perm[c]]; }
+    const fc = A[c], piv = fc[c], nz: number[] = [];
+    for (let k = c + 1; k < n; k++) if (fc[k] !== 0) nz.push(k);
     for (let r = c + 1; r < n; r++) {
-      const f = A[r][c] / A[c][c];
-      if (f === 0) continue;
-      for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
-      for (let k = 0; k < m; k++) B[r][k] -= f * B[c][k];
+      const fr = A[r], v = fr[c];
+      if (v === 0) continue;
+      const f = v / piv;
+      fr[c] = f;                                          // multiplicador (parte L)
+      for (const k of nz) fr[k] -= f * fc[k];
     }
   }
-  const X = ceros(n, m);
-  for (let r = n - 1; r >= 0; r--) for (let k = 0; k < m; k++) {
-    let s = B[r][k];
-    for (let c = r + 1; c < n; c++) s -= A[r][c] * X[c][k];
-    X[r][k] = s / A[r][r];
+  const colL: number[][] = Array.from({ length: n }, () => []), filaU: number[][] = Array.from({ length: n }, () => []);
+  for (let r = 0; r < n; r++) { const fr = A[r]; for (let c = 0; c < n; c++) if (fr[c] !== 0) (c < r ? colL[c] : c > r ? filaU[r] : null)?.push(c < r ? r : c); }
+  return { A, perm, colL, filaU, n };
+}
+/** resuelve A·X = B con la factorización de A (B con varias columnas; no se modifica) */
+function resolverLU(lu: LU, B0: Mat): Mat {
+  const { A, perm, colL, filaU, n } = lu, m = B0[0]?.length ?? 0;
+  const X = perm.map(i => [...B0[i]]);
+  for (let c = 0; c < n; c++) { const xc = X[c]; for (const r of colL[c]) { const f = A[r][c], xr = X[r]; for (let k = 0; k < m; k++) xr[k] -= f * xc[k]; } }
+  for (let r = n - 1; r >= 0; r--) {
+    const xr = X[r], fr = A[r];
+    for (const c of filaU[r]) { const f = fr[c], xc = X[c]; for (let k = 0; k < m; k++) xr[k] -= f * xc[k]; }
+    const d = fr[r]; for (let k = 0; k < m; k++) xr[k] /= d;
   }
   return X;
 }
+/** resuelve A·X = B (B con varias columnas) por eliminación de Gauss con pivoteo parcial; A y B se copian */
+function resolver(A0: Mat, B0: Mat): Mat { return resolverLU(factorizar(A0), B0); }
 
 /** barra en locales con sus articulaciones condensadas y sus cargas como fuerzas nodales equivalentes */
 interface BarraLocal { K: Mat; T: Mat; k: Mat; P: number[]; L: number; c: number; s: number; qa: number; qb: number; pa: number; pb: number }
@@ -624,14 +642,15 @@ function barraLocal(E: number, br: Barra, x1: number, z1: number, x2: number, z2
  * es un piso (master) o un gdl propio (esclavo), o si está fijo. Devuelve K condensada (n × n) y lo necesario para
  * recuperar los esclavos.
  */
-interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number }
+interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number; lu: LU | null }
 function condensar(Kg: Mat, master: number[], esclavos: number[]): Condensada {
   const Kmm = master.map(i => master.map(j => Kg[i][j])), Kms = master.map(i => esclavos.map(j => Kg[i][j]));
   const Ksm = esclavos.map(i => master.map(j => Kg[i][j])), Kss = esclavos.map(i => esclavos.map(j => Kg[i][j]));
-  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0 };
-  const X = resolver(Kss, Ksm);                        // Kss⁻¹·Ksm
-  const K = Kmm.map((f, i) => f.map((v, j) => v - Kms[i].reduce((s, kv, p) => s + kv * X[p][j], 0)));
-  return { K, Kss, Ksm, nEsc: esclavos.length };
+  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0, lu: null };
+  const lu = factorizar(Kss);
+  const X = resolverLU(lu, Ksm);                       // Kss⁻¹·Ksm
+  const K = Kmm.map((f, i) => f.map((v, j) => { let s = v; const km = Kms[i]; for (let p = 0; p < km.length; p++) if (km[p] !== 0) s -= km[p] * X[p][j]; return s; }));
+  return { K, Kss, Ksm, nEsc: esclavos.length, lu };
 }
 
 /** cara armada y condensada a los pisos 1..n (el piso 0 es la base) */
@@ -715,14 +734,14 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
   const c = condensar(Kg, master, esc);
   const Fs = esc.map(i => [Fg[i]]);
-  const KssFs = c.nEsc ? resolver(c.Kss, Fs).map(f => f[0]) : [];
+  const KssFs = c.lu ? resolverLU(c.lu, Fs).map(f => f[0]) : [];
   const Fc = master.map(i => Fg[i] - esc.reduce((sm, j, p) => sm + Kg[i][j] * KssFs[p], 0));
   const desplaz = (u: number[]) => {
     const d = new Array<number>(N).fill(0);
     u.forEach((v, i) => (d[i] = v));
     if (c.nEsc) {
       const rhs = c.Ksm.map((f, i) => [Fg[esc[i]] - f.reduce((s, kv, j) => s + kv * u[j], 0)]);
-      const x = resolver(c.Kss, rhs);
+      const x = resolverLU(c.lu!, rhs);
       x.forEach((f, i) => (d[nPisos + i] = f[0]));
     }
     return d;

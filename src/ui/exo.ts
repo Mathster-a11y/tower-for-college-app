@@ -153,8 +153,29 @@ export function entradaExo(dir: 'A' | 'B', def: ExoDef): EntradaExo | null {
   return d.entrada;
 }
 
-export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): (DatosExo & { entrada: EntradaExo }) | null {
+type DatosConEntrada = DatosExo & { entrada: EntradaExo };
+/**
+ * memoria del exo por cálculo: el riel, el avance, el Resumen y el panel lo piden en cada redibujo y con una torre
+ * grande (Citicorp, CIRSOC) cada pedido tarda segundos. Se guarda por cálculo (cambia al recalcular), por
+ * viento y por la definición del exo (que se puede estar editando antes de recalcular).
+ */
+const memoDatos = new WeakMap<object, Map<string, { d: DatosConEntrada | null; error: string }>>();
+const memo301 = new WeakMap<object, ReturnType<typeof cirsoc301>>();
+export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): DatosConEntrada | null {
   if (!def) return null;
+  // la clave es la asignación del cálculo: se crea en cada cálculo y sigue igual cuando al cálculo se le suman controles
+  const calc = estado.calculo?.asig as object | undefined;
+  if (!calc) return datosExoSinMemoria(dir, def);
+  let m = memoDatos.get(calc);
+  if (!m) { m = new Map(); memoDatos.set(calc, m); }
+  const clave = `${dir}|${estado.config.metodo}|${JSON.stringify(def)}`;
+  const hay = m.get(clave);
+  if (hay) { ultimoError = hay.error; return hay.d; }
+  const d = datosExoSinMemoria(dir, def);
+  m.set(clave, { d, error: ultimoError });
+  return d;
+}
+function datosExoSinMemoria(dir: 'A' | 'B', def: ExoDef): DatosConEntrada | null {
   ultimoError = '';
   try {
     const { asig } = estado.calculo, p = estado.proyecto;
@@ -206,7 +227,14 @@ export function vientoReglamento(): Viento102 | null {
   return m === 'cirsoc' || m === 'fem' ? estado.calculo.fem?.viento ?? estado.calculo.cirsoc?.viento ?? null : null;
 }
 /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
-export function verif301(d: DatosExo & { entrada: EntradaExo }) {
+export function verif301(d: DatosConEntrada) {
+  const hay = memo301.get(d);
+  if (hay) return hay;
+  const r = verif301SinMemoria(d);
+  memo301.set(d, r);
+  return r;
+}
+function verif301SinMemoria(d: DatosConEntrada) {
   const en = d.entrada, reglamento = !!vientoReglamento();
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
