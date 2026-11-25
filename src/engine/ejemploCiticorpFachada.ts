@@ -68,6 +68,9 @@ export function ejemploCiticorpFachada(): Proyecto {
   // ------------------------------------------------ exoesqueleto: 0,50 m adentro de la piel y la corona por barras
   const exo = p.exo!;
   exo.separacion = sep;
+  // las losas apoyan en el exo (las del Citicorp estructural: una franja de 6,4 m junto a cada fachada, 0,45 t/m² de
+  // peso y 0,25 t/m² de sobrecarga): el exo lleva la mitad de cada losa, además del viento
+  exo.losas = { franja: 6.4, qD: 0.45, qL: 0.25 };
   // los chevrones hasta el piso 56; arriba, la corona dibujada barra por barra (zona libre)
   // debajo del cajón de transición no hay esquinas ni diagonales: la plaza queda libre y solo baja la supercolumna de
   // cada cara (a media cara); los chevrones van del cajón al piso 56 y la corona, arriba, barra por barra
@@ -92,7 +95,7 @@ export function ejemploCiticorpFachada(): Proyecto {
   }
   // las supercolumnas de las caras perpendiculares trabajan como alas de esta cara (en sus bordes, media sección): de PB
   // al cajón la supercolumna; arriba, su mástil
-  const supercol = { b: 7.3, e: 0.06 };
+  const supercol = { b: 7.3, e: 0.08 };   // con las losas apoyadas en el exo (ver la nota de la llegada al suelo)
   exo.mastilBase = { hasta: zBase, sec: supercol };
   const mastil = exo.mastil ?? exo.columna;
   barra('columna', [-S, 0], [-S, zBase], { sec: supercol, ala: true }); barra('columna', [S, 0], [S, zBase], { sec: supercol, ala: true });
@@ -168,7 +171,7 @@ export function ejemploCiticorpFachada(): Proyecto {
     'Niveles: el techo del cajón de la corona es un nivel (244,62 m); para no pasar de los 49 niveles de la planilla, el 11º y el 12º van juntos. El 10º (42,88 m) es el techo del cajón de transición.',
     'Piel: sin carpintería en la plaza; «Por piso» plana del cajón de transición (34,75 m) al techo del cajón de la corona, en el borde de las losas; la corona es una «Envolvente» con su propio plano a 45° (las losas no se recortan). La losa de la azotea es la franja plana del norte.',
     'Estructura siempre adentro de la piel: el exoesqueleto va 0,50 m hacia adentro del borde de las losas (en la obra, los chevrones van detrás del muro cortina; supuesto el valor).',
-    'Llegada al suelo (plano de elevación): la plaza queda libre y en cada cara baja solo la supercolumna reticulada a media cara (24 ft de ancho: dos cordones con diagonales en zigzag; secciones equivalentes supuestas). Encima, el cajón de transición (pisos 8 y 9) en todo el ancho, con diagonales desde las esquinas de abajo y un zigzag que lleva la carga al centro (la V del centro, que recibe el mástil, con sección de transferencia de 1,40 m, supuesta). El mástil termina en el techo del cajón. El primer módulo es de 6 pisos (10 → 16): sus diagonales son una recta de cada esquina a un cuarto de la mitad sobre el cajón, que corta la columna del cuarto en el piso 12; las columnas de esquina, como en todos los módulos, terminan un piso antes del nudo de arriba (cada chevron se une al de arriba solo por el mástil); desde el piso 16, los chevrones de 8 pisos al mástil. Las supercolumnas de las caras perpendiculares trabajan como alas de cada cara (como el mástil en la ficha E). Sin esquinas abajo, el vuelco baja todo por las supercolumnas: el cajón de acero equivalente pasa de 5 a 6 cm de pared (supuesto; con 5 cm la de sotavento pasa la tensión admisible en un 5 %).',
+    'Llegada al suelo (plano de elevación): la plaza queda libre y en cada cara baja solo la supercolumna reticulada a media cara (24 ft de ancho: dos cordones con diagonales en zigzag; secciones equivalentes supuestas). Encima, el cajón de transición (pisos 8 y 9) en todo el ancho, con diagonales desde las esquinas de abajo y un zigzag que lleva la carga al centro (la V del centro, que recibe el mástil, con sección de transferencia de 1,40 m, supuesta). El mástil termina en el techo del cajón. El primer módulo es de 6 pisos (10 → 16): sus diagonales son una recta de cada esquina a un cuarto de la mitad sobre el cajón, que corta la columna del cuarto en el piso 12; las columnas de esquina, como en todos los módulos, terminan un piso antes del nudo de arriba (cada chevron se une al de arriba solo por el mástil); desde el piso 16, los chevrones de 8 pisos al mástil. Las supercolumnas de las caras perpendiculares trabajan como alas de cada cara (como el mástil en la ficha E). Sin esquinas abajo, el vuelco baja todo por las supercolumnas: el cajón de acero equivalente tiene 8 cm de pared (supuesto: con las losas apoyadas en el exo, la de sotavento, que acá trabaja como ala de la cara y recibe la esquina del cajón de transición, con 6,5 cm pasa la tensión admisible del curso en un 14 % y con 7,5 cm en un 2 %).',
     'Estructura de la corona (zona libre, barra por barra): columnas del cajón en las cuatro caras; en las caras este y oeste, un reticulado bajo la pendiente con el cordón 0,50 m adentro de la piel, montantes en las líneas de los nudos de abajo, un tirante a media altura y diagonales; la cara norte sube hasta la azotea con una V invertida y la sur termina en el cajón (barras de una sola cara). Las líneas de las crujías del plano no coinciden con los nudos del último módulo: se usaron los nudos (supuesto).',
     'Panelería: paños de 3,66 m (12 ft; Wikipedia: segmentos de 12 × 9 ft de vidrio y aluminio, dato de un resumen de la página) repartidos parejo, y antepecho de aluminio de 2,0 m (supuesto). La cara inclinada de la corona, opaca (revestida en aluminio, supuesto).',
   ];

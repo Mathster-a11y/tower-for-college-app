@@ -119,4 +119,17 @@ describe('Citicorp: los chevrones se unen solo por el mástil', () => {
       }
     });
   });
+  it('las losas apoyan en el exo: lleva su franja de cada losa además del viento', async () => {
+    const p = ejemploCiticorpFachada(), def = p.exo!;
+    expect(def.losas?.franja).toBeGreaterThan(0);
+    const { calcularExo } = await import('./exo');
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
+    const ancho = 47.85 + 2 * def.separacion, S = ancho / 2;
+    // sin viento: con las losas, las columnas bajan más carga que con el peso propio solo
+    const W = zs.map(() => 0), EJ = () => 1e3;
+    const conLosas = calcularExo(paraViento(def, 'A'), zs, W, EJ, ancho, [-S, S], 3e6);
+    const sinLosas = calcularExo({ ...paraViento(def, 'A'), losas: undefined }, zs, W, EJ, ancho, [-S, S], 3e6);
+    const reaccion = (r: typeof conLosas) => r.caras.reduce((s, c) => s + c.reacciones.reduce((q, x) => q + x.V, 0), 0);
+    expect(Math.abs(reaccion(conLosas))).toBeGreaterThan(Math.abs(reaccion(sinLosas)) * 1.5);
+  });
 });
