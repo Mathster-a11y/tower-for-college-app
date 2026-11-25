@@ -409,14 +409,16 @@ export function ejemploCiticorp(): Proyecto {
   // la mitad del peso de cada losa (47,85² = 2290 m²) baja por el núcleo y la otra mitad por las cuatro supercolumnas
   const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
     ({ id, dir: 'Y', x, y, largo: 7.3, ladoY: 7.3, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 286, piezaA, pegadoA: '', piezaB, pegadoB: '', zHasta: base });
-  const cortes = [8, 16, 24, 32, 40, 48, 56].map(z);
+  // el último módulo sube hasta la cima: la corona inclinada es estructura (si no, queda colgada de columnas sueltas)
+  const cortes = [...[8, 16, 24, 32, 40, 48, 56].map(z), 278.6];
   return {
     version: 1,
     nombre: 'Citicorp Center (Nueva York, 1977) · modelo aproximado',
     alumno: '',
     sitio: { V: 49, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: lado, a1: lado },
+    // sobre la roca de Manhattan (esquisto): código de edificación de Nueva York, roca intermedia, 20 t/ft² ≈ 19,5 kg/cm²
+    fundacion: { b1: lado, a1: lado, sigmaAdm: 19.5 },
     hormigon: 'H40',
     muros: [
       // núcleo octogonal de 63 × 72 ft (19,2 × 21,9 m) como un tubo rectangular; solo gravedad (sin pieza)
@@ -448,6 +450,7 @@ export function ejemploCiticorp(): Proyecto {
         '1978: uniones abulonadas; con el viento a 45° no alcanzaban y se soldaron chapas de 2 in en más de 200 uniones (Wikipedia; NIST 2019 lo revisó). Diagonales articuladas = abulonadas.',
         'Viento: CIRSOC 102 con V = 49 m/s y exposición de centro de ciudad (supuesto).',
         'Flecha objetivo h/450, no la h/500 del curso: con la geometría de la obra (las esquinas no llegan al tope de cada módulo) y los tubos del catálogo la azotea se corre unos h/480. El edificio real tiene además el amortiguador de 400 t para el movimiento. Con la marca de «esquina cortada» apagada, la torre llega a h/500.',
+        'Criterio CIRSOC: el último módulo del exo sube hasta la cima (la corona inclinada es estructura; sin ella, la corona quedaba en columnas sueltas y un piso se corría 1/25). Con eso el exo dimensionado pesa unas 46 000 t y la deriva de servicio de la azotea da unos 240 mm (límite 557 mm). Fundación sobre la roca de Manhattan: código de Nueva York, roca intermedia, 20 t/ft² ≈ 19,5 kg/cm².',
       ],
     },
   };

@@ -95,13 +95,15 @@ export function ejemploHearst(): Proyecto {
     alumno: '',
     sitio: { V: 49, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: B + 4, a1: L + 4 },
+    // sobre la roca de Manhattan: código de Nueva York, roca intermedia, 20 t/ft² ≈ 19,5 kg/cm²
+    fundacion: { b1: B + 4, a1: L + 4, sigmaAdm: 19.5 },
     hormigon: 'H40',
     // núcleo al oeste (supuesto: medidas y que también toma viento); corrido 12 m del centro → torsión
-    muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700, 'Núcleo', 'Núcleo B')],
+    // núcleo corrido al oeste, solo de gravedad: el viento y la torsión los toma el diagrid (un tubo cerrado)
+    muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700)],
     exo: {
       tipo: 'A', separacion: 0, modulo: 8, pasoH: r2(40 * FT), cortes,
-      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.8, e: 0.04 }, viga: { b: 0.15, e: 0.008 },
+      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 1.2, e: 0.07 }, viga: { b: 0.15, e: 0.008 },
       losas: { franja: 5.5, qD: 0.45, qL: 0.25 }, arriostradas: true,
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
@@ -109,10 +111,12 @@ export function ejemploHearst(): Proyecto {
         'Diagrid arriba del piso 10, triángulos de 4 pisos (52 ft), barras de 57 ft y nudos cada 40 ft (12,2 m): Wikipedia y AISC. Por eso la cara de 160 ft tiene 4 rombos y la de 120 ft, 3.',
         'Entrepiso de 182 m / 45 = 4,04 m (el real es de 13′6″ = 4,11 m en los pisos tipo; supuesto para que la azotea quede a 182 m).',
         'Debajo del piso 10 el diagrid baja por la base histórica hasta PB como un rombo alto (supuesto: en la obra son megacolumnas en el atrio).',
-        'Núcleo al oeste, corrido del centro (Wikipedia): genera torsión. Sus medidas y que también tome viento son supuestos.',
+        'Núcleo al oeste, corrido del centro (Wikipedia). Acá es solo de gravedad: el viento y la torsión los toma el diagrid, que es un tubo cerrado (con el núcleo como única pieza de viento, toda la torsión del núcleo corrido caía sobre él y no verificaba). Sus medidas son supuestas.',
         '10 480 t cortas de acero en total (Wikipedia; unas 9500 t). Barras de perfiles laminados de ala ancha con nudos abulonados (AISC, Modern Steel Construction); sus medidas no están publicadas. Acá, las del botón «Dimensionar» con las losas apoyadas y arriostrando las diagonales: diagonales de 0,80 m × 40 mm (el diagrid no tiene columnas ni vigas intermedias: quedan en el tubo más chico). El diagrid de la app pesa unas 6700 t (sin el arriostramiento hacían falta diagonales de 0,90 m y unas 7500 t).',
         'Las diagonales están arriostradas por las losas en cada piso entre nudos (AISC): en la app cada diagonal se ata a la losa en los tres pisos que cruza entre nudos, recibe ahí la carga de la losa y pandea de piso a piso (4 m de alto, unos 4,4 m de barra) en lugar de nudo a nudo.',
         'Las losas apoyan en el exo: una franja de 5,5 m junto a cada fachada: el diagrid lleva la mitad de cada losa (48,8 × 36,6 m), el núcleo la otra mitad, con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
+        'Criterio CIRSOC (102-25, 301/302 y 201): con el diagrid tomando todo el viento, las diagonales pasan a 1,20 m × 70 mm y el diagrid de la app pesa unas 17 300 t, casi el doble del acero real de toda la torre (unas 9500 t): tubos cuadrados de catálogo en lugar de perfiles armados, el viento del 102-25 y sin el aporte del núcleo. Deriva de servicio de la azotea: unos 160 mm (límite 364 mm).',
+        'Fundación sobre la roca de Manhattan: tensión admisible del código de edificación de Nueva York para roca intermedia, 20 t/ft² ≈ 19,5 kg/cm² (la roca de mejor calidad admite 40 a 60 t/ft²); la app no calcula la fundación real.',
       ],
     },
   };

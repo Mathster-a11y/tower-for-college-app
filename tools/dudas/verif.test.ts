@@ -14,6 +14,6 @@ it.skipIf(!process.env.DUDAS)('verifican', () => {
     const cs = estado.calculo.controles;
     const mal = cs.filter(x => x.estado === 'no verifica'), at = cs.filter(x => x.estado === 'atención');
     console.log(`${k} ${m}: ${cs.length} controles · no verifican ${mal.length} · atención ${at.length}${estado.calculo.error ? ' ERROR ' + estado.calculo.error : ''}`);
-    mal.slice(0, 10).forEach(x => console.log('   ✗', x.grupo, '|', x.nombre, '|', typeof x.guia === 'number' ? x.guia.toFixed(3) : x.guia, '|', (x.nota ?? '').slice(0, 140)));
+    mal.slice(0, 12).forEach(x => console.log('   ✗', x.grupo, '|', x.nombre, '|', typeof x.guia === 'number' ? x.guia.toFixed(3) : x.guia, '|', (x.nota ?? '').slice(0, +(process.env.LARGO ?? 140))));
   }
 });

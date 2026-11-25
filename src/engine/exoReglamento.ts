@@ -53,7 +53,8 @@ export function exoConViento(p: Proyecto, valores: PlanillaRes, piezas: PiezaEqu
     // la base de los tabiques: con interacción tabique-exo el corte puede repartirse distinto que el momento
     const fM = Math.abs(r.Msin[0]) > 1e-9 ? Math.abs(r.Mtab[0] / r.Msin[0]) : 1;
     const fV = Math.abs(r.Vsin[0]) > 1e-9 ? Math.abs(r.Vtab[0] / r.Vsin[0]) : 1;
-    return { r, z: zs.map(z => z - zPB), h: zs[zs.length - 1] - zPB, fM, fV };
+    // los corrimientos van con las cotas del resultado (calcularExo puede agregar nudos, como el arranque del mástil)
+    return { r, z: r.zs.map(z => z - zPB), h: r.zs[r.zs.length - 1] - zPB, fM, fV };
   };
   try {
     const a = uno('A'), b = uno('B');

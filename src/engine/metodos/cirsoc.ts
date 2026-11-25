@@ -231,7 +231,7 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
     const W = d102.QPB;
     const fem = derivaFem?.[dir], ex = exo?.[dir];
     const def = ex
-      ? { puntos: ex.z.map((z, i) => ({ z, d: ex.r.u[i], nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: ex.r.u[ex.r.u.length - 1], h: ex.h }
+      ? { puntos: ex.z.map((z, i) => ({ z, d: i === 0 ? 0 : ex.r.u[i - 1], nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: ex.r.u[ex.r.u.length - 1], h: ex.h }
       : fem
       ? { puntos: fem.z.map((z, i) => ({ z, d: fem.d[i] / w.servicio.relacion, nivel: p.niveles.find(n => Math.abs(n.cota - zPB - z) < 1e-6)?.nombre ?? 'PB' })), dTop: fem.d[fem.d.length - 1] / w.servicio.relacion, h: fem.h }
       : deformada(alt, W, E, J);
