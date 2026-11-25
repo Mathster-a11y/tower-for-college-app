@@ -564,7 +564,7 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   const Bp = { x: X(v.e), y: Y(zF) };
   flecha(g, I.x, I.y, Bp.x, Bp.y, 'resultante-r', 2);
   linea(g, Bp.x, Bp.y, Bp.x + (Bp.x - I.x) * 0.02, Bp.y + 14, 'ct-r-punteada');
-  txt(g, (I.x + Bp.x) / 2 + 6, (I.y + Bp.y) / 2, 'R = W + P', 'd-valor ct-rojo');
+  txt(g, (I.x + Bp.x) / 2 + 6, (I.y + Bp.y) / 2, 'R = W + P', 'd-valor');
   // base: centro, núcleo central ±b'/6, e, b'/2 y el punto de giro
   const ok = Math.abs(v.e) <= v.nucleo;
   g.append(el('rect', { x: X(-v.nucleo), y: Y(zF) - 2, width: 2 * v.nucleo * k, height: 9, class: `ct-nucleo ${ok ? 'ok' : 'mal'}` }));
@@ -579,8 +579,8 @@ function vuelcoD(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // momentos alrededor del punto de giro: volcador (horario) y equilibrante (antihorario)
   arco(g, giro.x, giro.y, 44, Math.PI * 0.97, Math.PI * 0.42, 'volcador');
   arco(g, giro.x, giro.y, 70, Math.PI * 0.46, Math.PI * 0.95, 'equilibrante');
-  txt(g, giro.x + 10, giro.y + 30, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-rojo');
-  txt(g, giro.x + 10, giro.y + 44, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-amarillo');
+  txt(g, giro.x + 10, giro.y + 30, `Mv = ${fmt(v.Mv, 0)} tm volcador`, 'd-valor ct-carga');
+  txt(g, giro.x + 10, giro.y + 44, `Me = ${fmt(v.Me, 0)} tm equilibrante`, 'd-valor ct-peso');
   // tensiones en el suelo (compresión hacia abajo): barlovento Tmín, sotavento Tmáx
   const y0 = Y(zF) + 104, Tm = Math.max(Math.abs(v.Tmax), Math.abs(v.Tmin), 1e-9), kt = 44 / Tm;
   const pa = { x: X(-v.bB / 2), y: y0 - v.Tmin * kt }, pb = { x: X(v.bB / 2), y: y0 - v.Tmax * kt };

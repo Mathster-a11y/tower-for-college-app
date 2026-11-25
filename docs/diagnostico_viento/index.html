@@ -183,7 +183,7 @@
 <div class="caja"><b>Recomendación:</b> 1 + 2 primero (calidad en esquinas y curvas casi sin costo), después 3 (la información que más importa, en todas las computadoras), después 4 + 5 (corridas largas, archivo y datos), y después 6 y 7.</div>
 
 <h2>4 bis. Resultados de las propuestas 1 y 2 <span class="tag verde">implementadas</span></h2>
-<p><b>Qué se hizo.</b> En el 2D y en el 3D: rebote interpolado de Bouzidi (cuadrático; lineal o simple donde falta aire detrás) con la posición exacta de la pared en cada enlace, sacada del contorno real de cada piso, y colisión TRT (Λ = 3/16). En el 3D también la azotea y los retiros en su cota. En el 2D, canal ancho de 12 anchos (bloqueo ≈ 8 %). Las dos cosas son opciones en la app («Paredes: exactas / en escalera» y «Canal: ancho / angosto»), para poder comparar.</p>
+<p><b>Qué se hizo.</b> En el 2D y en el 3D: rebote interpolado de Bouzidi (lineal; el cuadrático quedó como opción porque se volvía inestable con la torre de 34 pisos en el 3D liviano y con edificios vecinos en el 2D) con la posición exacta de la pared en cada enlace, sacada del contorno real de cada piso, y colisión TRT (Λ = 3/16). En el 3D también la azotea y los retiros en su cota. En el 2D, canal ancho de 12 anchos (bloqueo ≈ 8 %). Las dos cosas son opciones en la app («Paredes: exactas / en escalera» y «Canal: ancho / angosto»), para poder comparar.</p>
 <h3>Pruebas</h3>
 <ul>
   <li><b>Canal con paredes que caen entre celdas</b> (Poiseuille): error del perfil de 8,8 % en escalera → <b>0,3 %</b> con paredes exactas.</li>
@@ -203,19 +203,20 @@
 <p>A Re = 100 todas las variantes quedan entre 5 y 10 % por encima de la referencia, lo esperable con un canal que bloquea 8 % (las referencias usan ≈ 5 % o menos) y la entrada a 5 diámetros. Las paredes exactas acercan el Cd del cilindro; TRT el del cuadrado.</p>
 <h3>Las cinco formas, a Re ≈ 1 000 (20 celdas por ancho, corte de 10º)</h3>
 <table>
-<tr><th>Planta</th><th class="n">Cd antes<br><small>escalera · BGK · angosto</small></th><th class="n">Cd<br><small>escalera · BGK · ancho</small></th><th class="n">Cd<br><small>exactas · TRT sin piso · ancho</small></th><th class="n">Cd ahora<br><small>exactas · TRT ω− ≥ 1,5 · ancho</small></th><th class="n">Cl ahora</th><th class="n">St ahora</th></tr>
-<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">2,36</td><td class="n">1,90</td><td class="n">2,29</td><td class="n">±1,29</td><td class="n">0,170</td></tr>
-<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">—</td><td class="n">1,78</td><td class="n">1,90</td><td class="n">±1,08</td><td class="n">0,199</td></tr>
-<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">—</td><td class="n">1,63</td><td class="n">2,06</td><td class="n">±1,22</td><td class="n">0,187</td></tr>
-<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">1,91</td><td class="n">2,28</td><td class="n">1,92</td><td class="n">±1,09</td><td class="n">0,207</td></tr>
-<tr><td>Carpintería curva</td><td class="n">1,93</td><td class="n">—</td><td class="n">1,74</td><td class="n">1,67</td><td class="n">±0,88</td><td class="n">0,254</td></tr>
+<tr><th>Planta</th><th class="n">Cd antes<br><small>escalera · BGK · angosto</small></th><th class="n">Cd<br><small>escalera · BGK · ancho</small></th><th class="n">Cd<br><small>exactas · TRT sin piso · ancho</small></th><th class="n">Cd<br><small>exactas cuadráticas · TRT ω− ≥ 1,5</small></th><th class="n">Cd ahora<br><small>exactas lineales · TRT ω− ≥ 1,5 · ancho</small></th><th class="n">Cl ahora</th><th class="n">St ahora</th></tr>
+<tr><td>Esquinas vivas</td><td class="n">2,42</td><td class="n">2,36</td><td class="n">1,90</td><td class="n">2,29</td><td class="n">2,29</td><td class="n">±1,29</td><td class="n">0,170</td></tr>
+<tr><td>Redondeadas r = 3 m</td><td class="n">2,15</td><td class="n">—</td><td class="n">1,78</td><td class="n">1,90</td><td class="n">1,95</td><td class="n">±1,15</td><td class="n">0,190</td></tr>
+<tr><td>Chaflán 2 m</td><td class="n">2,20</td><td class="n">—</td><td class="n">1,63</td><td class="n">2,06</td><td class="n">2,12</td><td class="n">±1,27</td><td class="n">0,182</td></tr>
+<tr><td>Sustraídas 2 × 2 m</td><td class="n">1,96</td><td class="n">1,91</td><td class="n">2,28</td><td class="n">1,92</td><td class="n">1,92</td><td class="n">±1,09</td><td class="n">0,207</td></tr>
+<tr><td>Carpintería curva</td><td class="n">1,93</td><td class="n">—</td><td class="n">1,74</td><td class="n">1,67</td><td class="n">1,67</td><td class="n">±0,89</td><td class="n">0,241</td></tr>
 </table>
 <div class="caja aviso"><b>Lectura honesta.</b>
 <ul>
   <li>El <b>canal ancho</b> casi no cambia el resultado a este Reynolds (2,42 → 2,36): el bloqueo no era la causa principal del exceso.</li>
   <li>En una planta alineada con la grilla (esquinas vivas, sustraídas de 2 m) la pared cae justo entre celdas y las paredes exactas dan lo mismo que la escalera; el cambio de esas filas viene de la <b>colisión TRT</b>.</li>
   <li>La columna «TRT sin piso» tenía un problema: con Λ = 3/16, a Re ≈ 1 000 el tiempo de relajación de la parte antisimétrica se va a casi cero y el ruido de la grilla (un damero) no se amortigua; medido aguas arriba de la torre, el giro del aire «de ruido» era 37 veces el de BGK. Con un piso ω− ≥ 1,5 baja al nivel de BGK y el arrastre del cuadrado vuelve a 2,05 (BGK: 2,06). Por eso las sustraídas daban más arrastre que las vivas.</li>
-  <li>Con el piso, el orden es el que se espera: toda esquina trabajada baja el arrastre respecto de las vivas (2,29): curva 1,67 (−27 %), redondeadas 1,90 (−17 %), sustraídas 1,92 (−16 %), chaflán 2,06 (−10 %); la fuerza lateral baja en el mismo orden y el Strouhal sube (remolinos más chicos y más seguidos).</li>
+  <li>Con las paredes lineales (las que usa ahora la app) las plantas alineadas con la grilla dan exactamente lo mismo, y las curvas o en diagonal suben 3 % como mucho: redondeadas 1,90 → 1,95, chaflán 2,06 → 2,12, curva igual. El orden entre formas no cambia, que es lo que importa para comparar.</li>
+  <li>Con el piso, el orden es el que se espera: toda esquina trabajada baja el arrastre respecto de las vivas (2,29): curva 1,67 (−27 %), sustraídas 1,92 (−16 %), redondeadas 1,95 (−15 %), chaflán 2,12 (−7 %); la fuerza lateral baja en el mismo orden y el Strouhal sube (remolinos más chicos y más seguidos).</li>
   <li>Aun así, 20 celdas por ancho no resuelven la turbulencia a este Reynolds ni retranqueos de 2 celdas: para comparar formas usar siempre la misma configuración; los números absolutos son orientativos. Para ver una esquina con más definición está la ventana de detalle del 2D (anidada, hasta 16 veces más fina).</li>
   <li>Conclusión práctica: para comparar formas, usar siempre la misma configuración y, en lo posible, la resolución <b>fina</b>; los números absolutos a Re alto son orientativos. El paso siguiente para la alta fidelidad es más resolución donde importa (propuesta 7: refinamiento local en el 2D y la banda de pisos en el 3D).</li>
 </ul></div>

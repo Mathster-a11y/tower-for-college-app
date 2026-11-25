@@ -32,6 +32,8 @@ export interface OpcionesLbm3 {
   colision?: 'bgk' | 'trt';
   /** piso de ω− en la TRT (por defecto OMEGA_MENOS_MIN) */
   omegaMenosMin?: number;
+  /** perturbación inicial de costado, como fracción del viento (0,02 por defecto; 0 = flujo inicial exacto) */
+  perturbacion?: number;
   /**
    * paredes exactas con la interpolación lineal (por defecto) o la cuadrática (false). La cuadrática se vuelve
    * inestable con viscosidad de red muy baja: con una torre alta y ancha en la grilla liviana (τ ≈ 0,5007) se rompía
@@ -78,7 +80,7 @@ export class Lbm3D {
     this.nx = o.nx; this.ny = o.ny; this.nz = o.nz; this.N = o.nx * o.ny * o.nz;
     this.tau0 = 3 * o.nu + 0.5; this.cs = o.cs ?? 0; this.uIn = o.uIn; this.solido = o.solido;
     this.f = new Float32Array(19 * this.N); this.g = new Float32Array(19 * this.N);
-    inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido);
+    inicial3(this.f, this.nx, this.ny, this.nz, this.uIn, this.solido, o.perturbacion);
     this.g.set(this.f);
     this.trt = o.colision === 'trt'; this.ommMin = o.omegaMenosMin ?? OMEGA_MENOS_MIN; this.lineal = o.paredesLineales ?? true;
     if (o.paredes) {
@@ -98,20 +100,7 @@ export class Lbm3D {
    * sólido (rebota). Así el paso no recalcula vecinos ni bordes en cada celda (unas 20 veces más rápido en JavaScript).
    */
   private origen: Int32Array | null = null;
-  private armarOrigen(): Int32Array {
-    const { nx, ny, nz, N, solido } = this, o = new Int32Array(19 * N);
-    for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-      const c = (z * ny + y) * nx + x;
-      for (let i = 0; i < 19; i++) {
-        const sx = x - EX3[i], sz = z - EZ3[i];
-        let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
-        if (sz >= nz || sz < 0) { o[i * N + c] = -1; continue; }             // tapa (y fondo sin suelo): refleja
-        const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx < 0 ? 0 : sx); // salida: la de atrás
-        o[i * N + c] = solido[s] ? -2 : s;
-      }
-    }
-    return o;
-  }
+  private armarOrigen(): Int32Array { return origen3(this.nx, this.ny, this.nz, this.solido); }
 
   paso() {
     const { nx, ny, nz, N, f, g, solido, uIn } = this;
@@ -147,12 +136,35 @@ export class Lbm3D {
   masa(): number { let m = 0; for (let c = 0; c < this.N; c++) if (!this.solido[c]) for (let i = 0; i < 19; i++) m += this.f[i * this.N + c]; return m; }
 }
 
-/** el estado inicial: el perfil de entrada en todo el fluido (lo usa también la GPU) */
-export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uIn: Float32Array, solido: Uint8Array) {
-  const N = nx * ny * nz;
+/** de dónde tira cada población de cada celda: ≥ 0 la celda de atrás; −1 la tapa (refleja); −2 un sólido (rebota) */
+export function origen3(nx: number, ny: number, nz: number, solido: Uint8Array): Int32Array {
+  const N = nx * ny * nz, o = new Int32Array(19 * N);
   for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const c = (z * ny + y) * nx + x, u = solido[c] ? 0 : uIn[z];
-    for (let i = 0; i < 19; i++) f[i * N + c] = feq3(i, 1, u, 0, 0);
+    const c = (z * ny + y) * nx + x;
+    for (let i = 0; i < 19; i++) {
+      const sx = x - EX3[i], sz = z - EZ3[i];
+      let sy = y - EY3[i]; if (sy < 0) sy += ny; else if (sy >= ny) sy -= ny;
+      if (sz >= nz || sz < 0) { o[i * N + c] = -1; continue; }             // tapa (y fondo sin suelo): refleja
+      const s = (sz * ny + sy) * nx + (sx >= nx ? nx - 2 : sx < 0 ? 0 : sx); // salida: la de atrás
+      o[i * N + c] = solido[s] ? -2 : s;
+    }
+  }
+  return o;
+}
+
+/**
+ * el estado inicial: el perfil de entrada en todo el fluido (lo usan también la GPU y WebAssembly), con una
+ * perturbación chica de costado (una fracción del viento, con una semilla fija: siempre la misma). Sin ella, una torre
+ * simétrica en un flujo simétrico no tiene nada que la saque de la simetría y los remolinos nunca se desprenden (la
+ * fuerza lateral queda en cero); en un túnel real siempre hay algo de turbulencia. Es lo mismo que hace el 2D.
+ */
+export function inicial3(f: Float32Array, nx: number, ny: number, nz: number, uIn: Float32Array, solido: Uint8Array, perturbacion = 0.02) {
+  const N = nx * ny * nz;
+  let semilla = 12345;
+  const azar = () => { semilla = (semilla * 1664525 + 1013904223) >>> 0; return semilla / 4294967296 - 0.5; };
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const c = (z * ny + y) * nx + x, u = solido[c] ? 0 : uIn[z], v = solido[c] || x === 0 ? 0 : perturbacion * uIn[z] * azar();
+    for (let i = 0; i < 19; i++) f[i * N + c] = feq3(i, 1, u, v, 0);
   }
 }
 

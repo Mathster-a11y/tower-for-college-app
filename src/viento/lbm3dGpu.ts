@@ -179,7 +179,7 @@ export async function crearLbm3dGpu(o: OpcionesLbm3): Promise<Lbm3dGpu> {
   if (errores.length) throw new Error('WGSL: ' + errores.map(m => `${m.lineNum}:${m.linePos} ${m.message}`).join(' · '));
   const usoF = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
   const f0 = new Float32Array(19 * N);
-  inicial3(f0, nx, ny, nz, o.uIn, o.solido);
+  inicial3(f0, nx, ny, nz, o.uIn, o.solido, o.perturbacion);
   const bA = dev.createBuffer({ size: bytes, usage: usoF }), bB = dev.createBuffer({ size: bytes, usage: usoF });
   dev.queue.writeBuffer(bA, 0, f0); dev.queue.writeBuffer(bB, 0, f0);
   const sol = dev.createBuffer({ size: 4 * N, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });

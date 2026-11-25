@@ -1,5 +1,5 @@
 /**
- * Desglose analítico de la planilla, hoja por hoja (salvo «Flex comp PB paralelos», que se revisa aparte).
+ * Desglose analítico de la planilla, hoja por hoja (siete hojas, de «viento» a «Flex comp PB paralelos»).
  *
  * Cada hoja se vuelve a calcular «a mano», con las fórmulas del reglamento y de la guía de la cátedra, en un código
  * independiente de la réplica de la planilla (planilla.ts). Para cada paso se guarda: la fórmula, la sustitución con
@@ -14,7 +14,7 @@
  *  - hojas J: el J de cada pieza respecto de su propio baricentro (Steiner);
  *  - rototraslación: todas las piezas en las sumas y Q total = Q traslación + Q rotación.
  */
-import type { PlanillaDatos, PlanillaRes, FilaJ } from './planilla';
+import { flexFilaNuevo, ranuraFilaNuevo, FLEX_D_FIJO, TIPO_FILA_PARALELOS, type PlanillaDatos, type PlanillaRes, type FilaJ } from './planilla';
 
 export type Resultado = 'coincide' | 'difiere' | 'solo analítico';
 export interface Paso {
@@ -91,6 +91,14 @@ export interface EntradaDesglose {
   hormigon: string;
   /** ancho B y largo L en PB (para la carga mínima) */
   BPB: number;
+  /**
+   * el exoesqueleto (hoja 8), viento A: lo que necesita el cálculo a mano de la propuesta y lo que dio el pórtico plano
+   * de la app (en la columna «Excel», que acá es la app: la planilla de la cátedra no tiene exo)
+   */
+  exo?: {
+    tipo: string; nombreTipo: string; E: number; Eh: number; h: number; W: number; ancho: number; Ac: number; Ad: number; hMod: number; Jtab: number;
+    app: { u: number; fraccion: number; Jeq: number };
+  } | null;
 }
 
 // ------------------------------------------------------------------ 1 · viento
@@ -405,9 +413,140 @@ function hojaRoto(x: EntradaDesglose, menor: boolean): HojaDesglose {
   };
 }
 
-/** el desglose de las seis primeras hojas */
+/**
+ * «Flex comp PB paralelos»: σ = −N/F ± M/W en la base de cada pieza del viento A. El analítico usa, para cada pieza,
+ * su propia fila de la hoja J, su forma (simétrica, asimétrica o tubo), el peso propio de todas las filas, el momento
+ * M = Mtras + Qrot · hW y las combinaciones que deciden: compresión con el edificio cargado (Nq) y tracción con el
+ * descargado (Ng). Las diferencias con la hoja se explican abajo (docs/flexocompresion_planilla).
+ */
+function hojaFlex(x: EntradaDesglose): HojaDesglose {
+  const hoja = 'Flex comp PB paralelos', rr = x.r.rotA, f = x.r.flex, nuevo = !!x.r.jpar.filas28;
+  const nombres = new Map(x.piezas.filter(p => p.dir === 'A' && p.fila !== null).map(p => [p.fila!, p.nombre]));
+  const hW = rr.D5 ? rr.F5 / rr.D5 : 0;
+  const adm = (parseFloat(x.hormigon.replace(/[^\d.]/g, '')) || 30) * 10;
+  type Pz = { i: number; nom: string; forma: 'simétrica' | 'asimétrica' | 'circular'; F: number; C: number; Pp: number; Ng: number; Nq: number; M: number; W: number; Wfila: string; comp: number; trac: number; e: number; k: number };
+  const pzs: Pz[] = [];
+  for (const [i, nom] of nombres) {
+    const fl = x.d.flex[i];
+    if (!fl || fl.C == null || i >= f.B.length) continue;
+    const jr = x.r.jpar.filas[i], jd: FilaJ = x.d.jpar[i] ?? {};
+    const g = (k: keyof FilaJ) => n0(jd[k] as number | undefined);
+    const forma = jr.U > 1e-9 ? 'circular' : jr.AM > 1e-9 ? 'asimétrica' : 'simétrica';
+    // área: la de la hoja J más el ala inferior de las asimétricas (AH · AI), que la hoja no suma
+    const F = jr.O + (forma === 'asimétrica' ? g('AH') * g('AI') : 0);
+    let W: number, Wfila: string;
+    if (forma === 'circular') { W = g('S') > 0 ? jr.U / (g('S') / 2) : 0; Wfila = 'W = J / (D/2)'; }
+    else if (forma === 'asimétrica') { const h = g('X') + g('AB') + g('AI'), y = Math.max(jr.AK, h - jr.AK); W = y > 0 ? jr.AM / y : 0; Wfila = 'W = J / y máx (fibra más alejada)'; }
+    else { W = jr.Q; Wfila = 'W = J / (h/2)'; }
+    const C = n0(fl.C), Pp = F * C * 2.4, Ng = Pp + n0(fl.F) * n0(fl.G) * 0.7, Nq = Pp + n0(fl.F) * n0(fl.G) * 0.9;
+    const M = n0(rr.G[i]) + n0(rr.N[i]) * hW, Ma = Math.abs(M);
+    const comp = F > 0 && W > 0 ? (-Nq / F - Ma / W) * 0.1 : NaN, trac = F > 0 && W > 0 ? (-Ng / F + Ma / W) * 0.1 : NaN;
+    pzs.push({ i, nom, forma, F, C, Pp, Ng, Nq, M, W, Wfila, comp, trac, e: Ng ? Ma / Ng : NaN, k: F ? W / F : NaN });
+  }
+  const pasos: Paso[] = [];
+  // la pieza del ejemplo: la de más momento entre las que la hoja calcula (sin #DIV/0!)
+  const ej = pzs.slice().sort((a, b) => Number(Number.isFinite(f.O[b.i])) - Number(Number.isFinite(f.O[a.i])) || Math.abs(b.M) - Math.abs(a.M))[0];
+  if (ej) {
+    const i = ej.i, fila = i + 4, n = ej.nom;
+    pasos.push(
+      { titulo: `Área de la pieza · ${n}`, formula: 'F = Σ b · h de sus muros', sustitucion: `F = ${num(ej.F, 3)} m²${ej.forma === 'asimétrica' ? ' (con el ala inferior)' : ''}`, analitico: ej.F, excel: f.B[i], celda: `${hoja}!B${fila}`, unidad: 'm²', dec: 3 },
+      { titulo: `Peso propio · ${n}`, formula: 'Pp = F · altura · 2,4 t/m³', sustitucion: `Pp = ${num(ej.F, 3)} · ${num(ej.C, 1)} · 2,4`, analitico: ej.Pp, excel: f.E[i], celda: `${hoja}!E${fila}`, unidad: 't', dec: 1 },
+      { titulo: `N descargado · ${n}`, formula: 'Ng = Pp + área de influencia · losas · 0,7 t/m²', sustitucion: `Ng = ${num(ej.Pp, 1)} + ${num(n0(x.d.flex[i]?.F), 1)} · ${num(n0(x.d.flex[i]?.G), 0)} · 0,7`, analitico: ej.Ng, excel: f.H[i], celda: `${hoja}!H${fila}`, unidad: 't', dec: 1 },
+      { titulo: `N cargado · ${n}`, formula: 'Nq = Pp + área de influencia · losas · 0,9 t/m²', sustitucion: `Nq = ${num(ej.Pp, 1)} + ${num(n0(x.d.flex[i]?.F), 1)} · ${num(n0(x.d.flex[i]?.G), 0)} · 0,9`, analitico: ej.Nq, excel: f.I[i], celda: `${hoja}!I${fila}`, unidad: 't', dec: 1 },
+      { titulo: `Momento en PB · ${n}`, formula: 'M = Mtras + Qrot · hW   (hW = Mv / Q)', sustitucion: `M = ${num(n0(rr.G[i]), 1)} + (${num(n0(rr.N[i]), 3)}) · ${num(hW, 2)}`, analitico: ej.M, excel: f.J[i], celda: `${hoja}!J${fila}`, unidad: 'tm', dec: 1,
+        nota: 'La hoja lee O de «Rototrasl. cara mayor» = G + N (momento más corte); coincide solo si la pieza no tiene rotación.' },
+      { titulo: `Módulo resistente · ${n} (${ej.forma})`, formula: ej.Wfila, sustitucion: `W = ${num(ej.W, 3)} m³`, analitico: ej.W, excel: f.W[i], celda: `${hoja}!M${fila} · F (fila de la hoja J)`, unidad: 'm³', dec: 3 },
+      { titulo: `Excentricidad (descargado) · ${n}`, formula: 'e = M / Ng', sustitucion: `e = ${num(Math.abs(ej.M), 1)} / ${num(ej.Ng, 1)}`, analitico: ej.e, excel: f.K[i], celda: `${hoja}!K${fila}`, unidad: 'm', dec: 3 },
+      { titulo: `Límite del núcleo central · ${n}`, formula: 'k = W / F  (si e > k, la sección tiene tracción)', sustitucion: `k = ${num(ej.W, 3)} / ${num(ej.F, 3)}`, analitico: ej.k, excel: f.M[i], celda: `${hoja}!M${fila}`, unidad: 'm', dec: 3 },
+      { titulo: `Compresión máxima (cargado) · ${n}`, formula: 'σ = (−Nq / F − M / W) · 0,1', sustitucion: `σ = (−${num(ej.Nq, 1)} / ${num(ej.F, 3)} − ${num(Math.abs(ej.M), 1)} / ${num(ej.W, 3)}) · 0,1`, analitico: ej.comp, excel: f.O[i], celda: `${hoja}!O${fila}`, unidad: 'kg/cm²', dec: 1,
+        nota: 'La columna O usa Ng (descargado): la compresión que decide es con el edificio cargado.' },
+      { titulo: `Tracción máxima (descargado) · ${n}`, formula: 'σ = (−Ng / F + M / W) · 0,1', sustitucion: `σ = (−${num(ej.Ng, 1)} / ${num(ej.F, 3)} + ${num(Math.abs(ej.M), 1)} / ${num(ej.W, 3)}) · 0,1`, analitico: ej.trac, excel: f.P[i], celda: `${hoja}!P${fila}`, unidad: 'kg/cm²', dec: 1,
+        nota: 'La columna P usa Nq (cargado): la tracción que decide es con el edificio descargado.' });
+  }
+  const dif: string[] = [];
+  const d = (a: number, e: number) => comparar(a, e) === 'difiere';
+  if (pzs.some(o => d(o.M, f.J[o.i]))) dif.push(`Momento (columna J): la hoja lee O de «Rototrasl. cara mayor» = G + N, el momento de traslación (tm) más el corte de rotación (t). El momento de la pieza es Mtras + Qrot · hW, con hW = ${num(hW, 2)} m. El error nace en «Rototrasl.» y esta hoja lo arrastra.`);
+  if (pzs.some(o => o.Nq !== o.Ng)) dif.push('Combinaciones (columnas O y P): la hoja pone Ng (descargado) con la fibra comprimida y Nq (cargado) con la traccionada. Las que deciden son al revés: compresión máxima con Nq y tracción máxima con Ng. La diferencia es (Nq − Ng) / F en las dos, del lado inseguro.');
+  const sinPp = pzs.filter(o => FLEX_D_FIJO.includes(o.i));
+  if (sinPp.length) dif.push(`Peso propio: D13:D20 tienen 0,01 m³ fijo en lugar de F · altura, así que ${sinPp.map(o => o.nom).join(', ')} no ${sinPp.length > 1 ? 'suman' : 'suma'} su peso (Ng y Nq más chicos).`);
+  const otraForma = pzs.filter(o => o.i < 20 && TIPO_FILA_PARALELOS[o.i] !== o.forma);
+  if (otraForma.length) dif.push(`Tipo de fila: el W lo elige la fila (filas 4–10 simétricas, 11–14 asimétricas, 21–23 tubos), no la pieza. ${otraForma.map(o => `${o.nom} (${o.forma}) está en la fila ${o.i + 4}, que es para piezas ${TIPO_FILA_PARALELOS[o.i] === 'circular' ? 'circulares' : TIPO_FILA_PARALELOS[o.i] === 'asimétrica' ? 'asimétricas' : 'simétricas'}`).join('; ')}: la hoja lee el W de un molde que la pieza no usa${otraForma.some(o => !Number.isFinite(f.O[o.i])) ? ' y da #DIV/0!' : ''}. La hoja lo avisa en J25: hay que cambiar el vínculo a mano.`);
+  if (!nuevo && pzs.some(o => o.forma === 'circular')) dif.push('Tubos (planilla virgen): V = U/S/2 da J / (2D), la cuarta parte del W de un tubo (J / (D/2)): la tensión de flexión sale 4 veces más grande. La planilla 2025 ya lo corrigió.');
+  if (pzs.some(o => o.forma === 'asimétrica')) dif.push('Piezas asimétricas: la hoja divide el J por la mitad de la altura (AN) y su área (O de la hoja J) no suma el ala inferior AH · AI. El analítico usa la distancia a la fibra más alejada y el área completa.');
+  if (nuevo && pzs.some(o => o.i < 20 && flexFilaNuevo(o.i) !== ranuraFilaNuevo(o.i))) dif.push('Planilla 2025: desde la fila 10, el área y el W salen de una fila de la hoja J y el momento de otra (B10 = O14, pero J10 lee la pieza de AY10): son piezas distintas.');
+  const peorC = pzs.reduce<Pz | null>((m, o) => (!m || o.comp < m.comp ? o : m), null), peorT = pzs.reduce<Pz | null>((m, o) => (!m || o.trac > m.trac ? o : m), null);
+  // lo peor de la hoja, entre las piezas que calcula (sin #DIV/0!)
+  const finitos = (c: 'O' | 'P') => pzs.map(o => f[c][o.i]).filter(Number.isFinite);
+  const exC = finitos('O').length ? Math.min(...finitos('O')) : null, exT = finitos('P').length ? Math.max(...finitos('P')) : null;
+  return {
+    hoja,
+    temas: [
+      { titulo: 'Flexión compuesta', texto: 'En la base de cada pieza: σ = −N/F ± M/W (compresión negativa). Si la excentricidad e = M/N supera el núcleo central k = W/F, una fibra queda traccionada y lleva armadura.', fuente: 'guía 5' },
+      { titulo: 'Cargas', texto: 'N = peso propio + área de influencia × losas × 0,7 t/m² (descargado) o 0,9 t/m² (cargado).', fuente: 'guía 5' },
+      { titulo: 'Las dos que deciden', texto: 'Compresión máxima con el edificio cargado; tracción máxima con el edificio descargado.', fuente: 'guía 5' },
+    ],
+    datos: [{ nombre: 'Mv en PB', valor: `${num(rr.F5, 1)} tm` }, { nombre: 'Q en PB', valor: `${num(rr.D5, 2)} t` }, { nombre: 'hW = Mv / Q', valor: `${num(hW, 2)} m` }, { nombre: 'Piezas del viento A', valor: String(pzs.length) }],
+    pasos,
+    tablas: pzs.length ? [{
+      titulo: 'Cada pieza del viento A (PB)', columnas: [{ nombre: 'Ng', unidad: 't', dec: 1 }, { nombre: 'M', unidad: 'tm', dec: 1 }, { nombre: 'σ compresión', unidad: 'kg/cm²', dec: 1 }, { nombre: 'σ tracción', unidad: 'kg/cm²', dec: 1 }],
+      filas: pzs.map(o => ({ etiqueta: `${o.nom} · fila ${o.i + 4} · ${o.forma}`, valores: [[o.Ng, f.H[o.i]], [o.M, f.J[o.i]], [o.comp, f.O[o.i]], [o.trac, f.P[o.i]]] })),
+      nota: 'Excel: columnas H, J, O y P. La hoja llama O a la «compresión descargado» y P a la «compresión o tracción cargado». El área, Nq y W de cada pieza están en el paso por paso.',
+    }] : [],
+    controles: peorC && peorT ? [
+      { nombre: `Compresión del hormigón (peor pieza: ${peorC.nom})`, criterio: `|σ| ≤ ${adm} kg/cm² (${x.hormigon})`, unidad: 'kg/cm²', dec: 1, analitico: peorC.comp, excel: exC, cumpleAnalitico: Math.abs(peorC.comp) <= adm, cumpleExcel: exC === null ? null : Math.abs(exC) <= adm,
+        nota: 'Excel: la compresión más grande de la columna O, entre las piezas que la hoja calcula.' },
+      { nombre: `Tracción (peor pieza: ${peorT.nom})`, criterio: 'σ ≤ 0; si no, armadura (guía 5)', unidad: 'kg/cm²', dec: 1, analitico: peorT.trac, excel: exT, cumpleAnalitico: peorT.trac <= 0, cumpleExcel: exT === null ? null : exT <= 0,
+        nota: 'Con tracción la pieza no «falla»: lleva armadura (T = σ · b · x / 2). La app la calcula en Controles, muro por muro.' },
+    ] : [],
+    diferencias: dif,
+  };
+}
+
+/** el desglose de las siete hojas */
 export function desglosar(x: EntradaDesglose): HojaDesglose[] {
-  return [hojaViento(x), hojaMNyQ(x), hojaJ(x, false), hojaJ(x, true), hojaRoto(x, false), hojaRoto(x, true)];
+  return [hojaViento(x), hojaMNyQ(x), hojaJ(x, false), hojaJ(x, true), hojaRoto(x, false), hojaRoto(x, true), hojaFlex(x), ...(x.exo ? [hojaExo(x)] : [])];
+}
+
+/**
+ * Hoja 8 · Exoesqueleto (viento A): el cálculo a mano de la propuesta (las columnas de esquina como un tubo, con la
+ * relación de módulos; las cruces como rigidez al corte; la torre y el exo como dos resortes en paralelo) contra el
+ * pórtico plano de la app (barras, nudos y la ménsula de los tabiques resueltos juntos). La mano supone la carga pareja
+ * en altura (8EJ) y un exo de tubo arriostrado en X; las diferencias con el pórtico son esperables y se explican.
+ */
+function hojaExo(x: EntradaDesglose): HojaDesglose {
+  const e = x.exo!, hoja = 'Exoesqueleto';
+  const n = e.E / e.Eh, d = e.ancho / 2, Jexo = n * 4 * e.Ac * d * d;
+  const th = Math.atan2(e.hMod, e.ancho), S = 4 * e.E * e.Ad * Math.cos(th) ** 2 * Math.sin(th);
+  const dF = (e.W * e.h ** 3) / (8 * e.Eh * Jexo), dC = (e.W * e.h) / (2 * S), dExo = dF + dC;
+  const Kexo = e.W / dExo, dTab = (e.W * e.h ** 3) / (8 * e.Eh * e.Jtab), Ktab = e.W / dTab;
+  const dJunto = e.W / (Ktab + Kexo), frac = Kexo / (Ktab + Kexo), Jeq = (e.W * e.h ** 3) / (8 * e.Eh * dExo);
+  const app = 'etapa 08 (pórtico)', deg = (th * 180) / Math.PI;
+  const pasos: Paso[] = [
+    { titulo: 'Relación de módulos', formula: 'n = E acero / E hormigón', sustitucion: `n = ${num(e.E, 0)} / ${num(e.Eh, 0)}`, analitico: n, excel: null, celda: '—', unidad: '', dec: 2, nota: 'El acero se pasa a hormigón multiplicando su J por n, como en las secciones mixtas.' },
+    { titulo: 'J de las columnas de esquina (en hormigón)', formula: 'J exo = n · Σ Ac · d²  (4 columnas a d = ancho / 2)', sustitucion: `J = ${num(n, 2)} · 4 · ${num(e.Ac, 4)} · ${num(d, 2)}²`, analitico: Jexo, excel: null, celda: '—', unidad: 'm⁴', dec: 1 },
+    { titulo: 'Ángulo de las diagonales', formula: 'θ = atan(h módulo / ancho)', sustitucion: `θ = atan(${num(e.hMod, 2)} / ${num(e.ancho, 2)})`, analitico: deg, excel: null, celda: '—', unidad: '°', dec: 1 },
+    { titulo: 'Rigidez al corte de las cruces', formula: 'S = Σ E · Ad · cos²θ · sen θ  (2 caras × 2 diagonales)', sustitucion: `S = 4 · ${num(e.E, 0)} · ${num(e.Ad, 4)} · ${num(Math.cos(th) ** 2, 3)} · ${num(Math.sin(th), 3)}`, analitico: S, excel: null, celda: '—', unidad: 't', dec: 0 },
+    { titulo: 'Flecha del exo solo: flexión + corte', formula: 'δ exo = W h³ / (8 E J exo) + W h / (2 S)', sustitucion: `δ = ${num(dF * 1000, 1)} + ${num(dC * 1000, 1)} mm`, analitico: dExo * 1000, excel: null, celda: '—', unidad: 'mm', dec: 1, nota: 'Un reticulado se deforma también por corte (los tabiques llenos casi no): por eso su J equivalente es menor que el de las columnas solas.' },
+    { titulo: 'Flecha de los tabiques solos', formula: 'δ tab = W h³ / (8 E ΣJ)', sustitucion: `δ = ${num(e.W, 1)} · ${num(e.h, 2)}³ / (8 · ${num(e.Eh, 0)} · ${num(e.Jtab, 2)})`, analitico: dTab * 1000, excel: null, celda: '—', unidad: 'mm', dec: 1 },
+    { titulo: 'Flecha de la torre con el exo (dos resortes en paralelo)', formula: 'δ = W / (K tab + K exo), K = W / δ', sustitucion: `δ = ${num(e.W, 1)} / (${num(Ktab, 0)} + ${num(Kexo, 0)})`, analitico: dJunto * 1000, excel: e.app.u * 1000, celda: app, unidad: 'mm', dec: 1, nota: 'El pórtico de la app usa el viento real de cada piso (no parejo) y las barras con sus uniones: la diferencia mide cuánto simplifica la cuenta a mano.' },
+    { titulo: 'Parte del viento que toma el exo', formula: 'K exo / (K tab + K exo)', sustitucion: `${num(Kexo, 0)} / (${num(Ktab, 0)} + ${num(Kexo, 0)})`, analitico: frac * 100, excel: e.app.fraccion * 100, celda: app, unidad: '%', dec: 0 },
+    { titulo: 'J equivalente del exo (el que va a la hoja J)', formula: 'J eq = W h³ / (8 E δ exo)', sustitucion: `J eq = ${num(e.W, 1)} · ${num(e.h, 2)}³ / (8 · ${num(e.Eh, 0)} · ${num(dExo, 4)})`, analitico: Jeq, excel: e.app.Jeq, celda: app, unidad: 'm⁴', dec: 1, nota: 'La app da el J equivalente de una cara; la cuenta a mano, el de las dos caras juntas.' },
+  ];
+  const lim = e.h / 500;
+  return {
+    hoja,
+    temas: [{ titulo: 'El exoesqueleto como otra ménsula', texto: 'El exo es una ménsula más ancha puesta por fuera: las losas lo atan a los tabiques, se deforman juntos y cada uno toma el viento según su rigidez, como dos resortes en paralelo.', fuente: 'propuesta del exoesqueleto, pág. 3' }],
+    datos: [
+      { nombre: 'Ficha', valor: e.nombreTipo }, { nombre: 'Ancho de la cara', valor: `${num(e.ancho, 2)} m` }, { nombre: 'Altura', valor: `${num(e.h, 2)} m` },
+      { nombre: 'Viento total (A)', valor: `${num(e.W, 1)} t` }, { nombre: 'Columna / diagonal', valor: `${num(e.Ac * 1e4, 0)} / ${num(e.Ad * 1e4, 0)} cm²` }, { nombre: 'ΣJ de los tabiques', valor: `${num(e.Jtab, 2)} m⁴` },
+    ],
+    pasos, tablas: [],
+    controles: [{ nombre: 'Flecha de la azotea con el exo', criterio: `δ ≤ h/500 = ${num(lim * 1000, 0)} mm`, unidad: 'mm', dec: 1, analitico: dJunto * 1000, excel: e.app.u * 1000, cumpleAnalitico: dJunto <= lim, cumpleExcel: e.app.u <= lim }],
+    diferencias: [
+      ...(e.tipo !== 'D' ? [`La cuenta a mano es la de un tubo arriostrado en X (ficha D); con la ficha ${e.nombreTipo} solo sirve de orden de magnitud.`] : []),
+      'En la columna «Excel» va el resultado del pórtico plano de la app: la planilla de la cátedra no tiene exoesqueleto.',
+    ],
+  };
 }
 
 /** resumen de una hoja: cuántos pasos coinciden y si los controles verifican con los dos cálculos */

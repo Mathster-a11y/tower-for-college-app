@@ -17,6 +17,8 @@ export interface MetaGrabacion {
   nx: number; ny: number; factor: number;
   /** de la geometría simulada (en celdas de la grilla grabada) */
   D: number; anchoM: number; escala: number; contornos: { x: number; y: number }[][];
+  /** cuántos contornos son de la torre (los demás, vecinos del contexto urbano) */
+  nTorre?: number;
   caja: { x0: number; x1: number; y0: number; y1: number };
   u0: number;
   /** cuadros: cantidad y el paso de la simulación de cada uno */

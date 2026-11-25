@@ -14,37 +14,40 @@ export const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<s
 /** escapa un texto para meterlo en HTML (contenido o atributo entre comillas): los datos del proyecto nunca van como HTML */
 export const esc = (t: string) => t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-/** títulos de las secciones plegadas (se recuerdan entre sesiones: los paneles se rearman con cada cambio) */
-const CLAVE_PLEGADAS = 'torre3d.plegadas.v2';
 /**
- * Lo secundario empieza plegado (para no llenar la pantalla del alumno): las fórmulas con las celdas, las tablas
- * nivel por nivel o pieza por pieza y las notas sobre la planilla. Lo principal de cada etapa queda abierto.
- * Cada sección que se abre o se cierra a mano se recuerda.
+ * Secciones plegables: las del panel izquierdo empiezan todas plegadas (así cada etapa se ve como una lista de títulos,
+ * fácil de recorrer en un tutorial, y se abre lo que se va a usar); el avance y la axonometría, abiertos. Cada sección
+ * que se abre o se cierra a mano se recuerda entre sesiones (los paneles se rearman con cada cambio).
  */
-export const PLEGADAS_AL_EMPEZAR = ['Fórmulas', 'Fórmulas, nivel por nivel', 'Nivel por nivel', 'J de cada pieza', 'Tabiques paralelos al viento (t)',
-  'M, N y Q por nivel', 'Planilla y guía, lado a lado', 'Notas sobre cómo se escribe en la planilla', 'De la planilla virgen (valen para todos los proyectos)',
-  'Piezas agrupadas (papel de cada muro en la hoja J)', 'Datos del viento · CIRSOC 102'];
-let plegadas: Set<string> | null = null;
-export function seccionesPlegadas(): Set<string> {
-  if (!plegadas) {
-    try { const g = localStorage.getItem(CLAVE_PLEGADAS); plegadas = new Set(g === null ? PLEGADAS_AL_EMPEZAR : JSON.parse(g) as string[]); } catch { plegadas = new Set(PLEGADAS_AL_EMPEZAR); }
-  }
-  return plegadas;
+const CLAVE_PLEGADAS = 'torre3d.plegadas.v3';
+let elegidas: Record<string, boolean> | null = null;
+function estadoPlegado(): Record<string, boolean> {
+  if (!elegidas) { try { elegidas = JSON.parse(localStorage.getItem(CLAVE_PLEGADAS) ?? '{}') as Record<string, boolean>; } catch { elegidas = {}; } }
+  return elegidas;
 }
+/** ¿está plegada? (lo que eligió el usuario o, si nunca la tocó, lo que viene por defecto) */
+export const estaPlegada = (clave: string, porDefecto = true) => estadoPlegado()[clave] ?? porDefecto;
 export function plegarSeccion(clave: string, plegar: boolean) {
-  const s = seccionesPlegadas();
-  if (plegar) s.add(clave); else s.delete(clave);
-  try { localStorage.setItem(CLAVE_PLEGADAS, JSON.stringify([...s])); } catch { /* sin almacenamiento */ }
+  estadoPlegado()[clave] = plegar;
+  try { localStorage.setItem(CLAVE_PLEGADAS, JSON.stringify(estadoPlegado())); } catch { /* sin almacenamiento */ }
 }
 /** convierte una cabecera en plegable: tocarla muestra u oculta el cuerpo (con teclado: Enter o espacio) */
-export function hacerPlegable(caja: HTMLElement, cab: HTMLElement, clave: string) {
+export function hacerPlegable(caja: HTMLElement, cab: HTMLElement, clave: string, porDefecto = true) {
   caja.classList.add('plegable');
+  caja.dataset.clave = clave;
   cab.setAttribute('role', 'button'); cab.tabIndex = 0;
   const poner = (p: boolean) => { caja.classList.toggle('plegada', p); cab.setAttribute('aria-expanded', String(!p)); };
-  poner(seccionesPlegadas().has(clave));
+  poner(estaPlegada(clave, porDefecto));
   const cambiar = () => { const p = !caja.classList.contains('plegada'); poner(p); plegarSeccion(clave, p); };
   cab.addEventListener('click', ev => { if ((ev.target as HTMLElement).closest('button, a, input, select') && ev.target !== cab) return; cambiar(); });
   cab.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cambiar(); } });
+}
+/** abre o pliega todas las secciones de un panel (y lo recuerda) */
+export function plegarTodas(raiz: HTMLElement, plegar: boolean) {
+  raiz.querySelectorAll<HTMLElement>('section.seccion.plegable').forEach(s => {
+    s.classList.toggle('plegada', plegar); s.querySelector(':scope > .cab')?.setAttribute('aria-expanded', String(!plegar));
+    if (s.dataset.clave) plegarSeccion(s.dataset.clave, plegar);
+  });
 }
 
 /** Sección redondeada con franja de título (color del rol de la etapa). Se pliega tocando el título. */
@@ -60,8 +63,9 @@ export type EstadoChip = 'verifica' | 'no verifica' | 'revisar' | 'completa' | '
 export const chip = (e: EstadoChip, texto: string = e) => h('span', { class: `chip-estado ${e.replace(' ', '-')}` }, texto);
 
 /** Indicador: título en versalitas, valor grande en mono, nota; el color dice el estado. */
-export function kpi(cap: string, valor: string, nota: string, color = 'var(--accent)'): H {
-  const k = h('div', { class: 'kpi' }, h('div', { class: 'cap' }, cap), h('div', { class: 'val' }, valor), h('div', { class: 'not' }, nota));
+export function kpi(cap: string, valor: string, nota: string, color = 'var(--accent)', origen?: string): H {
+  // origen: de qué etapa llega el número («← Viento»); sin origen, se calcula en esta etapa
+  const k = h('div', { class: 'kpi' }, h('div', { class: 'cap' }, cap, ...(origen ? [h('span', { class: 'kpi-origen', title: `Este número llega de la etapa ${origen.replace('← ', '')}` }, origen)] : [])), h('div', { class: 'val' }, valor), h('div', { class: 'not' }, nota));
   k.style.setProperty('--c', color);
   return k;
 }
@@ -244,21 +248,23 @@ export function plegarExplicaciones(raiz: HTMLElement) {
     if (anterior?.classList.contains('ayuda-plegable')) { caja = anterior; cuerpo = anterior.querySelector<HTMLElement>(':scope > .ayuda-texto')!; }
     else {
       caja = document.createElement('div'); caja.className = 'ayuda-plegable';
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'ayuda-boton'; b.textContent = '?';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'ayuda-boton';
       cuerpo = document.createElement('div'); cuerpo.className = 'ayuda-texto';
       const abierta = abiertas.has(clave);
       cuerpo.hidden = !abierta; b.setAttribute('aria-expanded', String(abierta));
-      b.title = abierta ? 'Ocultar la explicación' : 'Ver la explicación'; b.setAttribute('aria-label', b.title);
+      b.textContent = abierta ? 'Ocultar la explicación' : 'Ver la explicación';
       b.dataset.clave = clave;
       b.addEventListener('click', () => {
         cuerpo.hidden = !cuerpo.hidden;
         const k = b.dataset.clave!; if (cuerpo.hidden) abiertas.delete(k); else abiertas.add(k);
         b.setAttribute('aria-expanded', String(!cuerpo.hidden));
-        b.title = cuerpo.hidden ? 'Ver la explicación' : 'Ocultar la explicación'; b.setAttribute('aria-label', b.title);
+        b.textContent = cuerpo.hidden ? 'Ver la explicación' : 'Ocultar la explicación';
       });
       e.before(caja); caja.append(b, cuerpo);
     }
     cuerpo.append(e);
-    if (llave) caja.after(llave);
+    // la oración llave a la vista, con «▸ Ver la explicación» al final de la misma línea (no suelto en un renglón
+    // aparte); el resto se despliega debajo
+    if (llave) { caja.before(llave); const b = caja.querySelector(':scope > .ayuda-boton'); if (b) { llave.append(' ', b); caja.classList.add('con-llave'); } }
   });
 }

@@ -15,7 +15,7 @@ import type { Muro } from '../engine/modelo';
 export interface Dibujo { titulo: string; png: string; ancho: number; alto: number }
 
 /** SVG → PNG (data URL), con los estilos copiados */
-function aPNG(svg: SVGSVGElement, escala = 1.6): Promise<{ png: string; ancho: number; alto: number } | null> {
+export function aPNG(svg: SVGSVGElement, escala = 1.6): Promise<{ png: string; ancho: number; alto: number } | null> {
   const { texto, ancho, alto } = svgAutonomo(svg);
   return new Promise(res => {
     const img = new Image();

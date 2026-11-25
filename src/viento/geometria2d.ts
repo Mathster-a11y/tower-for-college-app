@@ -18,6 +18,12 @@ export interface OpcionesGeometria {
   largo?: number; alto?: number; entrada?: number;
   /** segunda torre igual: a «distancia» D de la primera, detrás (en el sentido del viento) o al lado */
   segunda?: { donde: 'detras' | 'lado'; distancia: number } | null;
+  /**
+   * contexto urbano: los contornos (m, planta del proyecto) de los edificios vecinos que llegan al corte. La escala
+   * sigue siendo la de la torre; el canal se agranda para que entre el grupo, con la misma distancia a la entrada y
+   * lugar para la estela
+   */
+  contexto?: P[][] | null;
 }
 
 export interface Geometria2D {
@@ -36,6 +42,10 @@ export interface Geometria2D {
    * interpolado: la pared está donde está el contorno, no en el borde de las celdas.
    */
   q: Float32Array;
+  /** cuántos contornos de «contornos» son de la torre (los primeros); los demás son vecinos o la segunda torre */
+  nTorre: number;
+  /** con contexto: las celdas sólidas de la torre (para medir la fuerza solo sobre ella) */
+  cuerpo?: Uint8Array;
 }
 
 // las 9 direcciones de D2Q9 (las mismas que lbm2d)
@@ -116,12 +126,23 @@ export function geometria2D(o: OpcionesGeometria): Geometria2D {
   const escala = D / anchoM;
   const profD = (profM * escala) / D;                              // largo de la torre en el sentido del viento, en D
   const extraX = o.segunda?.donde === 'detras' ? o.segunda.distancia + profD : 0, extraY = o.segunda?.donde === 'lado' ? o.segunda.distancia + 1 : 0;
-  const nx = Math.round((Math.max(largo, entrada + profD + extraX + 12)) * D), ny = Math.round((alto + extraY) * D);
+  let nx = Math.round((Math.max(largo, entrada + profD + extraX + 12)) * D), ny = Math.round((alto + extraY) * D);
   // la torre: a «entrada» D de la entrada, centrada en el alto (con la segunda al lado, el par centrado);
   // una celda corrida hacia arriba, para que los remolinos se desprendan sin esperar
-  const ox = entrada * D, oy = Math.round((ny - (D + extraY * D)) / 2) + 1;
+  let ox = entrada * D, oy = Math.round((ny - (D + extraY * D)) / 2) + 1;
+  // con contexto: el grupo entero a «entrada» D de la entrada, 12 D de estela detrás y 3 D (o lo que dé el alto) a cada lado
+  const ctxR = (o.contexto ?? []).filter(p => p.length >= 3).map(p => p.map(rot));
+  if (ctxR.length) {
+    const tx = [xMin, xMax, ...ctxR.flat().map(q => q.x)], ty = [yMin, yMax, ...ctxR.flat().map(q => q.y)];
+    const gx0 = Math.min(...tx), gx1 = Math.max(...tx), gy0 = Math.min(...ty), gy1 = Math.max(...ty);
+    const largoG = (gx1 - gx0) * escala, anchoG = (gy1 - gy0) * escala;
+    nx = Math.round(Math.max(largo * D, entrada * D + largoG + 12 * D));
+    ny = Math.round(Math.max(alto * D, anchoG + 6 * D));
+    ox = entrada * D + (xMin - gx0) * escala;
+    oy = Math.round((ny - anchoG) / 2) + (yMin - gy0) * escala + 1;
+  }
   const aRed = (q: P): P => ({ x: ox + (q.x - xMin) * escala, y: oy + (q.y - yMin) * escala });
-  const contornos = polsR.map(p => p.map(aRed));
+  const contornos = polsR.map(p => p.map(aRed)), nTorre = contornos.length;
   if (o.segunda) {
     const dx = o.segunda.donde === 'detras' ? (profD + o.segunda.distancia) * D : 0, dy = o.segunda.donde === 'lado' ? (1 + o.segunda.distancia) * D : 0;
     contornos.push(...polsR.map(p => p.map(aRed).map(q => ({ x: q.x + dx, y: q.y + dy }))));
@@ -140,5 +161,16 @@ export function geometria2D(o: OpcionesGeometria): Geometria2D {
       solido[c] = 1;
     }
   });
-  return { nx, ny, solido, escala, anchoM, D, celdasTorre, caja, contornos, q: distanciasPared(nx, ny, solido, contornos) };
+  // los vecinos, después de la torre (no cuentan en su caja ni en sus celdas)
+  let cuerpo: Uint8Array | undefined;
+  if (ctxR.length) {
+    cuerpo = solido.slice();                                          // por ahora solo hay torre: esas son sus celdas
+    for (const p of ctxR.map(p => p.map(aRed))) {
+      contornos.push(p);
+      const bx0 = Math.max(0, Math.floor(Math.min(...p.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...p.map(q => q.x))));
+      const by0 = Math.max(0, Math.floor(Math.min(...p.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...p.map(q => q.y))));
+      for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (dentro(p, x + 0.5, y + 0.5)) solido[y * nx + x] = 1;
+    }
+  }
+  return { nx, ny, solido, escala, anchoM, D, celdasTorre, caja, contornos, q: distanciasPared(nx, ny, solido, contornos), nTorre, cuerpo };
 }

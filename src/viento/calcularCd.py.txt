@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+# Torre 3D: el Cd de la torre a partir de los resultados de OpenFOAM, sin función de OpenFOAM (por si «forceCoeffs»
+# no arranca en tu instalación). Suma la presión de cada cara de la torre por su área (solo presión, sin el roce).
+# Uso:  python3 calcular_cd.py . <tiempo> torre <U de referencia m/s> <área B·H m²>
+#   por ejemplo:  python3 calcular_cd.py . 1500 torre __U__ __A__
+import re, sys
+caso, t, patch, U, A = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4]), float(sys.argv[5])
+def lista(txt):
+    i = txt.index('(', txt.index('\n', txt.index('}') if '}' in txt[:txt.find('(')] else 0))
+    return txt
+def bloque(path):
+    s = open(path).read()
+    s = re.sub(r'/\*.*?\*/', '', s, flags=re.S); s = re.sub(r'//[^\n]*', '', s)
+    s = s[s.index('}', s.index('FoamFile')) + 1:]
+    return s
+pts_s = bloque(f'{caso}/constant/polyMesh/points')
+n = int(re.search(r'\n\s*(\d+)\s*\n\s*\(', pts_s).group(1))
+pts = [tuple(map(float, m)) for m in re.findall(r'\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*\)', pts_s)][:n]
+fac_s = bloque(f'{caso}/constant/polyMesh/faces')
+faces = [list(map(int, m.split())) for m in re.findall(r'\d+\(([\d ]+)\)', fac_s)]
+bnd = bloque(f'{caso}/constant/polyMesh/boundary')
+m = re.search(patch + r'\s*\{[^}]*?nFaces\s+(\d+);[^}]*?startFace\s+(\d+);', bnd, re.S)
+nF, s0 = int(m.group(1)), int(m.group(2))
+p_s = bloque(f'{caso}/{t}/p')
+pb = p_s[p_s.index(patch, p_s.index('boundaryField')):]
+mm = re.search(r'nonuniform List<scalar>\s*\d+\s*\(([^)]*)\)', pb[:pb.index('}')], re.S)
+if mm: vals = list(map(float, mm.group(1).split()))
+else:
+    # zeroGradient: el valor de la celda dueña de cada cara
+    inter = p_s[p_s.index('internalField'):]
+    pin = list(map(float, re.search(r'nonuniform List<scalar>\s*\d+\s*\(([^)]*)\)', inter, re.S).group(1).split()))
+    own_s = bloque(f'{caso}/constant/polyMesh/owner')
+    own = list(map(int, own_s[own_s.index('(') + 1:own_s.rindex(')')].split()))
+    vals = [pin[own[s0 + k]] for k in range(nF)]
+Fx = Fy = 0.0
+for k in range(nF):
+    f = faces[s0 + k]; c = [pts[i] for i in f]
+    sx = sy = sz = 0.0
+    for i in range(1, len(c) - 1):
+        a, b, d = c[0], c[i], c[i + 1]
+        u = [b[j] - a[j] for j in range(3)]; v = [d[j] - a[j] for j in range(3)]
+        sx += 0.5 * (u[1] * v[2] - u[2] * v[1]); sy += 0.5 * (u[2] * v[0] - u[0] * v[2])
+    Fx += vals[k] * sx; Fy += vals[k] * sy
+print(f'caras {nF}  Fx/rho = {Fx:.1f} m^4/s^2  Cd = {Fx / (0.5 * U * U * A):.3f}  Cl = {Fy / (0.5 * U * U * A):.3f}')

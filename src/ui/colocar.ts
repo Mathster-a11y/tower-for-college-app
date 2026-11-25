@@ -6,7 +6,10 @@
  * Cotas: horizontales, verticales o alineadas, pegadas a los nodos de los muros (siguen al muro), y las medidas del
  * elemento elegido.
  */
+import { diagridCircular, radioEn } from '../engine/diagridCircular';
 import { estado, fmt } from './estado';
+import { agregarVecino } from '../viento/contexto';
+import { medidasNiveles } from '../engine/perfilTorre';
 import { confirmar } from './tarjeta';
 import type { Camino, Cota } from '../engine/modelo';
 import type { Justificacion } from '../engine/colocar';
@@ -54,7 +57,7 @@ export function montarColocar(api: ApiPlanta) {
   const op = { vinculada: true, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
     matriz: 'rect' as 'rect' | 'polar' | 'camino', filas: 2, cols: 3, dx: 3.6, dy: 3.6, n: 6, total: 360, girarCopias: true, cx: 0, cy: 0,
     curva: false, dDesf: 0.6, angLibre: 30, espCam: 0.25, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false, arcoTg: true,
-    forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse', lados: 6, formaQue: 'perfil' as 'perfil' | 'muro' | 'camino', muroCurvo: false, justCam: ((): Justificacion => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })() };
+    forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse', lados: 6, formaQue: 'perfil' as 'perfil' | 'muro' | 'camino' | 'vecino', altVecino: 30, muroCurvo: false, justCam: ((): Justificacion => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })() };
   let caminoNuevo: { v: Camino['v']; paso?: Punto; ctrl?: Punto[] } | null = null;
   const caminosSel = new Set<string>();
   let cotaSel: string | null = null;
@@ -224,6 +227,7 @@ export function montarColocar(api: ApiPlanta) {
         pts = [];
         const c: Camino = { id: idCamino(), nombre: '', v: anillo, cerrado: true };
         if (op.formaQue === 'camino') { c.nombre = `Camino ${c.id.slice(1)}`; hacer(() => { (estado.proyecto.caminos ??= []).push(c); }, `«${c.nombre}» cerrado: se puede hacer perfil (▣) o muro (〰).`); }
+        else if (op.formaQue === 'vecino') hacer(() => { const r = agregarVecino(estado.proyecto, anillo, op.altVecino); return typeof r === 'string' ? null : r.error; }, `Edificio vecino de ${fmt(op.altVecino)} m (contexto urbano): lo usan los túneles de viento; se edita en Viento → Túnel 2D → Contexto urbano.`);
         else if (op.formaQue === 'perfil') hacer(() => { const r = perfilDesdeCamino(estado.proyecto, c, estado.contexto ?? undefined); return 'error' in r ? r.error : null; }, 'Perfil con esa forma. Doble clic sobre él para editar el contorno.');
         else hacer(() => { const r = muroSobreCamino(estado.proyecto, c, op.espCam, estado.contexto ?? undefined, op.justCam); return 'error' in r ? r.error : null; }, `Muro de ${fmt(op.espCam)} m siguiendo la forma (${NOMBRE_JUST[op.justCam]}).`);
         armar(); api.dibujar(); return;
@@ -373,9 +377,9 @@ export function montarColocar(api: ApiPlanta) {
 
   const selForma = () => { const selF = mk('select'); ([['rect', 'Rectángulo'], ['circulo', 'Círculo'], ['poligono', 'Polígono regular'], ['elipse', 'Elipse']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.forma === v; selF.append(o); });
     selF.addEventListener('change', () => { op.forma = selF.value as typeof op.forma; pts = []; armar(); api.dibujar(); }); return selF; };
-  const selQue = () => { const selQ = mk('select'); ([['perfil', 'perfil lleno'], ['muro', 'muro (anillo)'], ['camino', 'camino']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.formaQue === v; selQ.append(o); });
+  const selQue = () => { const selQ = mk('select'); ([['perfil', 'perfil lleno'], ['muro', 'muro (anillo)'], ['camino', 'camino'], ['vecino', 'edificio vecino (contexto)']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = op.formaQue === v; selQ.append(o); });
     selQ.addEventListener('change', () => { op.formaQue = selQ.value as typeof op.formaQue; armar(); api.dibujar(); });
-    selQ.title = 'Perfil lleno: un elemento macizo con esa forma. Muro: un anillo del espesor y la justificación elegidos. Camino: queda como camino cerrado.'; return selQ; };
+    selQ.title = 'Perfil lleno: un elemento macizo con esa forma. Muro: un anillo del espesor y la justificación elegidos. Camino: queda como camino cerrado. Edificio vecino: un edificio de alrededor para los túneles de viento (no entra en ningún cálculo), con la altura elegida.'; return selQ; };
   const filaJust = () => {
     const just = mk('div', '', 'col-fila col-just'); just.append(mk('span', 'justificación'));
     ([['izq', 'muro a la izq.', 'El muro queda a la izquierda del camino (en el sentido en que lo dibujás)'], ['eje', 'eje', 'El camino es el eje del muro'], ['der', 'muro a la der.', 'El muro queda a la derecha del camino']] as [Justificacion, string, string][])
@@ -401,7 +405,7 @@ export function montarColocar(api: ApiPlanta) {
       if (planta && panel.parentElement !== planta) planta.appendChild(panel);
       const extra: HTMLElement[] = [];
       if (herr === 'camino') extra.push(tilde('arco', op.arco, v => { op.arco = v; if (v) op.curva = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), ...(op.arco ? [tilde('tangente', op.arcoTg, v => { op.arcoTg = v; if (caminoNuevo) caminoNuevo.paso = undefined; }, 'El arco sale tangente al tramo anterior: alcanza con tocar el final (el primer arco pide un punto de paso)')] : []), tilde('Bézier', op.curva, v => { op.curva = v; if (v) op.arco = false; if (caminoNuevo) { caminoNuevo.paso = undefined; caminoNuevo.ctrl = undefined; } }), boton('Terminar', 'Enter', () => { terminarCamino(); poner(null); }), boton('Cerrar', 'Cierra el camino', () => { terminarCamino(true); poner(null); }));
-      if (herr === 'forma') extra.push(selForma(), ...(op.forma === 'poligono' ? [campoN('lados', op.lados, v => { op.lados = Math.max(3, Math.round(v)); }, 30)] : []), mk('span', '→'), selQue(), ...(op.formaQue === 'muro' ? [campoN('e', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')] : []));
+      if (herr === 'forma') extra.push(selForma(), ...(op.forma === 'poligono' ? [campoN('lados', op.lados, v => { op.lados = Math.max(3, Math.round(v)); }, 30)] : []), mk('span', '→'), selQue(), ...(op.formaQue === 'muro' ? [campoN('e', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')] : []), ...(op.formaQue === 'vecino' ? [campoN('alto', op.altVecino, v => { op.altVecino = v; }, 40, 'm')] : []));
       if ((herr === 'camino' && op.muroCurvo) || (herr === 'forma' && op.formaQue === 'muro')) { panel.append(fila(...extra)); extra.length = 0; if (herr === 'camino') extra.push(campoN('espesor', op.espCam, v => { op.espCam = v; api.pedirDibujo(); }, 40, 'm')); panel.append(filaJust()); }
       if (herr === 'desfase') extra.push(campoN('a', op.dDesf, v => { op.dDesf = v; }, 44, 'm'));
       if (herr === 'girar-libre') extra.push(campoN('ángulo', op.angLibre, v => { op.angLibre = v; }, 44, '°'));
@@ -513,6 +517,7 @@ export function montarColocar(api: ApiPlanta) {
         c.cerrado ? boton('▣', 'Perfil irregular con este contorno', () => hacer(() => { const r = perfilDesdeCamino(estado.proyecto, c, estado.contexto ?? undefined); return 'error' in r ? r.error : null; }, `Perfil irregular con el contorno de «${c.nombre}». Doble clic sobre él para editarlo.`))
           : mk('span', ''),
         boton('〰', `Muro de ${fmt(op.espCam)} m que sigue este camino (${NOMBRE_JUST[op.justCam]})${c.cerrado ? '; cerrado queda un anillo' : ''}`, () => hacer(() => { const r = muroSobreCamino(estado.proyecto, c, op.espCam, estado.contexto ?? undefined, op.justCam); return 'error' in r ? r.error : null; }, `Muro de ${fmt(op.espCam)} m sobre «${c.nombre}» (${NOMBRE_JUST[op.justCam]}). Doble clic sobre él para editarlo.`)),
+        ...(c.cerrado ? [boton('⌂', `Edificio vecino con este contorno, de ${fmt(op.altVecino)} m (contexto urbano de los túneles de viento)`, () => hacer(() => { const r = agregarVecino(estado.proyecto, c.v, op.altVecino, c.nombre || 'Edificio (calcado)'); return typeof r === 'string' ? null : r.error; }, `Edificio vecino de ${fmt(op.altVecino)} m con el contorno de «${c.nombre}». Se edita en Viento → Túnel 2D → Contexto urbano.`))] : []),
         boton('⇄', 'Invertir el sentido', () => hacer(() => { const p = estado.proyecto; p.caminos = (p.caminos ?? []).map(x => (x.id === c.id ? invertirCamino(x) : x)); }, 'Sentido invertido.')),
         boton('✕', 'Borrar el camino', () => { caminosSel.delete(c.id); hacer(() => { const p = estado.proyecto; p.caminos = (p.caminos ?? []).filter(x => x.id !== c.id); }, 'Camino borrado.'); }));
       lista.append(f);
@@ -550,6 +555,54 @@ export function montarColocar(api: ApiPlanta) {
     const { X, Y } = v;
     const p = estado.proyecto;
     const g = el('g', { class: 'capa-colocar' });
+    // los edificios vecinos del contexto urbano (calcados o importados): gris, con su id y su altura
+    (p.contexto?.edificios ?? []).forEach(e => {
+      g.append(el('polygon', { points: e.v.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'vecino-planta' }));
+      const cx = e.v.reduce((a, q) => a + q.x, 0) / e.v.length, cy = e.v.reduce((a, q) => a + q.y, 0) / e.v.length;
+      g.append(el('text', { x: X(cx), y: Y(cy), class: 'vecino-rot', 'text-anchor': 'middle' }, `${e.id} · ${fmt(Math.max(e.altura, ...(e.retiros ?? []).map(r => r.altura)), 0)} m`));
+    });
+    // el exoesqueleto (etapa 08): su contorno a la separación de la fachada, las columnas de esquina y las de las alas,
+    // en el nivel a la vista (si la torre está corrida o las caras siguen la planta, como en ese nivel)
+    const dcir = p.exo ? diagridCircular(p) : null;
+    if (dcir) {
+      // diagrid sobre la planta circular (30 St Mary Axe): la fachada y los nudos del anillo más cercano al nivel a la vista
+      const z = estado.nivelPlanta ?? 0, R = radioEn(p, z);
+      const an = dcir.anillos.reduce((m, a) => (Math.abs(a.z - z) < Math.abs(m.z - z) ? a : m), dcir.anillos[0]);
+      const ge = el('g', { class: 'exo-planta' });
+      ge.append(el('circle', { cx: X(0), cy: Y(0), r: X(R) - X(0), class: 'exo-contorno' }));
+      const lado = Math.max(0.6, (p.exo!.diagonal?.b ?? 0.5) * 1.6);
+      an.th.forEach(th => { const x = R * Math.cos(th), y = R * Math.sin(th); ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna', transform: `rotate(${(-th * 180) / Math.PI + 45} ${X(x)} ${Y(y)})` })); });
+      ge.append(el('text', { x: X(-R) + 4, y: Y(-R) + 16, class: 'exo-rot' }, `diagrid: ${dcir.n} nudos por anillo, anillo a ${fmt(an.z, 1)} m (cada anillo gira ${fmt(180 / dcir.n, 0)}°)`));
+      g.append(ge);
+    } else if (p.exo) {
+      const ms = medidasNiveles(p), pb = ms.find(m => Math.abs(m.z) < 1e-6) ?? ms[ms.length - 1];
+      const nv = (estado.nivelPlanta !== null ? ms.find(m => Math.abs(m.n.cota - estado.nivelPlanta!) < 1e-6) : undefined) ?? pb;
+      if (pb && nv) {
+        const ref = p.exo.anchoVariable ? nv : pb, sep = p.exo.separacion, hx = ref.B / 2 + sep, hy = ref.L / 2 + sep, cx = nv.dx, cy = nv.dy, lado = Math.max(0.25, p.exo.columna.b);
+        const ge = el('g', { class: 'exo-planta' });
+        ge.append(el('rect', { x: X(cx - hx), y: Y(cy + hy), width: X(cx + hx) - X(cx - hx), height: Y(cy - hy) - Y(cy + hy), class: 'exo-contorno' }));
+        const columna = (x: number, y: number) => ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna' }));
+        if (p.exo.tipo === 'F') {
+          // núcleo con outriggers: brazos desde las caras del núcleo hasta las columnas del perímetro, en los dos vientos;
+          // el contorno es el cinturón (si no hay, se borra)
+          const c = Math.max(0.5, (p.exo.nucleo ?? Math.min(hx, hy) * 2 / 3) / 2);
+          if (p.exo.cinturon === false) ge.firstChild?.remove();
+          for (const sg of [-1, 1]) for (const t of [-c, c]) {
+            ge.append(el('line', { x1: X(cx + sg * c), y1: Y(cy + t), x2: X(cx + sg * hx), y2: Y(cy + t), class: 'exo-brazo' }));
+            ge.append(el('line', { x1: X(cx + t), y1: Y(cy + sg * c), x2: X(cx + t), y2: Y(cy + sg * hy), class: 'exo-brazo' }));
+            columna(cx + sg * hx, cy + t); columna(cx + t, cy + sg * hy);
+          }
+          ge.append(el('text', { x: X(cx - hx) + 4, y: Y(cy + hy) - 5, class: 'exo-rot' }, `outriggers · brazos del núcleo a las columnas${p.exo.cinturon === false ? '' : ' · cinturón en el perímetro'}`));
+          g.append(ge);
+        } else {
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) columna(cx + sx * hx, cy + sy * hy);
+        const na = Math.max(0, Math.round(p.exo.alas ?? 0));
+        for (let i = 1; i <= na; i++) { const t = -1 + (2 * i) / (na + 1); for (const s2 of [-1, 1]) { columna(cx + t * hx, cy + s2 * hy); columna(cx + s2 * hx, cy + t * hy); } }
+        ge.append(el('text', { x: X(cx - hx) + 4, y: Y(cy + hy) - 5, class: 'exo-rot' }, `exoesqueleto · a ${fmt(sep, 2)} m de la fachada`));
+        g.append(ge);
+        }
+      }
+    }
     // caminos
     (p.caminos ?? []).forEach(c => {
       const ps = puntosCamino(c, 3);

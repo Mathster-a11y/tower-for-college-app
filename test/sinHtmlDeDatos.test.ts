@@ -32,6 +32,7 @@ const PERMITIDAS: [string, string][] = [
   ['src/ui/grafo.ts', 's.innerHTML = simbolo(p.sim);'],
   ['src/ui/grafo.ts', 'sal.innerHTML = simbolo(n.sim);'],
   ['src/ui/grafo.ts', "sp.innerHTML = simbolo(n.sim) + ' ';"],
+  ['src/ui/ecuaciones/glosario.ts', 'td.innerHTML = simbolo(s);'],   // símbolos de los grafos (texto de la app, simbolo() escapa)
   ['src/ui/ecuaciones/vista.ts', 'nom.innerHTML = `${simbolo(p.sim)} · ${esc(p.nombre)}`;'],
   ['src/ui/ecuaciones/vista.ts', 'titulo.innerHTML = `${simbolo((n ?? p)!.sim)} · ${esc(n ? n.titulo : p!.nombre)}`;'],
   ['src/ui/ecuaciones/vista.ts', 'sim.innerHTML = `${simbolo(n.sim)} = ${conSimbolos(n.ec, cap)}`;'],

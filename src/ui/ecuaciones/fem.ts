@@ -84,7 +84,7 @@ export function grafoFem(p0: Proyecto, teoria: 'timoshenko' | 'euler', s: SelFem
     nodos: [
       de('Kp2', 'K_p', 'Ménsula condensada (azotea)', 'del capítulo 1', r => { const K = Kp(r); return K[K.length - 1][K.length - 1]; }, 0, 't/m'),
       { id: 'gdl', titulo: 'Incógnitas de la torre', sim: 'N', ec: '3 · [n]', dec: 0, valor: () => 3 * n, f: x => 3 * x.n, nota: 'ux, uy y θ de cada losa: la matriz de la torre es de N × N.' },
-      { id: 'T', titulo: 'Corrimiento de la pieza en un piso', sim: 'd_p', ec: A ? 'u_y + [x] · θ' : 'u_x − [x] · θ', dec: 0, valor: () => null,
+      { id: 'T', titulo: 'Corrimiento de la pieza en un piso', sim: 'd_p', ec: A ? 'u_y + [x] · θ' : 'u_x − [x] · θ', unidad: 'm', dec: 0, valor: () => null,
         nota: 'Una pieza paralela al viento A (en x) se corre lo que la losa en y más el giro por su distancia; es la «T» que lleva la pieza a las incógnitas de la losa. Es la misma idea de la rototraslación, ahora piso por piso.' },
       { id: 'Kyy', titulo: 'Aporte al corrimiento (azotea)', sim: 'ΔK_uu', ec: '1 · [Kp2] · 1', unidad: 't/m', dec: 0, valor: r => { const K = Kp(r); return K[K.length - 1][K.length - 1]; }, f: x => x.Kp2,
         nota: 'Tᵀ·Kp·T: en la casilla del corrimiento de la azotea entra la rigidez de la pieza tal cual.' },

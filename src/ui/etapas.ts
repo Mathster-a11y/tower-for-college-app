@@ -3,6 +3,7 @@
  * 06 Rototraslación · 07 Flexión, más Resumen y Ayuda. Cada etapa tiene su color de rol, su panel (datos, indicadores,
  * fórmulas con los números y la celda de la planilla) y su dibujo grande en el centro.
  */
+import { etapaDeGrupo, irAEtapa } from './hilo';
 import { centroTunel, panelTunel } from './tunel2d';
 
 import { describirConfig } from '../engine/metodos/tipos';
@@ -16,7 +17,10 @@ import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
 import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
 import { rototraslacionAnimada } from './rotoAnimada';
 import { centroCorte } from './corte';
+import { centroPerfil, panelPerfil } from './perfilEditor';
 import { centroEcuaciones, panelEcuaciones, METODOS_ECUACIONES } from './ecuaciones/vista';
+import { esPerfilVariable } from '../engine/perfilTorre';
+import { protocoloDelCalculo } from '../engine/perfilVariable';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
 import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
@@ -27,7 +31,7 @@ import { TENSION_ADM, type Control } from '../engine/verificaciones';
 import { alturaDesde, fibrasDireccion } from '../engine/fibras';
 import { muroEn } from '../engine/modelo';
 import type { PlanillaRes } from '../engine/planilla';
-import { panelExo, centroExo, estadoExo, momentoTabiques } from './exo';
+import { panelExo, centroExo, estadoExo, momentoTabiques, exoEnElCalculo } from './exo';
 import { centroCirsoc102, panelCirsoc102 } from './cirsoc102';
 import { centroFlexCirsoc, panelFlexCirsoc } from './cirsoc201';
 import { centroRigidezFem, panelRigidezFem, seccionRepartoFem } from './fem';
@@ -137,14 +141,27 @@ export function tablaControlesImpresa(cs: Control[]): H {
 
 /** dos dibujos lado a lado si entran; si no, uno debajo del otro */
 /**
- * Ancho de cada dibujo de una fila: dos por fila solo si cada uno queda de 420 px o más; si no, uno debajo del otro.
+ * Ancho de cada dibujo de una fila: dos por fila si cada uno queda de 255 px o más; si no, uno debajo del otro.
  * El dibujo se arma con el ancho real de su columna, así el texto queda en su tamaño (no se achica al escalar).
  */
 let columnasFila = 1;
 function anchos(tam: Tam, n2 = 2) {
   const a = tam.ancho ?? 600;
-  columnasFila = a >= n2 * 420 + 16 * (n2 - 1) ? n2 : 1;
+  // los gráficos en altura son angostos y altos: lado a lado desde 255 px cada uno (así la etapa entra en una pantalla
+  // de notebook con el panel del 3D abierto, sin desplazarse para ver el segundo)
+  columnasFila = a >= n2 * 255 + 16 * (n2 - 1) ? n2 : 1;
   return columnasFila > 1 ? { ancho: Math.floor((a - 16 * (n2 - 1)) / n2), alto: Math.max(320, Math.min(560, (tam.alto ?? 520) - 70)) } : { ancho: a, alto: 380 };
+}
+/**
+ * lo secundario de una etapa, plegado (plan de entrega, inciso 2): un desplegable «Más detalle» que recuerda si se lo
+ * abrió (por título, en este navegador)
+ */
+function masDetalle(titulo: string, ...hijos: Node[]): HTMLElement {
+  const clave = `torre3d.masDetalle.${titulo}`;
+  let abierto = false; try { abierto = localStorage.getItem(clave) === '1'; } catch { /* sin almacenamiento */ }
+  const d = h('details', { class: 'mas-detalle', ...(abierto ? { open: '' } : {}) }, h('summary', {}, `Más detalle: ${titulo}`), ...hijos) as HTMLDetailsElement;
+  d.addEventListener('toggle', () => { try { localStorage.setItem(clave, d.open ? '1' : '0'); } catch { /* sin almacenamiento */ } });
+  return d;
 }
 function fila(...hijos: Node[]) { const f = h('div', { class: 'fila-dibujos' }, ...hijos); f.style.gridTemplateColumns = `repeat(${columnasFila}, minmax(0, 1fr))`; return f; }
 function nivelElegido(alt: PuntoAltura[], clave: string): PuntoAltura | undefined {
@@ -163,19 +180,20 @@ function selectorNivel(alt: PuntoAltura[], clave: string): H {
 
 // ------------------------------------------------------------------ 01 Diseño
 const diseno: Etapa = {
-  id: 'diseno', nro: '01', nombre: 'Diseño', rol: '--r-diseno', sub: ['Proyecto', 'Niveles', 'Muros', 'Piezas'],
+  id: 'diseno', nro: '01', nombre: 'Diseño', rol: '--r-diseno', sub: ['Proyecto', 'Niveles', 'Perfil', 'Muros', 'Piezas'],
   icono: '<rect x="4" y="4" width="18" height="16" rx="2"/><path d="M4 12h9M13 4v16"/>',
   globo: 'Diseño|Los datos de la torre: niveles, muros y piezas. Cada muro va en una pieza por dirección; la app arma con ellas los perfiles de las hojas J.',
   panel(c, sub) {
     recuadroJ(c);
     if (sub === 'Niveles') panelNiveles(c);
+    else if (sub === 'Perfil') panelPerfil(c);
     else if (sub === 'Muros') panelMuros(c);
     else if (sub === 'Piezas') panelPiezas(c);
     else panelProyecto(c);
   },
   // en «Niveles», el corte: desde dónde hasta dónde llega cada muro (se edita arrastrando)
-  get centro() { return estado.sub.diseno === 'Niveles' ? (c: H, tam: Tam) => centroCorte(c, tam) : 'planta' as const; },
-  nombreCentro: () => (estado.sub.diseno === 'Niveles' ? 'Corte · altura de cada muro' : 'Planta'),
+  get centro() { return estado.sub.diseno === 'Niveles' ? (c: H, tam: Tam) => centroCorte(c, tam) : estado.sub.diseno === 'Perfil' ? (c: H, tam: Tam) => centroPerfil(c, tam) : 'planta' as const; },
+  nombreCentro: () => (estado.sub.diseno === 'Niveles' ? 'Corte · altura de cada muro' : estado.sub.diseno === 'Perfil' ? 'Perfil de la torre · los dos alzados' : 'Planta'),
   estado() {
     const { asig, error } = estado.calculo;
     if (error) return 'no verifica';
@@ -246,7 +264,7 @@ const fuerzas: Etapa = {
   panel(c) {
     const d = datos();
     const m = d.R.mnyq, A = d.dir === 'A';
-    c.append(h('div', { class: 'kpis' }, kpi('W, viento total', `${fmt(d.W, 1)} t`, A ? 'M,NyQ!H61' : 'suma de la cara menor'), kpi('hw', `${fmt(d.hw)} m`, 'altura de la resultante sobre la base'), kpi('Mv', `${fmt(d.Mv, 0)} tm`, A ? 'momento volcador · M,NyQ!J61' : 'M,NyQ!O61')));
+    c.append(h('div', { class: 'kpis' }, kpi('W, viento total', `${fmt(d.W, 1)} t`, A ? 'M,NyQ!H61' : 'suma de la cara menor', undefined, '← Viento'), kpi('hw', `${fmt(d.hw)} m`, 'altura de la resultante sobre la base'), kpi('Mv', `${fmt(d.Mv, 0)} tm`, A ? 'momento volcador · M,NyQ!J61' : 'M,NyQ!O61')));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
       formula('Fuerza en cada nivel', `${v('W', 'i')}${op('=')}${v('D')} · ${A ? v('E') : v('F')} · ${v('p', 'neta')}`, `M,NyQ!H${5}…  (D = altura de influencia; ${A ? 'E = ancho B' : 'F = ancho L'})`),
@@ -273,6 +291,29 @@ const fuerzas: Etapa = {
 };
 
 // ------------------------------------------------------------------ 04 Estabilidad
+/** Estabilidad con una torre de perfil variable (Diseño → Perfil): los pasos 2, 4, 5 y 7 del protocolo */
+function panelPerfilVariable(c: HTMLElement, d: ReturnType<typeof datos>) {
+  const pr = protocoloDelCalculo(d.p, d.R, d.asig.piezas, d.asig.filaNivel, d.p.hormigon || 'H30', d.dir);
+  const s = seccion(`Perfil variable · viento ${d.dir}`);
+  const inclinadas = pr.niveles.some(x => Math.abs(x.beta) > 1e-4);
+  const okT = pr.theta <= 0.1, malT = pr.theta >= 0.25;
+  s.cuerpo.append(
+    h('p', { class: 'nota' }, 'La torre no es un prisma: los niveles cambian de medida o se corren. La planilla ya usa el B, el peso y el J de cada nivel; esto suma lo que le falta: la fachada inclinada, el peso corrido, el viento excéntrico y el efecto P-Δ (el peso de la torre empujando cuando el viento la corre).'),
+    h('div', { class: 'kpis' },
+      kpi('Índice θ (P-Δ)', fmt(pr.theta, 3), okT ? '≤ 0,10 · se desprecia' : malT ? '≥ 0,25 · demasiado flexible' : 'entre 0,10 y 0,25 · se suma', colorEstado(okT ? true : malT ? false : null)),
+      kpi('Momento total en PB', `${fmt(pr.Mtotal, 0)} tm`, `${pr.aumento >= 0 ? '+' : ''}${fmt(pr.aumento * 100, 0)} % sobre el Mv en PB = ${fmt(pr.Mv, 0)} tm`, colorEstado(pr.aumento < 0.1 ? true : null))),
+  );
+  s.cuerpo.append(
+    ...(inclinadas ? [formula('2 · Fachada inclinada: el viento empuja normal a la fachada', `${v('W', 'h')}${op('=')}Σ ${v('W')} · cos ${v('β')}${op('=')}${r(pr.Wh, 1, 't')}  ·  ${v('W', 'v')}${op('=')}Σ ${v('W')} · sen ${v('β')}${op('=')}${r(pr.Wv, 1, 't')}`, `de W = ${fmt(pr.W, 1)} t; Wv > 0 empuja hacia abajo (alivia el vuelco), Wv < 0 levanta`)] : []),
+    formula('4 · Peso corrido: cada nivel pesa donde está', `${v('M', 'G')}${op('=')}Σ ${v('P', 'i')} · ${v('e', 'i')}${op('=')}${r(pr.MG, 0, 'tm')}`, 'P = 0,7 t/m² · B · L · pisos; e = corrimiento del nivel en el sentido del viento'),
+    formula('5 · Viento excéntrico: torsor que se suma', `${v('M', 't')}${op('=')}Σ ${v('W', 'i')} · ${v('c', 'i')}${op('=')}${r(pr.MtExtra, 1, 'tm')}`, 'c = corrimiento del nivel a lo ancho (la planilla ya suma Q · e)'),
+    formula('7 · P-Δ: el peso sobre la torre deformada', `${v('θ')}${op('=')}Σ ${v('P', 'i')} · ${v('δ', 'i')} / ${v('M', 'v')}${op('=')}${n(pr.MPD1, 1)} / ${n(pr.Mv, 0)}${op('=')}${r(pr.theta, 3)}  ·  ${v('M', 'PΔ')}${op('=')}${n(pr.MPD1, 1)} / (1 − ${n(pr.theta, 3)})${op('=')}${r(pr.MPD, 1, 'tm')}`, 'δ = la deformada de la etapa Rigidez (con el J de cada nivel)', okT ? 'verifica' : malT ? 'no verifica' : undefined),
+  );
+  const t = tablaValores(['Nivel', 'z (m)', 'ancho (m)', 'e (m)', 'c (m)', 'β (°)', 'P (t)', 'W (t)', 'δ (mm)'],
+    [...pr.niveles].reverse().map(x => [x.nivel, x.z, x.ancho, x.e, x.c, (x.beta * 180) / Math.PI, x.P, x.W, x.delta * 1000]), [0, 1, 2, 2, 2, 1, 0, 2, 1]);
+  s.cuerpo.append(t);
+  c.append(s.el);
+}
 const estabilidad: Etapa = {
   id: 'estabilidad', nro: '04', nombre: 'Estabilidad', rol: '--r-estabilidad', dependeDir: true, conFuente: true,
   icono: '<path d="M10 3h7v14h-7zM4 21h19M13.5 17l-4 4M13.5 17l4 4"/>',
@@ -295,6 +336,7 @@ const estabilidad: Etapa = {
       formula(`Excentricidad, viento ${d.dir}`, `${v('e')}${op('=')}${v('M', 'v')} / ${v('P')}${op('=')}${n(fg.Mv, 0)} / ${n(fg.G, 0)}${op('=')}${r(fg.e, 2, 'm')}${op(okE ? '≤' : '>')}${v('b')}/6${op('=')}${r(fg.tercio, 2, 'm')}`, d.dir === 'A' ? 'M,NyQ!M99 y N99' : `con a1 = ${fmt(a1, 2)} m (la planilla no verifica el viento B)`, okE ? 'verifica' : 'no verifica'),
       formula('Tensión en el suelo (con sobrecarga, 0,9 t/m²)', `${v('σ')}${op('=')}−${v('N')}/${v('F')} ± ${v('M', 'v')}/${v('W')}${op('=')}${n(m.N86, 2)} ∓ ${n(Math.abs(m.N87), 2)}${op('=')}${r(m.N89, 2, 'kg/cm²')}`, 'M,NyQ!N89 (máx.) · N90 (mín., sin sobrecarga)'),
     );
+    if (esPerfilVariable(d.p) && d.asig.piezas.length) panelPerfilVariable(c, d);
     c.append(seccion('Controles', tablaControles(grupoControles(['Estabilidad', 'Funicular']))).el, h('p', { class: 'nota' }, fuenteTxt()));
   },
   centro(c, tam) {
@@ -310,8 +352,8 @@ const estabilidad: Etapa = {
       h('p', { class: `nota estado ${fg.verifica ? 'verifica' : 'no-verifica'}` }, fg.verifica ? `Verifica: corta la base a ${fmt(fg.e)} m del eje, dentro del tercio medio (±${fmt(fg.tercio)} m).` : `No verifica: corta la base a ${fmt(fg.e)} m del eje, fuera del tercio medio (±${fmt(fg.tercio)} m).`));
     c.append(fila(f1, f2));
     const fuera = fg.puntos.filter(x => !x.dentro);
-    c.append(h('figure', { class: 'diagrama' }, h('figcaption', {}, '3 · Línea de presiones piso a piso'), dibujoPresiones(fg, { ancho: Math.min(tam.ancho ?? 600, 760), alto: 360 }),
-      h('p', { class: 'nota' }, `En cada nivel, la resultante de todo lo que está arriba corta el nivel a e = M / N del eje. La banda verde es el núcleo central de la planta (lado / 6): es una referencia, porque la planta no es maciza. ${fuera.length ? `Fuera: ${fuera.map(x => x.nivel).join(', ')}.` : 'Todos los niveles quedan dentro.'}`)));
+    c.append(masDetalle('la línea de presiones piso a piso', h('figure', { class: 'diagrama' }, h('figcaption', {}, '3 · Línea de presiones piso a piso'), dibujoPresiones(fg, { ancho: Math.min(tam.ancho ?? 600, 760), alto: 360 }),
+      h('p', { class: 'nota' }, `En cada nivel, la resultante de todo lo que está arriba corta el nivel a e = M / N del eje. La banda verde es el núcleo central de la planta (lado / 6): es una referencia, porque la planta no es maciza. ${fuera.length ? `Fuera: ${fuera.map(x => x.nivel).join(', ')}.` : 'Todos los niveles quedan dentro.'}`))));
   },
   nombreCentro: () => `Funicular · viento ${estado.dir}`,
   estado: () => peor(grupoControles(['Estabilidad', 'Funicular']).filter(c => c.estado !== 'informativo')),
@@ -360,6 +402,8 @@ const rigidezE: Etapa = {
     const varia = Jniv.some(x => Math.abs(x.J - rg.J) > 1e-6 * rg.J);
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     const a = anchos(tam);
+    // la fila de abajo, con la altura que deja el gráfico de ΣJ (que mide unos 210 px): la etapa entra en la pantalla
+    if (columnasFila > 1) a.alto = Math.max(300, Math.min(a.alto, (tam.alto ?? 520) - 290));
     c.append(graficoRigidez(rs, { ancho: Math.min(tam.ancho ?? 600, 900) }));
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
@@ -387,7 +431,7 @@ const rototrasl: Etapa = {
     const hoja = d.dir === 'A' ? 'Rototrasl. cara mayor' : 'Rototrasl. cara menor';
     const guia = dp.metodo === 'guia';
     const e = Math.abs(dp.Xr);
-    c.append(h('div', { class: 'kpis' }, kpi('ΣJ paralelos', `${fmt(dp.SJ, 2)} m⁴`, `${hoja}!B25`), kpi('Excentricidad e', `${fmt(e, 2)} m`, 'eje de simetría → eje de inercia'), kpi('Mt = W·e', `${fmt(Math.abs(dp.Mt), 0)} tm`, 'momento que hace girar la planta')));
+    c.append(h('div', { class: 'kpis' }, kpi('ΣJ paralelos', `${fmt(dp.SJ, 2)} m⁴`, `${hoja}!B25`, undefined, '← Rigidez'), kpi('Excentricidad e', `${fmt(e, 2)} m`, 'eje de simetría → eje de inercia'), kpi('Mt = W·e', `${fmt(Math.abs(dp.Mt), 0)} tm`, 'momento que hace girar la planta')));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
       formula('Eje de inercia (Varignon): resultante de los J', `${v('X', 'r')}${op('=')}Σ ${v('J', 'j')}·${v('x', 'j')} / Σ ${v('J', 'j')}${op('=')}${r(d.dir === 'A' ? dp.Xr : -dp.Xr, 2, 'm')}`, `${hoja}!J7 · el viento actúa en el eje de simetría, así que e = Xr`),
@@ -420,7 +464,7 @@ const rototrasl: Etapa = {
     const dp = datosRotoPlano(d);
     const pasoN = Number(estado.sub.pasoRoto) || 1;
     const paso = Math.min(4, pasoN) as Paso;
-    const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Paso' });
+    const seg = h('div', { class: 'seg chico pasos', role: 'group', 'aria-label': 'Paso' });
     (['1 · Eje de inercia', '2 · Traslación', '3 · Rotación', '4 · Rototraslación', '5 · Animada', '6 · En 3D'] as const).forEach((t, i) => {
       const b2 = h('button', { type: 'button', 'aria-pressed': String(pasoN === i + 1) }, t);
       b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
@@ -695,7 +739,7 @@ const flexion: Etapa = {
     });
     sel.addEventListener('change', () => { estado.nivelFlex = Number(sel.value); estado.avisarPanel(); });
     c.append(h('label', { class: 'campo-nivel-flex' }, 'Verificar en la base del piso sobre ', sel));
-    if (d.p.exo) {
+    if (d.p.exo && exoEnElCalculo()) {
       const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = estado.flexConExo;
       cb.addEventListener('change', () => { estado.flexConExo = cb.checked; estado.avisarPanel(); });
       const Mx = momentoTabiques(d.dir);
@@ -756,15 +800,17 @@ const flexion: Etapa = {
       graficoTensiones(v0, adm, { ancho: anchoT, alto: Math.max(320, Math.min(500, (tam.alto ?? 520) - 140)) })));
     // fibras en altura: la peor tracción (descargado) y la peor compresión (cargado) de la pieza, piso a piso
     const f = fibras().find(x => x.nombre === v0.nombre);
+    // lo secundario: la pieza en todos los pisos y la tabla muro por muro (plegados)
+    const det = masDetalle('la pieza en todos los pisos y la tabla muro por muro');
     if (f && f.niveles.length > 1) {
       const pts = (k: 't' | 'c') => f.niveles.map(nv => ({ z: nv.z, nivel: nv.nivel, x: k === 't' ? Math.max(...nv.v.muros.map(m => m.traccion)) : Math.min(...nv.v.muros.map(m => m.compresion)) }));
-      c.append(comoLeer(
+      det.append(comoLeer(
         `Es la misma pieza ${v0.nombre} en todos los pisos: el eje vertical es la altura (cada punto es la base de un piso) y el horizontal, la tensión σ en kg/cm² (a la derecha del 0, tracción; a la izquierda, compresión).`,
         'Línea llena: la fibra más comprimida de cada piso, con la losa cargada. Línea punteada: la fibra más traccionada, con la losa descargada. El color sigue al signo: rojo donde tracciona, azul donde comprime.',
         'Abajo el momento del viento es máximo, por eso las dos líneas se abren en la base: ahí están la peor compresión y la peor tracción (los valores rotulados). Hacia arriba el momento baja más rápido que el peso y las líneas se cierran.',
         'Donde la punteada cruza el 0 deja de haber tracción: de ese piso para arriba alcanza con la armadura mínima. Si la llena pasa la línea σbk, ese piso no verifica a compresión.',
       ));
-      c.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
+      det.append(graficoAltura({ titulo: `${v0.nombre}: fibras extremas en altura (base de cada piso) · peor tracción ${fmt(f.traccion.valor, 1)} kg/cm² (${f.traccion.nivel}, ${f.traccion.muro}) · peor compresión ${fmt(f.compresion.valor, 1)} kg/cm² (${f.compresion.nivel}, ${f.compresion.muro})`, eje: 'σ, + tracción', unidad: 'kg/cm²', decimales: 1,
         series: [
           { nombre: 'fibra más traccionada, descargado (0,7 t/m², punteada)', color: 'traccion', punteada: true, tipo: 'linea', puntos: pts('t'), porSigno: true },
           { nombre: 'fibra más comprimida, cargado (0,9 t/m², llena)', color: 'compresion', tipo: 'linea', puntos: pts('c'), porSigno: true },
@@ -773,12 +819,12 @@ const flexion: Etapa = {
         alturas: Math.abs(z - (f.niveles[0]?.z ?? 0)) > 1e-6 ? [{ z, texto: `se ve: ${nomNivel}` }] : [],
       }, { ancho: anchoT, alto: Math.max(300, Math.min(520, (tam.alto ?? 520) - 120)) }));
       const filasF = f.niveles.slice().reverse().map(nv => [nv.nivel, nv.z, nv.v.M, Math.max(...nv.v.muros.map(m => m.traccion)), Math.min(...nv.v.muros.map(m => m.compresion)), nv.v.muros.reduce((s, m) => s + Math.max(m.As, m.AsMin), 0)]);
-      c.append(tablaValores(['Nivel', 'z (m)', 'M pieza (tm)', 'tracción máx.', 'compresión máx.', 'ΣAs (cm²)'], filasF, [0, 2, 1, 1, 1, 1]));
+      det.append(tablaValores(['Nivel', 'z (m)', 'M pieza (tm)', 'tracción máx.', 'compresión máx.', 'ΣAs (cm²)'], filasF, [0, 2, 1, 1, 1, 1]));
     }
     const filas = v0.muros.map(m => [`${m.id} (${m.papel})`, m.A, m.Ndesc, m.Ncarg, m.sigM / 10, m.desc[0] / 10, m.desc[1] / 10, m.carg[0] / 10, m.carg[1] / 10, Math.max(m.As, m.AsMin)]);
     const t = tablaValores(['Muro', 'F (m²)', 'Ng (t)', 'Nq (t)', 'M·y/J', 'σ desc. ext.', 'σ desc. int.', 'σ carg. ext.', 'σ carg. int.', 'As (cm²)'], filas, [0, 3, 1, 1, 1, 1, 1, 1, 1, 1]);
-    t.setAttribute('open', '');
-    c.append(t, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
+    det.append(t);
+    c.append(det, h('p', { class: 'nota' }, 'Arriba de cero, tracción (zona sombreada): la línea punteada es el edificio sin sobrecarga, que es el que más tracciona. La línea llena es con sobrecarga, que es el que más comprime. Tensiones en kg/cm².'));
   },
   nombreCentro: () => `Flexocompresión · viento ${estado.dir}`,
   estado: () => peor(grupoControles(usaCirsoc201() ? ['CIRSOC 201'] : ['Flexocompresión'])),
@@ -812,10 +858,11 @@ export function datosCarta(): DatosCarta | null {
   };
 }
 const VARIANTES: [Variante, string, string][] = [
-  ['A', 'A · Lámina M, N y Q', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja.'],
-  ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
-  ['C', 'C · Axonometría de la ménsula', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones.'],
+  // el orden de la entrega: C de portada, A como lámina principal, D la estabilidad y B el resumen
+  ['C', 'C · Axonometría (portada)', 'La torre en axonometría con el viento de cada piso, la resultante, el diagrama de momentos al costado y las reacciones. Va en la portada del informe, de la Carta PDF y arriba en la lámina A3.'],
+  ['A', 'A · Lámina M, N y Q (principal)', 'Alzado y, a la misma altura, Wi, Q, M y N de cada nivel, con la tabla de niveles de la hoja. Es la lámina principal: la que se corrige contra la planilla.'],
   ['D', 'D · Vuelco y suelo', 'El esquema de abajo de las tablas de «M,NyQ», a escala: viento de cada piso, W en hW, peso P, resultante, punto de giro, núcleo central b\'/6 y tensiones en el suelo, con las dos tablas de la hoja.'],
+  ['B', 'B · Ficha de la torre', 'Planta con piezas, ejes, CR y e; alzado con W en hw y la deformada; los valores y controles principales.'],
 ];
 const cartaE: Etapa = {
   id: 'carta', nro: '▤', nombre: 'Carta', rol: '--r-resumen', dependeDir: true, conFuente: true,
@@ -860,6 +907,20 @@ const resumen: Etapa = {
     if (estado.config.metodo === 'combinado' && (estado.sub.resumen ?? 'Comparación') === 'Comparación') { centroCombinado(c); return; }
     const cs = estado.calculo.controles ?? [];
     const grupos = [...new Set(cs.map(x => x.grupo))];
+    // qué revisar: lo que no verifica o pide atención, agrupado, con el botón a la etapa donde se resuelve
+    const malos = cs.filter(x => x.estado === 'no verifica' || x.estado === 'atención');
+    if (malos.length) {
+      const orden = (x: Control) => (x.estado === 'no verifica' ? 0 : 1);
+      const filas = grupos.filter(g => malos.some(x => x.grupo === g)).map(g => {
+        const xs = malos.filter(x => x.grupo === g).sort((a, b) => orden(a) - orden(b));
+        const et = etapaDeGrupo(g);
+        const ir = et ? h('button', { type: 'button', class: 'enlace' }, `Ir a ${et[1]} →`) : null;
+        ir?.addEventListener('click', () => irAEtapa(et![0]));
+        return h('li', {}, h('div', { class: 'qr-cab' }, h('b', {}, g), h('span', { class: 'nota chica' }, `${xs.length}`), ...(ir ? [ir] : [])),
+          h('ul', {}, ...xs.slice(0, 4).map(x => h('li', {}, chip(x.estado as EstadoChip), ' ', x.nombre)), ...(xs.length > 4 ? [h('li', { class: 'nota chica' }, `y ${xs.length - 4} más (en la tabla de abajo)`)] : [])));
+      });
+      c.append(h('div', { class: 'que-revisar' }, h('h3', {}, 'Qué revisar'), h('p', { class: 'nota' }, '«No verifica»: resolverlo. «Atención»: mirar el valor.'), h('ul', { class: 'qr-lista' }, ...filas)));
+    }
     c.append(h('div', { class: 'kpis' }, ...grupos.map(g => { const dg = cs.filter(x => x.grupo === g && x.estado !== 'informativo'), e = dg.length ? peor(dg) : 'informativo'; return kpi(g, e, `${cs.filter(x => x.grupo === g).length} controles`, e === 'verifica' ? 'var(--ok)' : e === 'no verifica' ? 'var(--mal)' : e === 'revisar' ? 'var(--revisar)' : 'var(--accent)'); })));
     // centro ancho: tabla; si queda angosto (tablet vertical), las mismas tarjetas que en los paneles
     const ancha = tablaControlesImpresa(cs), angosta = tablaControles(cs);

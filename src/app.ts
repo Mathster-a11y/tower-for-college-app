@@ -14,7 +14,8 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
-import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones } from './ui/comp';
+import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
+import { hiloDeEtapa } from './ui/hilo';
 import { leerProyecto, textoErrores } from './engine/lector';
 import { IDS_METODO, METODOS, VERSION_FORMULAS, configDe, configMotor, describirConfig } from './engine/metodos/tipos';
 import { tarjeta } from './ui/tarjeta';
@@ -27,12 +28,12 @@ import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
 import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
-import { ejemploBasicoExo, ejemploHancock, ejemploHearst, ejemploOnterie } from './engine/ejemplosExo';
+import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { datos201De } from './engine/metodos/cirsoc';
 import { datosGuia } from './engine/metodos/guiaPasos';
-import { datosExo } from './ui/exo';
+import { datosExo, exoEnElCalculo } from './ui/exo';
 import { montarDiagramaJ } from './ui/diagramaJ';
 import { borrarMuros, grupoCerrado, murosDe } from './engine/grupos';
 import { TIPOS_EXO, propsSeccion, pesoExo, type EntradaExo } from './engine/exo';
@@ -78,6 +79,8 @@ function dibujarPanel() {
   const lat = $('lateral');
   lat.style.setProperty('--rol', rolDe(e));
   lat.style.setProperty('--rolb', `var(${e.rol.replace('--r-', '--rb-')})`);
+  // el color de la etapa también para los pasos del centro (jerarquía de botones en estilo.css)
+  document.documentElement.style.setProperty('--rolb', `var(${e.rol.replace('--r-', '--rb-')})`);
   $('banda-nro').textContent = e.nro;
   $('banda-titulo').textContent = e.id === 'flexion' ? 'Flexocompresión' : e.id === 'rototrasl' ? 'Rototraslación' : e.nombre;
   const sp = $('subpasos');
@@ -99,6 +102,28 @@ function dibujarPanel() {
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
   }
   try { e.panel(p, sub); } catch (err) { console.error(err); p.append(h('p', { class: 'error' }, `No se pudo armar el panel: ${String(err)}`)); }
+  // el hilo del cálculo: qué se hace en esta etapa, qué usa y a quién le pasa el resultado
+  const hilo = hiloDeEtapa(e.id);
+  if (hilo) p.prepend(hilo);
+  // las secciones vienen plegadas: un renglón para abrirlas o plegarlas todas juntas
+  const secs = p.querySelectorAll('section.seccion.plegable');
+  if (secs.length > 1) {
+    const ab = h('button', { type: 'button', class: 'enlace' }, 'Abrir todas'), pl = h('button', { type: 'button', class: 'enlace' }, 'Plegar todas');
+    ab.addEventListener('click', () => plegarTodas(p, false)); pl.addEventListener('click', () => plegarTodas(p, true));
+    // recorrer: abre las secciones de a una, en orden (para seguir una explicación o un tutorial)
+    const rec = h('button', { type: 'button', class: 'enlace b-recorrer', title: 'Abre las secciones de a una, en orden' }, 'Recorrer ›');
+    let k = -1;
+    rec.addEventListener('click', () => {
+      const lista = [...p.querySelectorAll<HTMLElement>('section.seccion.plegable')];
+      k = (k + 1) % lista.length;
+      plegarTodas(p, true);
+      const s = lista[k]; s.classList.remove('plegada'); s.querySelector(':scope > .cab')?.setAttribute('aria-expanded', 'true');
+      if (s.dataset.clave) plegarSeccion(s.dataset.clave, false);
+      s.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      rec.textContent = k === lista.length - 1 ? `${k + 1} de ${lista.length} · volver al principio ›` : `${k + 1} de ${lista.length} · siguiente ›`;
+    });
+    secs[0].before(h('div', { class: 'plegar-todas' }, h('span', { class: 'nota chica' }, `${secs.length} secciones`), rec, ab, pl));
+  }
   requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
 }
@@ -120,7 +145,7 @@ function dibujarTira(e: Etapa) {
     b.addEventListener('click', () => { if (m.disponible && cfg.metodo !== k) estado.cambiarCalculo({ metodo: k }); });
     segMet.append(b);
   });
-  calc.push(h('span', { class: 'nota chica' }, 'Método'), segMet);
+  calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Método'), segMet));
   if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
     ([['actual', 'Anterior'], ['nuevo', '2025 (cátedra)']] as const).forEach(([k, txt]) => {
@@ -128,7 +153,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
       segV.append(b);
     });
-    calc.push(h('span', { class: 'nota chica' }, 'Planilla'), segV);
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Planilla'), segV));
   }
   if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
@@ -137,7 +162,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.verificacion !== k) estado.cambiarCalculo({ verificacion: k }); });
       segN.append(b);
     });
-    calc.push(h('span', { class: 'nota chica' }, 'Verificación'), segN);
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Verificación'), segN));
   }
   if (cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
@@ -146,7 +171,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.teoria !== k) estado.cambiarCalculo({ teoria: k }); });
       segT.append(b);
     });
-    calc.push(h('span', { class: 'nota chica' }, 'Piezas'), segT);
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Piezas'), segT));
   }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
@@ -155,7 +180,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.armado !== k) estado.cambiarCalculo({ armado: k }); });
       segA.append(b);
     });
-    calc.push(h('span', { class: 'nota chica' }, 'Armado'), segA);
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Armado'), segA));
   }
   if (e.id === 'diseno' && !calcAbierto) {
     const res = [METODOS[cfg.metodo]?.corto, cfg.metodo === 'planilla' || cfg.metodo === 'combinado' ? (cfg.version === 'nuevo' ? '2025' : 'Anterior') : null, cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado' ? (cfg.armado === 'app' ? 'Armado App' : 'Cátedra') : null].filter(Boolean).join(' · ');
@@ -197,7 +222,7 @@ function dibujarAvance() {
   const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
   const lista = h('div', { class: 'lista-avance' });
   a.replaceChildren(cab, lista);
-  hacerPlegable(a, cab, 'Avance de la planilla');
+  hacerPlegable(a, cab, 'Avance de la planilla', false);
   lista.replaceChildren(...ETAPAS.map(e => {
     const est = e.estado();
     const b = h('button', { type: 'button', 'aria-current': String(e.id === estado.etapa) }, h('span', { class: 'nro' }, e.nro), h('span', { class: 'nom' }, e.nombre), chip(est === 'pendiente' ? 'pendiente' : est, est === 'revisar' && e.id === 'flexion' ? 'armadura' : est));
@@ -302,8 +327,20 @@ function dibujarModoCalculo() {
     bc.addEventListener('click', () => estado.calcularAhora());
     partes.push(bc);
   }
-  zonaModo.replaceChildren(...partes);
+  // tutorial: «En esta etapa», de dónde llega cada indicador, «Recorrer» y las explicaciones plegables. Se apaga para
+  // ganar lugar cuando ya se conoce la app (se recuerda en este navegador)
+  const bt = h('button', { type: 'button', class: 'chico b-tutorial', 'aria-pressed': String(tutorialPrendido()),
+    'data-globo': 'Tutorial|Prendido: arriba de cada etapa, qué se calcula y de dónde llega cada dato, «Recorrer» las secciones y las explicaciones («Ver la explicación», «Cómo leer este gráfico»). Apagado: solo las herramientas y los resultados.' }, tutorialPrendido() ? 'Tutorial: sí' : 'Tutorial: no');
+  bt.addEventListener('click', () => { ponerTutorial(!tutorialPrendido()); dibujarModoCalculo(); });
+  zonaModo.replaceChildren(bt, ...partes);
 }
+const CLAVE_TUTORIAL = 'torre3d.tutorial';
+function tutorialPrendido(): boolean { try { return localStorage.getItem(CLAVE_TUTORIAL) !== 'no'; } catch { return true; } }
+function ponerTutorial(si: boolean) {
+  try { localStorage.setItem(CLAVE_TUTORIAL, si ? 'si' : 'no'); } catch { /* sin almacenamiento */ }
+  document.body.classList.toggle('sin-tutorial', !si);
+}
+document.body.classList.toggle('sin-tutorial', !tutorialPrendido());
 /** aviso sobre los diagramas del centro cuando quedaron del cálculo anterior */
 function marcarCentroViejo() {
   const dib = $('centro-dibujos');
@@ -413,11 +450,11 @@ async function exportar() {
         }
         // hojas «G ·»: motores con fórmulas, gráficos, y la carta y los dibujos de la app como imágenes
         if (!g) return;
-        if (estado.proyecto.exo) {
+        if (estado.proyecto.exo && exoEnElCalculo()) {
           const hoja = (dir: 'A' | 'B') => { const d = datosExo(dir); if (!d) return null; return {
             ficha: `${d.def.tipo} · ${TIPOS_EXO[d.def.tipo].nombre}`, ancho: d.ancho, t: d.tCaras[1], Eh: d.Eh, Eacero: d.def.E, colA: propsSeccion(d.def.columna).A,
             fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, limiteH: d.def.limiteH ?? 500, peso: pesoExo(d.def, (['A', 'B'] as const).map(x => datosExo(x)?.entrada).filter(Boolean) as EntradaExo[]), niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin, Mtab: d.r.Mtab,
-            barras: d.r.controles.map(c => { const e = d.r.caras.find(x => x.nombre === c.cara)!.esfuerzos.find(x => x.id === c.id)!; return [`${c.cara} · ${c.id}`, c.clase, e.L, c.N, c.M, c.sigma / 10, c.lambda, c.estado]; }) }; };
+            barras: d.r.controles.filter(c => !/^[KR]\d/.test(c.id) || d.def.tipo !== 'F').map(c => { const e = d.r.caras.find(x => x.nombre === c.cara)!.esfuerzos.find(x => x.id === c.id)!; return [`${c.cara} · ${c.id}`, c.clase, e.L, c.N, c.M, c.sigma / 10, c.lambda, c.estado]; }) }; };
           g.exo = { A: hoja('A'), B: hoja('B') };
         }
         try {
@@ -533,6 +570,7 @@ async function descargarTabla() {
     descargar(nombreArchivo('_tabla.xlsx'), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { fallo('No se pudo armar la tabla', e); }
 }
+document.addEventListener('torre:ir-etapa', ev => irA((ev as CustomEvent<string>).detail));
 document.addEventListener('torre:importar', () => $<HTMLInputElement>('b-abrir').click());
 document.addEventListener('torre:tabla', () => { void descargarTabla(); });
 
@@ -582,7 +620,9 @@ TORRES_PRUEBA.forEach((t, k) => {
 $('b-ejemplo-34').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploPlanta34()); cerrarMenus(); mensaje('Cargada la torre de 34 pisos: los núcleos toman el viento; las columnas, solo carga de losa.'); });
 $('b-ejemplo-chica').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploBasicoExo()); cerrarMenus(); mensaje('Cargada la torre chica con tubo en X: es el ejemplo paso a paso de la guía. Seguí el viento A.'); });
 $('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHancock()); cerrarMenus(); mensaje('Cargado el John Hancock Center: caras que se angostan con la altura y el tubo en X que toma todo el viento (etapa 08 · Exoesqueleto). Las fuentes de cada número están en la etapa 08.'); });
+$('b-ejemplo-shanghai').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploShanghai()); cerrarMenus(); mensaje('Cargada la Shanghai Tower: núcleo de hormigón con outriggers en las juntas de zona (etapa 08 · Exoesqueleto, ficha F). Las fuentes y los supuestos están en la etapa 08.'); });
 $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
+$('b-ejemplo-gherkin').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGherkin()); cerrarMenus(); mensaje('Cargado 30 St Mary Axe («the Gherkin»): diagrid que sigue el perfil de la torre, con la planta circular llevada a un cuadrado de la misma área (etapa 08). Fuentes y supuestos en la etapa 08. Verifica con el método CIRSOC y con el FEM.'); });
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota.'); });
 // proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
@@ -715,6 +755,7 @@ $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abri
 $('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme().catch(e => fallo('No se pudo armar el informe', e)); });
 $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf().catch(e => fallo('No se pudo armar la carta', e)); });
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
+$('b-presentacion').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar la presentación')) return; mensaje('Armando la presentación…'); import('./ui/presentacion').then(m => m.descargarPresentacion()).then(n => mensaje(`Presentación del trabajo: ${n} láminas.`)).catch(e => fallo('No se pudo armar la presentación', e)); });
 $('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
@@ -1006,7 +1047,7 @@ document.getElementById('arranque')?.remove();
 montarDivisores();
 {
   const b3 = document.querySelector<HTMLElement>('.bloque3d'), cab3 = b3?.querySelector<HTMLElement>('.tira');
-  if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría'); }
+  if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría', false); }
 }
 
 }

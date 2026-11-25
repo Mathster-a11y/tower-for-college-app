@@ -22,8 +22,46 @@ import { IDS_METODO, type IdMetodo } from '../engine/metodos/tipos';
 export interface Tabla { nombre: string; filas: Valor[][]; anchos: number[] }
 export const T = {
   proyecto: 'T3D Proyecto', niveles: 'T3D Niveles', muros: 'T3D Muros', contornos: 'T3D Contornos', grupos: 'T3D Grupos',
-  huecos: 'T3D Huecos de losa', caminos: 'T3D Caminos', cotas: 'T3D Cotas', guias: 'T3D Guías', lofts: 'T3D Lofts',
+  huecos: 'T3D Huecos de losa', caminos: 'T3D Caminos', cotas: 'T3D Cotas', guias: 'T3D Guías', lofts: 'T3D Lofts', exo: 'T3D Exo',
 } as const;
+
+type Exo = NonNullable<Proyecto['exo']>;
+const secTxt = (s: { b: number; e: number }) => `${s.b}x${s.e}`;
+const secLeer = (t: string) => { const r = /^\s*([\d.,]+)\s*[x×]\s*([\d.,]+)\s*$/i.exec(t); return r ? { b: Number(r[1].replace(',', '.')), e: Number(r[2].replace(',', '.')) } : null; };
+/**
+ * «T3D Exo»: lo del exoesqueleto que no entra en «T3D Proyecto» (lo de los ejemplos reales: cortes de los módulos,
+ * secciones por tramos, alas, vanos, caras que siguen la planta, …). Dato, valor y qué es, como «T3D Proyecto».
+ */
+const DATOS_EXO: [string, string, (x: Exo) => Valor, (x: Exo, v: Valor) => void][] = [
+  ['Vanos (diagrid)', 'rombos por cara (ficha A)', x => x.vanos ?? null, (x, v) => { const n = num(v); if (n) x.vanos = n; }],
+  ['Paso de los nudos (m)', 'diagrid: separación horizontal de los nudos (manda sobre «vanos»)', x => x.pasoH ?? null, (x, v) => { const n = num(v); if (n) x.pasoH = n; }],
+  ['Alas', 'tubo (fichas B, C, D): columnas intermedias de cada cara perpendicular al viento', x => x.alas ?? null, (x, v) => { const n = num(v); if (n !== null) x.alas = n; }],
+  ['Caras siguen la planta', 'sí: las caras toman el B y el L de cada nivel (columnas de esquina inclinadas)', x => b2s(x.anchoVariable), (x, v) => { if (sino(v)) x.anchoVariable = true; }],
+  ['Material', 'acero u hormigón', x => x.material ?? null, (x, v) => { const t = norm(v); if (t === 'acero' || t === 'hormigon') x.material = t; }],
+  ['Peso específico (t/m³)', 'vacío = 7,85 el acero y 2,4 el hormigón', x => x.gamma ?? null, (x, v) => { const n = num(v); if (n) x.gamma = n; }],
+  ['Tubos sin costura', 'sí: límites de la pared de la Tabla 2.2.1 del CIRSOC 302 para tubos sin costura', x => b2s(x.sinCostura), (x, v) => { if (sino(v)) x.sinCostura = true; }],
+  ['Columnas a los cuartos (ficha E)', 'como el Citicorp: columnas a los cuartos de la cara y viga a medio módulo', x => b2s(x.cuartos), (x, v) => { if (sino(v)) x.cuartos = true; }],
+  ['Esquina cortada (ficha E)', 'la columna de esquina termina un piso abajo del nudo de cada módulo', x => b2s(x.esquinaCortada), (x, v) => { if (sino(v)) x.esquinaCortada = true; }],
+  ['Ancho del núcleo (ficha F)', 'en el sentido del viento, en m (vacío: un tercio de la planta)', x => x.nucleo ?? null, (x, v) => { const n = Number(txt(v).replace(',', '.')); if (txt(v) && n > 0) x.nucleo = n; }],
+  ['Cotas de los brazos (ficha F)', 'cordón de arriba de cada outrigger, en m, separadas por «;» (vacío: a media altura)', x => (x.outriggers?.length ? x.outriggers.join('; ') : null), (x, v) => { const c = txt(v).split(';').map(t => Number(t.trim().replace(',', '.'))).filter(z => isFinite(z) && z > 0); if (c.length) x.outriggers = c; }],
+  ['Cinturón (ficha F)', 'no: sin cinturón (solo trabaja la columna que toca el brazo); vacío o sí: con cinturón', x => (x.cinturon === false ? 'no' : null), (x, v) => { if (txt(v).toLowerCase() === 'no') x.cinturon = false; }],
+  ['Columnas en cada cara (ficha F)', 'columnas de cada cara perpendicular al viento que toma el cinturón (vacío: 4)', x => x.columnasCara ?? null, (x, v) => { const n = Math.round(Number(txt(v))); if (txt(v) && n >= 1) x.columnasCara = n; }],
+  ['Brazos desde el principio (ficha F)', 'sí: los brazos se conectan desde el principio de la obra y toman parte del peso; vacío: al terminar la obra gruesa', x => b2s(x.brazosDesdeElPrincipio), (x, v) => { if (sino(v)) x.brazosDesdeElPrincipio = true; }],
+  ['Diagonales arriostradas por las losas', 'sí: cada diagonal se ata a la losa en cada piso que cruza y pandea de piso a piso', x => b2s(x.arriostradas), (x, v) => { if (sino(v)) x.arriostradas = true; }],
+  ['Losas en el exo', 'las losas apoyan en el exo: «franja; peso; sobrecarga» en m y t/m² (vacío: solo lo atan)', x => (x.losas ? [x.losas.franja, x.losas.qD ?? 0.7, x.losas.qL ?? 0.2].join('; ') : null),
+    (x, v) => { const c = txt(v).split(';').map(t => Number(t.trim().replace(',', '.'))); if (c[0] > 0) x.losas = { franja: c[0], ...(isFinite(c[1]) && c[1] !== 0.7 ? { qD: c[1] } : {}), ...(isFinite(c[2]) && c[2] !== 0.2 ? { qL: c[2] } : {}) }; }],
+  ['Mástil de la base (ficha E)', 'otra pieza debajo del primer módulo: «lado x espesor hasta cota», en m', x => (x.mastilBase ? `${secTxt(x.mastilBase.sec)} hasta ${x.mastilBase.hasta}` : null),
+    (x, v) => { const r = /^(.+?)\s+hasta\s+([\d.,-]+)\s*$/i.exec(txt(v)); const sc = r && secLeer(r[1]); if (r && sc) x.mastilBase = { sec: sc, hasta: Number(r[2].replace(',', '.')) }; }],
+  ['Cortes de los módulos (m)', 'cotas de los bordes de los módulos, de abajo arriba, separadas por «;» (mandan sobre el módulo)', x => (x.cortes?.length ? x.cortes.join('; ') : null),
+    (x, v) => { const c = txt(v).split(';').map(t => Number(t.trim().replace(',', '.'))).filter(isFinite); if (c.length >= 2) x.cortes = c; }],
+  ['Secciones por tramos', 'desde una cota, otra sección: «diagonal desde 30: 0.3x0.012; columna desde 60: 0.4x0.02» (clase: columna, diagonal, viga o mastil)', x => (x.tramos?.length ? x.tramos.map(t => `${t.clase} desde ${t.desde}: ${secTxt(t.sec)}`).join('; ') : null),
+    (x, v) => {
+      const ts = txt(v).split(';').map(t => /^\s*(columna|diagonal|viga|mastil)\s+desde\s+([\d.,-]+)\s*:\s*(.+)$/i.exec(t)).filter(Boolean).map(r => ({ clase: r![1].toLowerCase() as 'columna' | 'diagonal' | 'viga' | 'mastil', desde: Number(r![2].replace(',', '.')), sec: secLeer(r![3]) }));
+      const ok = ts.filter(t => t.sec) as NonNullable<Exo['tramos']>;
+      if (ok.length) x.tramos = ok;
+    }],
+  ['Notas', 'de dónde sale cada número (fuentes y supuestos), separadas por « | »', x => (x.notas?.length ? x.notas.join(' | ') : null), (x, v) => { const n = txt(v).split(' | ').map(t => t.trim()).filter(Boolean); if (n.length) x.notas = n; }],
+];
 
 const SI = 'sí';
 const b2s = (b: boolean | undefined) => (b ? SI : null);
@@ -75,8 +113,8 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ] as const).map(([k, rot, desc, t]) => [rot, desc, (p: Proyecto) => (p.cirsoc101?.[k] ?? null) as Valor,
     (p: Proyecto, v: Valor) => { const x = t === 'n' ? num(v) : txt(v) || null; if (x !== null) p.cirsoc101 = { ...(p.cirsoc101 ?? {}), [k]: x }; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   ['Parapeto (m)', 'parapeto o baranda sobre la última losa: se suma a la altura de influencia de la azotea (vacío = 0)', p => p.sitio.parapeto ?? null, (p, v) => { const x = num(v); if (x && x > 0) p.sitio.parapeto = x; else delete p.sitio.parapeto; }],
-  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil, L libre (barra por barra; vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
-    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E', 'L'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
+  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil, F núcleo con outriggers, L libre (barra por barra; vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
+    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E', 'F', 'L'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
   ...([['Exo: separación (m)', 'distancia de la fachada al eje de las columnas', 'separacion'], ['Exo: módulo (pisos)', 'alto de cada cruz, marco o diamante', 'modulo'],
     ['Exo: E del acero (t/m²)', 'módulo de elasticidad', 'E'], ['Exo: σ admisible (t/m²)', 'tensión admisible del acero', 'sigmaAdm'], ['Exo: flecha objetivo (h / …)', 'δ azotea ≤ h / este número (vacío = 500)', 'limiteH']] as const).map(([k, q, c]) =>
     [k, q, (p: Proyecto) => p.exo?.[c] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
@@ -107,7 +145,7 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Exo: zonas en altura', 'otra tipología desde una cota: «0 D; 45 A m=6 v=2» (cota en m, ficha, m: pisos por módulo, v: vanos; vacío = toda la torre con la ficha)',
     p => (p.exo?.zonas?.length ? p.exo.zonas.map(z => [z.desde, z.tipo, z.modulo ? `m=${z.modulo}` : '', z.vanos ? `v=${z.vanos}` : ''].filter(x => x !== '').join(' ')).join('; ') : null),
     (p, v) => { if (!p.exo || !txt(v)) return; const zs = txt(v).split(';').map(it => { const [d, t, ...r] = it.trim().split(/\s+/); const z: NonNullable<NonNullable<Proyecto['exo']>['zonas']>[number] = { desde: num(d) ?? NaN, tipo: (t ?? '').toUpperCase() as TipoExo }; r.forEach(x => { const [k, w] = x.split('='); const n = num(w); if (n !== null && k === 'm') z.modulo = n; if (n !== null && k === 'v') z.vanos = n; }); return z; }).filter(z => isFinite(z.desde) && ['A', 'B', 'C', 'D', 'E', 'L'].includes(z.tipo)); if (zs.length) p.exo.zonas = zs; }],
-  ['Perfil de la torre', 'cómo cambia la planta con la altura, en JSON: base (cota), puntos (h de 0 a 1, fx, fy, dx, dy), suave, giro; vacío = sin perfil',
+  ['Perfil de la planta en altura', 'cómo cambia la planta con la altura (carta «Perfil de la torre» de la planta), en JSON: base (cota), puntos (h de 0 a 1, fx, fy, dx, dy), suave, giro; vacío = sin perfil',
     p => (p.perfilTorre ? JSON.stringify(p.perfilTorre) : null),
     (p, v) => { if (!txt(v)) return; try { const x = JSON.parse(txt(v)); if (x && Array.isArray(x.puntos)) p.perfilTorre = x; } catch { /* texto que no es JSON: se ignora */ } }],
   ['Planos de corte', 'planos que recortan las losas, en JSON: eje (x o y), a y b (w, z en m), saca (arriba o abajo); vacío = ninguno',
@@ -128,6 +166,10 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Carpintería: retiro de la losa (m)', 'la carpintería de cada nivel sigue a su losa, metida estos metros (vacío = a mano)', p => p.carpinteriaRetiro ?? null, (p, v) => { const x = num(v); if (x !== null) p.carpinteriaRetiro = x; }],
   ['Juntas entre muros', 'qué pasa en cada encuentro: «M1|M2=inglete; M3|M4=pasaA» (pasaA: pasa el primero; vacío = el convenio por defecto)', p => (p.juntas && Object.keys(p.juntas).length ? Object.entries(p.juntas).map(([k, v]) => `${k}=${v}`).join('; ') : null),
     (p, v) => { const t = txt(v); if (!t) return; const o: Record<string, 'inglete' | 'pasaA' | 'pasaB'> = {}; t.split(';').forEach(par => { const k = par.lastIndexOf('='); if (k < 0) return; const val = par.slice(k + 1).trim(); if (val === 'inglete' || val === 'pasaA' || val === 'pasaB') o[par.slice(0, k).trim()] = val; }); if (Object.keys(o).length) p.juntas = o; }],
+  ['Perfil de la torre', 'las curvas de Diseño → Perfil, en JSON (vacío = sin perfil dibujado)', p => (p.perfil ? JSON.stringify(p.perfil) : null),
+    // (los archivos guardados con la carta de la planta antes de unirse con el editor de Diseño → Perfil usaban esta
+    //  misma fila para el perfil de la planta: si el JSON tiene «puntos», es ese)
+    (p, v) => { if (!txt(v)) return; try { const x = JSON.parse(txt(v)); if (x && x.A && x.B) p.perfil = x; else if (x && Array.isArray(x.puntos) && !p.perfilTorre) p.perfilTorre = x; } catch { /* dañado: se ignora */ } }],
   ['Áreas automáticas (cota)', 'nivel cuyas áreas de influencia se copian solas a «Área inf.» (vacío = a mano)', p => p.areasAuto ?? null, (p, v) => { const x = num(v); if (x !== null) p.areasAuto = x; }],
 ];
 
@@ -150,7 +192,8 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   const out: Tabla[] = [];
   out.push({ nombre: T.proyecto, anchos: [26, 16, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS.map(([k, q, g]) => [k, g(p) ?? null, q] as Valor[]),
     [], ['Estas hojas «T3D …» guardan la torre completa: con ellas la app vuelve a armar el proyecto. Se pueden editar; la app las lee al abrir la planilla.']] });
-  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12, 12, 14, 14], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales', 'Silueta a mano', 'Carpintería a mano', 'Voladizo a propósito'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null, n.manual ? SI : null, n.carpManual ? SI : null, n.carpVoladizo ? SI : null])] });
+  if (p.exo) out.push({ nombre: T.exo, anchos: [30, 34, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS_EXO.map(([k, q, g]) => [k, g(p.exo!) ?? null, q] as Valor[])] });
+  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12, 12, 12, 12, 14, 14], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales', 'Corrido x (m)', 'Corrido y (m)', 'Silueta a mano', 'Carpintería a mano', 'Voladizo a propósito'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null, n.dx || null, n.dy || null, n.manual ? SI : null, n.carpManual ? SI : null, n.carpVoladizo ? SI : null])] });
   out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30, 12, 34, 10], filas: [CAB_MUROS, ...p.muros.map(m => [
     m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? SI : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
     TIPO_TXT[m.tipo ?? 'tabique'], m.tipo === 'tubo-rect' ? m.ladoY ?? null : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta),
@@ -210,6 +253,10 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
     const d = DATOS.find(x => norm(x[0]) === norm(g('Dato')));
     if (d) d[3](p, g('Valor'));
   }
+  if (p.exo && H(T.exo)) for (const g of leerHoja(H(T.exo))) {
+    const d = DATOS_EXO.find(x => norm(x[0]) === norm(g('Dato')));
+    if (d) d[3](p.exo, g('Valor'));
+  }
   p.niveles = leerHoja(H(T.niveles)).map(g => {
     const n: Nivel = { nombre: txt(g('Nivel')), cota: num(g('Cota (m)')) ?? 0 };
     const B = num(g('B (m)')), L = num(g('L (m)'));
@@ -220,6 +267,10 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
     if (sino(g('Silueta a mano'))) n.manual = true;
     if (sino(g('Carpintería a mano'))) n.carpManual = true;
     if (sino(g('Voladizo a propósito'))) n.carpVoladizo = true;
+    // torre inclinada o corrida (Diseño → Perfil): cuánto se corre el nivel respecto de PB
+    const dx = num(g('Corrido x (m)')), dy = num(g('Corrido y (m)'));
+    if (dx) n.dx = dx;
+    if (dy) n.dy = dy;
     return n;
   });
   const cotaDe = (v: Valor, quien: string): number | null => {

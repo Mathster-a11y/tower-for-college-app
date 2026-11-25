@@ -24,6 +24,8 @@ const nf = (x: number, d: number) => x.toLocaleString('es-AR', { minimumFraction
 export const TENSION_ADM = (hormigon: string) => (parseFloat(hormigon.replace(/[^\d.]/g, '')) || 30) * 10; // H30 → 300 kg/cm²
 
 import { profundidadEstudio, sigmaAdmDe } from './fundaciones';
+import { esPerfilVariable } from './perfilTorre';
+import { protocoloDelCalculo } from './perfilVariable';
 export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: ResultadoCorregido, hormigon: string, piezas: PiezaEquivalente[] = [], filaNivel: number[] = []): Control[] {
   const out: Control[] = [];
   const m = r.mnyq, g = c.guia.mnyq;
@@ -88,7 +90,9 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
   // Σ J·a = 0 siempre (Xr es el baricentro de los J); la celda L25 de la planilla suma solo las filas 5 a 19
   for (const [dir, rr, gg] of [['A', r.rotA, c.guia.rotA], ['B', r.rotB, c.guia.rotB]] as const) {
     const total = gg.L.slice(0, gg.nP).reduce((x, y) => x + (isFinite(y) ? y : 0), 0);
-    const escala = Math.max(1e-9, gg.L.slice(0, gg.nP).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0));
+    // escala: Σ|J·a| o, si todas las piezas caen sobre el eje (una sola pieza: a = 0), Σ J · (1 m): si no, un resto de
+    // redondeo de 1e-12 se compara contra 0 y el control falla
+    const escala = Math.max(1e-9, gg.L.slice(0, gg.nP).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0), gg.B.slice(0, gg.nP).reduce((x, y) => x + Math.abs(isFinite(y) ? y : 0), 0));
     const parcial = Math.abs(rr.L25 - total) > 1e-6 * escala;
     out.push({ grupo: 'Reparto', nombre: `Control Σ J·a = 0 (cara ${dir === 'A' ? 'mayor' : 'menor'})`, criterio: '= 0: el eje de inercia está bien calculado', fuente: `Rototrasl. cara ${dir === 'A' ? 'mayor' : 'menor'} L25`,
       planilla: rr.L25, guia: total, unidad: 'm⁵', estado: est(Math.abs(total) <= 1e-6 * escala), nota: parcial ? 'La celda L25 de la planilla suma solo las piezas 1 a 15: con piezas en las filas 16 a 20 no da 0, aunque el cálculo esté bien.' : undefined });
@@ -108,14 +112,19 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
         const comp = v.muros.reduce((m2, x) => (x.compresion < m2.compresion ? x : m2), v.muros[0]);
         if (!peor) return;
         const As = Math.max(...v.muros.map(x => Math.max(x.As, x.AsMin)));
+        // lo que hay que saber del número de la planilla: con qué carga lo calcula (cruza Ng y Nq) y si dividió por cero
+        const tipoFila = i < 20 ? TIPO_FILA_PARALELOS[i] : 'simétrica';
+        const div0 = enPlanilla && !Number.isFinite(r.flex.O[i]) ? `La planilla da #DIV/0! en la fila ${i + 4} de «Flex comp PB paralelos»: es una fila para piezas ${tipoFila === 'circular' ? 'circulares' : tipoFila === 'asimétrica' ? 'asimétricas' : 'simétricas'} y lee el W de un molde que esta pieza no usa.` : '';
+        const notaP = enPlanilla && !div0 ? 'Planilla: columna P = (−Nq/F + M/W), con la carga del edificio cargado (la hoja cruza las cargas; la tracción decide con el descargado).' : '';
+        const notaO = enPlanilla && !div0 ? 'Planilla: columna O = (−Ng/F − M/W), con la carga del edificio descargado (la compresión decide con el cargado).' : '';
         // armado como la guía (5): cada muro en dos capas, vertical y horizontal (1/5)
         const repetido = (id: string) => v.muros.filter(x => x.id === id).length > 1;   // un tabique con abertura se verifica en partes
         const armado = v.muros.map((x, k) => { const a = armarTabique(x.As, x.AsMin, Math.max(x.b, x.h)); const nom = repetido(x.id) ? `${x.id} (parte ${v.muros.slice(0, k + 1).filter(y => y.id === x.id).length})` : x.id; return `${nom}: ${textoBarras(a.vertical)}, horizontal ${textoBarras(a.horizontal)}`; }).join(' · ');
         out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: tracción (descargado)`, criterio: 'σ ≤ 0; si no, armadura (T = σ·b·x/2)', fuente: 'guía 5',
           planilla: enPlanilla ? r.flex.P[i] : null, guia: peor.traccion, unidad: 'kg/cm²', estado: peor.traccion > 0 ? 'atención' : 'verifica',
-          nota: [peor.traccion > 0 ? `Lleva armadura: muro ${peor.id}, As = ${peor.As.toFixed(1)} cm² (mínima ${peor.AsMin.toFixed(1)} cm²).` : '', difiere ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : '', v.muros.length > 1 ? `Peor muro: ${peor.id}.` : ''].filter(Boolean).join(' ') || undefined });
+          nota: [peor.traccion > 0 ? `Lleva armadura: muro ${peor.id}, As = ${peor.As.toFixed(1)} cm² (mínima ${peor.AsMin.toFixed(1)} cm²).` : '', difiere && !div0 ? 'La planilla lee otro módulo en esta fila: su valor no vale para esta pieza.' : '', div0, notaP, v.muros.length > 1 ? `Peor muro: ${peor.id}.` : ''].filter(Boolean).join(' ') || undefined });
         out.push({ grupo: `Flexocompresión, viento ${dir}`, nombre: `${v.nombre}: compresión (cargado)`, criterio: `|σ| ≤ ${adm} kg/cm² (${hormigon})`, fuente: 'guía 5',
-          planilla: enPlanilla ? r.flex.O[i] : null, guia: comp.compresion, unidad: 'kg/cm²', estado: est(v.verifica), nota: `${v.muros.length > 1 ? `Peor muro: ${comp.id}. Armadura mínima de la pieza: ${As.toFixed(1)} cm². ` : ''}Armado (guía): ${armado}.` || undefined });
+          planilla: enPlanilla ? r.flex.O[i] : null, guia: comp.compresion, unidad: 'kg/cm²', estado: est(v.verifica), nota: `${div0 ? `${div0} ` : notaO ? `${notaO} ` : ''}${v.muros.length > 1 ? `Peor muro: ${comp.id}. Armadura mínima de la pieza: ${As.toFixed(1)} cm². ` : ''}Armado (guía): ${armado}.` });
       });
     }
   }
@@ -144,6 +153,23 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
             nota: `Qj = ${nf(cd.Qj, 2)} t · S = ${nf(cd.S, 4)} m³ · J = ${nf(cd.J, 3)} m⁴ → t = ${nf(cd.t, 2)} t/m; T = t · ${nf(cd.hPiso, 2)} m = ${nf(cd.T, 2)} t; dintel de ${nf(cd.hDintel, 2)} m.${hormigon.replace(/\s/g, '').toUpperCase() !== 'H30' ? ' τ adm proporcional a la de la guía para H30 (24 kg/cm²): confirmar con la cátedra.' : ''}` });
         }));
       });
+    }
+  }
+  // torre de perfil variable (Diseño → Perfil): peso corrido, viento excéntrico y P-Δ (propuesta del exo, pág. 14)
+  if (esPerfilVariable(p) && filaNivel.length && piezas.length) {
+    for (const dir of ['A', 'B'] as const) {
+      const pr = protocoloDelCalculo(p, c.guia, piezas, filaNivel, hormigon, dir);
+      if (!(pr.Mv > 0)) continue;
+      out.push({ grupo: 'Estabilidad', nombre: `Efecto P-Δ, viento ${dir}`, criterio: 'θ = M_PΔ / Mv ≤ 0,10 (se desprecia) · < 0,25', fuente: 'protocolo de perfil variable, paso 7',
+        planilla: null, guia: pr.theta, unidad: '', estado: pr.theta <= 0.1 ? 'verifica' : pr.theta < 0.25 ? 'atención' : 'no verifica',
+        nota: pr.theta <= 0.1 ? undefined : pr.theta < 0.25 ? `Hay que sumarlo: el momento del viento sube ${nf(pr.MPD, 0)} tm (amplificación ${nf(pr.amp, 2)}).` : 'La torre es demasiado flexible: rigidizala (más J) o achicá el corrimiento.' });
+      if (dir === 'A') {
+        const Me = g.K99, f = pr.Mtotal > 0 ? Me / pr.Mtotal : NaN;
+        out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con el perfil (peso corrido y P-Δ)', criterio: 'Me / (Mv + |M_G| + M_PΔ) ≥ 1,5', fuente: 'guía 2.2 + protocolo de perfil variable, pasos 4 y 7',
+          planilla: null, guia: f, unidad: '', estado: est(f >= 1.5), nota: `Mv = ${nf(pr.Mv, 0)} tm · M_G = ${nf(pr.MG, 0)} tm · M_PΔ = ${nf(pr.MPD, 0)} tm: el vuelco sube ${nf(pr.aumento * 100, 0)} %.` });
+      }
+      if (Math.abs(pr.MtExtra) > 1e-6) out.push({ grupo: 'Estabilidad', nombre: `Torsor por el viento excéntrico, viento ${dir}`, criterio: 'Mt = Σ W_i · c_i (se suma al Q · e de la planilla)', fuente: 'protocolo de perfil variable, paso 5',
+        planilla: null, guia: pr.MtExtra, unidad: 'tm', estado: 'informativo', nota: 'El viento de cada nivel pasa por el medio de su fachada, corrida a lo ancho respecto de PB.' });
     }
   }
   return out;

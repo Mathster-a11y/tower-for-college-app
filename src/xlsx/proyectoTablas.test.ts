@@ -135,3 +135,27 @@ describe('aberturas en T3D Muros', () => {
     expect(r.proyecto.muros[1].refLado).toBe(-1);
   });
 });
+
+describe('exoesqueleto y torre inclinada en las tablas', () => {
+  it('los ejemplos reales del exo y una torre inclinada vuelven iguales (T3D Exo, corrimientos y perfil)', async () => {
+    const { ejemploHearst, ejemploHancock } = await import('../engine/ejemplosExo');
+    const { aplicarPerfil, formaPerfil, medidasNiveles } = await import('../engine/perfilTorre');
+    for (const p of [ejemploHearst(), ejemploHancock()]) {
+      const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(p))), ejemploGuia())!;
+      expect(r.proyecto.exo).toEqual(p.exo);
+    }
+    // las losas apoyadas en el exo (franja, peso y sobrecarga)
+    const conLosas = ejemploHearst(); conLosas.exo!.losas = { franja: 6, qD: 0.45, qL: 0.25 };
+    const rl = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(conLosas))), ejemploGuia())!;
+    expect(rl.proyecto.exo!.losas).toEqual({ franja: 6, qD: 0.45, qL: 0.25 });
+    // ficha F: núcleo con outriggers
+    const outr = ejemploGuia(); outr.exo = { ...ejemploHearst().exo!, tipo: 'F', nucleo: 9, outriggers: [20.5, 41], cinturon: false, columnasCara: 6, notas: undefined, cortes: undefined, pasoH: undefined };
+    const ro = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(outr))), ejemploGuia())!;
+    expect(ro.proyecto.exo).toEqual(outr.exo);
+    const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
+    const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
+    const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;
+    expect(r.proyecto.niveles.map(n => n.dy ?? 0)).toEqual(inc.niveles.map(n => n.dy ?? 0));
+    expect(r.proyecto.perfil).toEqual(pf);
+  });
+});

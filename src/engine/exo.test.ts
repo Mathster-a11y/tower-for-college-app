@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cirsoc301, losaPorPiso, LOSA_QD, LOSA_QL, idBarra, nivelesOutrigger, columnasEfectivas, pesoCinturon } from './exo';
 import { armarCara, calcularExo, CATALOGO_TUBOS, cargarCara, cerosDeM, condensarCara, dimensionarExo, esfuerzosEn, EXO_POR_DEFECTO, pesoExo, propsSeccion, rigidezTabiques, type Barra, type Cara, type EntradaExo, type ExoDef } from './exo';
 
 const pisos = (n: number, h = 3) => Array.from({ length: n + 1 }, (_, i) => i * h);
@@ -244,3 +245,161 @@ describe('exoesqueleto · barras agregadas a mano', () => {
     r1.Ftab.forEach((f, i) => expect(f + r1.Fexo[i]).toBeCloseTo(W[i], 6));
   });
 });
+
+describe('torsión con el exoesqueleto', async () => {
+  const { torsionConExo } = await import('./exo');
+  const { calcRoto } = await import('./planilla');
+  it('el centro de rigidez se acerca al medio, el torsor baja y la rigidez a la torsión sube', () => {
+    // dos tabiques paralelos de J 10 y 2 a x = −5 y +5 (CR corrido a la izquierda) y dos perpendiculares de J 4 a ±6
+    const par = [10, 2], per = [4, 4], H: (number | null)[] = new Array(46).fill(null);
+    H[0] = -5; H[1] = 5; H[26] = -6; H[27] = 6;
+    const r = calcRoto(par, per, H, 100, 2000, false, true);
+    const t = torsionConExo(r, 8, 12, 8, 10);
+    expect(r.J7).toBeCloseTo((10 * -5 + 2 * 5) / 12, 6);
+    expect(Math.abs(t.crCon)).toBeLessThan(Math.abs(t.crSin));
+    expect(Math.abs(t.mtCon)).toBeLessThan(Math.abs(t.mtSin));
+    expect(t.kCon).toBeGreaterThan(t.kSin);
+    expect(t.giro).toBeGreaterThan(0); expect(t.giro).toBeLessThan(1);
+    expect(t.parteExo).toBeGreaterThan(0.5);
+  });
+});
+
+describe('exoesqueleto · las losas apoyan en el exo', () => {
+  const zs = Array.from({ length: 21 }, (_, i) => i * 3.5), W = zs.slice(1).map(() => 10), cero = W.map(() => 0);
+  it('equilibrio: las reacciones de la base suman lo que bajan las losas, en todas las fichas', () => {
+    for (const tipo of ['A', 'B', 'C', 'D', 'E'] as const) {
+      const def: ExoDef = { ...EXO_POR_DEFECTO, tipo, pesoPropio: false, losas: { franja: 5 } };
+      const r = calcularExo(def, zs, cero, () => 3e6 * 50, 30, [-10, 10], 3e6);
+      const cargas = [-10, 10].reduce((s, _t, i) => s + (cargarCara(armarCara(def, 30, zs, `cara ${i + 1}`), def, zs, cero, { q: LOSA_QD + LOSA_QL, franja: 5, ancho: () => 30, centro: () => 0, anchoPerp: () => 20 }).cargasNudo ?? []).reduce((a, c) => a + c.P, 0), 0);
+      const V = r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+      expect(cargas).toBeGreaterThan(0);
+      expect(V).toBeCloseTo(cargas, 3);
+    }
+  });
+  it('tubo con columnas solo en las esquinas: el exo toma toda la franja perimetral, q·(2f(B+L) − 4f²) por piso', () => {
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'B', pesoPropio: false, losas: { franja: 5 } };
+    const r = calcularExo(def, zs, cero, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    const V = r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+    expect(V).toBeCloseTo(20 * losaPorPiso(LOSA_QD + LOSA_QL, 5, 30, 20), 3);
+  });
+  it('CIRSOC 301: entra 1,2 D + 1,6 L y la columna de esquina de la base lleva su parte de la losa', () => {
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'B', losas: { franja: 5 } };
+    const sin = cirsoc301({ ...def, losas: undefined }, zs, W, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    const con = cirsoc301(def, zs, W, () => 3e6 * 50, 30, [-10, 10], 3e6);
+    expect(con.some(b => b.combinacion === '1,2 D + 1,6 L')).toBe(true);
+    const col = (v: typeof con) => v.filter(b => b.clase === 'columna').reduce((m, b) => Math.max(m, -b.Pu), 0);
+    // cada esquina: medio frente de 30 m y medio de 20 m, con la franja de 5 m menos la esquina → 5·(12,5 + 7,5) = 100 m² por piso
+    const losa = 20 * 100 * (1.2 * LOSA_QD + 1.6 * LOSA_QL);
+    expect(col(con) - col(sin)).toBeGreaterThan(0.95 * losa);
+    expect(col(con)).toBeGreaterThan(losa);
+    // sin las losas, nada cambia (las combinaciones son las de siempre)
+    expect(sin.every(b => !/L/.test(b.combinacion))).toBe(true);
+  });
+});
+
+describe('exoesqueleto · diagonales arriostradas por las losas', () => {
+  const zs = Array.from({ length: 25 }, (_, i) => i * 4), W = zs.slice(1).map(() => 12);
+  const base: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'A', modulo: 8, vanos: 2, pesoPropio: false };
+  it('cada diagonal se parte en los pisos que cruza: tramos de un piso, atados a la losa, con el mismo largo total', () => {
+    const libre = armarCara(base, 24, zs), atada = armarCara({ ...base, arriostradas: true }, 24, zs);
+    const largo = (c: Cara) => c.barras.filter(b => b.clase === 'diagonal').reduce((s, b) => s + Math.hypot(c.nudos[b.b].s - c.nudos[b.a].s, c.nudos[b.b].z - c.nudos[b.a].z), 0);
+    expect(largo(atada)).toBeCloseTo(largo(libre), 6);
+    atada.barras.filter(b => b.clase === 'diagonal').forEach(b => {
+      expect(Math.abs(atada.nudos[b.b].z - atada.nudos[b.a].z)).toBeLessThanOrEqual(4 + 1e-6);
+      expect(atada.nudos[b.a].piso).toBeGreaterThanOrEqual(0); expect(atada.nudos[b.b].piso).toBeGreaterThanOrEqual(0);
+    });
+    // todos los pisos tienen nudos en la cara (la losa carga la diagonal donde la toca)
+    for (let k = 1; k < zs.length; k++) expect(atada.nudos.some(q => q.piso === k)).toBe(true);
+  });
+  it('equilibrio con el viento, un poco más rígido, mismo peso y menos esbeltez en las diagonales', () => {
+    const r0 = calcularExo(base, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6), r1 = calcularExo({ ...base, arriostradas: true }, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6);
+    r1.Ftab.forEach((f, i) => expect(f + r1.Fexo[i]).toBeCloseTo(W[i], 6));
+    expect(r1.u[r1.u.length - 1]).toBeLessThanOrEqual(r0.u[r0.u.length - 1] * (1 + 1e-9));
+    const en: EntradaExo = { zs, W, EJ: () => 3e6 * 30, ancho: 24, tCaras: [-10, 10], Eh: 3e6, h: 96 };
+    expect(pesoExo({ ...base, arriostradas: true }, [en, en])).toBeCloseTo(pesoExo(base, [en, en]), 6);
+    const lam = (d: ExoDef) => Math.max(...cirsoc301(d, zs, W, () => 3e6 * 30, 24, [-10, 10], 3e6).filter(x => x.clase === 'diagonal').map(x => x.lambdaC));
+    expect(lam({ ...base, arriostradas: true })).toBeLessThan(lam(base) / 2);
+  });
+  it('un cambio barra por barra vale para la diagonal entera (todos sus tramos)', () => {
+    const sec = { b: 0.9, e: 0.04 };
+    const c = armarCara({ ...base, arriostradas: true, barras: { D1: { sec } } }, 24, zs);
+    const tramos = c.barras.filter(b => idBarra(b.id) === 'D1');
+    expect(tramos.length).toBeGreaterThan(1);
+    tramos.forEach(b => expect(b.sec).toEqual(sec));
+  });
+});
+
+describe('exoesqueleto · núcleo con outriggers (ficha F)', () => {
+  const n = 20, zs = Array.from({ length: n + 1 }, (_, i) => i * 4), W = zs.slice(1).map((_, i) => (i === n - 1 ? 5 : 10));
+  const EI = 3e6 * 40, d = 15, H = 80;
+  const base = (col: { b: number; e: number }, extra: Partial<ExoDef> = {}): ExoDef => ({ ...EXO_POR_DEFECTO, tipo: 'F', separacion: 0, pesoPropio: false, nucleo: 8, outriggers: [80], cinturon: false,
+    columna: col, viga: { b: 3, e: 1.5 }, diagonal: { b: 3, e: 1.5 }, uniones: { columna: 'articulada', diagonal: 'rigida', viga: 'rigida', base: 'articulada' }, ...extra });
+  it('outrigger en la azotea: el par de las columnas es el de Smith y Coull, M = θ·EI / (H·(1 + EI / (2·E·A·d²)))', () => {
+    const col = { b: 0.8, e: 0.04 }, r = calcularExo(base(col), zs, W, () => EI, 2 * d, [-5, 5], 3e6);
+    const A = 2 * propsSeccion(col).A;                      // dos planos, una columna por lado en cada uno
+    const theta = W.reduce((s, P, i) => s + (P * zs[i + 1] ** 2) / 2, 0) / EI;
+    const M = (theta * EI) / (H * (1 + EI / (2 * 2.1e7 * A * d * d)));
+    // el brazo es un reticulado de un piso de alto (no una línea): queda un poco más rígido que la teoría
+    expect(Math.abs((r.Msin[0] - r.Mtab[0]) / M - 1)).toBeLessThan(0.06);
+    expect(r.Ftab.reduce((a, b) => a + b, 0)).toBeCloseTo(W.reduce((a, b) => a + b, 0), 6);   // el corte, todo al núcleo
+    expect(r.u[n - 1]).toBeLessThan(r.uSin[n - 1] * 0.5);
+  });
+  it('sin columnas que lo frenen, vuelve a ser la ménsula de tabiques; el núcleo no se verifica ni se pesa como acero', () => {
+    const r = calcularExo(base({ b: 0.02, e: 0.001 }), zs, W, () => EI, 2 * d, [-5, 5], 3e6);
+    expect(r.u[n - 1] / r.uSin[n - 1]).toBeGreaterThan(0.98);
+    expect(r.controles.some(c => /^[KR]\d/.test(c.id))).toBe(false);
+    expect(cirsoc301(base({ b: 0.8, e: 0.04 }), zs, W, () => EI, 2 * d, [-5, 5], 3e6).some(c => /^[KR]\d/.test(c.id))).toBe(false);
+    const en: EntradaExo = { zs, W, EJ: () => EI, ancho: 2 * d, tCaras: [-5, 5], Eh: 3e6, h: H };
+    // con los perfiles por defecto: columnas, cordones y diagonales de los brazos; las del núcleo (100 m²) pesarían 30 000 t más
+    const peso = pesoExo(base(EXO_POR_DEFECTO.columna, { viga: EXO_POR_DEFECTO.viga, diagonal: EXO_POR_DEFECTO.diagonal }), [en, en]);
+    expect(peso).toBeGreaterThan(50); expect(peso).toBeLessThan(1000);
+  });
+  it('dos outriggers frenan más que uno; con cinturón (todas las columnas de la cara) más que sin él', () => {
+    const col = { b: 0.5, e: 0.025 };
+    const u = (x: Partial<ExoDef>) => { const r = calcularExo(base(col, { uniones: undefined, ...x }), zs, W, () => EI, 2 * d, [-5, 5], 3e6); return r.u[n - 1]; };
+    expect(u({ outriggers: [44, 80] })).toBeLessThan(u({ outriggers: [80] }));
+    expect(u({ cinturon: true, columnasCara: 6 })).toBeLessThan(u({ cinturon: false }));
+    expect(nivelesOutrigger({ ...EXO_POR_DEFECTO, tipo: 'F' }, zs)).toEqual([10]);
+  });
+  it('brazos conectados al final: el peso no los fuerza; desde el principio, el acortamiento de las columnas sí. Siempre en equilibrio', () => {
+    const def = base({ b: 0.5, e: 0.025 }, { uniones: undefined, losas: { franja: 4, qL: 0 }, pesoPropio: true, outriggers: [44, 80] });
+    const brazos = (r: ReturnType<typeof calcularExo>) => Math.max(...r.caras[0].esfuerzos.filter(e => e.clase === 'diagonal').map(e => Math.abs(e.N)));
+    // solo las losas (sin el peso de los brazos, que siempre pasa por ellos)
+    const sinPeso = { ...def, pesoPropio: false };
+    expect(brazos(calcularExo(sinPeso, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6))).toBeLessThan(1e-6);
+    expect(brazos(calcularExo({ ...sinPeso, brazosDesdeElPrincipio: true }, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6))).toBeGreaterThan(10);
+    const tarde = calcularExo(def, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6), antes = calcularExo({ ...def, brazosDesdeElPrincipio: true }, zs, W.map(() => 0), () => EI, 2 * d, [-5, 5], 3e6);
+    const V = (r: ReturnType<typeof calcularExo>) => r.caras.reduce((s, c) => s + c.reacciones.reduce((a, x) => a + x.V, 0), 0);
+    expect(V(tarde)).toBeCloseTo(V(antes), 3);
+    // y en el CIRSOC 301 las diagonales de los brazos no ven D
+    const c301 = (x: ExoDef) => Math.max(...cirsoc301(x, zs, W, () => EI, 2 * d, [-5, 5], 3e6).filter(b => b.clase === 'diagonal').map(b => b.ratio));
+    expect(c301(def)).toBeLessThan(c301({ ...def, brazosDesdeElPrincipio: true }));
+  });
+  it('cinturón con shear lag: muy rígido trabajan todas las columnas de la mitad; flojo, casi solo la del brazo', () => {
+    const def = (viga: { b: number; e: number }): ExoDef => ({ ...EXO_POR_DEFECTO, tipo: 'F', columnasCara: 6, columna: { b: 0.5, e: 0.025 }, viga });
+    const rigido = columnasEfectivas(def({ b: 3, e: 1.5 }), 30, 4, [10], zs).porPlano, flojo = columnasEfectivas(def({ b: 0.1, e: 0.004 }), 30, 4, [10], zs).porPlano;
+    const medio = columnasEfectivas(def({ b: 0.4, e: 0.02 }), 30, 4, [10], zs).porPlano;
+    expect(rigido).toBeGreaterThan(2.95); expect(rigido).toBeLessThanOrEqual(3 + 1e-9);   // 6 columnas, 3 por plano
+    expect(flojo).toBeLessThan(1.3);
+    expect(medio).toBeGreaterThan(flojo); expect(medio).toBeLessThan(rigido);
+    // las más lejanas del brazo trabajan menos
+    const ps = columnasEfectivas(def({ b: 0.4, e: 0.02 }), 30, 4, [10], zs).psi.filter(q => q.y > 0).sort((a, b) => Math.abs(a.y - 4) - Math.abs(b.y - 4));
+    for (let i = 1; i < ps.length; i++) expect(ps[i].psi).toBeLessThanOrEqual(ps[i - 1].psi + 1e-12);
+  });
+  it('el peso del cinturón: cordones y diagonales alrededor del perímetro en cada brazo; sin cinturón, nada', () => {
+    const en: EntradaExo = { zs, W, EJ: () => EI, ancho: 30, tCaras: [-4, 4], Eh: 3e6, h: H, anchosPerp: zs.map(() => 20) };
+    const def: ExoDef = { ...EXO_POR_DEFECTO, tipo: 'F', outriggers: [44, 80] };
+    const P = 100, Av = propsSeccion(def.viga).A, Ad = propsSeccion(def.diagonal).A, np = 25;
+    expect(pesoCinturon(def, en)).toBeCloseTo(2 * (2 * P * Av + np * Math.hypot(4, P / np) * Ad) * 7.85, 6);
+    expect(pesoCinturon({ ...def, cinturon: false }, en)).toBe(0);
+    // con cinturón, además, trabajan (y se cuentan) más columnas de la cara
+    expect(pesoExo(def, [en, en]) - pesoExo({ ...def, cinturon: false }, [en, en])).toBeGreaterThan(pesoCinturon(def, en));
+  });
+  it('las losas cargan las columnas del perímetro, no el núcleo', () => {
+    const def = base({ b: 0.5, e: 0.025 }, { losas: { franja: 4 } });
+    const cara = cargarCara(armarCara(def, 2 * d, zs), def, zs, W.map(() => 0), { q: 0.9, franja: 4, ancho: () => 2 * d, centro: () => 0, anchoPerp: () => 10 });
+    expect(cara.cargasNudo!.length).toBeGreaterThan(0);
+    expect(cara.cargasNudo!.every(c => !cara.nudos[c.nudo].nucleo)).toBe(true);
+  });
+});
+

@@ -22,7 +22,8 @@ import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
-import { enPlanta, polilinea, ponerPerfil } from '../engine/perfil';
+import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
+import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
@@ -236,15 +237,20 @@ export function montarPlanta(cont: HTMLElement) {
     const p = estado.proyecto;
     const ref = p.muros.find(x => x.id === (estado.multi.m[0] ?? estado.seleccion));
     if (!ref) { mensaje('Elegí un muro y apretá «Iguales»: se eligen todos los que tienen el mismo tipo, largo y espesor.'); return; }
-    const igual = (m: Muro) => tipoDe(m) === tipoDe(ref) && Math.abs(m.largo - ref.largo) < 0.005 && Math.abs(m.espesor - ref.espesor) < 0.005 && Math.abs((m.ladoY ?? 0) - (ref.ladoY ?? 0)) < 0.005;
+    // los perfiles se comparan por su sección (área y las dos inercias principales: vale girados o espejados)
+    const firma = (m: Muro) => { if (!m.perfil) return null; const pr = propsPerfil(m.perfil), j = principales(pr); return [pr.A, Math.max(j.J1, j.J2), Math.min(j.J1, j.J2)]; };
+    const fRef = firma(ref);
+    const cerca = (a: number, b: number) => Math.abs(a - b) <= 0.005 * Math.max(1e-6, Math.abs(b));
+    const igual = (m: Muro) => tipoDe(m) === tipoDe(ref) && (fRef ? !!firma(m)?.every((v, k) => cerca(v, fRef[k]))
+      : Math.abs(m.largo - ref.largo) < 0.005 && Math.abs(m.espesor - ref.espesor) < 0.005 && Math.abs((m.ladoY ?? 0) - (ref.ladoY ?? 0)) < 0.005);
     const ms = p.muros.filter(m => igual(m) && !muroOculto(p, m) && !muroBloqueado(p, m) && nodoAlTocar(p, m, estado.contexto)?.t === 'm').map(m => m.id);
     estado.multi = { m: ms, g: [] }; estado.grupoSel = null;
-    mensaje(`${ms.length} muros iguales a ${ref.id} (${tipoDe(ref)} ${fmtN(ref.largo)} × ${fmtN(ref.espesor)} m).`);
+    mensaje(`${ms.length} muros iguales a ${ref.id} (${fRef ? `perfil de ${fmtN(fRef[0])} m², misma sección` : `${tipoDe(ref)} ${fmtN(ref.largo)} × ${fmtN(ref.espesor)} m`}).`);
     estado.avisarPanel();
   };
   const fmtN = (v: number) => v.toFixed(2).replace('.', ',');
   document.addEventListener('torre:elegir-iguales', elegirIguales);
-  barraSel.insertBefore(bSel('Iguales', 'Elige todos los muros con el mismo tipo, largo y espesor', elegirIguales), barraSel.lastChild);
+  barraSel.insertBefore(bSel('Iguales', 'Elige todos los muros con el mismo tipo, largo y espesor (los perfiles, con la misma sección)', elegirIguales), barraSel.lastChild);
   /** junta lo elegido (o el elemento elegido) en un grupo nuevo, dentro del grupo que se está editando */
   function agruparElegidos() {
     const p = estado.proyecto;
@@ -936,7 +942,7 @@ export function montarPlanta(cont: HTMLElement) {
     const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else pp.perfilTorre = q; };
     const ab = env ? pfEnv : pfLosas;
     const p = estado.proyecto, pf = leer(p);
-    const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre'; det.open = ab.abierto;
+    const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre-carta'; det.open = ab.abierto;
     det.addEventListener('toggle', () => { ab.abierto = det.open; });
     const sum = document.createElement('summary'); sum.textContent = env ? 'Forma de la envolvente' : `Perfil de la torre${pf ? ' · activo' : ''}`; det.append(sum);
     let pfSel = ab.sel;
@@ -3488,11 +3494,28 @@ export function montarPlanta(cont: HTMLElement) {
   svg.addEventListener('pointerup', soltar);
   svg.addEventListener('pointercancel', soltar);
   svg.addEventListener('keydown', ev => {
-    const m = estado.proyecto.muros.find((x: Muro) => x.id === estado.seleccion);
-    if (!m) return;
     const paso = ev.shiftKey ? 1 : 0.05;
     const mov: Record<string, [number, number]> = { ArrowLeft: [-paso, 0], ArrowRight: [paso, 0], ArrowUp: [0, paso], ArrowDown: [0, -paso] };
-    if (mov[ev.key]) { ev.preventDefault(); if (muroBloqueado(estado.proyecto, m)) { mensaje(`${m.id} está bloqueado 🔒.`); return; } if (muroFijo(estado.proyecto, m)) { mensaje(`${m.id} está en un grupo fijo en su lugar 📌.`); return; } const ids = compas(m); estado.cambiar(() => { estado.proyecto.muros.forEach(w => { if (ids.includes(w.id)) { w.x = +(w.x + mov[ev.key][0]).toFixed(2); w.y = +(w.y + mov[ev.key][1]).toFixed(2); } }); }); }
+    if (!mov[ev.key]) return;
+    const p = estado.proyecto;
+    // varios elegidos o un grupo: se mueve todo junto (con sus cotas)
+    const sel = !vaciaSel(estado.multi) ? estado.multi : estado.grupoSel ? { m: [], g: [estado.grupoSel] } : null;
+    if (sel) {
+      ev.preventDefault();
+      const { ids } = resolverSel(p, sel);
+      const fijo = p.muros.find(w => ids.has(w.id) && muroFijo(p, w));
+      if (fijo) { mensaje(`${fijo.id} está en un grupo fijo en su lugar 📌.`); return; }
+      let err: string | null = null;
+      estado.cambiar(() => { err = aplicarOp(estado.proyecto, sel, { t: 'mover', dx: mov[ev.key][0], dy: mov[ev.key][1] }); });
+      if (err) mensaje(err);
+      return;
+    }
+    const m = p.muros.find((x: Muro) => x.id === estado.seleccion);
+    if (!m) return;
+    ev.preventDefault();
+    if (muroBloqueado(p, m)) { mensaje(`${m.id} está bloqueado 🔒.`); return; }
+    if (muroFijo(p, m)) { mensaje(`${m.id} está en un grupo fijo en su lugar 📌.`); return; }
+    estado.cambiar(() => { aplicarOp(estado.proyecto, { m: compas(m), g: [] }, { t: 'mover', dx: mov[ev.key][0], dy: mov[ev.key][1] }); });
   });
   new ResizeObserver(dibujar).observe(svg);
   estado.suscribir(dibujar);

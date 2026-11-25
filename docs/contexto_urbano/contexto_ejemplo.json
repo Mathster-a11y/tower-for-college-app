@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "nombre": "Ejemplo: torre de 34 pisos en una manzana con torres vecinas",
+  "nota": "Coordenadas del proyecto (m), con el centro de la torre en el origen; el viento A sopla hacia +y (de abajo hacia arriba en la planta). Cada edificio es un rectángulo (centro, ancho en x, largo en y) con su altura. Pensado para mostrar los efectos típicos: protección a barlovento, canal entre torres (Venturi), torre a sotavento y edificios bajos que solo cuentan cerca del suelo.",
+  "objetivo": { "nombre": "Torre del proyecto (34 pisos)", "altura": 118.8, "planta": "la carpintería de PB del proyecto: 40,1 × 18,5 m con esquinas redondeadas de 3,6 m" },
+  "calles": { "ancho_avenida": 22, "ancho_calle": 20 },
+  "vecinos": [
+    { "id": "V1", "nombre": "Torre a barlovento (corrida al oeste)", "cx": -18, "cy": -62, "ancho": 32, "largo": 20, "altura": 112, "para_que": "tapa la mitad de la fachada de barlovento: protección parcial y estela que llega a la torre" },
+    { "id": "V2", "nombre": "Torre a barlovento (este)", "cx": 40, "cy": -58, "ancho": 24, "largo": 24, "altura": 96, "para_que": "más baja: deja pasar el viento por arriba de los 96 m" },
+    { "id": "V3", "nombre": "Torre lateral oeste", "cx": -52, "cy": 4, "ancho": 20, "largo": 36, "altura": 124, "para_que": "calle de 22 m entre las dos: canal (efecto Venturi) en la esquina oeste" },
+    { "id": "V4", "nombre": "Torre lateral este", "cx": 51, "cy": -2, "ancho": 22, "largo": 30, "altura": 104, "para_que": "calle de 20 m al este, hasta los 104 m" },
+    { "id": "V5", "nombre": "Torre a sotavento", "cx": 6, "cy": 56, "ancho": 40, "largo": 22, "altura": 116, "para_que": "la estela de la torre del proyecto choca con ella (interferencia de estela)" },
+    { "id": "B1", "nombre": "Edificio bajo (7 pisos)", "cx": -62, "cy": -56, "ancho": 20, "largo": 18, "altura": 24, "para_que": "rugosidad del entorno cerca del suelo" },
+    { "id": "B2", "nombre": "Edificio bajo (7 pisos)", "cx": 64, "cy": 56, "ancho": 18, "largo": 18, "altura": 24, "para_que": "rugosidad del entorno cerca del suelo" },
+    { "id": "B3", "nombre": "Edificio bajo (6 pisos)", "cx": -54, "cy": 54, "ancho": 22, "largo": 16, "altura": 21, "para_que": "rugosidad del entorno cerca del suelo" }
+  ],
+  "cortes": [
+    { "altura": 12, "para_que": "nivel de la vereda alta: entran todos, también los edificios bajos" },
+    { "altura": 60, "para_que": "media altura: solo las torres" },
+    { "altura": 105, "para_que": "arriba: solo las torres de 105 m o más (V2 y V4 quedan debajo)" }
+  ]
+}

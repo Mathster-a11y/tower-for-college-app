@@ -57,6 +57,11 @@ export interface Nivel {
   carpManual?: boolean | null;
   /** la carpintería a mano sale de lo común a propósito (un vidrio en voladizo, un atrio): no se avisa (vacío = no) */
   carpVoladizo?: boolean | null;
+  /**
+   * torre de perfil variable (editor del perfil): cuánto se corre el nivel entero respecto de PB, en x y en y (m).
+   * La planta (muros y contornos) sigue en sus coordenadas; el nivel se corre como un todo (torre inclinada). Vacío = 0
+   */
+  dx?: number | null; dy?: number | null;
 }
 
 /** un tramo de espesor: desde la cota «desde» (m) hacia arriba, espesor «e» (m) */
@@ -309,6 +314,8 @@ export interface Proyecto {
   clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
   /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
+  /** el perfil de la torre dibujado en el editor (Diseño → Perfil); los niveles guardan lo que escribió (B, L, dx, dy) */
+  perfil?: import('./perfilTorre').PerfilTorre | null;
   /**
    * lofts de losas (como el Loft de Rhino): se eligen dos o más losas sección y las siluetas de las losas que quedan
    * entre ellas salen de interpolarlas en altura (ver loft.ts); se vuelven a aplicar solos con cada cambio
@@ -340,6 +347,20 @@ export interface Proyecto {
   cirsoc101?: import('./cargas/cirsoc101').DatosCirsoc101 | null;
   /** datos del hormigón para la verificación CIRSOC 201 (recubrimiento, exposición) y el límite de deriva; vacío = por defecto */
   cirsoc201?: import('./metodos/cirsoc').DatosCirsoc201 | null;
+  /**
+   * contexto urbano: los edificios vecinos, para los simuladores de viento (túnel 2D y 3D). No entra en ningún método
+   * de cálculo ni en el Excel. Vacío = la torre aislada
+   */
+  contexto?: { edificios: EdificioVecino[] } | null;
+}
+/** edificio vecino: su contorno en planta (m, en las coordenadas de la planta del proyecto) y su altura sobre PB (m) */
+export interface EdificioVecino {
+  id: string; nombre: string; v: { x: number; y: number }[]; altura: number;
+  /**
+   * retiros: los tramos de arriba, de abajo hacia arriba. Cada uno va desde la altura del anterior (el primero, desde
+   * «altura») hasta la suya, con su propio contorno (normalmente más chico). Sin retiros, un prisma.
+   */
+  retiros?: { v: { x: number; y: number }[]; altura: number }[];
 }
 /** hueco de la losa: rectángulo (o contorno) en la planta, de un nivel a otro (vacío = en todos los pisos) */
 export interface HuecoLosa { id: string; nombre: string; v: { x: number; y: number }[]; zDesde?: number | null; zHasta?: number | null }
@@ -418,14 +439,16 @@ export function ejemploCiticorp(): Proyecto {
   // la mitad del peso de cada losa (47,85² = 2290 m²) baja por el núcleo y la otra mitad por las cuatro supercolumnas
   const col = (id: string, x: number, y: number, piezaA: string, piezaB: string): Muro =>
     ({ id, dir: 'Y', x, y, largo: 7.3, ladoY: 7.3, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 286, piezaA, pegadoA: '', piezaB, pegadoB: '', zHasta: base });
-  const cortes = [8, 16, 24, 32, 40, 48, 56].map(z);
+  // el último módulo sube hasta la cima: la corona inclinada es estructura (si no, queda colgada de columnas sueltas)
+  const cortes = [...[8, 16, 24, 32, 40, 48, 56].map(z), 278.6];
   return {
     version: 1,
     nombre: 'Citicorp Center (Nueva York, 1977) · modelo aproximado',
     alumno: '',
     sitio: { V: 49, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: lado, a1: lado },
+    // sobre la roca de Manhattan (esquisto): código de edificación de Nueva York, roca intermedia, 20 t/ft² ≈ 19,5 kg/cm²
+    fundacion: { b1: lado, a1: lado, sigmaAdm: 19.5 },
     hormigon: 'H40',
     muros: [
       // núcleo octogonal de 63 × 72 ft (19,2 × 21,9 m) como un tubo rectangular; solo gravedad (sin pieza)
@@ -436,10 +459,11 @@ export function ejemploCiticorp(): Proyecto {
       tipo: 'E', separacion: 0, modulo: 8, pisoInicio: 1, cortes, cuartos: true, esquinaCortada: true, limiteH: 450,
       // mástil 60 × 30 in en la base, 18 in de profundidad arriba del piso 40: tubos cuadrados equivalentes (supuesto)
       // secciones dimensionadas con la app (botón «Dimensionar» de la etapa 08); las reales no están publicadas
-      mastil: { b: 2.0, e: 0.125 }, tramos: [{ clase: 'mastil', desde: z(40), sec: { b: 1.8, e: 0.08 } }],
+      mastil: { b: 2.2, e: 0.15 }, tramos: [{ clase: 'mastil', desde: z(40), sec: { b: 1.8, e: 0.1 } }],
+      losas: { franja: 6.4, qD: 0.45, qL: 0.25 },
       // debajo del cajón, el mástil es la supercolumna de 24 × 24 ft (cuatro barras): cajón de acero equivalente (pared supuesta)
-      mastilBase: { hasta: base, sec: { b: 7.3, e: 0.05 } },
-      diagonal: { b: 1.0, e: 0.04 }, viga: { b: 1.4, e: 0.08 }, columna: { b: 2.0, e: 0.125 },
+      mastilBase: { hasta: base, sec: { b: 7.3, e: 0.065 } },
+      diagonal: { b: 1.4, e: 0.06 }, viga: { b: 1.4, e: 0.08 }, columna: { b: 2.2, e: 0.15 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { diagonal: 'articulada', viga: 'rigida', columna: 'rigida', base: 'empotrada' },
       notas: [
         '59 pisos y techo a 915 ft (279 m) (Wikipedia, «Citigroup Center»); el plano de elevación dice 914′-0″ (278,6 m).',
@@ -447,14 +471,16 @@ export function ejemploCiticorp(): Proyecto {
         'Cuatro supercolumnas de 24 × 24 ft (7,3 m) a media cara, de 112 ft (Wikipedia; el plano: 114 ft = 34,75 m). Acá son tubos de hormigón equivalentes (pared de 0,60 m, supuesta) y son las piezas de la planilla en la base abierta.',
         'Seis módulos de chevrones de 8 pisos por cara, sin columna en las esquinas en el tope de cada módulo (Wikipedia): en la app la columna de esquina termina un piso abajo del nudo. Columnas a los cuartos de cada cara que bajan a las diagonales a medio módulo, con una viga a medio módulo (plano de elevación). Pisos de 13′-4″ (4,064 m) leídos del plano: el sexto módulo termina en el piso 56, a 229,82 m.',
         'Los pisos 8 y 9 son el cajón de transición (Wikipedia: el piso 9 es un reticulado; el plano: cajón de 2 pisos): acá un solo nivel a 34,75 m, para que entren los 49 niveles de la planilla.',
-        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (control del curso y CIRSOC 301) (el mástil y las esquinas de 2,00 m, las diagonales de 1,00 m, el cordón de 1,40 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
-        'Debajo del cajón, el mástil es la supercolumna (24 × 24 ft): un cajón de acero equivalente de 7,30 m con pared de 5 cm (supuesto).',
-        'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app pesa unas 32 500 t (tubos cuadrados de catálogo y viento del CIRSOC: más pesado que la obra).',
+        'Mástil de 60 in de ancho y 30 in de profundidad, 18 in arriba del piso 40; diagonales de 14 in y cordón de 36 in (Wikipedia). La app usa tubos cuadrados: las secciones salen del botón «Dimensionar» (control del curso y CIRSOC 301) con las losas apoyadas (el mástil y las esquinas de 2,20 m con chapa de 150 mm, las diagonales de 1,40 m, el cordón de 1,40 m; arriba del piso 40 el mástil se afina a 1,80 m). Con el viento del CIRSOC, la flecha h/500 del curso y sin el amortiguador, hacen falta barras más grandes que las de 14 in: no son las de la obra.',
+        'Debajo del cajón, el mástil es la supercolumna (24 × 24 ft): un cajón de acero equivalente de 7,30 m con pared de 6,5 cm (supuesto; con 5 cm no alcanza cuando las losas apoyan en el exo).',
+        'Control de orden de magnitud: la torre real tiene 24 000 t cortas de acero (≈ 21 800 t, Wikipedia, con vigas y losas); el exo dimensionado de la app, con las losas apoyadas, pesa unas 42 500 t (tubos cuadrados de catálogo, viento del CIRSOC y sin el amortiguador: bastante más pesado que la obra).',
+        'Las losas apoyan en el exo: una franja de 6,4 m junto a cada fachada: así el exo lleva la otra mitad de cada losa (47,85² ≈ 2290 m²; 1145 m² por piso), con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
         'Núcleo octogonal de 63 × 72 ft que lleva la mitad del peso (Wikipedia; no dice el material): acá un tubo de hormigón sin pieza (no toma viento).',
         'Corona: techo a 45° que sube 160 ft (49 m) sobre el último piso, con el amortiguador de 400 t (Wikipedia).',
         '1978: uniones abulonadas; con el viento a 45° no alcanzaban y se soldaron chapas de 2 in en más de 200 uniones (Wikipedia; NIST 2019 lo revisó). Diagonales articuladas = abulonadas.',
         'Viento: CIRSOC 102 con V = 49 m/s y exposición de centro de ciudad (supuesto).',
         'Flecha objetivo h/450, no la h/500 del curso: con la geometría de la obra (las esquinas no llegan al tope de cada módulo) y los tubos del catálogo la azotea se corre unos h/480. El edificio real tiene además el amortiguador de 400 t para el movimiento. Con la marca de «esquina cortada» apagada, la torre llega a h/500.',
+        'Criterio CIRSOC: el último módulo del exo sube hasta la cima (la corona inclinada es estructura; sin ella, la corona quedaba en columnas sueltas y un piso se corría 1/25). Con eso el exo dimensionado pesa unas 46 000 t y la deriva de servicio de la azotea da unos 240 mm (límite 557 mm). Fundación sobre la roca de Manhattan: código de Nueva York, roca intermedia, 20 t/ft² ≈ 19,5 kg/cm².',
       ],
     },
   };

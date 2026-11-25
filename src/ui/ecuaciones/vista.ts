@@ -11,7 +11,7 @@ import { grafoGuia } from './guia';
 import { grafoPlanilla, tablaNivelesPlanilla, type RP } from './planilla';
 import { grafoCirsoc } from './cirsoc';
 import { grafoFem } from './fem';
-import { abrirGuiaImprimible } from './imprimir';
+import { abrirGlosario, abrirGuiaImprimible } from './imprimir';
 import { elementoAImagen } from '../aImagen';
 import { confirmar, pedirTexto } from '../tarjeta';
 import { grafoFlujo } from './flujo';
@@ -93,7 +93,10 @@ export function panelEcuaciones(c: H) {
   // la guía del método, para imprimir o guardar en PDF
   const bGuia = h('button', { type: 'button', class: 'boton primario' }, `Guía del método ${metodo} (imprimir o PDF)`);
   bGuia.addEventListener('click', () => { void abrirGuiaImprimible(metodo); });
-  c.append(h('div', { class: 'fila-acciones' }, bGuia));
+  const bGlos = h('button', { type: 'button', class: 'boton' }, 'Glosario y unidades (imprimir o PDF)');
+  bGlos.title = 'Cada unidad, cada letra de las cuentas de los cinco métodos y cómo funciona la simulación del viento, paso a paso';
+  bGlos.addEventListener('click', () => { void abrirGlosario(); });
+  c.append(h('div', { class: 'fila-acciones' }, bGuia, bGlos));
   // capítulos
   const lista = h('div', { class: 'ec-capitulos', role: 'group', 'aria-label': 'Capítulos' });
   g.capitulos.forEach(k => {

@@ -78,10 +78,28 @@ button.peligro { color: var(--danger); border-color: var(--danger); }
 button.peligro:hover { background: var(--mal-fill); }
 button.glifo { width: 30px; height: 28px; padding: 0; display: inline-grid; place-items: center; font-size: 15px; }
 button.mini { padding: 1px 9px; font-size: 12px; }
-.seg { display: inline-flex; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; background: var(--field); flex-wrap: wrap; }
-.seg button { border: 0; border-radius: 0; background: transparent; padding: 4px 12px; }
-.seg button + button { border-left: 1px solid var(--field-edge); }
+/* botones segmentados: una caja con las opciones como pastillas adentro. Si no entran en una línea se parten en filas
+   sin cortar ninguna (la caja pasa de pastilla a rectángulo redondeado y nada queda recortado) */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--field-edge); border-radius: 17px; background: var(--field); }
+.seg > button, .seg > .menu-mas > button, .seg > .boton { border: 0; border-radius: 999px; background: transparent; padding: 3px 11px; }
+.seg > button:not([aria-pressed="true"]):hover, .seg > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+/* los pasos de una etapa (1 · …, 2 · …): en filas parejas en lugar de dejar uno solo abajo */
+/* rótulo y botones juntos: si la fila se parte, no queda el rótulo solo al final de la de arriba */
+.par-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.seg.pasos { flex: 0 1 auto; }
+.seg.pasos > button { text-align: center; }
+/* Jerarquía de los botones (misma separación y tamaño en todos; cambia la forma y el color):
+   1. acción principal (button.primario): llena, en el color de la app
+   2. ajustes del cálculo (Método, Planilla, Armado, Viento): caja en pastilla, la opción elegida llena en el color de la app
+   3. pasos de una etapa (subpasos del panel y pasos del centro): la elegida llena con el color de la etapa
+   4. herramientas de la planta: caja de herramientas con esquinas rectas; la elegida en tinte, con el texto en color
+   5. acciones chicas (SVG, PNG, zoom): pastillas con borde
+   6. explicaciones: renglón azul con triángulo */
+.seg.pasos > button[aria-pressed="true"] { background: var(--rolb, var(--accent)); }
+.herr-planta.seg { border-radius: 10px; }
+.herr-planta.seg > button, .herr-planta.seg > .menu-mas > button, .herr-planta.seg > .boton { border-radius: 7px; }
+.herr-planta.seg > button[aria-pressed="true"], .herr-planta .menu-mas > button[aria-pressed="true"] { background: var(--tint); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .seg.chico button { padding: 2px 10px; font-size: 12px; }
 .interruptor { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; }
 .interruptor input { appearance: none; width: 30px; height: 17px; border-radius: 999px; background: #b9c1c9; position: relative; margin: 0; padding: 0; border: 0; cursor: pointer; transition: background .15s; }
@@ -127,8 +145,10 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rolb); color: #fff; }
 .banda .chip { background: #fff; color: var(--rolb); font-weight: 700; font-family: var(--mono); font-size: 13px; border-radius: 6px; padding: 1px 6px; }
 .banda h2 { margin: 0; font-size: 17px; color: #fff; }
-.subpasos { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 10px 2px; }
-.subpasos button { font-size: 12px; padding: 2px 10px; }
+.subpasos { display: flex; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 20px); gap: 2px; padding: 2px; margin: 8px 10px 2px; border: 1px solid var(--field-edge); border-radius: 17px; background: var(--field); }
+.subpasos[hidden] { display: none; }
+.subpasos button { font-size: 12px; padding: 3px 8px; border: 0; border-radius: 999px; background: transparent; }
+.subpasos button:not([aria-pressed="true"]):hover { background: var(--tint); }
 .subpasos button[aria-pressed="true"] { background: var(--rolb); border-color: var(--rolb); color: #fff; font-weight: 600; }
 .panel { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 22px; display: flex; flex-direction: column; gap: 8px; }
 .panel > * { flex-shrink: 0; }
@@ -377,6 +397,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   .barra-sel button, .barra-lazo button, .barra-lazo label, .colocar-panel button, .capas button, .capas label, .tira button, .tira .seg button,
   .avance button, .seg button, .fila-acciones button, .panel button:not(.esq-abrir):not(.esq-icono):not(.tirador), .esquema li { min-height: 36px; }
   .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { padding: 6px 10px; }
+  /* los botones de una letra (σ, p, J de la vista 3D; ⋯ de la planta) también con 36 px de ancho */
+  .tira button.mini, .herr-planta.seg.chico .menu-mas > button { min-width: 36px; }
   .subpasos button { padding: 4px 12px; }
   .capas label, .capas button { padding: 4px 12px; }
   .grilla-caja button, .grilla-pasos button { min-height: 32px; }
@@ -385,9 +407,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 }
 /* planta angosta (tablet vertical o panel lateral ancho): las herramientas en varias líneas, cada una entera */
 @media (max-width: 1100px) {
-  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
-  .sel-nivel { top: 84px; right: 10px; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
+  .sel-nivel { top: 106px; right: 10px; }
 }
 @media (max-width: 760px) {
   body { height: auto; }
@@ -397,9 +418,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
   /* el grupo del final (Carta, Resumen, Ayuda) también en fila: si no, estira toda la barra */
   .riel .riel-fin { margin-top: 0; margin-left: 0; display: flex; flex-direction: row; gap: 2px; flex: 0 0 auto; }
   /* herramientas de la planta: en varias líneas, cada una entera */
-  .herr-planta { display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
-  .sel-nivel { top: 84px; right: 10px; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
+  .sel-nivel { top: 106px; right: 10px; }
   .lateral { border-right: 0; }
   .panel { overflow: visible; }
   .centro { min-height: 70vh; }
@@ -632,16 +652,18 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .carta .ct-base { fill: var(--ink); }
 .carta .ct-base-planta { fill: var(--zebra); stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 4 2; }
 .carta .ct-flecha.peso line { stroke: var(--ink); } .carta .ct-flecha.peso polygon { fill: var(--ink); }
-.carta .ct-flecha.resultante-r line { stroke: var(--mal); } .carta .ct-flecha.resultante-r polygon { fill: var(--mal); }
-.carta .ct-r-punteada { stroke: var(--mal); stroke-width: 1.6; stroke-dasharray: 2 3; }
+/* R = W + P, el volcador y el equilibrante no son tracción ni compresión: colores de las cargas (el rojo es solo tracción) */
+.carta .ct-flecha.resultante-r line { stroke: var(--ink); } .carta .ct-flecha.resultante-r polygon { fill: var(--ink); }
+.carta .ct-r-punteada { stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 2 3; }
 .carta .ct-rojo { fill: var(--mal); }
 .carta .ct-amarillo { fill: var(--revisar); }
+.carta .ct-carga { fill: var(--carga); } .carta .ct-peso { fill: var(--ink2); }
 .carta .ct-nucleo.ok { fill: color-mix(in srgb, var(--ok) 45%, transparent); }
 .carta .ct-nucleo.mal { fill: color-mix(in srgb, var(--mal) 45%, transparent); }
 .carta .ct-giro { fill: var(--ink); stroke: var(--lienzo); stroke-width: 1.5; }
 .arco-momento .arco-trazo { fill: none; }
-.carta .ct-arco.volcador .arco-trazo { stroke: var(--mal); } .carta .ct-arco.volcador .arco-punta { fill: var(--mal); }
-.carta .ct-arco.equilibrante .arco-trazo { stroke: var(--revisar); } .carta .ct-arco.equilibrante .arco-punta { fill: var(--revisar); }
+.carta .ct-arco.volcador .arco-trazo { stroke: var(--carga); } .carta .ct-arco.volcador .arco-punta { fill: var(--carga); }
+.carta .ct-arco.equilibrante .arco-trazo { stroke: var(--ink2); } .carta .ct-arco.equilibrante .arco-punta { fill: var(--ink2); }
 .carta .ct-suelo-t { fill: color-mix(in srgb, var(--compresion) 22%, transparent); stroke: var(--compresion); stroke-width: 1.4; }
 .carta .ct-suelo-t.traccion { fill: color-mix(in srgb, var(--traccion) 22%, transparent); stroke: var(--traccion); }
 .et3d.giro { color: var(--ink); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 0 3px; border-radius: 3px; text-shadow: none; }
@@ -1109,7 +1131,7 @@ button.peligro { color: var(--mal); }
 .controles-def { width: 100%; margin-top: 4px; gap: 4px 12px; } .controles-def .desliz-def { font-size: 12px; display: inline-flex; gap: 6px; align-items: center; } .controles-def input[type=range] { width: 110px; }
 .colocar-panel.compacto { width: auto; max-width: 320px; }
 .con-contorno .prec-panel { display: none !important; }
-.herr-planta .menu-mas > button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
 .barra-dib { right: auto; left: 50%; transform: translateX(-50%); }
 
 /* ---------- huecos de losa ---------- */
@@ -1135,8 +1157,7 @@ button.peligro { color: var(--mal); }
 
 /* ---- al final para ganar a las reglas de arriba: pantallas angostas y táctiles ---- */
 @media (max-width: 1100px) {
-  .herr-planta { flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); border: 0; background: none; box-shadow: none; padding: 0; }
-  .herr-planta button, .herr-planta .boton { flex: 0 0 auto; border: 1px solid var(--edge) !important; border-radius: 999px !important; }
+  .herr-planta { flex-wrap: wrap; max-width: calc(100% - 20px); }
   .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { min-height: 30px; }
 }
 @media (pointer: coarse) {
@@ -1197,6 +1218,7 @@ button.peligro { color: var(--mal); }
 /* convención de toda la app: rojo tracción, azul compresión */
 .exo-dibujo { --ex-trac: var(--traccion); --ex-comp: var(--compresion); --ex-neutro: color-mix(in srgb, var(--ink2) 18%, var(--lienzo)); }
 .exo-dibujo .ex-barra.neutra { stroke: var(--dim); }
+.exo-dibujo .ex-barra.nucleo { stroke: var(--dim); stroke-width: 7; stroke-opacity: 0.45; stroke-linecap: butt; cursor: default; }
 .exo-dibujo .ex-toque { stroke: transparent; stroke-width: 14; cursor: pointer; }
 .exo-dibujo .ex-g-barra:hover .ex-barra, .exo-dibujo .ex-g-barra.elegida .ex-barra { stroke: var(--elegido); }
 .exo-dibujo .ex-g-barra.elegida .ex-toque { stroke: color-mix(in srgb, var(--elegido) 22%, transparent); }
@@ -1666,13 +1688,16 @@ details.como-leer summary { cursor: pointer; color: var(--accent); font-weight: 
 details.como-leer ul { margin: 4px 0 0; padding-left: 18px; }
 details.como-leer li { margin: 2px 0; }
 /* explicaciones del centro detrás de «?» (comp.ts, plegarExplicaciones) */
-.ayuda-plegable { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 4px; }
-.ayuda-boton { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 13px; line-height: 1; color: var(--accent); background: var(--field); border: 1px solid var(--accent); }
-.ayuda-boton[aria-expanded="true"] { color: var(--field); background: var(--accent); }
-.ayuda-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink2); }
+/* el mismo aspecto que «Cómo leer este gráfico» y «Más detalle»: un renglón azul con su triángulo */
+.ayuda-plegable { display: block; margin: 2px 0 6px; }
+.ayuda-boton { display: inline-flex; align-items: center; gap: 5px; padding: 2px 0; border: 0; border-radius: 0; background: none; font-size: 12.5px; font-weight: 600; color: var(--accent); min-height: 24px; }
+.ayuda-boton:hover { background: none; text-decoration: underline; }
+.ayuda-boton::before { content: '▸'; font-size: 11px; }
+.ayuda-boton[aria-expanded="true"]::before { content: '▾'; }
+.ayuda-texto { margin-top: 4px; padding-left: 14px; border-left: 2px solid var(--edge); display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink2); }
 .ayuda-texto[hidden] { display: none; }
 .ayuda-texto ul { margin: 0; padding-left: 18px; }
-@media (pointer: coarse) { .ayuda-boton { width: 32px; height: 32px; min-height: 32px; } }
+@media (pointer: coarse) { .ayuda-boton { min-height: 36px; } }
 /* llaves para leer los dibujos: siempre a la vista, junto al dibujo */
 #centro-dibujos .llave { color: var(--ink2); font-size: 12.5px; margin: 2px 0; }
 /* túnel 2D: torre piso por piso */
@@ -1695,7 +1720,7 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .contorno-panel button.con-icono svg { flex: none; }
 /* llaves de colores sobre las simulaciones (3D) y botones de zoom del túnel 2D */
 .tunel-marco { position: relative; }
-.llave-sim { position: absolute; left: 8px; bottom: 8px; background: color-mix(in srgb, var(--lienzo) 88%, transparent); border-radius: 6px; padding: 5px 7px; font-size: 11px; color: var(--ink); min-width: 230px; pointer-events: none; }
+.llave-sim { position: absolute; left: 8px; bottom: 8px; background: color-mix(in srgb, var(--lienzo) 88%, transparent); border-radius: 6px; padding: 5px 7px; font-size: 11px; color: var(--ink); min-width: 290px; pointer-events: none; }
 .llave-sim + .llave-sim { bottom: auto; top: 8px; }
 .llave-sim b { display: block; font-size: 11px; margin-bottom: 3px; }
 .llave-sim-barra { height: 9px; border-radius: 2px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
@@ -1810,7 +1835,7 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .alzado-perfil .punto { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: grab; }
 .alzado-perfil .punto.sel { fill: var(--accent); }
 .alzado-perfil .rot { font-size: 10px; fill: var(--ink2); }
-.perfil-torre .punto-perfil { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px dashed var(--rule); }
+.perfil-torre-carta .punto-perfil { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px dashed var(--rule); }
 .sigue-losa { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--hair); }
 
 /* inferencias al dibujar: guía de puntos desde el punto con el que se alinea */
@@ -1953,3 +1978,192 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .desp-tabla th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-bottom: 1px solid var(--rule); padding: 4px 6px; }
 .desp-tabla td { padding: 4px 6px; border-bottom: 1px solid var(--hair); }
 .desp-tabla .n { text-align: right; }
+.llave-sim.derecha { left: auto; right: 8px; top: 8px; bottom: auto; }
+.llave-sim.llave-simbolos { left: auto; right: 8px; top: auto; bottom: 8px; min-width: 0; max-width: 300px; }
+.llave-simbolos .simbolo { display: flex; gap: 4px; align-items: flex-start; margin-top: 2px; }
+.llave-simbolos .simbolo canvas { flex: none; margin-top: 1px; }
+.llave-simbolos small { display: block; opacity: 0.75; font-size: 10px; }
+/* salvaguardas del túnel: lista de puntos de velocidad alta */
+.altos { margin-top: 8px; font-size: 12.5px; }
+.altos ol { margin: 4px 0 2px 18px; padding: 0; }
+.altos li { margin: 1px 0; }
+.zoom-tunel .zoom-chk { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 85%, transparent); padding: 1px 6px; border-radius: 4px; display: inline-flex; gap: 4px; align-items: center; }
+/* contexto urbano del túnel 2D */
+.tabla-contexto td, .tabla-contexto th { padding: 3px 5px; font-size: 12px; }
+.tabla-contexto input { padding: 2px 4px; font-size: 12px; }
+.plano-contexto-fig { margin: 6px 0; }
+.plano-contexto { background: var(--lienzo); border: 1px solid var(--edge); border-radius: 6px; max-width: 100%; height: auto; }
+.dxf-sitio { margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--edge); border-radius: 6px; }
+/* «Qué se dibuja» de los túneles: una capa con su opción al lado, y las sub-capas corridas */
+.capa-con-opcion { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.capa-con-opcion select { max-width: 100%; }
+.capa-sub { margin-left: 24px; }
+/* comparar dos grabaciones del túnel 2D: lado a lado si entran, si no una arriba de la otra */
+.repro-par { display: grid; gap: 12px; grid-template-columns: 1fr; }
+.repro-par.lado { grid-template-columns: 1fr 1fr; }
+.repro-par figure { margin: 0; min-width: 0; }
+.repro-par figcaption { font-size: 12.5px; color: var(--ink2); margin-bottom: 4px; }
+/* edificios vecinos del contexto urbano en la planta (calcados de un PDF o importados) */
+.vecino-planta { fill: color-mix(in srgb, #8f9198 22%, transparent); stroke: #8f9198; stroke-width: 1.2; stroke-dasharray: 5 3; pointer-events: none; }
+.vecino-rot { font: 600 10px system-ui, sans-serif; fill: #5a5c63; pointer-events: none; }
+/* glosario de la guía de cálculo */
+.glosario td.sim { white-space: nowrap; font-family: var(--mono, monospace); font-weight: 600; }
+.glosario td small { display: inline; }
+.glosario-dl { display: grid; grid-template-columns: minmax(150px, max-content) 1fr; gap: 6px 14px; margin: 8px 0; }
+.glosario-dl dt { font-weight: 600; }
+.glosario-dl dd { margin: 0; }
+@media (max-width: 600px) { .glosario-dl { grid-template-columns: 1fr; } .glosario-dl dd { margin-bottom: 6px; } }
+/* guía impresa: títulos pegados a lo que explican y capítulos en hoja nueva */
+.guia-impresion h2, .guia-impresion h3, .guia-impresion h4 { break-after: avoid; page-break-after: avoid; }
+.guia-impresion p, .guia-impresion li { orphans: 3; widows: 3; }
+.guia-impresion .mantener { break-inside: avoid; page-break-inside: avoid; }
+.guia-impresion .guia-intro { font-size: 14.5px; color: var(--ink2); }
+/* glosario: portada */
+.portada-glosario { border-left: 6px solid var(--r-ayuda); padding-left: 18px; }
+.portada-glosario h1 { font-size: 34px; }
+/* glosario: la simulación en tarjetas numeradas con su dibujo */
+.sim-paso { display: grid; grid-template-columns: 38px 1fr 236px; gap: 12px; align-items: start; border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px; margin: 12px 0; background: color-mix(in srgb, var(--r-ayuda) 4%, #fff); break-inside: avoid; page-break-inside: avoid; }
+.sim-paso.sin-dibujo { grid-template-columns: 38px 1fr; }
+.sp-num { width: 32px; height: 32px; border-radius: 50%; background: var(--r-ayuda); color: #fff; font: 700 16px var(--fuente); display: grid; place-items: center; }
+.sp-txt h3 { margin: 4px 0 4px; font-size: 15.5px; }
+.sp-txt p { margin: 0; }
+.sp-dib { margin: 0; }
+.sp-dib .ilustracion { width: 100%; height: auto; display: block; }
+@media (max-width: 700px) { .sim-paso { grid-template-columns: 32px 1fr; } .sp-dib { grid-column: 1 / -1; } }
+/* glosario: las unidades como fichas */
+.fichas-unidad { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.ficha-unidad { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--edge); border-radius: 10px; padding: 10px 12px; break-inside: avoid; page-break-inside: avoid; }
+.fu-sim { flex: none; min-width: 64px; padding: 8px 6px; border-radius: 8px; background: color-mix(in srgb, var(--r-ayuda) 12%, #fff); color: color-mix(in srgb, var(--r-ayuda) 70%, var(--ink)); font: 700 15px var(--mono, monospace); text-align: center; }
+.fu-txt b { font-size: 13.5px; }
+.fu-txt p { margin: 3px 0 5px; font-size: 12.5px; line-height: 1.45; }
+.fu-eq { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: #eef1f5; color: var(--ink2); }
+@media (max-width: 700px) { .fichas-unidad { grid-template-columns: 1fr; } }
+/* glosario: el diccionario en dos columnas */
+.dicc { columns: 2; column-gap: 22px; margin: 10px 0; }
+.dicc-item { break-inside: avoid; page-break-inside: avoid; margin: 0 0 10px; padding: 8px 10px; border-left: 3px solid var(--r-ayuda); background: #f7f8fa; border-radius: 0 6px 6px 0; }
+.dicc-item b { color: color-mix(in srgb, var(--r-ayuda) 70%, var(--ink)); }
+.dicc-item p { margin: 3px 0 0; font-size: 12.5px; }
+@media (max-width: 700px) { .dicc { columns: 1; } }
+/* glosario: la tabla de variables */
+.guia-impresion table.glosario { border-collapse: separate; border-spacing: 0; width: 100%; }
+.guia-impresion table.glosario th { background: color-mix(in srgb, var(--r-ayuda) 14%, #fff); text-align: left; }
+.guia-impresion table.glosario tbody tr:nth-child(even) td { background: #f7f8fa; }
+.guia-impresion table.glosario tr { break-inside: avoid; page-break-inside: avoid; }
+.guia-impresion table.glosario td.sim { color: color-mix(in srgb, var(--r-ayuda) 70%, var(--ink)); }
+/* Diseño → Perfil: fichas de forma y el editor en los dos alzados */
+.fichas-forma { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ficha-forma { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card, #fff); cursor: pointer; font-size: 12px; }
+.ficha-forma[aria-pressed="true"] { border-color: var(--r-diseno); box-shadow: 0 0 0 2px color-mix(in srgb, var(--r-diseno) 30%, transparent); }
+.fila-rango { display: flex; gap: 8px; align-items: center; } .fila-rango input { flex: 1; }
+.perfil-torre { display: block; max-width: 100%; height: auto; touch-action: none; user-select: none; }
+.perfil-torre .pf-tit { font: 600 13px var(--fuente); fill: var(--ink); }
+.perfil-torre .pf-niv, .perfil-torre .pf-med { font: 11px var(--fuente); fill: var(--ink2); }
+.perfil-torre .pf-med { font-weight: 600; fill: var(--ink); }
+.perfil-torre .pf-borde { cursor: copy; }
+.perfil-torre .pf-manija { fill: var(--lienzo, #fff); stroke: var(--r-diseno); stroke-width: 2; cursor: grab; }
+.perfil-torre .pf-manija.sel { fill: var(--r-diseno); }
+.perfil-torre .pf-tangente { fill: #ef9f27; stroke: #fff; stroke-width: 1; cursor: grab; }
+/* Exoesqueleto: ¿qué módulo conviene? (acero contra el ángulo de las diagonales) */
+.grafico-modulo { display: block; width: 100%; max-width: 460px; height: auto; margin: 6px 0; }
+.grafico-modulo .gm-franja { fill: color-mix(in srgb, var(--deformada) 12%, transparent); }
+.grafico-modulo .gm-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-modulo .gm-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-modulo .gm-tit { font: 600 10.5px var(--fuente); fill: var(--ink); }
+.grafico-modulo .gm-linea { fill: none; stroke: var(--ink2); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.grafico-modulo .gm-punto { fill: var(--ink); stroke: var(--lienzo, #fff); stroke-width: 1.5; }
+.grafico-modulo .gm-punto.no { fill: var(--cero); opacity: .55; }
+.grafico-modulo .gm-punto.mejor { fill: var(--elegido); }
+.grafico-modulo .gm-punto.actual { stroke: var(--ink); stroke-width: 2; }
+/* Túnel 3D: fuerzas en la base en el tiempo */
+.grafico-serie { display: block; max-width: 100%; height: auto; }
+.grafico-serie .gs-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-serie .gs-cero { stroke: var(--cero); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico-serie .gs-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-serie .gs-arrastre { fill: none; stroke: var(--carga); stroke-width: 1.6; }
+.grafico-serie .gs-lateral { fill: none; stroke: var(--corte); stroke-width: 1.6; }
+/* Túnel 3D: fachada desplegada y tabla por zona */
+.fachada-desplegada { display: block; max-width: 100%; margin: 4px 0; }
+.llave-sim.en-flujo { position: static; margin: 6px 0; min-width: 0; max-width: 100%; }
+.tabla td.marca { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--elegido) 18%, transparent); }
+/* Túnel 3D: espectro de la fuerza lateral (dinámica) */
+.grafico-espectro { display: block; max-width: 100%; height: auto; }
+.grafico-espectro .ge-barra { fill: color-mix(in srgb, var(--corte) 70%, transparent); }
+.grafico-espectro .ge-eje { stroke: var(--ink2); stroke-width: 1; }
+.grafico-espectro .ge-nota { font: 10px var(--fuente); fill: var(--ink2); }
+.grafico-espectro .ge-pico { font: 600 10.5px var(--fuente); fill: var(--corte); }
+.grafico-espectro .ge-torre { stroke: var(--deformada); stroke-width: 2; stroke-dasharray: 5 3; }
+.grafico-espectro .ge-torre-t { font: 600 10.5px var(--fuente); fill: var(--deformada); }
+/* Túnel 3D: rosa de vientos y mapa de confort con todos los rumbos */
+.mapa-confort { display: block; max-width: 100%; margin: 4px 0; border: 1px solid var(--edge); border-radius: 4px; }
+.leyenda .caja.rayada { background: repeating-linear-gradient(135deg, #fff 0 3px, #1d1d24 3px 4px); }
+.rosa-tabla input.corto { width: 72px; }
+.rosa-tabla td, .rosa-tabla th { padding: 3px 6px; }
+/* Túnel 3D: lámina «Estudio de viento» */
+.lamina-viento .lamina-vista { display: block; width: 100%; max-height: 120mm; object-fit: contain; border: 1px solid var(--edge); border-radius: 4px; margin: 8px 0; }
+.lamina-viento .lamina-advertencia { margin-top: 10px; padding: 6px 8px; border-left: 3px solid var(--elegido); background: color-mix(in srgb, var(--elegido) 10%, transparent); }
+.lamina-viento img.fachada-desplegada, .lamina-viento img.mapa-confort { max-width: 100%; height: auto; }
+.lamina-viento .diagrama svg, .lamina-viento .grafico-altura svg { max-width: 120mm; max-height: 95mm; height: auto; }
+.lamina-viento .diagrama { break-inside: avoid; }
+.lamina-viento .tabla-valores { font-size: 9px; }
+/* Planta: el exoesqueleto (etapa 08), por fuera de la fachada */
+.exo-planta { pointer-events: none; }
+.exo-planta .exo-contorno { fill: none; stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 1.5; stroke-dasharray: 7 4; }
+.exo-planta .exo-columna { fill: var(--r-rototrasl, #6a3d9a); opacity: .85; }
+.exo-planta .exo-brazo { stroke: var(--r-rototrasl, #6a3d9a); stroke-width: 2.5; opacity: .8; }
+.exo-planta .exo-rot { font: 600 11px var(--fuente); fill: var(--r-rototrasl, #6a3d9a); }
+/* túnel 3D: la lista de tomas para grabar en fila */
+details.toma3d { border: 1px solid var(--edge, #c3cad1); border-radius: 8px; padding: 6px 8px; margin: 6px 0; background: var(--lienzo, #fff); }
+details.toma3d > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; flex-wrap: wrap; }
+details.toma3d > summary .toma3d-nombre { flex: 1 1 140px; min-width: 120px; font-weight: 600; }
+details.toma3d > summary .mini { margin-left: 0; }
+details.toma3d h4 { margin: 10px 0 4px; font-size: 12.5px; color: var(--ink2, #5f6b76); }
+/* lo secundario de cada etapa, plegado (plan de entrega, inciso 2) */
+details.mas-detalle { margin: 10px 0; border-top: 1px solid var(--edge, #c3cad1); padding-top: 6px; }
+details.mas-detalle > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 0; min-height: 28px; }
+@media (pointer: coarse) { details.mas-detalle > summary { min-height: 36px; } }
+
+/* panel izquierdo: abrir o plegar todas las secciones */
+.plegar-todas { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin: 0 2px 6px; }
+.plegar-todas .nota { margin-right: auto; }
+button.enlace { border: 0; background: none; padding: 2px 0; min-height: 24px; color: var(--accent); font-size: 12.5px; font-weight: 600; border-radius: 0; }
+button.enlace:hover { background: none; text-decoration: underline; }
+@media (pointer: coarse) { button.enlace { min-height: 36px; } }
+
+/* tamaño ceñido en las cajas de botones (pasos, ajustes y herramientas): el botón abraza su texto y la caja al botón.
+   Con pantalla táctil, 32 px de alto en lugar de 36 (el texto es de 12 px) */
+@media (pointer: coarse) {
+  .seg > button, .seg > .menu-mas > button, .subpasos button,
+  .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button { min-height: 32px; padding: 4px 10px; }
+}
+.nota.llave > .ayuda-boton { display: inline-flex; min-height: 0; padding: 0; vertical-align: baseline; }
+.ayuda-plegable.con-llave { margin: 0; }
+@media (pointer: coarse) { .nota.llave > .ayuda-boton { min-height: 0; padding: 4px 0; } }
+.ayuda-plegable.con-llave:has(> .ayuda-texto[hidden]) { display: none; }
+
+/* hilo del cálculo arriba del panel de cada etapa (ui/hilo.ts) */
+.hilo { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--rolb, var(--accent)) 7%, var(--field)); border: 1px solid color-mix(in srgb, var(--rolb, var(--accent)) 25%, transparent); font-size: 12.5px; }
+.hilo-hace { margin: 0 0 4px; color: var(--ink); }
+.hilo-fila { display: grid; grid-template-columns: 52px 1fr; align-items: baseline; margin-top: 3px; }
+.hilo-pasos { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.hilo-rot { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); }
+.hilo-paso { display: inline-flex; align-items: baseline; gap: 5px; }
+button.hilo-etapa { border: 0; background: none; padding: 0; min-height: 0; color: var(--rolb, var(--accent)); font-weight: 600; font-size: 12.5px; border-radius: 0; }
+button.hilo-etapa:hover { background: none; text-decoration: underline; }
+.hilo-que { color: var(--ink2); }
+.hilo-aviso { margin: 6px 0 0; padding: 5px 8px; border-radius: 6px; background: var(--revisar-fill, #fff7e0); color: var(--ink); }
+@media (pointer: coarse) { button.hilo-etapa { min-height: 28px; } }
+/* indicadores: el número que llega de otra etapa lo dice */
+.kpi .cap .kpi-origen { float: right; font-size: 10.5px; font-weight: 600; color: var(--ink2); background: var(--tint); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+/* Resumen: qué revisar */
+.que-revisar { border: 1px solid var(--edge); border-left: 4px solid var(--revisar, #b7791f); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; background: var(--field); }
+.que-revisar h3 { margin: 0 0 2px; font-size: 14px; }
+.qr-lista { list-style: none; padding: 0; margin: 6px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 16px; }
+.qr-lista > li > ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
+.qr-lista > li > ul > li { margin: 2px 0; }
+.qr-cab { display: flex; align-items: baseline; gap: 8px; }
+.qr-cab .enlace { margin-left: auto; }
+
+/* tutorial apagado (botón «Tutorial» de la barra de arriba): fuera lo que explica, quedan las herramientas y los resultados */
+body.sin-tutorial .hilo, body.sin-tutorial .kpi-origen, body.sin-tutorial .b-recorrer,
+body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tutorial details.como-leer { display: none !important; }
+.b-tutorial[aria-pressed="true"] { background: var(--tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }

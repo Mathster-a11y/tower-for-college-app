@@ -1,4 +1,5 @@
 import { envolverPiezas } from '../engine/grupos';
+import { exoConViento } from '../engine/exoReglamento';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { aPlanilla, type Asignacion } from '../engine/mapping';
 import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
@@ -82,12 +83,16 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
     const fem = c.metodo === 'fem' ? calcularFem(proyecto, c.teoria) : undefined;
     const w = fem?.viento ?? viento102(proyecto);
     const corrC = calcularCorregido(datosCirsoc(asig.datos, w), filaPB, { proyecto, piezas: asig.piezas });
-    const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n) : undefined);
-    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB, w.A.MPB, w.B.B, w.B.QPB, esf('A')),
-      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB, w.B.MPB, w.A.B, w.A.QPB, esf('B'))];
+    // con exoesqueleto: los tabiques toman solo su parte del viento (y la deriva es la de la torre con el exo)
+    const SJ = { A: corrC.rotoA?.SJ ?? 0, B: corrC.rotoB?.SJ ?? 0 };
+    const ex = exoConViento(proyecto, corrC.guia, asig.piezas, asig.filaNivel, w, SJ);
+    const fM = (d: 'A' | 'B') => ex?.[d].fM ?? 1, fV = (d: 'A' | 'B') => ex?.[d].fV ?? 1;
+    const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n)?.map(x => ({ M: x.M * fM(d), V: x.V * fV(d) })) ?? null : undefined);
+    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A')),
+      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'))];
     const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel);
     return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif }, fem,
-      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, { A: corrC.rotoA?.SJ ?? 0, B: corrC.rotoB?.SJ ?? 0 }, fem?.deriva) };
+      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, SJ, fem?.deriva, ex ?? undefined) };
   }
   return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,
     config: c, valores: c.metodo === 'guia' ? corr.guia : res };
@@ -96,6 +101,13 @@ type Oyente = () => void;
 
 /** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
 const nombrePieza = (g: string, ms: import('../engine/modelo').Muro[]) => `${ms[0].pieza?.tipo ? `${ms[0].pieza.tipo[0].toUpperCase()}${ms[0].pieza.tipo.slice(1)} ` : 'Pieza '}${g}`;
+/**
+ * Controles que se calculan después del cálculo principal porque usan sus resultados (el exoesqueleto): cada módulo
+ * registra una función y el estado la llama al recalcular. Así el estado no importa esos módulos (sin ciclos).
+ */
+const controlesExtra: (() => Control[])[] = [];
+export function registrarControles(f: () => Control[]) { controlesExtra.push(f); }
+
 class Estado {
   proyecto: Proyecto;
   dir: 'A' | 'B' = 'A';
@@ -232,6 +244,11 @@ class Estado {
     Object.assign(config, configMotor(this.config));
     try {
       this.calculo = { ...calcularProyecto(this.proyecto), revision: this.revision };
+      if (controlesExtra.length) {
+        const extra: Control[] = [];
+        for (const f of controlesExtra) { try { extra.push(...f()); } catch { /* un control extra que falla no tumba el cálculo */ } }
+        if (extra.length) this.calculo = { ...this.calculo, controles: [...this.calculo.controles, ...extra] };
+      }
     } catch (e) {
       // se conservan los resultados del último cálculo bueno (con su revisión) para que las vistas no se rompan,
       // pero quedan marcados: no son vigentes y no se exportan

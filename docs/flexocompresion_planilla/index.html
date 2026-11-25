@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flex comp PB paralelos</title>
+<style>
+  :root { --tinta: #1f2328; --gris: #5b6472; --suave: #eef1f5; --acento: #1565c0; --ok: #2e7d32; --aviso: #8a5f00;
+    /* la convención de la app: rojo tracción, azul compresión */
+    --traccion: #e24b4a; --compresion: #378add; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--tinta); font: 15px/1.55 "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 21px; margin: 38px 0 8px; border-bottom: 2px solid var(--suave); padding-bottom: 4px; }
+  h3 { font-size: 17px; margin: 24px 0 6px; } p, li { max-width: 80ch; } .sub { color: var(--gris); margin: 0 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 10px 0; } th, td { border-bottom: 1px solid #e3e7ec; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--suave); font-weight: 600; } td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .caja { background: var(--suave); border-radius: 8px; padding: 12px 16px; margin: 12px 0; } .caja.ok { background: #e8f5e9; } .caja.aviso { background: #fff7e0; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--suave); color: var(--gris); white-space: nowrap; }
+  .tag.alta { background: #fff7e0; color: var(--aviso); } .tag.verde { background: #e8f5e9; color: var(--ok); }
+  .comp { color: var(--compresion); font-weight: 600; } .trac { color: var(--traccion); font-weight: 600; }
+  code { background: var(--suave); padding: 0 4px; border-radius: 3px; font-size: 13px; }
+  .f { font-family: "IBM Plex Mono", Consolas, monospace; font-size: 13.5px; }
+  .ancho { overflow-x: auto; }
+  @media print { main { max-width: none; padding: 0 6mm; } table, .caja { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+<h1>«Flex comp PB paralelos»: qué falta resolver de la matemática</h1>
+<p class="sub">Torre 3D · revisión de la hoja de flexocompresión de las dos planillas de la cátedra (la virgen y la 2025) · 23 de noviembre de 2026. Las planillas <b>no se cambian</b>; este documento separa lo que la app puede hacer sola de lo que tiene que decidir la cátedra.</p>
+
+<div class="caja">
+<b>En pocas palabras</b>
+<ul>
+  <li>La idea de la hoja es la correcta: σ = −N/F ± M/W en la base de cada pieza, con el edificio descargado y cargado. Las unidades están bien (t/m² × 0,1 = kg/cm²) y el límite del núcleo central (k = W/F) también.</li>
+  <li>Lo que falla está en <b>los datos que lee</b> y en <b>cómo combina</b>: toma como momento una suma de un momento y un corte, cruza la carga descargada con la compresión, deja sin peso propio a 8 filas y, según el tipo de pieza, lee un W equivocado o divide por cero.</li>
+  <li>En tu torre de 34 pisos, con las mismas secciones de la planilla y la combinación corregida, la tracción de T1 pasa de <span class="trac">+38,8</span> a <span class="trac">+59,6 kg/cm²</span> (+54 %) y la compresión de <span class="comp">−112,1</span> a <span class="comp">−132,9 kg/cm²</span>. En T2 pasa al revés: la planilla exagera.</li>
+  <li>En el desglose por hoja (Exportar ▾) esta hoja quedó afuera: no tiene su cálculo analítico al lado del Excel. Eso es lo que queda del ítem 15 de nuestro lado, más dos arreglos chicos en Controles.</li>
+</ul>
+</div>
+
+<h2>1. Qué calcula la hoja, columna por columna</h2>
+<p>Una fila por pieza paralela al viento A (filas 4 a 23), en PB. Signo: compresión negativa.</p>
+<div class="ancho"><table>
+<tr><th>Col.</th><th>Qué es</th><th>Fórmula de la planilla</th><th>Comentario</th></tr>
+<tr><td>B</td><td>Área de la pieza F (m²)</td><td class="f">='J Tabiques paralelos'!O</td><td>En las asimétricas no suma el ala inferior (ver 3.5)</td></tr>
+<tr><td>C</td><td>Altura de la pieza hasta la terraza (m)</td><td>dato</td><td></td></tr>
+<tr><td>D, E</td><td>Volumen y peso propio</td><td class="f">D = B·C · E = D·2,4</td><td>En D13:D20 hay 0,01 fijo (ver 3.3)</td></tr>
+<tr><td>F, G</td><td>Área de influencia (m²) y losas encima</td><td>datos</td><td></td></tr>
+<tr><td>H</td><td>N descargado Ng (t)</td><td class="f">= E + F·G·0,7</td><td>0,7 t/m² por losa</td></tr>
+<tr><td>I</td><td>N cargado Nq (t)</td><td class="f">= E + F·G·0,9</td><td>0,9 t/m² por losa</td></tr>
+<tr><td>J</td><td>Momento que toma la pieza M (tm)</td><td class="f">='Rototrasl. cara mayor'!O</td><td>O = G + N mezcla tm con t (ver 3.1)</td></tr>
+<tr><td>K, L</td><td>Excentricidad e = M/N</td><td class="f">K = J/H · L = J/I</td><td>Bien</td></tr>
+<tr><td>M</td><td>Límite del núcleo central k = W/F</td><td class="f">= W/O de la hoja J</td><td>Bien para piezas simétricas</td></tr>
+<tr><td>N</td><td>k − e (negativo: gran excentricidad)</td><td class="f">= M − K</td><td>Bien: usa la e mayor (descargado)</td></tr>
+<tr><td>O</td><td>«Tensión de compresión descargado»</td><td class="f">= (−H/B − J/W)·0,1</td><td>Ng con la fibra comprimida (ver 3.2)</td></tr>
+<tr><td>P</td><td>«Tensión de compresión o tracción cargado»</td><td class="f">= (−I/B + J/W)·0,1</td><td>Nq con la fibra traccionada (ver 3.2)</td></tr>
+</table></div>
+<p>El W lo elige la fila, no la pieza: filas 4–10 leen el W de las simétricas (Q de la hoja J), 11–14 el de las asimétricas (AN) y 21–23 el de los tubos (V). La hoja no compara las tensiones con ningún límite ni calcula armadura: eso lo hace la guía (sección 5) y la app.</p>
+
+<h2>2. Lo que está bien</h2>
+<ul>
+  <li>σ = −N/F ± M/W es la flexión compuesta de una sección que no se fisura; con tracción en una fibra, la guía sigue con el triángulo de tracción y la armadura, como la app.</li>
+  <li>Unidades: N/F y M/W dan t/m², y × 0,1 pasa a kg/cm².</li>
+  <li>El núcleo central k = W/F y la comparación con e = M/Ng (la excentricidad mayor, con el edificio descargado).</li>
+  <li>El W de las simétricas: J / (altura/2).</li>
+</ul>
+
+<h2>3. Lo que falla, de mayor a menor efecto</h2>
+
+<h3>3.1 El momento: O = G + N suma un momento y un corte <span class="tag alta">cambia M hasta 33 %</span></h3>
+<p>En «Rototrasl.», G = Mv·J/ΣJ es el momento de traslación (tm) y N = Mt·J·a/ΣJ·a² es el <b>corte</b> de rotación (t). La hoja toma O = G + N como el momento de la pieza. Lo correcto es pasar el corte de rotación a momento con el brazo de la resultante del viento, hW = Mv/Q:</p>
+<p class="f">M = G + N · hW&nbsp;&nbsp;&nbsp;(= la parte del corte que toma la pieza, (E + N)/Q, por Mv: la fórmula de la hoja «Flexocompresión (guía)» que agrega la app)</p>
+<table>
+<tr><th>Torre</th><th>Pieza</th><th class="n">G (tm)</th><th class="n">N (t)</th><th class="n">hW (m)</th><th class="n">O de la planilla (tm)</th><th class="n">M correcto (tm)</th><th class="n">Diferencia</th></tr>
+<tr><td>Tu torre de 34 pisos</td><td>T1</td><td class="n">30 128</td><td class="n">+112,3</td><td class="n">67,05</td><td class="n">30 241</td><td class="n">37 660</td><td class="n">−20 %</td></tr>
+<tr><td></td><td>T2</td><td class="n">30 128</td><td class="n">−112,3</td><td class="n">67,05</td><td class="n">30 016</td><td class="n">22 596</td><td class="n">+33 %</td></tr>
+<tr><td>Ejemplo de la guía</td><td>T1–T4</td><td class="n">343</td><td class="n">0</td><td class="n">38,48</td><td class="n">343</td><td class="n">343</td><td class="n">igual</td></tr>
+</table>
+<p>Solo da bien cuando la planta no tiene excentricidad (como el ejemplo de la guía con N = 0). En el Anexo de rototraslación de la guía, T1 y T3 quedan 46 % abajo y T2 y T4 31 % arriba. El desglose de «Rototrasl.» ya lo marca; esta hoja arrastra el error.</p>
+
+<h3>3.2 La carga cruzada con la fibra <span class="tag alta">tracción hasta +37 %</span></h3>
+<p>Los dos casos que deciden son: la <b>tracción máxima</b> con la menor carga (descargado, Ng) en la fibra traccionada, y la <b>compresión máxima</b> con la mayor carga (cargado, Nq) en la fibra comprimida. La hoja los arma al revés:</p>
+<table>
+<tr><th>Caso</th><th>Lo que hace la planilla</th><th>Lo que corresponde</th></tr>
+<tr><td>Compresión</td><td class="f">O = (−Ng/F − M/W)·0,1</td><td class="f">(−Nq/F − M/W)·0,1</td></tr>
+<tr><td>Tracción</td><td class="f">P = (−Nq/F + M/W)·0,1</td><td class="f">(−Ng/F + M/W)·0,1</td></tr>
+</table>
+<p>La diferencia es siempre (Nq − Ng)/F, en las dos tensiones y del lado inseguro. En el ejemplo de la guía (T1: F = 0,90 m², Ng = 293 t, Nq = 337 t) la tracción pasa de <span class="trac">+13,4</span> a <span class="trac">+18,3 kg/cm²</span> (+37 %) y la compresión de <span class="comp">−83,3</span> a <span class="comp">−88,2 kg/cm²</span>. En tu torre pesa poco (2 kg/cm²) porque domina el momento.</p>
+
+<h3>3.3 Ocho filas sin peso propio <span class="tag alta">según en qué fila caiga la pieza</span></h3>
+<p>D13:D20 tienen 0,01 m³ fijo en lugar de B·C: las piezas 10 a 17 no suman su peso. El peso propio es casi la mitad de Ng: en T1 del ejemplo de la guía, 138 de 293 t. Si esa pieza cayera en una de esas filas, Ng bajaría a 155 t y la tracción corregida subiría de <span class="trac">+18,3</span> a <span class="trac">+33,6 kg/cm²</span>. Para la compresión da un valor menor (inseguro).</p>
+
+<h3>3.4 El W del tubo en la planilla virgen <span class="tag alta">M/W cuatro veces mayor</span></h3>
+<p>La virgen calcula <span class="f">V = U/S/2</span>, que Excel lee como (J/D)/2 = J/(2D). El W de un tubo es J/(D/2) = 2J/D: el de la planilla es <b>4 veces más chico</b> y la tensión de flexión de un tubo, 4 veces más grande (del lado seguro, pero inútil para dimensionar). La planilla 2025 ya lo corrigió (<span class="f">U/(S/2)</span>).</p>
+
+<h3>3.5 Las piezas asimétricas: W y área <span class="tag">piezas en L, T, C</span></h3>
+<ul>
+  <li><b>W:</b> <span class="f">AN = AM / (X/2 + AB/2 + AI/2)</span> divide el J por la mitad de la altura, pero en una pieza asimétrica el eje neutro (AK) no está en la mitad: hay dos W, uno por fibra. Ejemplo (no del proyecto): una T con ala 4 × 0,2 m y alma 0,2 × 4 m tiene J = 2,83 m⁴ y el eje a 1,15 m del ala; la planilla usa W = 1,35 m³, pero la punta del alma está a 3,05 m (W = 0,93 m³): ahí la tensión de flexión es 45 % mayor que la que da la hoja.</li>
+  <li><b>Área:</b> O de la hoja J suma <span class="f">W·X + Z·AB + AE·AF</span> y no el ala inferior AH·AI (ya está en las preguntas a la cátedra). En los núcleos T5 y T6 de la guía da 1,72 m² en vez de 2,72 m² (−37 %): menos peso propio y una N/F distinta.</li>
+</ul>
+
+<h3>3.6 El tipo de fila manda, no la pieza <span class="tag">#DIV/0! o pieza equivocada</span></h3>
+<ul>
+  <li>Si una pieza asimétrica queda en una fila «simétrica» (o al revés), la hoja lee el W de un molde vacío: 0/0. En el ejemplo de la guía, los núcleos T5 y T6 van en las filas 4 y 5 y la planilla da <b>#DIV/0!</b>. La misma hoja lo avisa en J25 («se deberá cambiar el hipervínculo»): pide que el alumno reescriba la fórmula a mano.</li>
+  <li>En la 2025, desde la fila 10 el área y el W salen de una fila de la hoja J y el momento de otra (B10 = O14 pero J10 lee la pieza de AY10): son piezas distintas. Ya decidido: la app lo reproduce y avisa en cada pieza.</li>
+</ul>
+
+<h3>3.7 Lo que la hoja no hace</h3>
+<ul>
+  <li>Solo el viento A («cara mayor»): no hay flexocompresión para las piezas del viento B.</li>
+  <li>Verifica la pieza entera (N total / área total). La guía separa almas y alas, cada una con su N, y las alas «hacen un par».</li>
+  <li>Una pieza del lado donde la rotación resta (T2 de tu torre) termina con menos momento que la traslación sola (−25 %). El CIRSOC 102 pide además los casos de carga con torsión (Fig. 2.4-8) en los dos sentidos.</li>
+  <li>No compara con ningún límite ni calcula armadura.</li>
+</ul>
+
+<h2>4. Tu torre, con todo junto</h2>
+<p>Las mismas F, W, Ng y Nq de la planilla; solo cambian el momento (3.1) y la combinación (3.2). A la derecha, el método Guía de la app (muro por muro, con su propio N y su propio M).</p>
+<table>
+<tr><th>Pieza</th><th class="n">Compresión: planilla</th><th class="n">corregida</th><th class="n">Guía (app)</th><th class="n">Tracción: planilla</th><th class="n">corregida</th><th class="n">Guía (app)</th></tr>
+<tr><td>T1</td><td class="n comp">−112,1</td><td class="n comp">−132,9</td><td class="n comp">−125,3</td><td class="n trac">+38,8</td><td class="n trac">+59,6</td><td class="n trac">+51,5</td></tr>
+<tr><td>T2</td><td class="n comp">−111,6</td><td class="n comp">−94,8</td><td class="n comp">−91,0</td><td class="n trac">+38,3</td><td class="n trac">+21,5</td><td class="n trac">+17,1</td></tr>
+</table>
+<p class="sub">kg/cm². La planilla trata a T1 y T2 casi igual; con el momento correcto T1 trabaja bastante más que T2. Lo que queda entre «corregida» y «Guía» viene de verificar cada muro con su propio N y del momento en PB de la guía.</p>
+
+<h2>5. Qué queda por resolver</h2>
+<h3>De nuestro lado (la app; la planilla no se toca)</h3>
+<table>
+<tr><th>#</th><th>Qué</th><th>Por qué</th></tr>
+<tr><td>a</td><td>Sumar «Flex comp PB paralelos» al desglose por hoja (PDF y PowerPoint): cada pieza con F, Ng, Nq, M, W, e, k y las dos tensiones, el valor de la planilla al lado y la diferencia explicada (3.1 a 3.6)</td><td>Quedó afuera del desglose: hoy no tiene su cálculo analítico</td></tr>
+<tr><td>b</td><td>Corregir el rótulo en Controles: la columna «Planilla» de «tracción (descargado)» muestra P, que la hoja calcula con Nq (cargado); y «compresión (cargado)» muestra O, calculada con Ng</td><td>Hoy el rótulo dice lo que corresponde, pero el número de la planilla es el de la otra carga</td></tr>
+<tr><td>c</td><td>Mostrar «#DIV/0!» y su causa (el tipo de la fila no es el de la pieza) cuando la planilla divide por cero</td><td>Pasa en el ejemplo de la guía con T5 y T6</td></tr>
+</table>
+
+<h3>Preguntas para la cátedra</h3>
+<ol>
+  <li>¿El momento de cada pieza es G + N·hW (como la guía, con la parte del corte) y no O = G + N?</li>
+  <li>¿La tracción se verifica con Ng y la compresión con Nq (al revés de las columnas O y P)?</li>
+  <li>¿D13:D20 = 0,01 es a propósito? Las piezas 10 a 17 no suman su peso propio.</li>
+  <li>Piezas asimétricas: ¿se verifica cada fibra con su propio W (J/y<sub>sup</sub> y J/y<sub>inf</sub>)? ¿Y el área suma el ala inferior?</li>
+  <li>¿Se verifica la pieza entera (la hoja) o cada alma y ala con su N (la guía)? ¿Cuál va en la entrega?</li>
+  <li>¿Una pieza puede tomar menos momento que la traslación sola por la rotación, o se toma el mayor de los dos sentidos del giro?</li>
+  <li>¿Hay que agregar la flexocompresión del viento B, o alcanza con la cara mayor?</li>
+</ol>
+<div class="caja aviso">Las preguntas 2, 3 y 5 ya estaban en la lista de la cátedra (PENDIENTES.md); la 1 está en la revisión de la rototraslación. Las 4, 6 y 7 son nuevas de esta revisión.</div>
+
+<h2>6. Cómo se midió</h2>
+<p>Fórmulas leídas de <code>src/assets/planilla_virgen.xlsx</code> y <code>src/assets/planilla_catedra_2025.xlsx</code> (hojas «Flex comp PB paralelos», «J Tabiques paralelos» y «Rototrasl. cara mayor»). Números de la réplica de la planilla de la app (<code>src/engine/planilla.ts</code>, que da lo mismo que Excel y LibreOffice) y del método Guía (<code>src/engine/flexocompresion.ts</code>), con el ejemplo de la guía y el proyecto de 34 pisos.</p>
+</main>
+</body>
+</html>

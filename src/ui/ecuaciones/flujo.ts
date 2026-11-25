@@ -24,13 +24,13 @@ export function grafoFlujo(d0: DF): Grafo<DF, RF> {
     id: 'red', titulo: '1 · La red (Lattice Boltzmann)',
     intro: 'El aire como partículas que saltan de celda en celda en 9 direcciones (D2Q9; 19 en 3D, D3Q19). En cada paso chocan y se acercan al equilibrio; de ese reparto salen la densidad, la velocidad y la presión. Equivale a resolver Navier-Stokes sin escribirlo.',
     params: [
-      param('U0', 'U_0', 'velocidad de entrada en la red (celdas por paso)', 0.02, 0.2, 0.01, 2, '', 'túnel 2D: 0,1'),
+      param('U0', 'U_0', 'velocidad de entrada en la red', 0.02, 0.2, 0.01, 2, 'celdas/paso', 'túnel 2D: 0,1'),
       param('D', 'D', 'celdas que ocupa el ancho de la torre', 10, 120, 2, 0, 'celdas'),
       param('Re', 'Re', 'número de Reynolds de la simulación', 50, 20000, 50, 0, '', 'laminar 150 · medio 1 000 · alto 20 000'),
       param('cs', 'C_s', 'constante de Smagorinsky (turbulencia)', 0, 0.3, 0.01, 2, '', '0 laminar · 0,16 · 0,22'),
     ],
     nodos: [
-      { id: 'nu', titulo: 'Viscosidad en la red', sim: 'ν', ec: '[U0] · [D] / [Re]', dec: 4, valor: r => r.nu, f: x => (x.U0 * x.D) / x.Re,
+      { id: 'nu', titulo: 'Viscosidad en la red', sim: 'ν', ec: '[U0] · [D] / [Re]', unidad: 'celdas²/paso', dec: 4, valor: r => r.nu, f: x => (x.U0 * x.D) / x.Re,
         nota: 'Se elige la viscosidad para que la simulación tenga el Reynolds buscado: Re = U·D/ν.' },
       { id: 'tau', titulo: 'Tiempo de relajación', sim: 'τ', ec: '3 · [nu] + 0,5', dec: 4, valor: r => r.tau, f: x => 3 * x.nu + 0.5,
         control: { cond: '> 0,5', ok: r => (r.tau ?? 0) > 0.5 + 1e-4, siNo: [{ texto: 'τ muy cerca de 0,5 vuelve inestable la red: más celdas en la torre, menos Re o el modelo de turbulencia.', mueve: ['D', 'Re', 'cs'] }] },
