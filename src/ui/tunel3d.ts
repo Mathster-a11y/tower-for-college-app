@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
-import { contornoAlViento, puntosSilueta } from '../engine/silueta';
+import { puntosAlViento } from '../engine/silueta';
 import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, grillaBanda, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import { MedicionBanda } from '../viento/banda3d';
@@ -120,7 +120,7 @@ const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
-  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(contornoAlViento(p, x.i).v, 12) }));
+  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosAlViento(p, x.i) }));
 }
 
 /** lo que necesita la dinámica: frecuencias, viento de 5 y 10 años, masas, fuerzas del CIRSOC y la rigidez de cada nivel */
