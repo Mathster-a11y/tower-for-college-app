@@ -230,6 +230,12 @@ details.tabla-valores summary { cursor: pointer; color: var(--accent); font-size
 .chip-estado.no-verifica { background: var(--mal-fill); color: var(--mal); }
 .chip-estado.revisar, .chip-estado.atención { background: var(--revisar-fill); color: var(--revisar); }
 .chip-estado.informativo, .chip-estado.pendiente { background: var(--header); color: var(--ink2); }
+/* cálculo en segundo plano: el chip late y los diagramas del centro se atenúan solo si tarda (sin parpadeo en los cortos) */
+.chip-estado.calculando { animation: latido-calculo 1.2s ease-in-out infinite; }
+@keyframes latido-calculo { 50% { opacity: .5; } }
+#centro-dibujos > * { transition: opacity .15s; }
+body.calculando #centro-dibujos > * { opacity: .6; transition: opacity .25s .35s; }
+@media (prefers-reduced-motion: reduce) { .chip-estado.calculando { animation: none; } }
 .estado { font-weight: 600; white-space: nowrap; }
 .estado.verifica { color: var(--ok); } .estado.no-verifica { color: var(--mal); } .estado.atención { color: var(--revisar); } .estado.informativo { color: var(--ink2); }
 p.estado { white-space: normal; margin: 0; }
@@ -1374,6 +1380,8 @@ svg [data-zoom-min] { display: none; }
   padding: 6px 10px; margin-bottom: 8px; border-radius: 8px; background: color-mix(in srgb, #f59e0b 16%, var(--field, #fff)); border: 1px solid #f59e0b; font-size: 13px; }
 .panel-viejo { margin: 0 0 10px; }
 .vista-vieja { position: relative; }
+/* en vivo, calculando en segundo plano: el 3D no avisa (se actualiza solo en un momento) */
+body.calculando .vista-vieja::after { display: none; }
 .vista-vieja::after { content: '3D del último cálculo · F9 para actualizar'; position: absolute; left: 8px; top: 8px; z-index: 5; padding: 3px 8px; border-radius: 6px;
   font-size: 12px; background: color-mix(in srgb, #f59e0b 22%, #fff); border: 1px solid #f59e0b; color: #1f2937; pointer-events: none; }
 /* barra superior con el modo de cálculo: el nombre del proyecto se acorta antes de que la barra pase a dos renglones */

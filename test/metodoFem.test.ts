@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ejemploGuia } from '../src/engine/modelo';
-import { calcularFem, masasDeProyecto, modeloDeProyecto } from '../src/engine/metodos/fem';
+import { calcularFem, esfuerzosFem, masasDeProyecto, modeloDeProyecto } from '../src/engine/metodos/fem';
 import { entradaFem } from '../src/engine/femEntrada';
 import { calcularProyecto } from '../src/ui/estado';
 
@@ -29,7 +29,7 @@ describe('método FEM con la torre de la guía', () => {
   });
   it('los cuatro casos dan esfuerzos para cada pieza', () => {
     const nombre = r.modelo.piezas.find(x => x.dir === 'A')!.nombre;
-    const e = r.esfuerzos('A', nombre)!;
+    const e = esfuerzosFem(r, 'A', nombre)!;
     expect(e).toHaveLength(4);
     // caso 2: 75 % con la torsión del signo que suma (puede pasar al caso 1 en las piezas de borde); caso 3 sin torsión propia
     expect(Math.abs(e[1].M)).toBeGreaterThan(0.75 * Math.abs(e[0].M) - 1e-6);

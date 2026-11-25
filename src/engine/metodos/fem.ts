@@ -38,8 +38,9 @@ export interface ResultadoMetodoFem {
   n1: { A: number; B: number };
   viento: Viento102;
   casos: CasoFem[];
-  /** esfuerzos en la base de cada pieza en cada caso: el peor de los dos signos de la torsión */
-  esfuerzos: (dir: 'A' | 'B', nombre: string) => { M: number; V: number }[] | null;
+  /** esfuerzos en la base de cada pieza en cada caso (1 a 4): el peor de los dos signos de la torsión. Es una tabla
+   *  (no una función) para que el cálculo se pueda copiar entre hilos; se lee con esfuerzosFem */
+  esfuerzos: Record<'A' | 'B', Record<string, { M: number; V: number }[]>>;
   /** deformada de servicio de cada dirección (caso 1, borde más desfavorable): cotas sobre PB y desplazamientos (m) */
   deriva: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>;
   /** % del corte del viento que toma cada pieza en el caso 1 (FEM) y el de la planilla, para comparar */
@@ -88,6 +89,11 @@ export function masasDeProyecto(p: Proyecto, mo: ModeloTorre): { masas: number[]
   return { masas, inercias };
 }
 
+/** esfuerzos en la base de una pieza en los casos 1 a 4, o null si la pieza no está en el modelo */
+export function esfuerzosFem(r: ResultadoMetodoFem, dir: 'A' | 'B', nombre: string): { M: number; V: number }[] | null {
+  return Object.prototype.hasOwnProperty.call(r.esfuerzos[dir], nombre) ? r.esfuerzos[dir][nombre] : null;
+}
+
 /** todo el método FEM de un proyecto: modal → viento del 102-25 con esas frecuencias → casos de carga → esfuerzos */
 export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): ResultadoMetodoFem {
   const mo = modeloDeProyecto(p, teoria);
@@ -119,8 +125,7 @@ export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): Resu
   for (const s of [1, -1]) agregar(4, s, `Caso 4, los dos vientos, torsión ${s > 0 ? '+' : '−'}`, { Fx: esc(WB, 0.563), Fy: esc(WA, 0.563), Mz: esc(suma(MtA, MtB), 0.563 * s) });
 
   const deDir = (c: CasoFem, d: 'A' | 'B') => c.caso >= 3 || (d === 'A' ? c.texto.includes('viento A') : c.texto.includes('viento B'));
-  const esfuerzos = (d: 'A' | 'B', nombre: string) => {
-    if (!mo.piezas.some(x => x.dir === d && x.nombre === nombre)) return null;
+  const esfuerzosDe = (d: 'A' | 'B', nombre: string) => {
     return ([1, 2, 3, 4] as const).map(k => {
       let M = 0, V = 0;
       for (const c of casos.filter(x => x.caso === k && deDir(x, d))) {
@@ -130,6 +135,8 @@ export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): Resu
       return { M, V };
     });
   };
+  const esfuerzos: ResultadoMetodoFem['esfuerzos'] = { A: {}, B: {} };
+  for (const pz of mo.piezas) esfuerzos[pz.dir][pz.nombre] ??= esfuerzosDe(pz.dir, pz.nombre);
 
   // deriva de servicio (caso 1): el borde de la planta que más se mueve, con la presión de servicio
   const pl = plantas(p), iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);

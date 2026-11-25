@@ -96,7 +96,8 @@ function dibujarPanel() {
   p.replaceChildren();
   if (estado.calculo.error) p.append(h('p', { class: 'error' }, `Error en el cálculo: ${estado.calculo.error}`));
   // modo con botón: los resultados de las etapas son los del último cálculo
-  if (estado.pendiente && e.id !== 'diseno' && e.id !== 'ayuda') {
+  // (en vivo, mientras calcula en segundo plano, alcanza con el chip de arriba: el aviso movería el panel en cada cambio)
+  if (estado.pendiente && !estado.calculando && e.id !== 'diseno' && e.id !== 'ayuda') {
     const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
     b.addEventListener('click', () => estado.calcularAhora());
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
@@ -260,6 +261,17 @@ function dibujarCapas() {
 }
 function dibujarEstadoCalculo() {
   dibujarModoCalculo();
+  // en vivo, con el cálculo en segundo plano: los diagramas se atenúan (si tarda) hasta que llegan los resultados
+  document.body.classList.toggle('calculando', estado.calculando);
+  if (estado.calculando) {
+    const el = $('estado-calculo');
+    el.className = 'chip-estado pendiente calculando';
+    el.textContent = 'Calculando…';
+    el.setAttribute('data-globo', 'Calculando en segundo plano|Los últimos cambios se están calculando sin frenar la app: podés seguir editando. Mientras tanto, los resultados, el 3D y los diagramas son los del cálculo anterior; se actualizan solos al terminar.');
+    el.style.cursor = 'default';
+    el.onclick = null;
+    return;
+  }
   if (estado.pendiente) {
     const el = $('estado-calculo');
     el.className = 'chip-estado revisar';
@@ -344,7 +356,7 @@ document.body.classList.toggle('sin-tutorial', !tutorialPrendido());
 /** aviso sobre los diagramas del centro cuando quedaron del cálculo anterior */
 function marcarCentroViejo() {
   const dib = $('centro-dibujos');
-  if (dib.querySelector('.aviso-viejo')) return;
+  if (estado.calculando || dib.querySelector('.aviso-viejo')) return;
   const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
   b.addEventListener('click', () => estado.calcularAhora());
   dib.prepend(h('div', { class: 'aviso-viejo' }, h('span', {}, 'Diagramas del último cálculo: hay cambios sin calcular.'), b));
