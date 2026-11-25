@@ -638,31 +638,49 @@ export const losaPorPiso = (q: number, f: number, B: number, L: number) => q * M
 // ------------------------------------------------------------------ álgebra densa
 type Mat = number[][];
 const ceros = (r: number, c: number): Mat => Array.from({ length: r }, () => new Array<number>(c).fill(0));
-/** resuelve A·X = B (B con varias columnas) por eliminación de Gauss con pivoteo parcial; A y B se copian */
-function resolver(A0: Mat, B0: Mat): Mat {
-  const n = A0.length, A = A0.map(f => [...f]), B = B0.map(f => [...f]), m = B[0]?.length ?? 0;
+/**
+ * Factorización LU con pivoteo parcial (PA = LU), una sola vez por matriz: después se resuelve con cualquier B sin volver
+ * a eliminar. La matriz de un exo es rala (cada nudo toca a sus vecinos): la eliminación solo recorre los términos no nulos
+ * de la fila pivote, y las sustituciones, los de cada columna de L y cada fila de U.
+ */
+interface LU { A: Mat; perm: number[]; colL: number[][]; filaU: number[][]; n: number }
+function factorizar(A0: Mat): LU {
+  const n = A0.length, A = A0.map(f => [...f]), perm = Array.from({ length: n }, (_, i) => i);
   // pivote nulo respecto de la escala de la matriz (un mecanismo deja un resto de redondeo, no un cero exacto)
   const escala = A0.reduce((mx, f, i) => Math.max(mx, Math.abs(f[i])), 0), cero = Math.max(1e-14, escala * 1e-13);
   for (let c = 0; c < n; c++) {
     let p = c;
     for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
     if (Math.abs(A[p][c]) < cero) throw new Error('El exoesqueleto es un mecanismo (falta una barra para que sea estable).');
-    [A[c], A[p]] = [A[p], A[c]]; [B[c], B[p]] = [B[p], B[c]];
+    if (p !== c) { [A[c], A[p]] = [A[p], A[c]]; [perm[c], perm[p]] = [perm[p], perm[c]]; }
+    const fc = A[c], piv = fc[c], nz: number[] = [];
+    for (let k = c + 1; k < n; k++) if (fc[k] !== 0) nz.push(k);
     for (let r = c + 1; r < n; r++) {
-      const f = A[r][c] / A[c][c];
-      if (f === 0) continue;
-      for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
-      for (let k = 0; k < m; k++) B[r][k] -= f * B[c][k];
+      const fr = A[r], v = fr[c];
+      if (v === 0) continue;
+      const f = v / piv;
+      fr[c] = f;                                          // multiplicador (parte L)
+      for (const k of nz) fr[k] -= f * fc[k];
     }
   }
-  const X = ceros(n, m);
-  for (let r = n - 1; r >= 0; r--) for (let k = 0; k < m; k++) {
-    let s = B[r][k];
-    for (let c = r + 1; c < n; c++) s -= A[r][c] * X[c][k];
-    X[r][k] = s / A[r][r];
+  const colL: number[][] = Array.from({ length: n }, () => []), filaU: number[][] = Array.from({ length: n }, () => []);
+  for (let r = 0; r < n; r++) { const fr = A[r]; for (let c = 0; c < n; c++) if (fr[c] !== 0) (c < r ? colL[c] : c > r ? filaU[r] : null)?.push(c < r ? r : c); }
+  return { A, perm, colL, filaU, n };
+}
+/** resuelve A·X = B con la factorización de A (B con varias columnas; no se modifica) */
+function resolverLU(lu: LU, B0: Mat): Mat {
+  const { A, perm, colL, filaU, n } = lu, m = B0[0]?.length ?? 0;
+  const X = perm.map(i => [...B0[i]]);
+  for (let c = 0; c < n; c++) { const xc = X[c]; for (const r of colL[c]) { const f = A[r][c], xr = X[r]; for (let k = 0; k < m; k++) xr[k] -= f * xc[k]; } }
+  for (let r = n - 1; r >= 0; r--) {
+    const xr = X[r], fr = A[r];
+    for (const c of filaU[r]) { const f = fr[c], xc = X[c]; for (let k = 0; k < m; k++) xr[k] -= f * xc[k]; }
+    const d = fr[r]; for (let k = 0; k < m; k++) xr[k] /= d;
   }
   return X;
 }
+/** resuelve A·X = B (B con varias columnas) por eliminación de Gauss con pivoteo parcial; A y B se copian */
+function resolver(A0: Mat, B0: Mat): Mat { return resolverLU(factorizar(A0), B0); }
 
 /** barra en locales con sus articulaciones condensadas y sus cargas como fuerzas nodales equivalentes */
 interface BarraLocal { K: Mat; T: Mat; k: Mat; P: number[]; L: number; c: number; s: number; qa: number; qb: number; pa: number; pb: number }
@@ -768,7 +786,7 @@ function condensar(Kg: Mat, master: number[], esclavos: number[]): Condensada {
   if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0, resolverSs: B => B };
   const resolverSs = factorizarRigidez(Kss);
   const X = resolverSs(Ksm);                           // Kss⁻¹·Ksm
-  const K = Kmm.map((f, i) => f.map((v, j) => v - Kms[i].reduce((s, kv, p) => s + kv * X[p][j], 0)));
+  const K = Kmm.map((f, i) => f.map((v, j) => { let s = v; const km = Kms[i]; for (let p = 0; p < km.length; p++) if (km[p] !== 0) s -= km[p] * X[p][j]; return s; }));
   return { K, Kss, Ksm, nEsc: esclavos.length, resolverSs };
 }
 
@@ -938,7 +956,25 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
  * @param anchoCara distancia entre columnas de esquina en el sentido del viento (m); tCaras: posición transversal de cada cara
  * @param Eh módulo del hormigón (t/m²), para el J equivalente de cada cara
  */
+/**
+ * Memoria de calcularExo: con las mismas entradas da el mismo resultado, y la app lo pide varias veces por cálculo
+ * (la torre con el exo para los tabiques, el panel, la verificación 301 de cada viento y el viento perpendicular de los
+ * oblicuos). La rigidez EJ entra con sus valores en las cotas. Guarda los últimos resultados; nadie los modifica.
+ */
+const memoExo = new Map<string, ResultadoExo>();
 export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
+  op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ficha F: sin los brazos (las cargas que llegan antes de conectarlos) */ sinBrazos?: boolean; /** ficha F: el peso propio, solo el de los brazos */ pesoSoloBrazos?: boolean; /** qLosa es carga permanente (D): con los brazos conectados al final, va sin ellos */ casoD?: boolean; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
+  let clave: string | null = null;
+  try { clave = JSON.stringify([def, zs, W, zs.map(z => EJ(z)), zs.map(z => EJ(z - 1e-3)), anchoCara, tCaras, Eh, anchos, corr, op]); } catch { clave = null; }
+  if (clave) {
+    const hay = memoExo.get(clave);
+    if (hay) { memoExo.delete(clave); memoExo.set(clave, hay); return hay; }
+  }
+  const r = calcularExoSinMemoria(def, zs, W, EJ, anchoCara, tCaras, Eh, anchos, corr, op);
+  if (clave) { memoExo.set(clave, r); if (memoExo.size > 24) memoExo.delete(memoExo.keys().next().value!); }
+  return r;
+}
+function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
   op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ficha F: sin los brazos (las cargas que llegan antes de conectarlos) */ sinBrazos?: boolean; /** ficha F: el peso propio, solo el de los brazos */ pesoSoloBrazos?: boolean; /** qLosa es carga permanente (D): con los brazos conectados al final, va sin ellos */ casoD?: boolean; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
   const n = zs.length - 1;
   // ficha F con los brazos conectados al final: el peso (D) se resuelve sin brazos y se le suma la sobrecarga y el viento
@@ -1293,7 +1329,8 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
     const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
     // pared del tubo (CIRSOC 302, Tabla 2.2.1). La pieza equivalente de la base (Citicorp: la supercolumna son cuatro
     // barras en las esquinas de un cuadrado de 7,3 m) y las barras macizas no son tubos de pared delgada.
-    const equivalente = (!!def.mastilBase && s === def.mastilBase.sec) || s.e >= s.b / 2 - 1e-9;
+    // (por valor, no por identidad: el resultado puede venir de la memoria, armado con otra copia de la definición)
+    const mb = def.mastilBase?.sec, equivalente = (!!mb && s.b === mb.b && s.e === mb.e) || s.e >= s.b / 2 - 1e-9;
     const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, op.costura ?? true);
     const pared: Cirsoc301Barra['pared'] = equivalente || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
     // flexión: compacta Mn = Mp = Z·Fy; no compacta, entre Mp y Mr = Fy·S según λ (302, cap. 3)
