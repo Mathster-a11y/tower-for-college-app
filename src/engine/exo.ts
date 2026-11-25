@@ -819,7 +819,25 @@ export interface ControlBarra { cara: string; id: string; clase: ClaseBarra; N: 
  * @param anchoCara distancia entre columnas de esquina en el sentido del viento (m); tCaras: posición transversal de cada cara
  * @param Eh módulo del hormigón (t/m²), para el J equivalente de cada cara
  */
+/**
+ * Memoria de calcularExo: con las mismas entradas da el mismo resultado, y la app lo pide varias veces por cálculo
+ * (la torre con el exo para los tabiques, el panel, la verificación 301 de cada viento y el viento perpendicular de los
+ * oblicuos). La rigidez EJ entra con sus valores en las cotas. Guarda los últimos resultados; nadie los modifica.
+ */
+const memoExo = new Map<string, ResultadoExo>();
 export function calcularExo(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
+  op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ficha F: sin los brazos (las cargas que llegan antes de conectarlos) */ sinBrazos?: boolean; /** ficha F: el peso propio, solo el de los brazos */ pesoSoloBrazos?: boolean; /** qLosa es carga permanente (D): con los brazos conectados al final, va sin ellos */ casoD?: boolean; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
+  let clave: string | null = null;
+  try { clave = JSON.stringify([def, zs, W, zs.map(z => EJ(z)), zs.map(z => EJ(z - 1e-3)), anchoCara, tCaras, Eh, anchos, corr, op]); } catch { clave = null; }
+  if (clave) {
+    const hay = memoExo.get(clave);
+    if (hay) { memoExo.delete(clave); memoExo.set(clave, hay); return hay; }
+  }
+  const r = calcularExoSinMemoria(def, zs, W, EJ, anchoCara, tCaras, Eh, anchos, corr, op);
+  if (clave) { memoExo.set(clave, r); if (memoExo.size > 24) memoExo.delete(memoExo.keys().next().value!); }
+  return r;
+}
+function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, anchoCara: number, tCaras: number[], Eh: number, anchos?: number[], corr?: number[],
   op: { /** carga de las losas (t/m²); por defecto, si apoyan en el exo, peso más sobrecarga (0,9 t/m², el «cargado» de la planilla) */ qLosa?: number; /** ficha F: sin los brazos (las cargas que llegan antes de conectarlos) */ sinBrazos?: boolean; /** ficha F: el peso propio, solo el de los brazos */ pesoSoloBrazos?: boolean; /** qLosa es carga permanente (D): con los brazos conectados al final, va sin ellos */ casoD?: boolean; /** ancho de la cara perpendicular en cada cota (si no, la distancia entre las caras) */ anchosPerp?: number[] } = {}): ResultadoExo {
   const n = zs.length - 1;
   // ficha F con los brazos conectados al final: el peso (D) se resuelve sin brazos y se le suma la sobrecarga y el viento
@@ -1173,7 +1191,8 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
     const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
     // pared del tubo (CIRSOC 302, Tabla 2.2.1). La pieza equivalente de la base (Citicorp: la supercolumna son cuatro
     // barras en las esquinas de un cuadrado de 7,3 m) y las barras macizas no son tubos de pared delgada.
-    const equivalente = (!!def.mastilBase && s === def.mastilBase.sec) || s.e >= s.b / 2 - 1e-9;
+    // (por valor, no por identidad: el resultado puede venir de la memoria, armado con otra copia de la definición)
+    const mb = def.mastilBase?.sec, equivalente = (!!mb && s.b === mb.b && s.e === mb.e) || s.e >= s.b / 2 - 1e-9;
     const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, op.costura ?? true);
     const pared: Cirsoc301Barra['pared'] = equivalente || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
     // flexión: compacta Mn = Mp = Z·Fy; no compacta, entre Mp y Mr = Fy·S según λ (302, cap. 3)
