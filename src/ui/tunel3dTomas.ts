@@ -22,7 +22,7 @@ export interface VistaToma {
   /** grosor de los tubos (veces el de base) */
   grosorLineas: number;
   horizontal: boolean; vertical: boolean; zRel: number; yRel: number;
-  color: 'velocidad' | 'cp'; espectro: 'termico' | 'arcoiris'; escalaVel: 'fija' | 'auto';
+  color: 'velocidad' | 'cp'; espectro: 'termico' | 'arcoiris' | 'grises'; escalaVel: 'fija' | 'auto';
   rastrillo: 'grilla' | 'vertical' | 'horizontal'; verRastrillo: boolean; rastN: number;
   vereda: boolean; lawson: boolean;
 }
@@ -92,7 +92,7 @@ export function describirToma(t: Toma, nombresTam: Record<string, string>): stri
   if (v.maqueta) que.push('modo maqueta'); else if (!v.torreCp) que.push('torre sin colores');
   return [
     `Simulación: ${s.banda ? `banda de ${s.bandaPisos} pisos` : 'torre entera'}, grilla ${nombresTam[s.tam] ?? s.tam}, paredes ${s.paredes === 'exactas' ? 'exactas en planta y en altura' : s.paredes === 'planta' ? 'exactas solo en planta' : 'en escalera (geometría gruesa)'}${s.angulo ? `, viento girado ${s.angulo}°` : ''}${s.ajustado && !s.banda ? ', dominio ajustado' : ''}${s.lento ? ', túnel lento' : ''}.`,
-    `Se ve: ${que.join(', ') || 'solo la torre'}. Colores de la velocidad: ${v.espectro === 'arcoiris' ? 'arcoíris (el rojo es aire rápido, no tracción)' : 'térmico'}, escala ${v.escalaVel === 'fija' ? 'fija' : 'automática'}.`,
+    `Se ve: ${que.join(', ') || 'solo la torre'}. Colores de la velocidad: ${v.espectro === 'arcoiris' ? 'arcoíris (el rojo es aire rápido, no tracción)' : v.espectro === 'grises' ? 'grises' : 'térmico'}, escala ${v.escalaVel === 'fija' ? 'fija' : 'automática'}.`,
     `Cámara: ${t.camara === 'guardada' ? 'la guardada' : t.camara === 'detalle' ? 'zoom a la esquina' : t.camara}${t.acercar !== 1 ? ` (×${t.acercar})` : ''}, ${t.recorrido === 'quieta' ? 'quieta' : t.recorrido === 'orbita' ? 'una vuelta alrededor' : 'vuelo del peatón a arriba'}, ${t.segundos} s. Llaves ${t.llaves === 'costado' ? 'en una franja al costado' : t.llaves === 'encima' ? 'en una esquina' : 'sin llaves'}.`,
   ];
 }

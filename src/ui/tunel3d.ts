@@ -23,10 +23,11 @@ import { AVISO_RED, CRITICO_RED, dondeRespectoTorre, SALVAGUARDAS } from '../vie
 import { avisoArcoiris, textoEspectro, coloresTermico, dibujarFlechas, elegirEspectroVel, espectroVel, lutVelocidad, muestraVelocidad, type ModoFlechas } from './campoSuave';
 import { tramosEdificio } from '../viento/contexto';
 import { FIDELIDAD, fidelidadGuardada, fidelidadRecomendada, guardarFidelidad, nivelDe3D, ORDEN_FIDELIDAD, type Fidelidad } from './fidelidad';
-import { controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
+import { controlEspectroVel, controlUnidadViento, textoReferencia, txtPct, txtVel, vientoDisenoEn, vientoQueLlega } from './unidadViento';
 import { altoSimbolos, llaveEnLienzo, llaveHtml, simbolosEnLienzo, simbolosHtml, type Llave, type Simbolo } from './llaveColor';
 import { categoriaLawson, LAWSON_LDDC, velocidad5 } from '../viento/confort';
 import { MediaPlano } from '../viento/direcciones';
+import { ExoDeCalculo } from '../engine/exoDeCalculo';
 import { aBase64, deBase64, desempaquetar, empaquetar, FORMATO_3D, huella, VERSION_3D } from '../viento/archivo3d';
 import { abrirLamina } from './tunel3dLamina';
 import { criterioQ, isosuperficie, umbralQ } from '../viento/vortices';
@@ -151,6 +152,10 @@ function datosDinamica(geo: Geometria3D, infoFz: Corrida['infoFz']): InfoDinamic
     f5: (FACTOR_SERVICIO[5] * w.V50) / w.V, f10: (FACTOR_SERVICIO[10] * w.V50) / w.V,
     regl: [{ z: 0, F: w[dir].WPB }, ...niv.map(n => ({ z: n.z, F: n.W }))], servicio: w.servicio.relacion,
     EJ: z => E * ((Jniv.find(q => q.z >= z + zPB - 1e-6)?.J ?? rg.J) || rg.J), limD: datos201De(p).limiteDeriva,
+    // con el exo en el cálculo (CIRSOC o FEM), la deriva es la de la torre con el exo: un diagrid toma casi todo el viento
+    corrimientos: p.exo && (estado.config.metodo === 'cirsoc' || estado.config.metodo === 'fem')
+      ? (() => { const ex = new ExoDeCalculo(p, estado.calculo, estado.config.metodo), def = p.exo; return (F: { z: number; F: number }[]) => { try { return ex.corrimientos(dir, def, F); } catch { return null; } }; })()
+      : undefined,
   };
 }
 
@@ -1064,7 +1069,7 @@ function seccionTomas(): HTMLElement {
           ...(v.lineas === 'tubos' ? [fSel('Grosor de los tubos', v, 'grosorLineas', [['0.5', 'muy finos'], ['1', 'finos'], ['1.7', 'medios'], ['2.8', 'gruesos']], true)] : []),
           fChk('Partículas (como tinta)', v, 'particulas'), fChk('Nubes de turbulencia (remolinos, criterio Q)', v, 'vortices'),
           ...(v.vortices ? [fNum('Remolinos: umbral (0,03 muchos ↔ 0,5 solo los fuertes)', v, 'umbralQ', 0.03, 0.5, 0.01)] : []),
-          fSel('Espectro de la velocidad', v, 'espectro', [['termico', 'térmico (de la app)'], ['arcoiris', 'arcoíris (el rojo es rápido, no tracción)']]),
+          fSel('Espectro de la velocidad', v, 'espectro', [['termico', 'térmico (de la app)'], ['arcoiris', 'arcoíris (el rojo es rápido, no tracción)'], ['grises', 'grises (para imprimir)']]),
           fSel('Escala de la velocidad', v, 'escalaVel', [['fija', 'fija (se comparan los videos)'], ['auto', 'automática (todo el espectro)']]),
           fSel('De dónde salen las líneas', v, 'rastrillo', [['grilla', 'una grilla delante'], ['vertical', 'un rastrillo vertical'], ['horizontal', 'un rastrillo horizontal']]),
           ...(v.rastrillo !== 'grilla' ? [fNum('Cantidad de líneas', v, 'rastN', 4, 40, 1), fChk('Ver la raya del rastrillo', v, 'verRastrillo')] : []),
@@ -1273,7 +1278,6 @@ export function panelTunel3d(c: H) {
     cfg.motor === 'procesador' ? h('label', { class: 'campo' }, h('span', {}, 'Grilla'), h('span', { class: 'nota chica' }, TAM_CPU.texto)) : sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
     sel('Paredes', [['exactas', 'exactas en planta y en altura: la piel sigue la fachada entre pisos'], ['planta', 'exactas solo en planta: un escalón por piso (para comparar)'], ['escalera', 'en escalera: el borde de las celdas (para comparar)']], cfg.paredes, x => { cfg.paredes = x as Paredes3DModo; }, true),
     sel('Giro del viento', [...new Set(['-45', '-30', '-15', '0', '15', '30', '45', String(cfg.angulo)])].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
-    sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),
     rango('Posición del corte vertical', cfg.yRel, x => { cfg.yRel = x; }),
   ),
@@ -1328,8 +1332,15 @@ export function panelTunel3d(c: H) {
     d.append(h('div', { class: 'fila-acciones' }, stl, of), h('p', { class: 'nota chica' }, 'STL: un prisma cerrado por piso con la planta que rige en ese piso (la carpintería o la losa), en metros y con z hacia arriba, para imprimir en 3D o llevar la forma a un programa de CAD. Caso de OpenFOAM: el nivel de laboratorio (RANS k-ε con la capa límite del viento, malla de 0,2 a 1 millón de celdas); el LEAME.txt del .zip explica cómo correrlo.'));
   }
   // «Qué se dibuja»: cada capa se prende y se apaga sin volver a simular
+  // colores: qué pintan los cortes, con qué espectro y hasta dónde llega la escala (arriba de todo: se busca rápido)
+  const rehacerColores = () => { if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); armarLlaves3d(); estado.avisarPanel(); };
+  const co = seccion('Colores').cuerpo; c.append(co.parentElement!);
+  co.append(h('div', { class: 'grilla2' },
+    sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
+    sel('Escala de la velocidad', [['fija', 'fija: hasta 1,6 veces el que llega (se comparan corridas)'], ['auto', 'automática: lo que se ve usa todo el espectro']], cfg.escalaVel, x => { cfg.escalaVel = x; })),
+    ...controlEspectroVel(rehacerColores));
   const uv = seccion('Unidades de la velocidad').cuerpo; c.append(uv.parentElement!);
-  uv.append(controlUnidadViento(zRef3d(), () => { if (corrida) corrida.ultimasLineas = 0; actualizarCampo(); armarLlaves3d(); estado.avisarPanel(); }));
+  uv.append(controlUnidadViento(zRef3d(), rehacerColores));
   const qd = seccion('Qué se dibuja').cuerpo; c.append(qd.parentElement!);
   {
     const estilo = h('select', { 'aria-label': 'Estilo de las flechas' }) as HTMLSelectElement;

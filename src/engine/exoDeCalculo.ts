@@ -152,6 +152,26 @@ export class ExoDeCalculo {
     });
   }
 
+  /**
+   * Corrimiento de cada nivel de la torre con el exo (tabiques y exo juntos) con otras fuerzas por nivel: las del túnel
+   * de viento, por ejemplo. Las fuerzas van por altura sobre PB (m) y en t; se suman a la cota más cercana del exo.
+   * Devuelve z sobre PB (con PB en 0) y el corrimiento (m), o null si el exo no se puede calcular.
+   */
+  corrimientos(dir: 'A' | 'B', def: ExoDef, fuerzas: { z: number; F: number }[]): { z: number; d: number }[] | null {
+    const d = this.datos(dir, def);
+    if (!d) return null;
+    const en = d.entrada, zPB = en.zs[0], sobre = en.zs.slice(1);
+    const W = sobre.map(() => 0);
+    for (const q of fuerzas) {
+      if (q.z <= 1e-6 || !isFinite(q.F)) continue;          // la de PB no mueve nada
+      let k = 0;
+      sobre.forEach((z, i) => { if (Math.abs(z - zPB - q.z) < Math.abs(sobre[k] - zPB - q.z)) k = i; });
+      W[k] += q.F;
+    }
+    const r = calcularExo(paraViento(def, dir), en.zs, W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
+    return [{ z: 0, d: 0 }, ...r.zs.slice(1).map((z, i) => ({ z: z - zPB, d: r.u[i] }))];
+  }
+
   /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
   flecha(d: DatosExo): { u: number; lim: number; texto: string } {
     const n = d.r.u.length - 1, w = this.vientoReglamento;

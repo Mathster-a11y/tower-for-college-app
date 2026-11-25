@@ -43,7 +43,8 @@ export const picoEstimado = (e: Estad, g = FACTOR_PICO) => Math.abs(e.media) + g
 
 export class Fuerzas3D {
   readonly serie: MuestraBase[] = [];
-  private readonly piso: Int32Array;
+  /** cada cara reparte su fuerza entre los pisos con los que se superpone en altura: (piso, peso) planos, por cara */
+  private readonly reparto: { i: number; w: number }[][];
   private readonly px: Float64Array; private readonly py: Float64Array; private readonly pz: Float64Array;
   readonly acPiso: { Fx: Acum; Fy: Acum; Mz: Acum }[];
   readonly acBase = { Vx: vacia(), Vy: vacia(), Mz: vacia(), Mx: vacia(), My: vacia() };
@@ -57,14 +58,22 @@ export class Fuerzas3D {
    */
   constructor(readonly caras: ReturnType<typeof celdasDeCara>, readonly g: Geometria3D, readonly niveles: NivelFuerza[], readonly uH: number, readonly qhG: number) {
     const n = caras.length, e = g.escala;
-    this.piso = new Int32Array(n); this.px = new Float64Array(n); this.py = new Float64Array(n); this.pz = new Float64Array(n);
+    this.reparto = new Array(n); this.px = new Float64Array(n); this.py = new Float64Array(n); this.pz = new Float64Array(n);
     const xc = (g.caja.x0 + g.caja.x1) / 2, yc = (g.caja.y0 + g.caja.y1) / 2;
-    const bordes = niveles.map((nv, k) => (k + 1 < niveles.length ? (nv.z + niveles[k + 1].z) / 2 : Infinity));
+    // la franja de fachada de cada piso: de la mitad del piso de abajo a la mitad del de arriba
+    const hasta = niveles.map((nv, k) => (k + 1 < niveles.length ? (nv.z + niveles[k + 1].z) / 2 : Infinity));
+    const desde = niveles.map((_, k) => (k > 0 ? hasta[k - 1] : -Infinity));
     caras.forEach((c, k) => {
       // la pared está a media celda de la celda de aire, del lado contrario a la normal
       this.px[k] = (c.x - 0.5 * c.nx - xc) / e; this.py[k] = (c.y - 0.5 * c.ny - yc) / e; this.pz[k] = (c.z - 0.5 - 0.5 * c.nz) / e;
-      const i = bordes.findIndex(b => this.pz[k] <= b + 1e-9);
-      this.piso[k] = i < 0 ? niveles.length - 1 : i;
+      // una cara de costado ocupa toda la altura de su celda: cuando la celda es más alta que la franja de un piso (o
+      // cae entre dos), su fuerza se reparte por lo que se superpone con cada franja. Si se la diera entera al piso de
+      // su centro, algún piso quedaría sin ninguna celda (fuerza cero) y el de al lado con el doble
+      const z0 = c.nz ? this.pz[k] : this.pz[k] - 0.5 / e, z1 = c.nz ? this.pz[k] : this.pz[k] + 0.5 / e;
+      const r: { i: number; w: number }[] = [];
+      if (z1 - z0 < 1e-12) { const i = hasta.findIndex(b => z0 <= b + 1e-9); r.push({ i: i < 0 ? niveles.length - 1 : i, w: 1 }); }
+      else for (let i = 0; i < niveles.length; i++) { const w = (Math.min(z1, hasta[i]) - Math.max(z0, desde[i])) / (z1 - z0); if (w > 1e-9) r.push({ i, w }); }
+      this.reparto[k] = r.length ? r : [{ i: niveles.length - 1, w: 1 }];
     });
     this.acPiso = niveles.map(() => ({ Fx: vacia(), Fy: vacia(), Mz: vacia() }));
   }
@@ -75,8 +84,8 @@ export class Fuerzas3D {
     let Mx = 0, My = 0;
     this.caras.forEach((c, k) => {
       // fuerza sobre la torre: −p · n (la normal mira al aire)
-      const p = (campo[c.celda * paso + desplaz] - rhoRef) * k0, fx = -p * c.nx, fy = -p * c.ny, i = this.piso[k];
-      Fx[i] += fx; Fy[i] += fy; Mz[i] += this.px[k] * fy - this.py[k] * fx;
+      const p = (campo[c.celda * paso + desplaz] - rhoRef) * k0, fx = -p * c.nx, fy = -p * c.ny, mz = this.px[k] * fy - this.py[k] * fx;
+      for (const { i, w } of this.reparto[k]) { Fx[i] += w * fx; Fy[i] += w * fy; Mz[i] += w * mz; }
       Mx += fx * this.pz[k]; My += fy * this.pz[k];
     });
     let Vx = 0, Vy = 0, Mzb = 0;

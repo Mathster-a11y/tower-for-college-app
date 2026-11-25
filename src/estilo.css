@@ -2107,6 +2107,10 @@ canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 /* Túnel 3D: fachada desplegada y tabla por zona */
 .fachada-desplegada { display: block; max-width: 100%; margin: 4px 0; }
 .llave-sim.en-flujo { position: static; margin: 6px 0; min-width: 0; max-width: 100%; }
+/* túnel 2D: las llaves abajo del dibujo, una al lado de la otra si entran */
+.llaves-tunel { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: flex-start; }
+.llaves-tunel .llave-sim.en-flujo { flex: 1 1 260px; max-width: 420px; border: 1px solid var(--edge); }
+.llaves-tunel .llave-sim.llave-simbolos.en-flujo { max-width: 460px; }
 .tabla td.marca { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--elegido) 18%, transparent); }
 /* Túnel 3D: espectro de la fuerza lateral (dinámica) */
 .grafico-espectro { display: block; max-width: 100%; height: auto; }

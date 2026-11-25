@@ -7,7 +7,9 @@ import { Lbm2D } from './lbm2d';
 import { Detalle, type GeometriaDetalle } from './detalle';
 
 export type MensajeTunel =
-  | { tipo: 'iniciar'; nx: number; ny: number; solido: Uint8Array; nu: number; u0: number; cs: number; q?: Float32Array; colision?: 'bgk' | 'trt'; cuerpo?: Uint8Array }
+  | { tipo: 'iniciar'; nx: number; ny: number; solido: Uint8Array; nu: number; u0: number; cs: number; q?: Float32Array; colision?: 'bgk' | 'trt'; cuerpo?: Uint8Array;
+    /** corte vertical: el perfil de entrada (fracción de u0 por fila) y el techo deslizante */
+    perfil?: Float32Array; techoLibre?: boolean }
   | { tipo: 'correr'; si: boolean }
   | { tipo: 'listo' }
   /** ventana de detalle: la geometría fina (null la saca) */
@@ -49,7 +51,7 @@ function ciclo() {
 
 self.onmessage = (e: MessageEvent<MensajeTunel>) => {
   const m = e.data;
-  if (m.tipo === 'iniciar') { det = null; ini = { nu: m.nu, u0: m.u0, cs: m.cs }; sim = new Lbm2D({ nx: m.nx, ny: m.ny, nu: m.nu, u0: m.u0, cs: m.cs, solido: m.solido, q: m.q, colision: m.colision, cuerpo: m.cuerpo }); Fx = []; Fy = []; listo = true; corriendo = true; seguir(); }
+  if (m.tipo === 'iniciar') { det = null; ini = { nu: m.nu, u0: m.u0, cs: m.cs }; sim = new Lbm2D({ nx: m.nx, ny: m.ny, nu: m.nu, u0: m.u0, cs: m.cs, solido: m.solido, q: m.q, colision: m.colision, cuerpo: m.cuerpo, perfil: m.perfil, techoLibre: m.techoLibre }); Fx = []; Fy = []; listo = true; corriendo = true; seguir(); }
   else if (m.tipo === 'correr') { const antes = corriendo; corriendo = m.si; if (corriendo && !antes) seguir(); }
   else if (m.tipo === 'detalle') { det = m.geo && sim ? new Detalle(m.geo, sim.nx, sim.ny, ini.nu, ini.u0, ini.cs, m.exactas ? 'trt' : 'bgk', m.exactas) : null; det?.arrancarDesde(sim!); if (!corriendo && listo) mandar(); }
   else if (m.tipo === 'listo') { listo = true; if (!corriendo && Fx.length) mandar(); }

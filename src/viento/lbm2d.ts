@@ -60,6 +60,17 @@ export interface OpcionesLbm {
    * 3D (ver lbm3d, paredesLineales)
    */
   paredesLineales?: boolean;
+  /**
+   * corte vertical (alzado): la velocidad de entrada de cada fila, en fracción de u0 (el perfil del viento que crece
+   * con la altura). Sin esto, la entrada es pareja
+   */
+  perfil?: Float32Array;
+  /**
+   * corte vertical: arriba un techo deslizante (el aire corre a lo largo sin frenarse: reflexión especular) y abajo,
+   * en vez de la vuelta periódica, lo que haya en la primera fila (el suelo, sólido). Sin esto, arriba y abajo se
+   * conectan (periódico)
+   */
+  techoLibre?: boolean;
 }
 /** Λ de la colisión TRT: (τ+ − ½)(τ− − ½); 3/16 deja la pared del rebote en su lugar */
 export const LAMBDA_TRT = 3 / 16;
@@ -71,6 +82,8 @@ export class Lbm2D {
   readonly tau0: number; readonly u0: number; readonly cs: number; readonly periodicoX: boolean;
   readonly gx: number; readonly gy: number;
   readonly solido: Uint8Array;
+  /** velocidad de entrada de cada fila (u0 · perfil) y el techo deslizante (ver OpcionesLbm) */
+  private readonly uEntrada: Float32Array; private readonly techoLibre: boolean;
   f: Float32Array; private g: Float32Array;
   readonly rho: Float32Array; readonly ux: Float32Array; readonly uy: Float32Array;
   /** fuerza sobre todos los sólidos en el último paso (red) */
@@ -98,6 +111,8 @@ export class Lbm2D {
     [this.gx, this.gy] = o.fuerza ?? [0, 0];
     this.solido = o.solido ?? new Uint8Array(this.N);
     this.marco = !!o.marco;
+    this.techoLibre = !!o.techoLibre;
+    this.uEntrada = new Float32Array(this.ny).map((_, y) => this.u0 * (o.perfil ? o.perfil[y] ?? 1 : 1));
     this.borde = this.marco ? { rho: new Float32Array(this.N).fill(1), ux: new Float32Array(this.N).fill(this.u0 ?? 0), uy: new Float32Array(this.N) } : null;
     this.f = new Float32Array(9 * this.N); this.g = new Float32Array(9 * this.N);
     this.rho = new Float32Array(this.N).fill(1); this.ux = new Float32Array(this.N); this.uy = new Float32Array(this.N);
@@ -108,7 +123,7 @@ export class Lbm2D {
     const azar = () => { semilla = (semilla * 1664525 + 1013904223) >>> 0; return semilla / 4294967296 - 0.5; };
     const amp = (o.perturbacion ?? 0.02) * this.u0;
     for (let c = 0; c < this.N; c++) {
-      const u = this.solido[c] ? 0 : this.u0, v = this.solido[c] ? 0 : amp * azar();
+      const u = this.solido[c] ? 0 : this.uEntrada[Math.floor(c / this.nx)], v = this.solido[c] ? 0 : amp * azar();
       this.ux[c] = u; this.uy[c] = v;
       for (let i = 0; i < 9; i++) this.f[i * this.N + c] = feq(i, 1, u, v);
     }
@@ -119,7 +134,7 @@ export class Lbm2D {
       if (this.solido[c]) continue;
       for (let i = 1; i < 9; i++) {
         let xs = x - EX[i], ys = y - EY[i];
-        if (this.marco && (ys < 0 || ys >= this.ny)) continue;
+        if ((this.marco || this.techoLibre) && (ys < 0 || ys >= this.ny)) continue;
         if (ys < 0) ys += this.ny; else if (ys >= this.ny) ys -= this.ny;
         if (xs < 0 || xs >= this.nx) { if (!this.periodicoX) continue; xs = (xs + this.nx) % this.nx; }
         if (this.solido[ys * this.nx + xs]) enl.push(c, i);
@@ -146,7 +161,7 @@ export class Lbm2D {
       // la celda de aire del otro lado (c + e_i): la usa el rebote interpolado cuando la pared está cerca (q < ½)
       const x = c % this.nx, y = (c - x) / this.nx;
       let x2 = x + EX[i], y2 = y + EY[i];
-      if (this.marco && (y2 < 0 || y2 >= this.ny)) continue;
+      if ((this.marco || this.techoLibre) && (y2 < 0 || y2 >= this.ny)) continue;
       if (y2 < 0) y2 += this.ny; else if (y2 >= this.ny) y2 -= this.ny;
       if (x2 < 0 || x2 >= this.nx) { if (!this.periodicoX) continue; x2 = (x2 + this.nx) % this.nx; }
       const c2 = y2 * this.nx + x2;
@@ -154,7 +169,7 @@ export class Lbm2D {
       this.otra[k] = c2;
       // y la siguiente (c + 2·e_i), para la interpolación cuadrática
       let x3 = x2 + EX[i], y3 = y2 + EY[i];
-      if (this.marco && (y3 < 0 || y3 >= this.ny)) continue;
+      if ((this.marco || this.techoLibre) && (y3 < 0 || y3 >= this.ny)) continue;
       if (y3 < 0) y3 += this.ny; else if (y3 >= this.ny) y3 -= this.ny;
       if (x3 < 0 || x3 >= this.nx) { if (!this.periodicoX) continue; x3 = (x3 + this.nx) % this.nx; }
       if (!this.solido[y3 * this.nx + x3]) this.otra2[k] = y3 * this.nx + x3;
@@ -266,12 +281,24 @@ export class Lbm2D {
       g[i * N + c] = vuelve;
       if (this.delCuerpo[n]) { Fx -= (fo + vuelve) * EX[i]; Fy -= (fo + vuelve) * EY[i]; }
     }
-    // --- entrada (equilibrio a u0) y salida (gradiente nulo)
+    // techo deslizante: lo que bajaría a la fila de arriba desde afuera es lo que subía, reflejado como en un espejo
+    // (la componente vertical cambia de signo, la horizontal sigue): el aire corre a lo largo del techo sin frenarse
+    if (this.techoLibre) {
+      const t = (ny - 1) * nx;
+      for (let x = 0; x < nx; x++) {
+        const c = t + x;
+        if (solido[c]) continue;
+        g[4 * N + c] = f[2 * N + c];                                                     // S ← N
+        g[7 * N + c] = x + 1 < nx ? f[6 * N + c + 1] : f[6 * N + c];                     // SO ← NO de la derecha
+        g[8 * N + c] = x > 0 ? f[5 * N + c - 1] : f[5 * N + c];                          // SE ← NE de la izquierda
+      }
+    }
+    // --- entrada (equilibrio a u0, o al perfil) y salida (gradiente nulo)
     if (this.borde) this.orillas(g);
     else if (!perX) {
       for (let y = 0; y < ny; y++) {
         const c0 = y * nx, cN = c0 + nx - 1;
-        if (!solido[c0]) for (let i = 0; i < 9; i++) g[i * N + c0] = feq(i, 1, this.u0, 0);
+        if (!solido[c0]) for (let i = 0; i < 9; i++) g[i * N + c0] = feq(i, 1, this.uEntrada[y], 0);
         if (!solido[cN]) for (let i = 0; i < 9; i++) g[i * N + cN] = g[i * N + cN - 1];
       }
     }
