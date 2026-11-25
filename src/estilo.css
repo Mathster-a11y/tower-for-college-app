@@ -1746,6 +1746,7 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .zoom-tunel button { min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--lienzo) 90%, transparent); color: var(--ink); cursor: pointer; font-size: 14px; line-height: 1; }
 .zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
 canvas.tunel2d.arrastrable { cursor: grab; }
+canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 
 /* diseñador 3D del exoesqueleto (etapa 08) */
 .exo3d { display: flex; flex-direction: column; gap: 6px; }
@@ -1992,7 +1993,6 @@ canvas.tunel2d.arrastrable { cursor: grab; }
 .desp-tabla th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-bottom: 1px solid var(--rule); padding: 4px 6px; }
 .desp-tabla td { padding: 4px 6px; border-bottom: 1px solid var(--hair); }
 .desp-tabla .n { text-align: right; }
-canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 .llave-sim.derecha { left: auto; right: 8px; top: 8px; bottom: auto; }
 .llave-sim.llave-simbolos { left: auto; right: 8px; top: auto; bottom: 8px; min-width: 0; max-width: 300px; }
 .llave-simbolos .simbolo { display: flex; gap: 4px; align-items: flex-start; margin-top: 2px; }

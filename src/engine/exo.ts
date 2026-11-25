@@ -731,7 +731,9 @@ interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number; /** Kss⁻¹·B
  * resuelve con «resolver», que da su mensaje.
  */
 function factorizarRigidez(A: Mat): (B: Mat) => Mat {
-  const n = A.length, denso = (B: Mat) => resolver(A, B);
+  // respaldo: la LU con pivoteo (rala), factorizada una sola vez y reusada para cada B
+  let lu: LU | null = null;
+  const n = A.length, denso = (B: Mat) => resolverLU(lu ??= factorizar(A), B);
   if (n < 60) return denso;
   // vecinos de cada incógnita
   const vec: number[][] = A.map((f, i) => { const v: number[] = []; for (let j = 0; j < n; j++) if (j !== i && f[j] !== 0) v.push(j); return v; });
