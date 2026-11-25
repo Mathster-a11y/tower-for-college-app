@@ -22,7 +22,7 @@
   --edge: #c3cad1; --field-edge: #b3bcc5; --rule: #dfe3e7; --hair: #e1e5ea;
   --ink: #1f2328; --ink2: #5f6b76; --head: #6b7781; --dim: #8a949e;
   --accent: #1a6bbd; --accent-dark: #15559a; --tint: #dbe8f6; --danger: #c62828; --warn: #b8401a; --run-fill: #eaf6ec; --run-ink: #1a7a3a; --hand: #00747f;
-  --traccion: #e24b4a; --compresion: #378add; --deformada: #1d9e75; --carga: #d85a30; --reaccion: #6a1b9a; --corte: #7f77dd; --elegido: #ef9f27; --cero: #888888; --grilla: #e8e8e8;
+  --traccion: #e24b4a; --compresion: #378add; --deformada: #1d9e75; --carga: #d85a30; --reaccion: #6a1b9a; --corte: #7f77dd; --carpinteria: #5b4a8b; --elegido: #ef9f27; --cero: #888888; --grilla: #e8e8e8;
   --r-diseno: #1a6bbd; --r-viento: #b8401a; --r-fuerzas: #3f51b5; --r-estabilidad: #00747f; --r-rigidez: #8a5f00; --r-rototrasl: #6a3d9a; --r-flexion: #ad1457; --r-resumen: #2e7d32; --r-ayuda: #455a64;
   --ok: #1a7a3a; --ok-fill: #eaf6ec; --mal: #c62828; --mal-fill: #fbe9e9; --revisar: #8a5f00; --revisar-fill: #fbf1dc; --info-fill: #dbe8f6;
   --num: #a55500;
@@ -39,7 +39,7 @@
     --edge: #3d4d5e; --field-edge: #4a5a6b; --rule: #2c3946; --hair: #2a3542;
     --ink: #dce4ec; --ink2: #9aa8b6; --head: #8b99a7; --dim: #7d8b99;
     --accent: #4aa3ff; --accent-dark: #2f86e0; --tint: #203a57; --danger: #ff6b6b; --warn: #ff8a5c; --run-fill: #1d3326; --run-ink: #5fd47e; --hand: #3fc1c9;
-    --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
+    --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --carpinteria: #c2b5f2; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
     --r-diseno: #4aa3ff; --r-viento: #ff8a5c; --r-fuerzas: #8c9eff; --r-estabilidad: #3fc1c9; --r-rigidez: #ffb547; --r-rototrasl: #c38bff; --r-flexion: #ff6fa8; --r-resumen: #5fd47e; --r-ayuda: #9aa8b6;
     --ok: #5fd47e; --ok-fill: #1d3326; --mal: #ff6b6b; --mal-fill: #3a2026; --revisar: #ffb547; --revisar-fill: #3a2f18; --info-fill: #203a57;
     --num: #ffb547;
@@ -52,7 +52,7 @@
   --edge: #3d4d5e; --field-edge: #4a5a6b; --rule: #2c3946; --hair: #2a3542;
   --ink: #dce4ec; --ink2: #9aa8b6; --head: #8b99a7; --dim: #7d8b99;
   --accent: #4aa3ff; --accent-dark: #2f86e0; --tint: #203a57; --danger: #ff6b6b; --warn: #ff8a5c; --run-fill: #1d3326; --run-ink: #5fd47e; --hand: #3fc1c9;
-  --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
+  --traccion: #ff6b6b; --compresion: #5aa9ff; --deformada: #3dd9a4; --carga: #ff8a5c; --reaccion: #c38bff; --corte: #a9a3ff; --carpinteria: #c2b5f2; --elegido: #ffb547; --cero: #7d8b99; --grilla: #1f2d3a;
   --r-diseno: #4aa3ff; --r-viento: #ff8a5c; --r-fuerzas: #8c9eff; --r-estabilidad: #3fc1c9; --r-rigidez: #ffb547; --r-rototrasl: #c38bff; --r-flexion: #ff6fa8; --r-resumen: #5fd47e; --r-ayuda: #9aa8b6;
   --ok: #5fd47e; --ok-fill: #1d3326; --mal: #ff6b6b; --mal-fill: #3a2026; --revisar: #ffb547; --revisar-fill: #3a2f18; --info-fill: #203a57;
   --num: #ffb547;
@@ -770,10 +770,10 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .cad .cad-referencia { stroke: color-mix(in srgb, var(--ink2) 45%, transparent); }
 .planta .cad .cad-muros { stroke: color-mix(in srgb, var(--ink) 70%, transparent); }
 .planta .cad .cad-losa { stroke: color-mix(in srgb, var(--ink2) 60%, transparent); stroke-dasharray: 5 3; }
-.planta .cad .cad-carpinteria { stroke: var(--serie-1); stroke-width: 1.6; }
-.planta .carpinteria { fill: none; stroke: var(--serie-1); stroke-width: 2.2; pointer-events: none; }
+.planta .cad .cad-carpinteria { stroke: var(--carpinteria); stroke-width: 1.6; }
+.planta .carpinteria { fill: none; stroke: var(--carpinteria); stroke-width: 2.2; pointer-events: none; }
 .planta .caja-carpinteria { fill: none; stroke: var(--elegido); stroke-width: 1.2; stroke-dasharray: 6 4; pointer-events: none; }
-.planta .caja-txt { fill: var(--serie-1); }
+.planta .caja-txt { fill: var(--carpinteria); }
 .planta .iman-txt { fill: var(--elegido); font-weight: 600; }
 .cad-panel { width: 270px; max-height: calc(100% - 60px); overflow: auto; }
 .cad-panel .capas-cad { display: grid; gap: 3px; margin: 4px 0; }
@@ -786,10 +786,11 @@ text[data-par].ultimo { font-size: 15px; }
 .dock-planta { position: absolute; top: 44px; left: 10px; z-index: 2; display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 90px); overflow: auto; pointer-events: none; }
 .dock-planta > * { pointer-events: auto; }
 .dock-planta .calco-panel { position: static; max-height: none; }
-.dock-planta .calco-panel > b { cursor: pointer; }
-.dock-planta .calco-panel > b::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
-.dock-planta .calco-panel.plegado > b::after { content: ' ▸'; }
-.dock-planta .calco-panel.plegado > :not(b) { display: none !important; }
+.calco-panel > b:first-of-type { cursor: pointer; }
+.calco-panel > b:first-of-type::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
+.calco-panel.plegado > b:first-of-type::after { content: ' ▸'; }
+.calco-panel.plegado > :not(b):not(.asa-mover) { display: none !important; }
+.calco-panel.plegado { height: auto !important; max-height: none !important; }
 @media (max-width: 760px) { .dock-planta { position: static; max-height: none; margin: 6px 10px; } }
 /* nodos del elemento elegido */
 .planta .nodos rect, .planta .nodos polygon { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.1; pointer-events: none; }
@@ -805,8 +806,8 @@ text[data-par].ultimo { font-size: 15px; }
 .corte-tabla { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
 .corte-tabla th, .corte-tabla td { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .corte-tabla th:nth-child(2), .corte-tabla td:nth-child(2) { text-align: left; }
-.planta .carpinteria.editando { stroke-width: 3; fill: color-mix(in srgb, var(--serie-1) 6%, transparent); pointer-events: visiblePainted; cursor: copy; }
-.planta .vertice.vertice-carp { stroke: var(--serie-1); }
+.planta .carpinteria.editando { stroke-width: 3; fill: color-mix(in srgb, var(--carpinteria) 6%, transparent); pointer-events: visiblePainted; cursor: copy; }
+.planta .vertice.vertice-carp { stroke: var(--carpinteria); }
 .planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
 .silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }
 .planta .nodos .ref rect, .planta .nodos .ref polygon { fill: var(--elegido); stroke: var(--elegido); }
@@ -1646,6 +1647,9 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 .esquinas-torre .campo-esq { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0; }
 .esquinas-torre .campo-esq select { max-width: 62%; }
 .esquinas-torre > button { width: 100%; margin: 4px 0; }
+.loft-losas .loft-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--rule); }
+.loft-losas .loft-item span { flex: 1 1 100%; font-size: 0.92em; }
+.aviso-loft { border-left: 3px solid var(--revisar); padding-left: 6px; }
 
 /* Panel de la etapa angosto (menos de ~340 px, mouse o tablet): cada rótulo arriba de su campo, a todo el ancho;
    las grillas de dos columnas pasan a una; las tablas y los botones largos no se salen del panel. */
@@ -1743,6 +1747,252 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
 canvas.tunel2d.arrastrable { cursor: grab; }
 canvas.tunel2d.arrastrable:active { cursor: grabbing; }
+
+/* diseñador 3D del exoesqueleto (etapa 08) */
+.exo3d { display: flex; flex-direction: column; gap: 6px; }
+.exo3d-herr { flex-wrap: wrap; }
+.exo3d-kpis { display: flex; flex-wrap: wrap; gap: 6px; }
+.exo3d-kpi { display: flex; flex-direction: column; padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); font-size: 0.85em; min-width: 120px; }
+.exo3d-kpi span { color: var(--ink2); }
+.exo3d-kpi.ok b { color: var(--ok); }
+.exo3d-kpi.mal b { color: var(--mal); }
+.exo3d-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 8px; }
+.exo3d-lienzo { position: relative; height: min(72vh, 760px); min-height: 380px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--window); }
+.exo3d-lienzo canvas { display: block; touch-action: none; }
+.exo3d-etiquetas { position: absolute; inset: 0; pointer-events: none; }
+.exo3d-zona { font-size: 11px; color: var(--corte); background: var(--panel); border: 1px solid var(--corte); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.exo3d-lateral { display: flex; flex-direction: column; gap: 8px; max-height: min(72vh, 760px); overflow: auto; }
+.exo3d-caja { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; background: var(--panel); }
+.exo3d-caja > button { text-align: left; }
+.exo3d-n.traccion { color: var(--traccion); font-weight: 600; }
+.exo3d-n.compresion { color: var(--compresion); font-weight: 600; }
+.exo3d-pincel { display: flex; flex-wrap: wrap; gap: 3px; }
+.exo3d-pincel button { font-size: 0.8em; padding: 2px 5px; }
+.exo3d-zona-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-top: 1px dashed var(--rule); padding-top: 4px; }
+.exo3d-zona-fila select { max-width: 100%; }
+.exo3d-desde { flex: 1 1 100%; font-size: 0.85em; color: var(--corte); }
+@media (max-width: 900px) { .exo3d-cuerpo { grid-template-columns: 1fr; } .exo3d-lateral { max-height: none; } }
+.formulario > .nota-ancha { grid-column: 1 / -1; }
+.exo3d-lateral > button, .exo3d-caja > button { white-space: normal; text-align: left; }
+.exo3d-aviso { flex: 1 1 100%; margin: 0; padding: 6px 8px; border-left: 3px solid var(--revisar); background: var(--panel); font-size: 0.9em; }
+.exo3d-txt { margin: 0; font-size: 0.85em; color: var(--ink2); line-height: 1.35; }
+.exo3d-ayuda { padding: 4px 2px; }
+
+/* cartas que cambian de tamaño: tirador abajo a la derecha, siempre a la vista aunque la carta se desplace por dentro */
+.calco-panel.redimensionable { min-width: 170px; }
+.calco-panel.con-tamano { overflow: auto; }
+.dock-planta .calco-panel.con-tamano { flex: none; }
+.asa-tamano { position: sticky; bottom: -6px; align-self: flex-end; margin: 2px -8px -6px auto; width: 16px; height: 16px; min-height: 0 !important; padding: 0; border: 0; background: none; cursor: nwse-resize; touch-action: none; flex: none; z-index: 2; }
+.asa-tamano::before { content: ''; position: absolute; inset: 3px; background: linear-gradient(135deg, transparent 0 45%, var(--edge) 45% 55%, transparent 55% 70%, var(--edge) 70% 80%, transparent 80%); }
+.asa-tamano:hover::before, .cambiando-tamano .asa-tamano::before { background: linear-gradient(135deg, transparent 0 45%, var(--accent) 45% 55%, transparent 55% 70%, var(--accent) 70% 80%, transparent 80%); }
+@media (max-width: 760px) { .asa-tamano { display: none; } }
+
+/* indicación de la herramienta activa (planta) */
+.indicacion-planta { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 2; max-width: min(640px, calc(100% - 120px)); display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px 4px 10px; border: 1px solid var(--edge); border-left: 3px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 94%, transparent); font-size: 12px; line-height: 1.35; color: var(--ink); pointer-events: auto; }
+.indicacion-planta[hidden] { display: none; }
+.indicacion-planta button { border: 0; background: none; padding: 0 2px; color: var(--ink2); min-height: 0; cursor: pointer; }
+.herr-planta .b-indic { font-weight: 700; min-width: 26px; }
+@media (max-width: 760px) { .indicacion-planta { position: static; transform: none; max-width: none; margin: 4px 10px; } }
+
+/* arco elegido en el editor de contornos: centro, radios y mediatriz */
+.capa-contorno .mediatriz { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 4; fill: none; pointer-events: none; }
+.capa-contorno .radio-arco { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 6 3; fill: none; pointer-events: none; }
+.capa-contorno .h-centro { cursor: move; }
+.capa-contorno .h-centro line { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.capa-contorno .h-centro-fondo { fill: color-mix(in srgb, var(--accent) 15%, var(--lienzo)); stroke: var(--accent); stroke-width: 1.2; }
+.capa-contorno .rot-centro { font-size: 11px; fill: var(--accent); pointer-events: none; paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+/* losa desde cero */
+.losa-cero .nota-losa { margin: 6px 0 2px; font-size: 11.5px; color: var(--ink2); line-height: 1.35; }
+.galeria-formas { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; }
+.galeria-formas button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; font-size: 10.5px; line-height: 1.15; min-height: 0; border-radius: 6px; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.galeria-formas svg polygon { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: 1.2; }
+.galeria-formas button[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+.campos-forma { display: flex; flex-direction: column; }
+.planta .lado-saliente { stroke: var(--elegido, #e8a317); stroke-width: 5; stroke-linecap: round; opacity: .8; pointer-events: none; }
+.planta .trazo-losa polyline { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-width: 2; }
+.planta .trazo-losa .cierre { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 4; }
+.planta .trazo-losa circle { fill: var(--lienzo); stroke: var(--accent); stroke-width: 1.5; }
+.planta .trazo-losa circle.primero { fill: var(--accent); }
+.planta .trazo-losa .medida-trazo { font-size: 11px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+.losa-cero .error-losa { margin: 2px 0; font-size: 11.5px; color: var(--ink2); min-height: 0; }
+.losa-cero .error-losa:empty { display: none; }
+.planta .previa-losa polygon { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; pointer-events: none; }
+.planta .previa-losa text { font-size: 11.5px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; pointer-events: none; }
+.losa-cero .error-losa.mal { color: var(--revisar); font-weight: 600; }
+
+/* pantallas táctiles: los tiradores de las cartas, más grandes para el dedo */
+@media (pointer: coarse) {
+  .asa-tamano { width: 28px; height: 28px; margin: 2px -8px -6px auto; }
+  .asa-tamano::before { inset: 6px; }
+  .asa-mover:not(.en-linea) { height: 22px; width: 72px; }
+  .asa-mover:not(.en-linea)::before { top: 9px; }
+}
+
+/* avisos de diseño */
+.herr-planta .b-avisos { min-width: 30px; font-weight: 600; color: var(--ok); }
+.herr-planta .b-avisos.hay { color: var(--revisar); border-color: var(--revisar); }
+.avisos-panel { right: 58px; left: auto; top: 84px; width: 300px; max-height: calc(100% - 140px); }
+.avisos-panel .aviso-item { display: flex; flex-direction: column; gap: 3px; padding: 6px 0; border-top: 1px solid var(--hair); }
+.avisos-panel .aviso-item button { align-self: flex-start; }
+.avisos-panel .nota-losa { font-size: 11.5px; color: var(--ink2); line-height: 1.35; }
+.planta .muro.con-aviso polygon, .planta .muro.con-aviso rect, .planta .muro.con-aviso path { stroke: var(--revisar); stroke-width: 2.5; stroke-dasharray: 5 3; }
+
+/* perfil de la torre (alzado) y carpintería que sigue a la losa */
+.galeria-perfiles { display: flex; flex-wrap: wrap; gap: 4px; }
+.galeria-perfiles button { font-size: 11px; padding: 2px 8px; }
+.alzado-perfil { width: 100%; max-width: 280px; height: auto; align-self: center; touch-action: none; background: var(--lienzo); border: 1px solid var(--hair); border-radius: 6px; cursor: crosshair; }
+.alzado-perfil .nivel { stroke: var(--hair); stroke-width: 1; }
+.alzado-perfil .eje { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 4; }
+.alzado-perfil .torre { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; }
+.alzado-perfil .cara-y { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.alzado-perfil .punto { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: grab; }
+.alzado-perfil .punto.sel { fill: var(--accent); }
+.alzado-perfil .rot { font-size: 10px; fill: var(--ink2); }
+.perfil-torre-carta .punto-perfil { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px dashed var(--rule); }
+.sigue-losa { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--hair); }
+
+/* inferencias al dibujar: guía de puntos desde el punto con el que se alinea */
+.planta .guia-inferencia { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 4; pointer-events: none; }
+.planta .guia-inferencia-punto { fill: none; stroke: var(--accent); stroke-width: 1.2; pointer-events: none; }
+
+/* corte de la torre (sobre la planta) */
+.corte-torre { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; background: var(--lienzo); }
+.corte-torre[hidden] { display: none; }
+.corte-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--rule); background: var(--panel); font-size: 12.5px; }
+.corte-barra > b { margin-right: 6px; }
+.corte-svg { flex: 1; width: 100%; min-height: 0; touch-action: none; display: block; cursor: grab; }
+.corte-pie { padding: 4px 10px; font-size: 12px; color: var(--ink2); border-top: 1px solid var(--rule); background: var(--panel); }
+.corte-svg .terreno { stroke: #6b4f2a; stroke-width: 1.4; }
+.corte-svg .eje { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 6 5; opacity: .6; }
+.corte-svg .muro-cortado { fill: color-mix(in srgb, var(--ink) 22%, transparent); }
+.corte-svg .losa { fill: var(--dim); }
+.corte-svg .losa.generada { fill: color-mix(in srgb, var(--accent) 45%, var(--dim)); }
+.corte-svg .losa.manual { fill: var(--ink2); }
+.corte-svg .fachada { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.corte-svg .carp { fill: none; stroke: var(--carpinteria); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.corte-svg .manija { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: ew-resize; }
+.corte-svg .manija:hover { fill: var(--accent); }
+.corte-svg .calib { fill: var(--elegido, #e8a317); }
+.corte-svg .nivel { font-size: 10px; fill: var(--ink2); }
+.corte-svg .rot { font-size: 12px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
+
+.corte-svg .plano { stroke: var(--corte); stroke-width: 1.6; stroke-dasharray: 8 5; }
+.corte-svg .plano-sacado { fill: color-mix(in srgb, var(--corte) 10%, transparent); pointer-events: none; }
+.corte-svg .manija-plano { fill: var(--lienzo); stroke: var(--corte); stroke-width: 2; cursor: move; }
+.corte-barra .plano-item { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid var(--corte); border-radius: 6px; color: var(--corte); }
+.corte-barra .plano-item button { padding: 1px 5px; min-height: 0; font-size: 11px; }
+.sigue-losa .tramo-carp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 0; border-top: 1px dashed var(--rule); }
+.sigue-losa .tramo-carp select { max-width: 100%; }
+.sigue-losa .paneleria { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--hair); }
+
+/* la barra de herramientas de la planta: si no entra, en dos líneas (nunca cortada) */
+.herr-planta { flex-wrap: wrap !important; overflow: visible !important; row-gap: 4px; }
+/* avisos de diseño: chip arriba a la derecha, debajo del selector de planta */
+.chip-avisos { position: absolute; right: 10px; top: 80px; z-index: 2; font-weight: 600; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--edge); background: var(--panel); color: var(--ok); }
+.chip-avisos.hay { color: var(--revisar); border-color: var(--revisar); }
+.chip-avisos[aria-pressed="true"] { background: var(--tint); }
+/* «?» para volver a prender las indicaciones, donde iba la indicación */
+.b-indic-flotante { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 2; width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--edge); background: var(--panel); font-weight: 700; color: var(--accent); }
+.b-indic-flotante[hidden] { display: none; }
+.herr-planta.seg { border-radius: 14px; }
+
+/* ── Herramientas nuevas con el mismo lenguaje que la carta Colocar ──
+   Botones-píldora chicos, títulos de sección en versalitas grises sobre una línea fina, campos en línea con la unidad
+   al lado y el modo de cada tramo como control segmentado. */
+.silueta-panel { width: 268px; }
+.silueta-panel button, .avisos-panel .aviso-item button { font-size: 11.5px; padding: 3px 8px; min-height: 26px; }
+.silueta-panel button.primario { font-weight: 600; }
+.silueta-panel .fila-acciones { gap: 4px; margin: 3px 0; }
+.silueta-panel .seg button { padding: 3px 6px; }
+.silueta-panel .sec-sub,
+.esquinas-torre > summary { margin-top: 6px; padding-top: 5px; font-weight: 600; font-size: 11.5px; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; }
+.silueta-panel .sec-sub { border-top: 1px solid var(--hair); }
+.esquinas-torre > summary { margin-top: 0; list-style-position: inside; }
+.esquinas-torre > summary:hover { color: var(--ink); }
+.esquinas-torre[open] > summary { color: var(--ink); margin-bottom: 3px; }
+.esquinas-torre .campo-esq { justify-content: flex-start; gap: 4px; flex-wrap: wrap; }
+.esquinas-torre .campo-esq input[type="text"], .sigue-losa .campo-esq input[type="text"] { width: 4.2em; padding: 2px 4px; font-size: 12px; }
+.esquinas-torre > button { width: auto; margin: 3px 4px 3px 0; }
+.sigue-losa .campo-esq { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--ink2); }
+.sigue-losa .campo-esq select { font-size: 12px; max-width: 8.5em; }
+.sigue-losa .tramo-carp { flex-direction: column; align-items: stretch; gap: 3px; }
+.sigue-losa .tramo-cab { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sigue-losa .quitar-tramo { margin-left: auto; border: 0; background: none; color: var(--ink2); padding: 0 4px; min-height: 22px; }
+.sigue-losa .quitar-tramo:hover { color: var(--ink); background: var(--tint); }
+.sigue-losa .modo-tramo { display: flex; } .sigue-losa .modo-tramo button { flex: 1; white-space: nowrap; }
+.sigue-losa .paneleria .campo-esq { display: flex; justify-content: flex-start; }
+.silueta-panel label.boton { font-size: 11.5px; padding: 3px 8px; min-height: 26px; display: inline-flex; align-items: center; }
+.corte-barra button { font-size: 12px; padding: 3px 8px; min-height: 28px; }
+@media (pointer: coarse) {
+  .silueta-panel button, .avisos-panel button, .corte-barra button { min-height: 36px; }
+  .sigue-losa .quitar-tramo { min-width: 36px; }
+}
+.sigue-losa .forma-tramo { display: flex; } .sigue-losa .forma-tramo button { flex: 1; }
+/* un botón suelto dentro de un formulario ocupa la fila entera (no ensancha la columna de los rótulos) */
+.formulario > button { grid-column: 1 / -1; justify-self: start; white-space: normal; text-align: left; }
+/* en una carta baja, nada se aplasta: la carta se desplaza */
+.silueta-panel > * { flex-shrink: 0; }
+
+/* carpintería: color propio (no es tracción ni compresión: nunca rojo ni azul) */
+.planta .carpinteria.carpinteria-pieza { stroke-dasharray: none; }
+.silueta-panel .estado-carp { display: block; margin-top: 4px; padding: 4px 6px; border-radius: 6px; background: color-mix(in srgb, var(--carpinteria) 8%, transparent); color: var(--ink2); font-size: 11.5px; }
+/* barra de la planta en grupos con nombre */
+.herr-planta .grupo-rot { align-self: center; padding: 0 5px 0 9px; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; }
+.herr-planta .grupo-rot + button { border-left: 1px solid var(--field-edge); }
+/* tira de pasos: el recorrido de diseño de la torre, arriba de la barra de herramientas */
+.pasos-torre { position: absolute; top: 8px; left: 10px; right: 10px; z-index: 3; display: grid; gap: 5px; padding: 6px 8px; border: 1px solid var(--hair); border-radius: 10px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.pasos-torre.plegada { right: auto; padding: 0; border: 0; background: none; box-shadow: none; }
+.pasos-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.pasos-torre .paso { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; min-height: 26px; border: 1px solid var(--edge); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 11.5px; white-space: nowrap; }
+.pasos-torre .paso .n { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 600; background: var(--hair); color: var(--ink2); }
+.pasos-torre .paso.hecho .n { background: var(--ok); color: #fff; }
+.pasos-torre .paso.act { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); font-weight: 600; }
+.pasos-torre .paso.act .n { background: var(--accent); color: #fff; }
+.pasos-flecha { color: var(--ink2); font-size: 12px; }
+.pasos-plegar { margin-left: auto; font-size: 11.5px; padding: 2px 8px; min-height: 24px; border-radius: 999px; }
+.pasos-det { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.pasos-det .pasos-ayuda { flex: 1 1 260px; min-width: 0; color: var(--ink2); font-size: 11.5px; }
+.pasos-det button { font-size: 11.5px; padding: 3px 8px; min-height: 26px; border-radius: 999px; }
+@media (pointer: coarse) { .pasos-torre .paso, .pasos-det button, .pasos-plegar { min-height: 36px; } }
+.b-calculo { font-size: 11.5px; }
+.herr-planta.compacta .grupo-rot { font-size: 0; padding: 0 3px; }
+.herr-planta.compacta .grupo-rot::before { content: ""; display: block; width: 1px; height: 16px; background: var(--rule); }
+.sigue-losa .regla-grilla { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sigue-losa .regla-grilla .seg button { font-size: 11.5px; padding: 3px 8px; }
+/* la carpintería que genera la envolvente: su sombra en la planta (no se edita acá) */
+.planta .carpinteria.sombra-env { stroke-dasharray: 6 4; stroke-width: 1.8; fill: color-mix(in srgb, var(--carpinteria) 5%, transparent); }
+.planta .carpinteria.editando.sombra-env { pointer-events: none; cursor: default; }
+.sigue-losa .secciones-env { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+.sigue-losa .seccion-item { display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--edge); border-radius: 999px; padding-right: 2px; background: var(--panel); }
+.sigue-losa .seccion-item > button:first-child { border: 0; background: none; }
+/* alzado desplegado de la fachada */
+.dialogo-desplegado { width: min(1080px, 96vw); max-height: 92vh; overflow: auto; padding: 14px 16px; border: 1px solid var(--edge); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.dialogo-desplegado[open] { display: grid; gap: 8px; }
+.dialogo-desplegado::backdrop { background: rgba(0,0,0,.35); }
+.dialogo-desplegado .desp-cab button { font-size: 12px; padding: 3px 10px; min-height: 28px; }
+.dialogo-desplegado .desp-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dialogo-desplegado .desp-cab h2 { margin: 0; font-size: 16px; }
+.desp-lienzo { overflow-x: auto; margin: 6px 0; border: 1px solid var(--hair); border-radius: 8px; background: var(--lienzo, var(--panel)); }
+.desp-svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.desp-svg .desp-vidrio { fill: color-mix(in srgb, var(--carpinteria) 10%, var(--panel)); stroke: var(--ink2); stroke-width: .5; }
+.desp-svg .desp-opaco { fill: color-mix(in srgb, var(--ink2) 45%, var(--panel)); stroke: var(--ink2); stroke-width: .5; }
+.desp-svg .desp-borde { fill: none; stroke: var(--ink); stroke-width: 1.2; }
+.desp-svg .desp-cara { cursor: pointer; }
+.desp-svg .desp-cara:hover .desp-borde, .desp-svg .desp-cara:focus .desp-borde { stroke: var(--elegido); stroke-width: 2; }
+.desp-svg .desp-cara.sel .desp-borde { stroke: var(--elegido); stroke-width: 3; }
+.desp-svg .desp-nombre { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.desp-svg .desp-medida { font-size: 10.5px; fill: var(--ink2); }
+.desp-abajo { display: grid; gap: 10px; }
+.desp-ajustes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--elegido); border-radius: 8px; }
+.desp-ajustes > b { flex-basis: 100%; font-size: 13px; }
+.desp-ajustes .nota-losa { flex-basis: 100%; margin: 0; font-size: 11.5px; color: var(--ink2); }
+.desp-ajustes button { font-size: 11.5px; padding: 3px 8px; min-height: 26px; }
+.desp-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.desp-tabla th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-bottom: 1px solid var(--rule); padding: 4px 6px; }
+.desp-tabla td { padding: 4px 6px; border-bottom: 1px solid var(--hair); }
+.desp-tabla .n { text-align: right; }
 .llave-sim.derecha { left: auto; right: 8px; top: 8px; bottom: auto; }
 .llave-sim.llave-simbolos { left: auto; right: 8px; top: auto; bottom: 8px; min-width: 0; max-width: 300px; }
 .llave-simbolos .simbolo { display: flex; gap: 4px; align-items: flex-start; margin-top: 2px; }

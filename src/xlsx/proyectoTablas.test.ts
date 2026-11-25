@@ -48,9 +48,18 @@ function completo(): Proyecto {
   p.cotas = [{ id: 'K1', tipo: 'h', d: 1.5, a: { x: -4, y: 2, ref: { id: 'M5', k: 1 } }, b: { x: 4, y: 2 } }];
   p.guias = [{ id: 'L1', t: 'recta', p: { x: 0, y: 0 }, ang: 90, eje: 'A', deEjes: true }, { id: 'L2', t: 'circulo', c: { x: 1, y: 1 }, r: 3 }];
   p.areasAuto = p.niveles[3].cota;
+  p.lofts = [{ id: 'LF1', cotas: [p.niveles[6].cota, p.niveles[2].cota], tipo: 'suave', giro: 15 }, { id: 'LF2', cotas: [p.niveles[9].cota, p.niveles[8].cota, p.niveles[7].cota], bl: false }];
   p.juntas = { 'M5|M6': 'pasaA', 'M8|M9': 'inglete' };
   p.exo = { tipo: 'E', separacion: 1.5, modulo: 5, columna: { b: 0.6, e: 0.04 }, diagonal: { b: 0.35, e: 0.016 }, viga: { b: 0.45, e: 0.025 }, E: 2.1e7, sigmaAdm: 14000, limiteH: 1000,
     uniones: { columna: 'articulada', base: 'articulada' }, viento: 'fachada', pesoPropio: false, pisoInicio: 2, mastil: { b: 1.2, e: 0.05 }, barras: { C3: { relA: true, sec: { b: 0.3, e: 0.0125 } }, D2: { quitar: true } }, nuevas: [{ clase: 'diagonal', a: [-9, 6], b: [9, 12] }] };
+  p.perfilTorre = { puntos: [{ h: 0, fx: 1 }, { h: 0.5, fx: 1.1, fy: 0.9, dx: 1 }, { h: 1, fx: 0.7 }], suave: true, giro: 30 };
+  p.carpinteriaRetiro = 0.3;
+  p.paneleria = { modulo: 1.5, antepecho: 0.9, intermedios: 1, regla: 'fijo', origen: 'inicio', desfase: 0.25, alabeoMax: 0.015, caras: [{ id: '270°·0°·8.0', tipo: 'opaca' }, { id: '0°·0°·10.0', modulo: 2 }] };
+  p.niveles[2].carpManual = true; p.niveles[2].carpVoladizo = true;
+  p.carpinteriaFija = true;
+  p.envolvente = { planta: [{ x: -9, y: -7 }, { x: 9, y: -7, b: 0.3 }, { x: 9, y: 7 }, { x: -9, y: 7 }], perfil: { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 0.8 }] }, planos: [{ id: 'P1', eje: 'x', a: { w: -10, z: 30 }, b: { w: 10, z: 50 } }] };
+  p.carpinteriaTramos = [{ desde: 0, modo: 'sin' }, { desde: 3, modo: 'losa', retiro: 0.3, forma: 'plana' }, { desde: 40, modo: 'continua', retiro: 0.25, forma: 'curva' }];
+  p.exo!.zonas = [{ desde: 0, tipo: 'E' }, { desde: 30, tipo: 'A', modulo: 6, vanos: 2 }];
   p.nombre = 'Torre «completa» & cía'; p.alumno = 'Ana';
   return p;
 }

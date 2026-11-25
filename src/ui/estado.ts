@@ -16,6 +16,10 @@ import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
 import { Historial } from './historial';
 import { Guardado } from './guardado';
+import { aplicarLofts } from '../engine/loft';
+import { aplicarPerfil } from '../engine/perfil_torre';
+import { aplicarCarpinteriaTramos } from '../engine/carpinteria';
+import { aplicarPlanosCorte } from '../engine/planos_corte';
 
 /**
  * Hasta noviembre de 2026 el motor y el armado se recordaban en el navegador (no en el proyecto), y el mismo archivo
@@ -42,7 +46,7 @@ export interface Calculo {
   /** los valores del método: la planilla tal cual (Planilla virgen), la guía, o el CIRSOC (planilla con el viento del 102-25) */
   valores: PlanillaRes;
   /** método CIRSOC: viento del 102-25, cálculo con ese viento y verificación del 201 de cada pieza */
-  cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[] };
+  cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[]; /** el exo en el cálculo (con el viento del 102-25) */ exo?: Record<'A' | 'B', import('../engine/exoReglamento').ExoDireccion> | null };
   /** método FEM: modelo, modos, casos de carga resueltos y reparto (cirsoc lleva el viento con las frecuencias del modelo) */
   fem?: ResultadoMetodoFem;
   /** método Combinado: los cuatro métodos con la misma torre, comparados (las etapas muestran la Planilla virgen) */
@@ -86,8 +90,8 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
     const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n)?.map(x => ({ M: x.M * fM(d), V: x.V * fV(d) })) ?? null : undefined);
     const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A')),
       ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'))];
-    const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel);
-    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif }, fem,
+    const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel, ex);
+    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif, exo: ex }, fem,
       controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, SJ, fem?.deriva, ex ?? undefined) };
   }
   return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,
@@ -118,7 +122,7 @@ class Estado {
   etapa = 'diseno';
   sub: Record<string, string> = {};
   /** capas de la vista 3D */
-  capas = { losas: true, viento: true, fuera: true, deformada: false, espectro: true, exo: true, tensiones: false, presiones: false, casoViento: 1 as 1 | 2 | 3 | 4, corteViento: null as number | null };
+  capas = { losas: true, fachada: false, viento: true, fuera: true, deformada: false, espectro: true, exo: true, tensiones: false, presiones: false, casoViento: 1 as 1 | 2 | 3 | 4, corteViento: null as number | null };
   /** grilla de discretización de 0,05 m en la planta: se ve y los puntos se ajustan a ella (apagada: ajuste a 0,01 m) */
   grillaFina = false;
   /** planta: los muros que se encuentran se dibujan unidos (juntas limpias) o cada uno con su rectángulo */
@@ -127,6 +131,8 @@ class Estado {
   roto3d: { exag: number | null; giro: number | null; original: boolean; animar: boolean; rotulos: boolean } = { exag: null, giro: null, original: true, animar: false, rotulos: true };
   /** plano para calcar en la planta (no se guarda en el proyecto): imagen, ancho real (m), centro (m) y opacidad */
   calco: { url: string; aspecto: number; ancho: number; x: number; y: number; opacidad: number } | null = null;
+  /** plano calcado en el corte de la torre (alzado o corte del proyecto): x = borde izquierdo y z = borde de arriba, en m */
+  calcoCorte: { url: string; aspecto: number; ancho: number; x: number; z: number; opacidad: number } | null = null;
   /** dibujo de CAD (DXF) de fondo en la planta: entidades en metros, capas (visible y uso) y nodos para el imán */
   cad: { archivo: string; unidad: string; omitidas: number; ents: import('../engine/cad').Entidad[]; capas: Record<string, { ver: boolean; uso: 'referencia' | 'muros' | 'losa' | 'carpintería' }>; nodos: { p: { x: number; y: number }; t: import('../engine/cad').TipoNodo; capa: string }[] } | null = null;
   /** grupo de dibujo que se está editando (null = la planta entera); el resto queda atenuado */
@@ -263,6 +269,12 @@ class Estado {
         : hechos.length ? `Copias vinculadas actualizadas: ${hechos.join(', ')}.` : '';
       if (this.avisoGrupos) { const e = typeof document !== 'undefined' ? document.getElementById('mensaje') : null; if (e) e.textContent = this.avisoGrupos; }
     }
+    // lofts de losas: las siluetas intermedias siguen a las losas sección
+    // perfil de la torre, después los lofts (mandan sobre los niveles que generan) y la carpintería que sigue a la losa
+    if (this.proyecto.perfilTorre) aplicarPerfil(this.proyecto);
+    if (this.proyecto.lofts?.length) aplicarLofts(this.proyecto);
+    if (this.proyecto.planosCorte?.length) aplicarPlanosCorte(this.proyecto);
+    if (this.proyecto.carpinteriaTramos?.length || (this.proyecto.carpinteriaRetiro !== null && this.proyecto.carpinteriaRetiro !== undefined)) aplicarCarpinteriaTramos(this.proyecto);
     // áreas de influencia al día (si se eligió un nivel tipo): se copian solas a «Área inf.»
     const pa = this.proyecto;
     if (pa.areasAuto !== undefined && pa.areasAuto !== null) {

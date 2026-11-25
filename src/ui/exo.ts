@@ -8,12 +8,13 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
-import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, nivelesOutrigger, columnasEfectivas, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
+import { armarCara, paraViento, anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, calcularExo, vientoDeCuarto, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, nivelesOutrigger, columnasEfectivas, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type ResultadoExo, type TipoExo } from '../engine/exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { plantaDeNivel } from '../engine/silueta';
 import type { PlanillaRes } from '../engine/planilla';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
+import { disenadorExo3D } from './exo3d';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, string | number> = {}, txt?: string) => {
@@ -27,6 +28,8 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Record<string, stri
 type ModoExo = 'N' | 'M' | 'Q' | 'sigma';
 let modo: ModoExo = 'N';
 let barraSel: string | null = null;
+/** qué se ve en el centro: el alzado de una cara o el diseñador 3D */
+let vistaExo: 'alzado' | '3d' = 'alzado';
 /** agregar barras: la clase elegida y el primer nudo tocado */
 let agregando: 'diagonal' | 'viga' | 'columna' | null = null;
 let nudoA: [number, number] | null = null;
@@ -153,29 +156,30 @@ export function entradaExo(dir: 'A' | 'B', def: ExoDef): EntradaExo | null {
   return d.entrada;
 }
 
-type DatosConEntrada = DatosExo & { entrada: EntradaExo };
 /**
- * memoria del exo por cálculo: el riel, el avance, el Resumen y el panel lo piden en cada redibujo y con una torre
- * grande (Citicorp, CIRSOC) cada pedido tarda segundos. Se guarda por cálculo (cambia al recalcular), por
- * viento y por la definición del exo (que se puede estar editando antes de recalcular).
+ * Memoria de los resultados del exo: la etapa 08, el riel, el avance, los controles y el informe piden lo mismo varias
+ * veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez (en una torre con muchas barras,
+ * decenas de segundos). Se guarda por cálculo (los valores de la planilla de ese cálculo), revisión del proyecto, viento
+ * y la ficha tal como está (texto): cualquier cambio de la ficha, aunque sea en el mismo objeto, se calcula de nuevo.
  */
-const memoDatos = new WeakMap<object, Map<string, { d: DatosConEntrada | null; error: string }>>();
-const memo301 = new WeakMap<object, ReturnType<typeof cirsoc301>>();
-export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): DatosConEntrada | null {
-  if (!def) return null;
-  // la clave es la asignación del cálculo: se crea en cada cálculo y sigue igual cuando al cálculo se le suman controles
-  const calc = estado.calculo?.asig as object | undefined;
-  if (!calc) return datosExoSinMemoria(dir, def);
-  let m = memoDatos.get(calc);
-  if (!m) { m = new Map(); memoDatos.set(calc, m); }
-  const clave = `${dir}|${estado.config.metodo}|${JSON.stringify(def)}`;
-  const hay = m.get(clave);
-  if (hay) { ultimoError = hay.error; return hay.d; }
-  const d = datosExoSinMemoria(dir, def);
-  m.set(clave, { d, error: ultimoError });
-  return d;
+const memoExo = new WeakMap<object, Map<string, { v: unknown; error: string }>>();
+function recordar<T>(clave: string, def: ExoDef, f: () => T): T {
+  const base = estado.calculo?.valores as object | undefined;
+  if (!base) return f();
+  let m = memoExo.get(base);
+  if (!m) { m = new Map(); memoExo.set(base, m); }
+  const k = `${estado.revision}|${estado.config.metodo}|${clave}|${JSON.stringify(def)}`;
+  const x = m.get(k);
+  if (x) { ultimoError = x.error; return x.v as T; }
+  const v = f();
+  m.set(k, { v, error: ultimoError });
+  return v;
 }
-function datosExoSinMemoria(dir: 'A' | 'B', def: ExoDef): DatosConEntrada | null {
+export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): (DatosExo & { entrada: EntradaExo }) | null {
+  if (!def) return null;
+  return recordar(`datos ${dir}`, def, () => datosExoSinMemoria(dir, def));
+}
+function datosExoSinMemoria(dir: 'A' | 'B', def: ExoDef): (DatosExo & { entrada: EntradaExo }) | null {
   ultimoError = '';
   try {
     const { asig } = estado.calculo, p = estado.proyecto;
@@ -196,30 +200,50 @@ function datosExoSinMemoria(dir: 'A' | 'B', def: ExoDef): DatosConEntrada | null
     const Jniv = rigidezPorNivel(p, asig.piezas, dir, rg.J).sort((a, b) => a.z - b.z);
     // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
     const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
-    const pl = plantaDeNivel(p, iPB);
-    const A = dir === 'A';
-    // ficha F: los planos de los brazos pasan por las caras del núcleo (a ± medio núcleo), no por las fachadas
-    const ancho = (A ? pl.L : pl.B) + 2 * def.separacion, t = def.tipo === 'F' ? Math.max(0.5, (def.nucleo ?? ancho / 3) / 2) : (A ? pl.B : pl.L) / 2 + def.separacion;
-    // caras que siguen la planta de cada nivel (Hancock): ancho y posición de la cara en cada cota
-    let anchos: number[] | undefined, ts: number[] | undefined;
-    if (def.anchoVariable) {
-      const plz = zs.map(z => { const i = p.niveles.findIndex(nv => Math.abs(nv.cota - z) < 1e-6); return plantaDeNivel(p, i >= 0 ? i : iPB); });
-      anchos = plz.map(q => (A ? q.L : q.B) + 2 * def.separacion);
-      ts = plz.map(q => (A ? q.B : q.L) / 2 + def.separacion);
-    }
-    // torre inclinada o corrida: cada nivel corrido (dx, dy) respecto de PB; las caras lo siguen
-    const nivEn = (z: number) => p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6);
-    const corrido = (f: (nv: typeof p.niveles[number]) => number | null | undefined) => { const v = zs.map(z => { const nv = nivEn(z); return (nv && f(nv)) || 0; }); return v.some(x => Math.abs(x) > 1e-9) ? v : undefined; };
-    const corr = corrido(nv => (A ? nv.dy : nv.dx)), tc = corrido(nv => (A ? nv.dx : nv.dy));
-    // con las losas en el exo, la tensión admisible del curso va con peso y sobrecarga (0,9 t/m², el «cargado» de la planilla)
-    // la cara perpendicular: la del cinturón en la ficha F (sus planos pasan por el núcleo)
-    const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
+    const { ancho, t, anchos, ts, corr, tc, anchosPerp } = anchosCara(dir, def, zs);
+    const r = calcularExo(paraViento(def, dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
     const h0 = zs[zs.length - 1] - zPB;
-    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr, anchosPerp } };
+    return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { dir, zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr, anchosPerp } };
   } catch (err) { ultimoError = err instanceof Error ? err.message : String(err); return null; }
 }
 let ultimoError = '';
+/** ancho de la cara (y su posición t) del viento dir, fijo o en cada cota si la cara sigue la planta */
+function anchosCara(dir: 'A' | 'B', def: ExoDef, zs: number[]) {
+  const p = estado.proyecto, iPB = p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1);
+  const pl = plantaDeNivel(p, iPB), A = dir === 'A';
+  // ficha F: los planos de los brazos pasan por las caras del núcleo (a ± medio núcleo), no por las fachadas
+  const ancho = (A ? pl.L : pl.B) + 2 * def.separacion, t = def.tipo === 'F' ? Math.max(0.5, (def.nucleo ?? ancho / 3) / 2) : (A ? pl.B : pl.L) / 2 + def.separacion;
+  // caras que siguen la planta de cada nivel (Hancock): ancho y posición de la cara en cada cota
+  let anchos: number[] | undefined, ts: number[] | undefined;
+  if (def.anchoVariable) {
+    const plz = zs.map(z => { const i = p.niveles.findIndex(nv => Math.abs(nv.cota - z) < 1e-6); return plantaDeNivel(p, i >= 0 ? i : iPB); });
+    anchos = plz.map(q => (A ? q.L : q.B) + 2 * def.separacion);
+    ts = plz.map(q => (A ? q.B : q.L) / 2 + def.separacion);
+  }
+  // torre inclinada o corrida: cada nivel corrido (dx, dy) respecto de PB; las caras lo siguen
+  const nivEn = (z: number) => p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6);
+  const corrido = (f: (nv: typeof p.niveles[number]) => number | null | undefined) => { const v = zs.map(z => { const nv = nivEn(z); return (nv && f(nv)) || 0; }); return v.some(x => Math.abs(x) > 1e-9) ? v : undefined; };
+  const corr = corrido(nv => (A ? nv.dy : nv.dx)), tc = corrido(nv => (A ? nv.dx : nv.dy));
+  // la cara perpendicular: la del cinturón en la ficha F (sus planos pasan por el núcleo)
+  const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
+  return { ancho, t, anchos, ts, corr, tc, anchosPerp };
+}
+/**
+ * la geometría de la cara sin calcularla (sirve aunque todavía sea un mecanismo, mientras se arma barra por barra):
+ * cotas sobre PB, ancho, posición de las caras y la cara armada
+ */
+export function geometriaExo(dir: 'A' | 'B', def: ExoDef | null | undefined = estado.proyecto.exo) {
+  if (!def) return null;
+  try {
+    const p = estado.proyecto, { asig } = estado.calculo, R: PlanillaRes = estado.calculo.valores;
+    const alt = datosAltura(p, R.viento, R.mnyq, asig.filaNivel, dir);
+    const iPB = p.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
+    const zs = [zPB, ...alt.filter(x => x.z > zPB + 1e-6).sort((a, b) => a.z - b.z).map(x => x.z)];
+    if (zs.length < 3) return null;
+    const g = anchosCara(dir, def, zs);
+    return { zs, ...g, tCaras: [-g.t, g.t], cara: armarCara(paraViento(def, dir), g.ancho, zs, 'cara', g.anchos, g.corr, { anchoPerp: g.anchosPerp?.[0] }) };
+  } catch { return null; }
+}
 
 /** el viento del 102-25 si el método sigue las reglas del CIRSOC (CIRSOC o FEM); si no, null (el de la planilla o la guía) */
 export function vientoReglamento(): Viento102 | null {
@@ -227,19 +251,15 @@ export function vientoReglamento(): Viento102 | null {
   return m === 'cirsoc' || m === 'fem' ? estado.calculo.fem?.viento ?? estado.calculo.cirsoc?.viento ?? null : null;
 }
 /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
-export function verif301(d: DatosConEntrada) {
-  const hay = memo301.get(d);
-  if (hay) return hay;
-  const r = verif301SinMemoria(d);
-  memo301.set(d, r);
-  return r;
+export function verif301(d: DatosExo & { entrada: EntradaExo }) {
+  return recordar(`301 ${d.dir} ${d.ancho} ${d.tCaras.join(' ')}`, d.def, () => verif301SinMemoria(d));
 }
-function verif301SinMemoria(d: DatosConEntrada) {
+function verif301SinMemoria(d: DatosExo & { entrada: EntradaExo }) {
   const en = d.entrada, reglamento = !!vientoReglamento();
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
   const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
-  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, corr: en.corr, anchosPerp: en.anchosPerp });
+  return cirsoc301(d.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, dir: d.dir, corr: en.corr, anchosPerp: en.anchosPerp });
 }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
 export function flechaExo(d: DatosExo): { u: number; lim: number; texto: string } {
@@ -388,8 +408,10 @@ export function panelExo(c: H) {
   const sw = h('label', { class: 'campo-linea' });
   const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = !!def;
   cb.addEventListener('change', () => estado.cambiar(() => { p.exo = cb.checked ? structuredClone(EXO_POR_DEFECTO) : null; }));
-  sw.append(cb, ' Agregar un exoesqueleto de acero por fuera de la fachada');
-  c.append(h('p', { class: 'nota' }, 'Una estructura de acero por fuera que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.'), sw);
+  sw.append(cb, ' Agregar un exoesqueleto de acero en el perímetro de la torre');
+  // dónde va: por fuera de la fachada (separación ≥ 0) o detrás de la piel (separación < 0, como los chevrones del Citicorp)
+  const adentro = !!def && def.separacion < 0;
+  c.append(h('p', { class: 'nota' }, `Una estructura de acero ${adentro ? `por dentro de la piel (${fmt(-def!.separacion, 2)} m detrás de la fachada)` : 'por fuera de la fachada'} que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.`), sw);
   if (!def) return;
   if (!exoEnElCalculo()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'guia' ? 'Guía' : estado.config.metodo === 'combinado' ? 'comparación' : 'Planilla'}: el método de la cátedra no tiene en cuenta el exoesqueleto. Acá es un estudio aparte: no cambia ningún resultado del método (tabiques, flexocompresión, resumen, desglose ni el Excel). Para que entre en el cálculo, elegí el método CIRSOC o FEM.`));
   if (def.notas?.length) {
@@ -430,10 +452,11 @@ export function panelExo(c: H) {
     const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
+  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; delete x.zonas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
   if (def.tipo !== 'F') campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; delete x.nuevas; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  if (def.zonas?.length) fo.append(h('p', { class: 'nota aviso-loft nota-ancha' }, `Hay ${def.zonas.length} zonas en altura: cada una tiene su ficha y su módulo (se editan en «Diseño 3D», en el centro). La ficha y el módulo de acá valen para lo que no diga cada zona.`));
   campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
@@ -684,9 +707,18 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
 export function centroExo(c: H, tam: Tam) {
   if (!estado.proyecto.exo) {
     c.append(h('div', { class: 'tarjeta-vacia' }, h('h3', {}, 'Sin exoesqueleto'), h('p', { class: 'nota' }, 'Tildá «Agregar un exoesqueleto» en el panel de la izquierda para ver cómo cambia la torre: la flecha, el reparto del viento y los esfuerzos de cada barra.'),
-      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
+      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F', 'L'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
     return;
   }
+  // vista: el alzado de una cara (con los diagramas) o el diseñador 3D de las cuatro caras
+  const segV = h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista del exoesqueleto' });
+  ([['alzado', 'Alzado de una cara', 'El flujo de fuerzas, los diagramas y el detalle de cada barra'], ['3d', 'Diseño 3D', 'Las cuatro caras alrededor de las losas: zonas en altura, plantillas, pintar secciones y agregar barras tocando la torre']] as const).forEach(([v, t, ti]) => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(vistaExo === v), title: ti }, t);
+    b.addEventListener('click', () => { vistaExo = v; estado.avisarPanel(); });
+    segV.append(b);
+  });
+  c.append(h('div', { class: 'fila-acciones' }, segV));
+  if (vistaExo === '3d') { c.append(disenadorExo3D()); return; }
   const d = datosExo();
   if (!d) { c.append(h('p', { class: 'error' }, ultimoError ? `No se pudo calcular: ${ultimoError} Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));

@@ -40,7 +40,8 @@ export function paquete(p: Proyecto, celdas: Record<string, Record<string, Valor
   const c: Paquete['celdas'] = {};
   for (const [hoja, cs] of Object.entries(celdas)) { c[hoja] = {}; for (const [ref, v] of Object.entries(cs)) c[hoja][ref] = plano(v); }
   // la torre completa en tablas legibles: con ellas la hoja alcanza sola para volver a armarla
-  const tablas = tablasProyecto(p).map(t => ({ nombre: t.nombre, filas: t.filas }));
+  // «T3D Lofts» va solo si hay lofts: los scripts de Sheets instalados antes no la conocen y rechazarían el paquete
+  const tablas = tablasProyecto(p).filter(t => t.nombre !== T.lofts || t.filas.length > 1).map(t => ({ nombre: t.nombre, filas: t.filas }));
   return { celdas: c, tablas, t3d: JSON.stringify(p) };
 }
 

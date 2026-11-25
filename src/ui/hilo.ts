@@ -28,7 +28,7 @@ function hilos(): Record<string, Hilo> {
       usa: [['fuerzas', 'Fuerzas', 'Q y Mv'], ['rigidez', 'Rigidez', 'el J de cada pieza']], pasa: [['flexion', 'Flexión', 'el momento de cada pieza']] },
     flexion: { hace: cirsoc() ? 'Cada muro en PB con el CIRSOC 201: las combinaciones mayoradas contra la resistencia (diagrama N-M) y la armadura.' : 'Cada pieza en PB: σ = −N/F ± M/W, la compresión contra el hormigón y la tracción que pide armadura.',
       usa: [['rototrasl', 'Rototrasl.', 'el momento de cada pieza'], ['diseno', 'Diseño', 'el peso que baja por cada muro']], pasa: [['resumen', 'Resumen', 'los controles']] },
-    exo: { hace: 'Una estructura de acero por fuera de la fachada que toma parte del viento: cuánto toma, cuánto baja la flecha y los esfuerzos de cada barra.',
+    exo: { hace: `Una estructura de acero ${(estado.proyecto.exo?.separacion ?? 0) < 0 ? 'por dentro de la piel' : 'por fuera de la fachada'} que toma parte del viento: cuánto toma, cuánto baja la flecha y los esfuerzos de cada barra.`,
       usa: [['fuerzas', 'Fuerzas', 'el viento'], ['rigidez', 'Rigidez', 'el J de los tabiques']], pasa: metodoCatedra() ? [] : [['flexion', 'Flexión', 'menos momento en los tabiques']] },
     carta: { hace: 'La hoja «M,NyQ» dibujada: el edificio, el viento, el corte, el momento y el peso de cada nivel.', usa: [['fuerzas', 'Fuerzas', 'M, N y Q de cada nivel']], pasa: [] },
     resumen: { hace: 'Todos los controles juntos. Lo que no verifica o pide atención lleva a la etapa donde se resuelve.', usa: [], pasa: [] },

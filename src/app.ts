@@ -26,6 +26,7 @@ import { usarConfig, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
+import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
@@ -126,9 +127,14 @@ function dibujarPanel() {
   requestAnimationFrame(() => resaltarEnTablas());
   p.scrollTop = y;
 }
+/** las opciones de cálculo en la etapa de diseño: plegadas por defecto (se recuerda en este navegador) */
+let calcAbierto = (() => { try { return localStorage.getItem('torre3d.calculoAbierto') === '1'; } catch { return false; } })();
+const guardarCalcAbierto = () => { try { localStorage.setItem('torre3d.calculoAbierto', calcAbierto ? '1' : '0'); } catch { /* */ } };
 function dibujarTira(e: Etapa) {
   const t = $('tira-centro');
   t.replaceChildren(h('span', { class: 'nombre' }, e.nombreCentro()), h('span', { class: 'espacio' }));
+  // las opciones de cálculo; en la etapa de diseño quedan plegadas en «Cálculo ▾» (se diseña sin pensar en el método)
+  const calc: HTMLElement[] = [];
   // método de cálculo (uno solo, guardado en el proyecto) y sus opciones: versión de la planilla y armado de piezas
   const cfg = estado.config;
   const segMet = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Método de cálculo', 'data-globo': `Método de cálculo|Cada método sigue sus reglas y se guarda con el proyecto (el archivo da lo mismo en cualquier computadora). ${METODOS[cfg.metodo].nombre}: ${METODOS[cfg.metodo].reglas}` });
@@ -139,7 +145,7 @@ function dibujarTira(e: Etapa) {
     b.addEventListener('click', () => { if (m.disponible && cfg.metodo !== k) estado.cambiarCalculo({ metodo: k }); });
     segMet.append(b);
   });
-  t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Método'), segMet));
+  calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Método'), segMet));
   if (cfg.metodo === 'planilla' || cfg.metodo === 'combinado') {
     const segV = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Versión de la planilla', 'data-globo': 'Versión de la planilla|«Anterior»: replica la planilla anterior del repositorio (20 filas en «J Tabiques paralelos»). «2025»: replica la planilla de la cátedra EDIFICIO_TORRE_1 (28 filas, qh máximo con IF, W del tubo = J/(D/2), sumas completas en Rototrasl.). Verificadas celda por celda con LibreOffice.' });
     ([['actual', 'Anterior'], ['nuevo', '2025 (cátedra)']] as const).forEach(([k, txt]) => {
@@ -147,7 +153,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.version !== k) estado.cambiarCalculo({ version: k }); });
       segV.append(b);
     });
-    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Planilla'), segV));
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Planilla'), segV));
   }
   if (cfg.metodo === 'cirsoc' || cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segN = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Verificación del hormigón', 'data-globo': 'Verificación CIRSOC 201|«Simple»: lo que se hace a mano: compresión con el método empírico (14.5), cordones de borde para la flexión, corte y cuantías mínimas. «Completa»: diagrama de interacción N-M de cada muro con todas las combinaciones, la cuantía necesaria, corte y cuantías.' });
@@ -156,7 +162,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.verificacion !== k) estado.cambiarCalculo({ verificacion: k }); });
       segN.append(b);
     });
-    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Verificación'), segN));
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Verificación'), segN));
   }
   if (cfg.metodo === 'fem' || cfg.metodo === 'combinado') {
     const segT = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Teoría de las piezas', 'data-globo': 'Piezas del modelo FEM|«Timoshenko»: cada pieza se deforma por flexión y por el corte de sus almas (lo más real en tabiques cortos y altos). «Euler»: solo flexión, como la planilla: con piezas de toda la altura da el mismo reparto que la rototraslación.' });
@@ -165,7 +171,7 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.teoria !== k) estado.cambiarCalculo({ teoria: k }); });
       segT.append(b);
     });
-    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Piezas'), segT));
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Piezas'), segT));
   }
   if (cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado') {
     const segA = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Armado de piezas', 'data-globo': 'Armado de piezas|«Cátedra»: método simplificado de la cátedra (sección 7): alas apiladas con el ancho del muro más corto y la suma de los espesores, almas a cada lado del baricentro unidas extremo con extremo con el espesor más fino. «App»: el armado de la app (alas que conservan el área, posición por área). No cambia los muros: se puede volver atrás.' });
@@ -174,7 +180,16 @@ function dibujarTira(e: Etapa) {
       b.addEventListener('click', () => { if (cfg.armado !== k) estado.cambiarCalculo({ armado: k }); });
       segA.append(b);
     });
-    t.append(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Armado'), segA));
+    calc.push(h('span', { class: 'par-ctl' }, h('span', { class: 'nota chica' }, 'Armado'), segA));
+  }
+  if (e.id === 'diseno' && !calcAbierto) {
+    const res = [METODOS[cfg.metodo]?.corto, cfg.metodo === 'planilla' || cfg.metodo === 'combinado' ? (cfg.version === 'nuevo' ? '2025' : 'Anterior') : null, cfg.metodo === 'planilla' || cfg.metodo === 'guia' || cfg.metodo === 'combinado' ? (cfg.armado === 'app' ? 'Armado App' : 'Cátedra') : null].filter(Boolean).join(' · ');
+    const bc = h('button', { type: 'button', class: 'chico b-calculo', 'aria-expanded': 'false', 'data-globo': 'Opciones de cálculo|Método, versión de la planilla y armado de piezas. Mientras se diseña no hace falta tocarlas: quedan como las dejó el docente o el proyecto.' }, `Cálculo: ${res} ▾`);
+    bc.addEventListener('click', () => { calcAbierto = true; guardarCalcAbierto(); dibujarTira(e); });
+    t.append(bc);
+  } else {
+    t.append(...calc);
+    if (e.id === 'diseno') { const bx = h('button', { type: 'button', class: 'chico b-calculo', 'aria-expanded': 'true' }, 'Plegar ▴'); bx.addEventListener('click', () => { calcAbierto = false; guardarCalcAbierto(); dibujarTira(e); }); t.append(bx); }
   }
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Dirección del viento', 'data-globo': 'Viento A y B|El viento A empuja la cara mayor (ancho B) y lo toman los tabiques paralelos (hoja «J Tabiques paralelos»). El viento B empuja la cara menor y lo toman los ortogonales.' });
   (['A', 'B'] as const).forEach(dd => {
@@ -218,7 +233,7 @@ function dibujarAvance() {
 function dibujarCapas() {
   const c = $('capas');
   type Interruptor = Exclude<keyof typeof estado.capas, 'casoViento' | 'corteViento'>;
-  const capas: [Interruptor, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [Interruptor, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [Interruptor, string, string]] : [])];
+  const capas: [Interruptor, string, string][] = [['losas', 'Losas', 'var(--ink2)'], ['fachada', 'Fachada', 'var(--dim)'], ['viento', 'Viento', 'var(--carga)'], ['fuera', 'Fuera del cálculo', 'var(--dim)'], ...(estado.proyecto.exo ? [['exo', 'Exoesqueleto', 'var(--r-rototrasl)'] as [Interruptor, string, string]] : []), ['deformada', 'Deformada (exagerada)', 'var(--deformada)'], ...(estado.capas.deformada ? [['espectro', 'Espectro', 'var(--deformada)'] as [Interruptor, string, string]] : [])];
   c.replaceChildren(...capas.map(([k, t, col]) => {
     const b = h('button', { type: 'button', class: 'chip-capa', 'aria-pressed': String(estado.capas[k]) }, h('i', {}), t);
     b.style.setProperty('--c', col);
@@ -592,6 +607,7 @@ window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.r
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos). Es el de la cátedra, para Planilla y Guía: con CIRSOC la deriva de servicio de la azotea pasa 1/500 y el Resumen lo marca.'); });
 $('b-ejemplo-citicorp').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorp()); cerrarMenus(); mensaje('Cargado el Citicorp Center: núcleo, supercolumnas en la base abierta y el exoesqueleto de chevrones (ficha E) en la etapa 08 · Exoesqueleto.'); });
+$('b-ejemplo-citicorp-fachada').addEventListener('click', () => { plantillaAbierta = null; estado.capas.fachada = true; reemplazarConCopia(ejemploCiticorpFachada()); cerrarMenus(); mensaje('Cargado el Citicorp Center con su forma y su fachada: la plaza abierta, carpintería por piso hasta el cajón de la corona y, arriba, la envolvente con su techo a 45°. El exoesqueleto va adentro de la piel y la corona tiene su reticulado bajo la pendiente (etapa 08). Mirá la capa «Fachada» en el 3D y el alzado desplegado (Carpintería → Panelería). Abre con el método CIRSOC, que cuenta el exo (con Planilla o Guía el exo es un estudio aparte y los tabiques solos no alcanzan).'); });
 // torres de prueba: diez plantas variadas armadas con las piezas tipo (se usan para controlar la app)
 TORRES_PRUEBA.forEach((t, k) => {
   const [cod, desc] = t.nombre.split(' · ');
@@ -610,7 +626,20 @@ $('b-ejemplo-gherkin').addEventListener('click', () => { plantillaAbierta = null
 $('b-ejemplo-onterie').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploOnterie()); cerrarMenus(); mensaje('Cargado el Onterie Center: tubo de hormigón con X de paneles (etapa 08). La planta es supuesta: lo dice la etapa 08.'); });
 $('b-ejemplo-asim').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploAsimetrico()); cerrarMenus(); mensaje('Cargado el Anexo de la guía: T5 aislado, la planta rota. Es un ejemplo solo para la Planilla: con otro método no está dimensionado (con CIRSOC no verifican la deriva ni la armadura de T1, T3 y T6).'); });
 // proyecto nuevo: armado de la cátedra por defecto (lo que enseña la guía); los archivos viejos siguen con el que tenían
-$('b-nuevo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia({ ...proyectoVacio(), calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } }); estado.etapa = 'diseno'; estado.sub.diseno = 'Niveles'; dibujarTodo(); cerrarMenus(); });
+$('b-torre-nueva').addEventListener('click', () => $('b-nuevo').click());
+$('b-nuevo').addEventListener('click', async () => {
+  cerrarMenus();
+  // documento en blanco: pisos y altura; la losa sale rectangular de 20 × 16 y se cambia en Planta → Losa → «Losa desde cero»
+  const r = await pedirTexto('Proyecto nuevo, en blanco', 'Cuántos pisos sobre PB y qué altura tiene cada uno, como «10 × 3» (diez pisos de 3 m). Después: la forma de la losa (Planta → Losa → «Losa desde cero»), la carpintería (Losa → Carpintería) y los muros (Dibujar, Insertar o Colocar).', '10 × 3', 'Crear');
+  if (r === null) return;
+  const m = /^\s*(\d+)\s*[x×*]\s*([\d.,]+)\s*$/i.exec(r);
+  const n = m ? Math.max(1, Math.min(200, +m[1])) : 10, hp = m ? Math.max(2, Math.min(10, +m[2].replace(',', '.'))) : 3;
+  const base = proyectoVacio();
+  const niveles = Array.from({ length: n + 1 }, (_, k) => { const piso = n - k, cota = +(piso * hp).toFixed(2); return piso === n ? { nombre: 'Azotea', cota, B: 20, L: 16 } : piso === 0 ? { nombre: 'PB', cota: 0 } : { nombre: `${piso}º`, cota }; });
+  plantillaAbierta = null;
+  reemplazarConCopia({ ...base, niveles, calculo: { metodo: 'planilla', version: 'actual', armado: 'catedra', formulas: VERSION_FORMULAS } });
+  estado.etapa = 'diseno'; dibujarTodo();
+});
 $('b-guardar').addEventListener('click', () => { descargarProyecto(); cerrarMenus(); });
 $('b-tabla').addEventListener('click', () => { void descargarTabla(); cerrarMenus(); });
 $('b-comparacion').addEventListener('click', () => { cerrarMenus(); if (resultadosListos('escribir la comparación de métodos')) void descargarComparacion(); });

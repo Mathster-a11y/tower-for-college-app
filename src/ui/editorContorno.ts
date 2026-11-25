@@ -16,7 +16,7 @@ import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
 import type { Punto, Vertice } from '../engine/silueta';
-import { arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
+import { arcoComplementario, arcoConCentro, arcoConRadioMismoLado, geometriaArco, invertirArco, arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
@@ -64,7 +64,7 @@ export function montarEditorContorno(api: ApiPlanta) {
   };
   // valores de las herramientas
   const her = { r: 0.3, d: 0.2, partes: 2, desf: 0.1, giro: 15, escala: 1.25, lados: 6, forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse' };
-  let arrastre: { tipo: 'vertice' | 'lado' | 'c1' | 'c2' | 'arco'; anillo: number; i: number; base: Perfil } | null = null;
+  let arrastre: { tipo: 'vertice' | 'lado' | 'c1' | 'c2' | 'arco' | 'centro'; anillo: number; i: number; base: Perfil } | null = null;
   /**
    * otro contorno (no un muro): la losa o la carpintería de un nivel. Sin huecos; los arcos se guardan exactos
    * (bulge) y las Bézier, como puntos de la curva.
@@ -192,7 +192,12 @@ export function montarEditorContorno(api: ApiPlanta) {
   const punteroEn = (ev: PointerEvent) => api.pegar(ev).p;
   svg.addEventListener('pointerdown', ev => {
     if (!id || !P || ev.button !== 0) return;
-    const h = (ev.target as Element).closest?.('[data-h]') as SVGElement | null;
+    // la manija tocada; si encima había otro dibujo (un rótulo, la flecha del viento), la más cercana a menos de 12 px (22 con el dedo)
+    let h = (ev.target as Element).closest?.('[data-h]') as SVGElement | null;
+    if (!h) {
+      let dmin = ev.pointerType === 'touch' ? 22 : 12;            // el dedo es menos preciso que el mouse o el lápiz
+      svg.querySelectorAll<SVGElement>('.capa-contorno [data-h]').forEach(e => { const r = e.getBoundingClientRect(), d = Math.hypot(ev.clientX - (r.left + r.right) / 2, ev.clientY - (r.top + r.bottom) / 2); if (d < dmin) { dmin = d; h = e; } });
+    }
     ev.preventDefault(); ev.stopPropagation();
     if (!h) { sel = null; tramo = null; armar(); api.dibujar(); return; }
     const [tipo, k, i] = h.getAttribute('data-h')!.split(':');
@@ -206,7 +211,7 @@ export function montarEditorContorno(api: ApiPlanta) {
       if (!a.b && !a.c1) pendiente = { anillo: kk, i: ii, sx: ev.clientX, sy: ev.clientY };
       else arrastre = { tipo: 'arco', anillo: kk, i: ii, base: clonar(P) };
     } else {
-      arrastre = { tipo: tipo as 'vertice' | 'lado' | 'c1' | 'c2' | 'arco', anillo: kk, i: ii, base: clonar(P) };
+      arrastre = { tipo: tipo as 'vertice' | 'lado' | 'c1' | 'c2' | 'arco' | 'centro', anillo: kk, i: ii, base: clonar(P) };
       if (tipo === 'vertice') { sel = { anillo: kk, i: ii }; tramo = null; } else { tramo = { anillo: kk, i: ii }; sel = null; }
     }
     try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
@@ -229,6 +234,11 @@ export function montarEditorContorno(api: ApiPlanta) {
     }
     else if (a.tipo === 'lado') P = moverLado(a.base, a.anillo, a.i, q);
     else if (a.tipo === 'arco') P = arcoPor(a.base, a.anillo, a.i, q);
+    else if (a.tipo === 'centro') {
+      // el centro corre sobre la mediatriz de la cuerda: así el arco sigue pasando por sus dos extremos
+      const g = geometriaArco(anilloDe(a.base, a.anillo), a.i);
+      if (g) { const p = clonar(a.base), d = (q.x - g.mx) * g.nx + (q.y - g.my) * g.ny; const vs = arcoConCentro(anilloDe(p, a.anillo), a.i, d); if (a.anillo === 0) p.v = vs; else p.huecos![a.anillo - 1] = vs; P = p; }
+    }
     else {
       const p = clonar(a.base), vs = anilloDe(p, a.anillo), n = vs.length, v = vs[a.i];
       v[a.tipo] = { x: r4(q.x), y: r4(q.y) };
@@ -354,7 +364,18 @@ export function montarEditorContorno(api: ApiPlanta) {
       if (!a0.b && !a0.c1) panel.append(fila(
         campo('largo', md.largo, x => aplicarAnillo(k, vs => ladoCon(vs, i, x), `Lado de ${fmt(x)} m (queda fijo su primer vértice).`), 52),
         campo('ángulo', md.angulo, x => aplicarAnillo(k, vs => ladoCon(vs, i, md.largo, x), `Lado a ${fmt(x)}°.`), 44, '°')));
-      else if (a0.b) panel.append(fila(mk('span', `arco de ${fmt(md.largo)} m`), campo('radio', md.radio ?? 0, x => aplicarAnillo(k, vs => arcoConRadio(vs, i, x), `Arco de radio ${fmt(x)} m.`), 52)));
+      else if (a0.b) {
+        // arco: radio y centro sin mover los extremos (el centro siempre queda sobre la mediatriz de la cuerda)
+        const g = geometriaArco(anilloDe(P, k), i)!;
+        const aCentro = (x: number, y: number) => aplicarAnillo(k, vs => arcoConCentro(vs, i, (x - g.mx) * g.nx + (y - g.my) * g.ny), 'Centro del arco movido sobre la mediatriz (los extremos no se mueven).');
+        panel.append(
+          fila(mk('span', `arco de ${fmt(md.largo)} m · cuerda ${fmt(g.c)} m${g.mayor ? ' · arco mayor' : ''}`)),
+          fila(campo('radio', Math.round(g.r * 1000) / 1000, x => aplicarAnillo(k, vs => arcoConRadioMismoLado(vs, i, x), `Arco de radio ${fmt(x)} m (los extremos quedan).`), 64)),
+          fila(campo('centro x', Math.round(g.cx * 1000) / 1000, x => aCentro(x, g.cy), 60), campo('y', Math.round(g.cy * 1000) / 1000, y => aCentro(g.cx, y), 60)),
+          fila(boton('Invertir', 'La panza del arco del otro lado de la cuerda (mismo radio)', () => aplicarAnillo(k, vs => invertirArco(vs, i), 'Arco invertido.')),
+            boton(g.mayor ? 'Arco menor' : 'Arco mayor', 'El mismo radio, con el centro del otro lado de la cuerda: la parte chica o la grande del círculo', () => aplicarAnillo(k, vs => arcoComplementario(vs, i), g.mayor ? 'Arco menor.' : 'Arco mayor.'))),
+          mk('p', 'Arrastrá el centro (✛) o el medio del arco (○): los extremos no se mueven. El centro corre por la mediatriz de la cuerda (la línea de puntos); si escribís otro punto, se lleva a la mediatriz.', 'col-nota'));
+      }
       if (!a0.b && !a0.c1) panel.append(fila(campo('en', her.partes, x => { her.partes = Math.max(2, Math.round(x)); }, 32, 'partes'), boton('Dividir', 'Parte el lado en partes iguales (agrega vértices)', () => aplicarAnillo(k, vs => dividirLado(vs, i, her.partes), `Lado dividido en ${her.partes}.`), false, 'dividir')),
         fila(campo('r', her.r, x => { her.r = x; }), boton('Arco por radio', 'Convierte el lado en un arco del radio escrito (hacia afuera; el radio es al menos la mitad del lado)', () => aplicarAnillo(k, vs => arcoConRadio(vs, i, her.r), `Arco de radio ${fmt(her.r)} m.`), false, 'arcoRadio')));
     }
@@ -433,6 +454,21 @@ export function montarEditorContorno(api: ApiPlanta) {
         if (Ls < 30) { const kc = propiedades({ v: vs }), ux = hx - X(kc.xg), uy = hy - Y(kc.yg), L = Math.hypot(ux, uy) || 1, off = (k === 0 ? 16 : -16); g.append(el('line', { x1: hx, y1: hy, x2: hx + (ux / L) * off, y2: hy + (uy / L) * off, class: 'ctrl-lin' })); hx += (ux / L) * off; hy += (uy / L) * off; }
         g.append(el('circle', { cx: hx, cy: hy, r: 5, class: 'h-lado' + (esT ? ' sel' : ''), 'data-h': `${a.b ? 'arco' : 'lado'}:${k}:${i}` }));
       });
+      // arco elegido: centro (se arrastra sobre la mediatriz), radios a los extremos y la mediatriz de la cuerda
+      if (tramo && tramo.anillo === k && vs[tramo.i]?.b) {
+        const ga = geometriaArco(vs, tramo.i);
+        if (ga) {
+          const a = vs[tramo.i], b = vs[(tramo.i + 1) % vs.length], L = Math.max(ga.r, ga.c) * 1.2;
+          g.append(el('line', { x1: X(ga.mx - ga.nx * L), y1: Y(ga.my - ga.ny * L), x2: X(ga.mx + ga.nx * L), y2: Y(ga.my + ga.ny * L), class: 'mediatriz' }),
+            el('line', { x1: X(ga.cx), y1: Y(ga.cy), x2: X(a.x), y2: Y(a.y), class: 'radio-arco' }), el('line', { x1: X(ga.cx), y1: Y(ga.cy), x2: X(b.x), y2: Y(b.y), class: 'radio-arco' }),
+            el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b.x), y2: Y(b.y), class: 'mediatriz' }));
+          const cx = X(ga.cx), cy = Y(ga.cy);
+          const hc = el('g', { class: 'h-centro', 'data-h': `centro:${k}:${tramo.i}` });
+          hc.append(el('circle', { cx, cy, r: 9, class: 'h-centro-fondo' }), el('line', { x1: cx - 7, y1: cy, x2: cx + 7, y2: cy }), el('line', { x1: cx, y1: cy - 7, x2: cx, y2: cy + 7 }));
+          const t = el('text', { x: cx + 10, y: cy - 8, class: 'rot-centro' }); t.textContent = `r = ${fmt(ga.r)} m`; hc.append(t);
+          g.append(hc);
+        }
+      }
       vs.forEach((a, i) => { const s = sel && sel.anillo === k && sel.i === i; g.append(el('rect', { x: X(a.x) - 5, y: Y(a.y) - 5, width: 10, height: 10, class: 'h-vert' + (s ? ' sel' : ''), 'data-h': `vertice:${k}:${i}` })); });
     });
     svg.append(g);

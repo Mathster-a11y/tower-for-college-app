@@ -19,7 +19,7 @@
  */
 import type { RotoRes } from './planilla';
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
@@ -27,6 +27,7 @@ export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
   F: { nombre: 'Núcleo con outriggers', texto: 'Brazos reticulados de un piso de alto que salen del núcleo de tabiques hacia las columnas del perímetro (con un cinturón, todas las de la cara): cuando el núcleo se flexiona, las columnas lo frenan con un par de fuerzas (Taipei 101, Shanghai Tower).' },
   E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
+  L: { nombre: 'Libre (barra por barra)', texto: 'Sin dibujo armado: cada columna, diagonal y viga se dibuja a mano entre nudos de la cara (en «Diseño 3D»). Sirve sola o como una zona entre otras.' },
 };
 
 /** sección de una barra: tubo cuadrado b × e (m) */
@@ -127,6 +128,12 @@ export interface ExoDef {
   /** de dónde sale cada número del ejemplo (fuentes y supuestos), para mostrar en la etapa 08 */
   notas?: string[];
   /**
+   * zonas en altura: desde la cota «desde» (m) hacia arriba, otra tipología (y su módulo y vanos). Vacío = toda la
+   * torre con «tipo». La primera zona arranca en PB aunque su «desde» sea más alto. Entre zonas va una viga de
+   * transición que ata los dos dibujos.
+   */
+  zonas?: ZonaExo[];
+  /**
    * solo para el dibujo (3D y planta): el diagrid sobre una planta circular, como el de 30 St Mary Axe: «nudos» nudos
    * por anillo, anillos en los bordes y en la mitad de cada módulo (cortes), cada uno girado media separación respecto
    * del de abajo, sobre la fachada (el radio sale de la silueta de cada nivel). El cálculo sigue con las caras planas
@@ -134,11 +141,51 @@ export interface ExoDef {
    */
   circular?: { nudos: number; /** el diagrid se dibuja hasta esta cota; arriba, la carpintería (una cúpula de vidrio) */ hasta?: number };
 }
+export interface ZonaExo { desde: number; tipo: TipoExo; modulo?: number | null; vanos?: number | null }
+/** las zonas de la torre con sus niveles (índices de zs): sin zonas, una sola con la ficha */
+export function zonasDe(def: ExoDef, zs: number[]): { tipo: TipoExo; kI: number; kF: number; modulo: number; vanos?: number; desde: number }[] {
+  const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
+  if (!def.zonas?.length) return [{ tipo: def.tipo, kI: 0, kF: n, modulo: m, vanos: def.vanos, desde: zs[0] }];
+  // cada zona arranca en el nivel más cercano a su cota; las que caen en el mismo nivel o arriba de todo se descartan
+  const lista = [...def.zonas].sort((a, b) => a.desde - b.desde).map(z => {
+    let k = 0; zs.forEach((zz, i) => { if (Math.abs(zz - z.desde) < Math.abs(zs[k] - z.desde)) k = i; });
+    return { z, k };
+  });
+  lista[0].k = 0;
+  const ok = lista.filter((x, i) => x.k < n && (i === 0 || x.k > lista[i - 1].k)).filter((x, i, a) => i === a.length - 1 || a[i + 1].k > x.k);
+  return ok.map((x, i) => ({ tipo: x.z.tipo, kI: x.k, kF: i + 1 < ok.length ? ok[i + 1].k : n, modulo: Math.max(1, Math.round(x.z.modulo ?? m)), vanos: x.z.vanos ?? def.vanos, desde: zs[x.k] }));
+}
 export interface LosasExo { franja: number; qD?: number; qL?: number }
 /** peso de las losas y sobrecarga por m² (t/m²): los mismos de la planilla (0,7 descargado, 0,9 cargado) */
 export const LOSA_QD = 0.7, LOSA_QL = 0.2;
 export interface TramoSeccion { clase: ClaseBarra | 'mastil'; desde: number; sec: Seccion }
-export interface BarraNueva { clase: ClaseBarra; a: [number, number]; b: [number, number]; sec?: Seccion; relA?: boolean; relB?: boolean }
+export interface BarraNueva {
+  clase: ClaseBarra; a: [number, number]; b: [number, number]; sec?: Seccion; relA?: boolean; relB?: boolean;
+  /** s de a y b como fracción del medio ancho de la cara en su cota (−1 = un borde, 0 = el medio, 1 = el otro): la barra cae en el mismo lugar en las caras de los dos vientos aunque tengan distinto ancho */
+  enFraccion?: boolean;
+  /** solo en las caras de un viento: A (las caras que ve el viento A) o B; vacío = en las de los dos */
+  dir?: 'A' | 'B' | null;
+  /** solo en una de las dos caras del viento: la de +t (1: norte o este) o la de −t (−1: sur u oeste); vacío = en las dos */
+  lado?: 1 | -1 | null;
+  /**
+   * ala: el mástil (supercolumna) de la cara perpendicular, puesto en el borde de esta cara (media sección, como en la
+   * ficha E): trabaja con la cara pero se dibuja y se pesa con la otra
+   */
+  ala?: boolean;
+  /** (interno) en las caras de este viento no va: se saltea sin cambiar la numeración N1, N2… */
+  fuera?: boolean;
+}
+/** el exo para la cara de posición t (lado +1 o −1): las barras a mano del otro lado quedan afuera (con su número) */
+export function paraLado(def: ExoDef, t: number): ExoDef {
+  if (!def.nuevas?.some(n => n.lado)) return def;
+  const sg = t >= 0 ? 1 : -1;
+  return { ...def, nuevas: def.nuevas.map(n => (n.lado && n.lado !== sg ? { ...n, fuera: true } : n)) };
+}
+/** el exo para las caras del viento dir: las barras a mano de solo el otro viento quedan afuera (con su número) */
+export function paraViento(def: ExoDef, dir?: 'A' | 'B' | null): ExoDef {
+  if (!dir || !def.nuevas?.some(n => n.dir)) return def;
+  return { ...def, nuevas: def.nuevas.map(n => (n.dir && n.dir !== dir ? { ...n, fuera: true } : n)) };
+}
 export const EXO_POR_DEFECTO: ExoDef = {
   tipo: 'D', separacion: 1, modulo: 4,
   columna: { b: 0.5, e: 0.03 }, diagonal: { b: 0.3, e: 0.0125 }, viga: { b: 0.4, e: 0.02 },
@@ -160,6 +207,8 @@ export interface Barra {
   /** barra de borde (sus dos nudos en las esquinas): ahí se cuelga la fachada */
   borde: boolean;
   carga?: CargaBarra;
+  /** ala de la ficha E: la mitad del mástil de una cara perpendicular (su acero se cuenta con esa cara) */
+  deMastil?: boolean;
   /** parte de la sección que representa (ala: la mitad del mástil de una cara perpendicular, compartido por dos caras) */
   fraccion?: number;
   /** ficha F: el núcleo de tabiques (y sus brazos rígidos hasta el borde): no es del exo, no se verifica ni se pesa */
@@ -211,7 +260,7 @@ export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
   return [...new Set(pedidos.filter(k => k >= 1 && k <= n))].sort((a, b) => a - b);
 }
 export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[], op: { /** ficha F: sin los brazos (todavía no conectados) */ sinBrazos?: boolean; /** ficha F: ancho de la cara perpendicular (la del cinturón) */ anchoPerp?: number } = {}): Cara {
-  const n = zs.length - 1, m = Math.max(1, Math.round(def.modulo));
+  const n = zs.length - 1;
   /**
    * centro de la cara en el nivel k: en una torre inclinada o corrida (Diseño → Perfil) cada nivel se corre respecto
    * de PB y las columnas de esquina lo siguen (quedan inclinadas). La ficha E (mástil central) no lo usa.
@@ -262,132 +311,153 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     const rel = un[clase] === 'articulada';
     barras.push({ id: `${clase[0].toUpperCase()}${barras.filter(x => x.clase === clase).length + 1}`, clase, a, b, A: p.A, I: p.I, sec: s, relA: rel, relB: rel, borde: enBorde(a) && enBorde(b) });
   };
-  // niveles con nudos del exo (los bordes de cada módulo)
-  const k0 = def.tipo === 'E' ? Math.min(n - 1, Math.max(0, Math.round(def.pisoInicio ?? 0))) : 0;
-  const mods: number[] = [];
-  const porCortes = (def.cortes ?? []).map(z => zs.findIndex(zz => Math.abs(zz - z) < 1e-3)).filter((k, i, a) => k >= 0 && a.indexOf(k) === i).sort((a, b) => a - b);
-  if (porCortes.length >= 2) mods.push(...porCortes);
-  else {
-    for (let k = k0; k <= n; k += m) mods.push(k);
-    if (mods[mods.length - 1] !== n) mods.push(n);
-    // un último módulo de un solo piso se junta con el anterior (en el diagrid el diamante necesita al menos 2 pisos)
-    if (mods.length > 2 && mods[mods.length - 1] - mods[mods.length - 2] < 2) mods.splice(mods.length - 2, 1);
-  }
-  const kTope = mods[mods.length - 1];
-  if (def.tipo === 'A') {
-    // diagrid: nudos en los bordes y en el centro; diamantes de «módulo» pisos de alto
-    // con varios vanos: en cada borde de módulo, nudos en el centro de cada vano; a media altura, en los límites de los vanos
-    const nb = Math.max(1, Math.round(def.pasoH ? anchoK(mods[0]) / def.pasoH : (def.vanos ?? 1)));
-    const centro = (i: number, k: number) => S0(k) + ((i + 0.5) * anchoK(k)) / nb, limite = (i: number, k: number) => S0(k) + (i * anchoK(k)) / nb;
-    for (let j = 0; j + 1 < mods.length; j++) {
-      const a0 = mods[j], a1 = mods[j + 1], km = Math.round((a0 + a1) / 2);
-      for (let i = 0; i < nb; i++) {
-        const C0 = nudo(centro(i, a0), a0), Lm = nudo(limite(i, km), km), Rm = nudo(limite(i + 1, km), km), C1 = nudo(centro(i, a1), a1);
-        barra('diagonal', C0, Lm); barra('diagonal', C0, Rm); barra('diagonal', Lm, C1); barra('diagonal', Rm, C1);
+  /**
+   * el dibujo de una tipología entre los niveles kI y kF (toda la torre o una zona). Las zonas comparten los nudos de
+   * sus bordes: así una zona de diagrid arriba de una de cruces arranca de las mismas esquinas.
+   */
+  let nF = 0;
+  /** nudos propios de las alas (mástil de la cara perpendicular), que no se comparten con las barras dibujadas */
+  const nudosAla = new Set<number>();
+  const zonal = !!def.zonas?.length;
+  const patron = (tipo: TipoExo, kI: number, kF: number, m: number, vanos: number | undefined, pisoIni: number, cortes: number[]) => {
+    if (tipo === 'L' || tipo === 'F') return;          // libre: solo las barras dibujadas a mano (la F, núcleo con outriggers, va aparte: toda la torre)
+    // niveles con nudos del exo (los bordes de cada módulo)
+    const k0 = tipo === 'E' ? Math.min(kF - 1, Math.max(kI, kI + Math.round(pisoIni))) : kI;
+    const mods: number[] = [];
+    const porCortes = cortes.map(z => zs.findIndex(zz => Math.abs(zz - z) < 1e-3)).filter((k, i, a) => k >= kI && k <= kF && a.indexOf(k) === i).sort((a, b) => a - b);
+    if (porCortes.length && zonal) { if (porCortes[0] !== kI) porCortes.unshift(kI); if (porCortes[porCortes.length - 1] !== kF) porCortes.push(kF); }
+    if (porCortes.length >= 2) mods.push(...porCortes);
+    else {
+      for (let k = k0; k <= kF; k += m) mods.push(k);
+      if (mods[mods.length - 1] !== kF) mods.push(kF);
+      // un último módulo de un solo piso se junta con el anterior (en el diagrid el diamante necesita al menos 2 pisos)
+      if (mods.length > 2 && mods[mods.length - 1] - mods[mods.length - 2] < 2) mods.splice(mods.length - 2, 1);
+    }
+    const kTope = mods[mods.length - 1];
+    if (tipo === 'A') {
+      // diagrid: nudos en los bordes y en el centro; diamantes de «módulo» pisos de alto
+      // con varios vanos: en cada borde de módulo, nudos en el centro de cada vano; a media altura, en los límites de los vanos
+      const nb = Math.max(1, Math.round(def.pasoH ? anchoK(mods[0]) / def.pasoH : (vanos ?? 1)));
+      const centro = (i: number, k: number) => S0(k) + ((i + 0.5) * anchoK(k)) / nb, limite = (i: number, k: number) => S0(k) + (i * anchoK(k)) / nb;
+      for (let j = 0; j + 1 < mods.length; j++) {
+        const a0 = mods[j], a1 = mods[j + 1], km = Math.round((a0 + a1) / 2);
+        for (let i = 0; i < nb; i++) {
+          const C0 = nudo(centro(i, a0), a0), Lm = nudo(limite(i, km), km), Rm = nudo(limite(i + 1, km), km), C1 = nudo(centro(i, a1), a1);
+          barra('diagonal', C0, Lm); barra('diagonal', C0, Rm); barra('diagonal', Lm, C1); barra('diagonal', Rm, C1);
+        }
+        const L0 = nudo(S0(a0), a0), R0 = nudo(S1(a0), a0), L1 = nudo(S0(a1), a1), R1 = nudo(S1(a1), a1), Lm = nudo(S0(km), km), Rm = nudo(S1(km), km);
+        barra('diagonal', L0, Lm); barra('diagonal', Lm, L1); barra('diagonal', R0, Rm); barra('diagonal', Rm, R1);
       }
-      const L0 = nudo(S0(a0), a0), R0 = nudo(S1(a0), a0), L1 = nudo(S0(a1), a1), R1 = nudo(S1(a1), a1), Lm = nudo(S0(km), km), Rm = nudo(S1(km), km);
-      barra('diagonal', L0, Lm); barra('diagonal', Lm, L1); barra('diagonal', R0, Rm); barra('diagonal', Rm, R1);
-    }
-    // anillo (viga de borde) arriba, para cerrar los diamantes
-    const anillo = [S0(kTope), ...Array.from({ length: nb }, (_, i) => centro(i, kTope)), S1(kTope)];
-    for (let i = 0; i + 1 < anillo.length; i++) barra('viga', nudo(anillo[i], kTope), nudo(anillo[i + 1], kTope));
-  } else if (def.tipo === 'E') {
-    // mástil central de la base a la azotea; esquinas desde el primer módulo (abajo vuelan); V por módulo y viga en cada borde
-    for (let k = 0; k < n; k++) barra('columna', nudo(0, k), nudo(0, k + 1), def.mastil ?? def.columna, 'mastil');
-    // esquinas desde el primer piso del exo (el primer tramo cuelga del chevron de arriba)
-    // columna de esquina cortada: no llega al nudo del tope de cada módulo (el último piso de cada módulo no la tiene);
-    // cada tramo se apoya abajo en el nudo del tope del módulo de abajo. En el primer módulo no hay nudo abajo (ahí está
-    // la transición sobre las supercolumnas): su columna sigue hasta el nudo de arriba y cuelga de él.
-    const topes = new Set(mods.slice(2));
-    for (const lado of [S0, S1]) for (let k = mods[0]; k < n; k++) {
-      if (def.esquinaCortada && topes.has(k + 1)) continue;
-      barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
-    }
-    const kMedio = (a0: number, a1: number) => { const zm = (zs[a0] + zs[a1]) / 2; let mejor = a0; zs.forEach((z, k) => { if (k > a0 && k < a1 && Math.abs(z - zm) < Math.abs(zs[mejor] - zm)) mejor = k; }); return mejor; };
-    for (let j = 0; j + 1 < mods.length; j++) {
-      const a0 = mods[j], a1 = mods[j + 1];
-      if (def.cuartos && a1 - a0 >= 2) {
-        // la diagonal pasa por el cuarto de la cara a medio módulo: ahí tiene un nudo (en un piso, si cae en uno)
-        const km = kMedio(a0, a1), zm = zs[km], t = (zm - zs[a0]) / (zs[a1] - zs[a0]);
+      // anillo (viga de borde) arriba, para cerrar los diamantes
+      const anillo = [S0(kTope), ...Array.from({ length: nb }, (_, i) => centro(i, kTope)), S1(kTope)];
+      for (let i = 0; i + 1 < anillo.length; i++) barra('viga', nudo(anillo[i], kTope), nudo(anillo[i + 1], kTope));
+    } else if (tipo === 'E') {
+      // mástil central de la base a la azotea; esquinas desde el primer módulo (abajo vuelan); V por módulo y viga en cada borde
+      for (let k = kI; k < kF; k++) barra('columna', nudo(0, k), nudo(0, k + 1), def.mastil ?? def.columna, 'mastil');
+      // esquinas desde el primer piso del exo (el primer tramo cuelga del chevron de arriba)
+      // columna de esquina cortada: no llega al nudo del tope de cada módulo (el último piso de cada módulo no la tiene);
+      // cada tramo se apoya abajo en el nudo del tope del módulo de abajo. En el primer módulo no hay nudo abajo (ahí está
+      // la transición sobre las supercolumnas): su columna sigue hasta el nudo de arriba y cuelga de él.
+      // (si la zona arranca más arriba, abajo está el nudo de la zona de abajo: se cortan todos los módulos)
+      const topes = new Set(mods.slice(kI > 0 ? 1 : 2));
+      for (const lado of [S0, S1]) for (let k = mods[0]; k < kF; k++) {
+        if (def.esquinaCortada && topes.has(k + 1)) continue;
+        barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
+      }
+      const kMedio = (a0: number, a1: number) => { const zm = (zs[a0] + zs[a1]) / 2; let mejor = a0; zs.forEach((z, k) => { if (k > a0 && k < a1 && Math.abs(z - zm) < Math.abs(zs[mejor] - zm)) mejor = k; }); return mejor; };
+      for (let j = 0; j + 1 < mods.length; j++) {
+        const a0 = mods[j], a1 = mods[j + 1];
+        if (def.cuartos && a1 - a0 >= 2) {
+          // la diagonal pasa por el cuarto de la cara a medio módulo: ahí tiene un nudo (en un piso, si cae en uno)
+          const km = kMedio(a0, a1), zm = zs[km], t = (zm - zs[a0]) / (zs[a1] - zs[a0]);
+          for (const lado of [S0, S1]) {
+            const sq = lado(a1) * t, q = nudo(sq, km);
+            barra('diagonal', nudo(lado(a1), a1), q); barra('diagonal', q, nudo(0, a0));
+          }
+          // viga a medio módulo de cuarto a cuarto, pasando por el mástil
+          barra('viga', nudo(S0(a1) * t, km), nudo(0, km)); barra('viga', nudo(0, km), nudo(S1(a1) * t, km));
+        } else {
+          barra('diagonal', nudo(S0(a1), a1), nudo(0, a0)); barra('diagonal', nudo(S1(a1), a1), nudo(0, a0));
+        }
+        barra('viga', nudo(S0(a1), a1), nudo(0, a1)); barra('viga', nudo(0, a1), nudo(S1(a1), a1));
+      }
+      // columnas a los cuartos: del nudo a medio módulo del primer módulo hasta arriba, piso por piso (llevan las losas a
+      // las diagonales); se cruzan con las vigas del tope de cada módulo
+      if (def.cuartos && mods.length >= 2 && mods[1] - mods[0] >= 2) {
+        const k1 = kMedio(mods[0], mods[1]), t = (zs[k1] - zs[mods[0]]) / (zs[mods[1]] - zs[mods[0]]);
         for (const lado of [S0, S1]) {
-          const sq = lado(a1) * t, q = nudo(sq, km);
-          barra('diagonal', nudo(lado(a1), a1), q); barra('diagonal', q, nudo(0, a0));
+          const s = lado(mods[1]) * t;
+          for (let k = k1; k < kTope; k++) {
+            // en el tope de cada módulo la columna toca la viga de borde en el cuarto: nudo propio sobre la viga
+            barra('columna', nudo(s, k), nudo(s, k + 1));
+          }
         }
-        // viga a medio módulo de cuarto a cuarto, pasando por el mástil
-        barra('viga', nudo(S0(a1) * t, km), nudo(0, km)); barra('viga', nudo(0, km), nudo(S1(a1) * t, km));
-      } else {
-        barra('diagonal', nudo(S0(a1), a1), nudo(0, a0)); barra('diagonal', nudo(S1(a1), a1), nudo(0, a0));
-      }
-      barra('viga', nudo(S0(a1), a1), nudo(0, a1)); barra('viga', nudo(0, a1), nudo(S1(a1), a1));
-    }
-    // columnas a los cuartos: del nudo a medio módulo del primer módulo hasta arriba, piso por piso (llevan las losas a
-    // las diagonales); se cruzan con las vigas del tope de cada módulo
-    if (def.cuartos && mods.length >= 2 && mods[1] - mods[0] >= 2) {
-      const k1 = kMedio(mods[0], mods[1]), t = (zs[k1] - zs[mods[0]]) / (zs[mods[1]] - zs[mods[0]]);
-      for (const lado of [S0, S1]) {
-        const s = lado(mods[1]) * t;
-        for (let k = k1; k < kTope; k++) {
-          // en el tope de cada módulo la columna toca la viga de borde en el cuarto: nudo propio sobre la viga
-          barra('columna', nudo(s, k), nudo(s, k + 1));
+        // las vigas del tope de cada módulo pasan por los nudos de los cuartos (se parten ahí)
+        for (let i = barras.length - 1; i >= 0; i--) {
+          const b = barras[i];
+          if (b.clase !== 'viga') continue;
+          const A = nudos[b.a], B = nudos[b.b];
+          if (A.piso < 0 || A.piso !== B.piso) continue;
+          const enCuarto = nudos.find(q => q.piso === A.piso && q.id !== A.id && q.id !== B.id && Math.min(A.s, B.s) < q.s - 1e-9 && q.s < Math.max(A.s, B.s) - 1e-9 && barras.some(c => c.clase === 'columna' && (c.a === q.id || c.b === q.id)));
+          if (!enCuarto) continue;
+          barras.splice(i, 1, { ...b, id: b.id, b: enCuarto.id }, { ...b, id: `${b.id}b`, a: enCuarto.id });
         }
       }
-      // las vigas del tope de cada módulo pasan por los nudos de los cuartos (se parten ahí)
-      for (let i = barras.length - 1; i >= 0; i--) {
-        const b = barras[i];
-        if (b.clase !== 'viga') continue;
-        const A = nudos[b.a], B = nudos[b.b];
-        if (A.piso < 0 || A.piso !== B.piso) continue;
-        const enCuarto = nudos.find(q => q.piso === A.piso && q.id !== A.id && q.id !== B.id && Math.min(A.s, B.s) < q.s - 1e-9 && q.s < Math.max(A.s, B.s) - 1e-9 && barras.some(c => c.clase === 'columna' && (c.a === q.id || c.b === q.id)));
-        if (!enCuarto) continue;
-        barras.splice(i, 1, { ...b, id: b.id, b: enCuarto.id }, { ...b, id: `${b.id}b`, a: enCuarto.id });
+      // alas del tubo: los mástiles de las dos caras perpendiculares quedan en s = ±ancho/2 (en el sentido del viento) y
+      // reciben de sus chevrones lo que bajan las esquinas; cada uno lo comparten dos caras paralelas → la mitad acá
+      // (el ala se ata a la esquina solo en los niveles de los chevrones: por ahí le llega la carga; en los otros pisos
+      //  tiene sus propios nudos, que comparten con la losa solo el corrimiento horizontal)
+      const sm = def.mastil ?? def.columna, pm = propsSeccion(sm), atadas = new Set(kI > 0 ? mods : mods.slice(1));   // en una zona de arriba, el mástil de la cara perpendicular arranca de la esquina
+      const nudoAla = (s: number, k: number) => {
+        if (atadas.has(k)) return nudo(s, k);
+        const sa = s * (1 + 1e-7);
+        let q = nudos.find(x => x.piso === k && Math.abs(x.s - sa) < 1e-12);
+        if (!q) { q = { id: nudos.length, s: sa, z: zs[k], piso: k }; nudos.push(q); nudosAla.add(q.id); }
+        return q.id;
+      };
+      for (const lado of [S0, S1]) for (let k = kI; k < kF; k++) {
+        const a = nudoAla(lado(k), k), b = nudoAla(lado(k + 1), k + 1), rel = un.columna === 'articulada';
+        const sk = tramo('mastil', a, b, sm), pk = sk === sm ? pm : propsSeccion(sk);
+        barras.push({ id: `F${++nF}`, clase: 'columna', a, b, A: pk.A / 2, I: pk.I / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: 0.5, deMastil: true });
+      }
+    } else {
+      // columnas de esquina, de piso a piso
+      for (const lado of [S0, S1]) for (let k = kI; k < kF; k++) barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
+      // alas: las columnas intermedias de las caras perpendiculares, sumadas a las esquinas (la mitad en cada cara)
+      const na = Math.max(0, Math.round(def.alas ?? 0));
+      if (na > 0) {
+        const rel = un.columna === 'articulada';
+        for (const lado of [S0, S1]) for (let k = kI; k < kF; k++) {
+          const a = nudo(lado(k), k), b = nudo(lado(k + 1), k + 1), sk = tramo('columna', a, b, def.columna), pk = propsSeccion(sk);
+          barras.push({ id: `F${++nF}`, clase: 'columna', a, b, A: (na * pk.A) / 2, I: (na * pk.I) / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: na / 2 });
+        }
+      }
+      for (let j = 0; j + 1 < mods.length; j++) {
+        const a0 = mods[j], a1 = mods[j + 1];
+        if (tipo === 'D') cruz(a0, a1);
+        if (tipo === 'B' || tipo === 'D') barra('viga', nudo(S0(a1), a1), nudo(S1(a1), a1));
+      }
+      if (tipo === 'C') {
+        // dos cinturones: a la mitad y arriba, cada uno un reticulado de un módulo de alto (vigas arriba y abajo + X)
+        const cint = [kI + Math.max(m, Math.round((kF - kI) / 2)), kF].filter((k, i, a) => k <= kF && a.indexOf(k) === i);
+        cint.forEach(kt => {
+          const kb = Math.max(kI, kt - Math.min(m, kt - kI));
+          barra('viga', nudo(S0(kt), kt), nudo(S1(kt), kt)); barra('viga', nudo(S0(kb), kb), nudo(S1(kb), kb));
+          cruz(kb, kt);
+        });
       }
     }
-    // alas del tubo: los mástiles de las dos caras perpendiculares quedan en s = ±ancho/2 (en el sentido del viento) y
-    // reciben de sus chevrones lo que bajan las esquinas; cada uno lo comparten dos caras paralelas → la mitad acá
-    // (el ala se ata a la esquina solo en los niveles de los chevrones: por ahí le llega la carga; en los otros pisos
-    //  tiene sus propios nudos, que comparten con la losa solo el corrimiento horizontal)
-    const sm = def.mastil ?? def.columna, pm = propsSeccion(sm), atadas = new Set(mods.slice(1));
-    const nudoAla = (s: number, k: number) => {
-      if (atadas.has(k)) return nudo(s, k);
-      const sa = s * (1 + 1e-7);
-      let q = nudos.find(x => x.piso === k && Math.abs(x.s - sa) < 1e-12);
-      if (!q) { q = { id: nudos.length, s: sa, z: zs[k], piso: k }; nudos.push(q); }
-      return q.id;
-    };
-    let nf = 0;
-    for (const lado of [S0, S1]) for (let k = 0; k < n; k++) {
-      const a = nudoAla(lado(k), k), b = nudoAla(lado(k + 1), k + 1), rel = un.columna === 'articulada';
-      const sk = tramo('mastil', a, b, sm), pk = sk === sm ? pm : propsSeccion(sk);
-      barras.push({ id: `F${++nf}`, clase: 'columna', a, b, A: pk.A / 2, I: pk.I / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: 0.5 });
+  };
+  const zonas = zonasDe(def, zs);
+  zonas.forEach(zn => patron(zn.tipo, zn.kI, zn.kF, zn.modulo, zn.vanos, zn.kI === 0 ? def.pisoInicio ?? 0 : 0, def.cortes ?? []));
+  // entre zonas: una viga de transición de borde a borde que pasa por todos los nudos de ese nivel (ata los dos dibujos)
+  zonas.slice(1).forEach(zn => {
+    const k = zn.kI, enNivel = nudos.filter(q => q.piso === k).sort((x, y) => x.s - y.s);
+    for (let i = 0; i + 1 < enNivel.length; i++) {
+      const a = enNivel[i].id, b = enNivel[i + 1].id;
+      if (!barras.some(x => (x.a === a && x.b === b) || (x.a === b && x.b === a))) barra('viga', a, b);
     }
-  } else if (def.tipo !== 'F') {
-    // columnas de esquina, de piso a piso
-    for (const lado of [S0, S1]) for (let k = 0; k < n; k++) barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));
-    // alas: las columnas intermedias de las caras perpendiculares, sumadas a las esquinas (la mitad en cada cara)
-    const na = Math.max(0, Math.round(def.alas ?? 0));
-    if (na > 0) {
-      let nf = 0;
-      const rel = un.columna === 'articulada';
-      for (const lado of [S0, S1]) for (let k = 0; k < n; k++) {
-        const a = nudo(lado(k), k), b = nudo(lado(k + 1), k + 1), sk = tramo('columna', a, b, def.columna), pk = propsSeccion(sk);
-        barras.push({ id: `F${++nf}`, clase: 'columna', a, b, A: (na * pk.A) / 2, I: (na * pk.I) / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: na / 2 });
-      }
-    }
-    for (let j = 0; j + 1 < mods.length; j++) {
-      const a0 = mods[j], a1 = mods[j + 1];
-      if (def.tipo === 'D') cruz(a0, a1);
-      if (def.tipo === 'B' || def.tipo === 'D') barra('viga', nudo(S0(a1), a1), nudo(S1(a1), a1));
-    }
-    if (def.tipo === 'C') {
-      // dos cinturones: a la mitad y arriba, cada uno un reticulado de un módulo de alto (vigas arriba y abajo + X)
-      const cint = [Math.max(m, Math.round(n / 2)), n];
-      cint.forEach(kt => {
-        const kb = Math.max(0, kt - Math.min(m, kt));
-        barra('viga', nudo(S0(kt), kt), nudo(S1(kt), kt)); barra('viga', nudo(S0(kb), kb), nudo(S1(kb), kb));
-        cruz(kb, kt);
-      });
-    }
-  }
+  });
   if (def.tipo === 'F') {
     // núcleo con outriggers: el plano vertical que pasa por el núcleo. El núcleo es una barra por piso en s = 0 (su EI
     // se pone en calcularExo con el de los tabiques); en cada brazo, un reticulado de un piso de alto desde el borde del
@@ -426,10 +496,20 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   }
   // barras agregadas a mano (entre nudos que ya existen o en un piso)
   (def.nuevas ?? []).forEach((nb, i) => {
-    const a = nudoEn(nb.a[0], nb.a[1]), b = nudoEn(nb.b[0], nb.b[1]);
+    if (nb.fuera) return;                                     // de las caras del otro viento
+    // en fracción del ancho: se lleva a metros y se pega al nudo que ya esté ahí (a menos de 0,1 mm), así una barra
+    // dibujada sobre un nudo de la ficha se une a él aunque la fracción esté redondeada
+    const sDe = (q: [number, number]) => {
+      if (!nb.enFraccion) return q[0];
+      const sv = enZ(cK, q[1]) + (q[0] * enZ(anchoK, q[1])) / 2;
+      const cerca = nudos.filter(x => !nudosAla.has(x.id) && Math.abs(x.z - q[1]) < 1e-6 && Math.abs(x.s - sv) < 1e-4).sort((x, y) => Math.abs(x.s - sv) - Math.abs(y.s - sv))[0];
+      return cerca ? cerca.s : +sv.toFixed(9);
+    };
+    const a = nudoEn(sDe(nb.a), nb.a[1]), b = nudoEn(sDe(nb.b), nb.b[1]);
     if (a === b) return;
     const sec = nb.sec ?? (nb.clase === 'columna' ? def.columna : nb.clase === 'diagonal' ? def.diagonal : def.viga), p = propsSeccion(sec);
     const rel = un[nb.clase] === 'articulada';
+    if (nb.ala) { barras.push({ id: `N${i + 1}`, clase: 'columna', a, b, A: p.A / 2, I: p.I / 2, sec, relA: nb.relA ?? rel, relB: nb.relB ?? rel, borde: false, fraccion: 0.5, deMastil: true }); return; }
     barras.push({ id: `N${i + 1}`, clase: nb.clase, a, b, A: p.A, I: p.I, sec, relA: nb.relA ?? rel, relB: nb.relB ?? rel, borde: enBorde(a) && enBorde(b) });
   });
   // cambios barra por barra
@@ -642,15 +722,74 @@ function barraLocal(E: number, br: Barra, x1: number, z1: number, x2: number, z2
  * es un piso (master) o un gdl propio (esclavo), o si está fijo. Devuelve K condensada (n × n) y lo necesario para
  * recuperar los esclavos.
  */
-interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number; lu: LU | null }
+interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number; /** Kss⁻¹·B (factorizada una vez) */ resolverSs: (B: Mat) => Mat }
+/**
+ * Factoriza una matriz de rigidez (simétrica, cada nudo unido solo a sus vecinos) para resolver A·X = B con varios B:
+ * se renumeran las incógnitas para que las unidas queden cerca (Cuthill-McKee inverso) y se elimina solo dentro de la
+ * banda que queda, sin pivotear (la rigidez es simétrica y no negativa). Da lo mismo que «resolver» y, en una cara con
+ * muchos nudos, es decenas de veces más rápido. Si un pivote se anula (un mecanismo) o la banda no achica la matriz, se
+ * resuelve con «resolver», que da su mensaje.
+ */
+function factorizarRigidez(A: Mat): (B: Mat) => Mat {
+  // respaldo: la LU con pivoteo (rala), factorizada una sola vez y reusada para cada B
+  let lu: LU | null = null;
+  const n = A.length, denso = (B: Mat) => resolverLU(lu ??= factorizar(A), B);
+  if (n < 60) return denso;
+  // vecinos de cada incógnita
+  const vec: number[][] = A.map((f, i) => { const v: number[] = []; for (let j = 0; j < n; j++) if (j !== i && f[j] !== 0) v.push(j); return v; });
+  // Cuthill-McKee: por componentes, desde la de menos vecinos; cada una suma sus vecinos de menos a más vecinos
+  const orden: number[] = [], visto = new Uint8Array(n);
+  const porGrado = [...Array(n).keys()].sort((a, b) => vec[a].length - vec[b].length);
+  for (const ini of porGrado) {
+    if (visto[ini]) continue;
+    visto[ini] = 1; orden.push(ini);
+    for (let h = orden.length - 1; h < orden.length; h++) {
+      const nuevos = vec[orden[h]].filter(j => !visto[j]).sort((a, b) => vec[a].length - vec[b].length);
+      for (const j of nuevos) { visto[j] = 1; orden.push(j); }
+    }
+  }
+  orden.reverse();
+  const pos = new Int32Array(n); orden.forEach((i, k) => { pos[i] = k; });
+  let bw = 0;
+  vec.forEach((v, i) => v.forEach(j => { bw = Math.max(bw, Math.abs(pos[i] - pos[j])); }));
+  if (bw > n / 3) return denso;
+  // eliminación en la banda: arriba queda U; abajo de la diagonal, los multiplicadores (L)
+  const P = orden.map(i => orden.map(j => A[i][j]));
+  const escala = P.reduce((mx, f, i) => Math.max(mx, Math.abs(f[i])), 0), cero = Math.max(1e-14, escala * 1e-13);
+  for (let c = 0; c < n; c++) {
+    const piv = P[c][c], fc = P[c];
+    if (!(Math.abs(piv) >= cero)) return denso;
+    const hasta = Math.min(n - 1, c + bw);
+    for (let r = c + 1; r <= hasta; r++) {
+      const fr = P[r], f = fr[c] / piv;
+      if (f === 0) continue;
+      for (let k = c + 1; k <= hasta; k++) fr[k] -= f * fc[k];
+      fr[c] = f;
+    }
+  }
+  return (B: Mat) => {
+    const m = B[0]?.length ?? 0, Q = orden.map(i => [...B[i]]);
+    for (let c = 0; c < n; c++) {
+      const hasta = Math.min(n - 1, c + bw), qc = Q[c];
+      for (let r = c + 1; r <= hasta; r++) { const f = P[r][c]; if (f === 0) continue; const qr = Q[r]; for (let k = 0; k < m; k++) qr[k] -= f * qc[k]; }
+    }
+    for (let r = n - 1; r >= 0; r--) {
+      const hasta = Math.min(n - 1, r + bw), fr = P[r], qr = Q[r];
+      for (let k = 0; k < m; k++) { let s = qr[k]; for (let j = r + 1; j <= hasta; j++) s -= fr[j] * Q[j][k]; qr[k] = s / fr[r]; }
+    }
+    const X = ceros(n, m);
+    orden.forEach((i, k) => { X[i] = Q[k]; });
+    return X.some(f => f.some(v => !Number.isFinite(v))) ? denso(B) : X;
+  };
+}
 function condensar(Kg: Mat, master: number[], esclavos: number[]): Condensada {
   const Kmm = master.map(i => master.map(j => Kg[i][j])), Kms = master.map(i => esclavos.map(j => Kg[i][j]));
   const Ksm = esclavos.map(i => master.map(j => Kg[i][j])), Kss = esclavos.map(i => esclavos.map(j => Kg[i][j]));
-  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0, lu: null };
-  const lu = factorizar(Kss);
-  const X = resolverLU(lu, Ksm);                       // Kss⁻¹·Ksm
+  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0, resolverSs: B => B };
+  const resolverSs = factorizarRigidez(Kss);
+  const X = resolverSs(Ksm);                           // Kss⁻¹·Ksm
   const K = Kmm.map((f, i) => f.map((v, j) => { let s = v; const km = Kms[i]; for (let p = 0; p < km.length; p++) if (km[p] !== 0) s -= km[p] * X[p][j]; return s; }));
-  return { K, Kss, Ksm, nEsc: esclavos.length, lu };
+  return { K, Kss, Ksm, nEsc: esclavos.length, resolverSs };
 }
 
 /** cara armada y condensada a los pisos 1..n (el piso 0 es la base) */
@@ -734,14 +873,14 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
   const c = condensar(Kg, master, esc);
   const Fs = esc.map(i => [Fg[i]]);
-  const KssFs = c.lu ? resolverLU(c.lu, Fs).map(f => f[0]) : [];
+  const KssFs = c.nEsc ? c.resolverSs(Fs).map(f => f[0]) : [];
   const Fc = master.map(i => Fg[i] - esc.reduce((sm, j, p) => sm + Kg[i][j] * KssFs[p], 0));
   const desplaz = (u: number[]) => {
     const d = new Array<number>(N).fill(0);
     u.forEach((v, i) => (d[i] = v));
     if (c.nEsc) {
       const rhs = c.Ksm.map((f, i) => [Fg[esc[i]] - f.reduce((s, kv, j) => s + kv * u[j], 0)]);
-      const x = resolverLU(c.lu!, rhs);
+      const x = c.resolverSs(rhs);
       x.forEach((f, i) => (d[nPisos + i] = f[0]));
     }
     return d;
@@ -867,7 +1006,7 @@ function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: n
   const F = def.tipo === 'F';
   // ficha F: el núcleo está dentro de cada plano (cada uno con su parte del EJ de los tabiques); la ménsula sola no se suma
   const conNucleo = (c: Cara): Cara => (F ? { ...c, barras: c.barras.map(b => (b.nucleo && b.clase === 'columna' ? { ...b, I: Math.max(EJ((c.nudos[b.a].z + c.nudos[b.b].z) / 2) || 0, 1e-6) / (def.E * tCaras.length) } : b)) } : c);
-  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(def, anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr, { sinBrazos: op.sinBrazos, anchoPerp: op.anchosPerp?.[0] })), def, zs, W, losa, op.pesoSoloBrazos), def.E, n) }));
+  const caras = tCaras.map((t, i) => ({ t, c: condensarCara(cargarCara(conNucleo(armarCara(paraLado(def, t), anchoCara, zs, F ? `plano ${i + 1}` : `cara ${i + 1}`, anchos, corr, { sinBrazos: op.sinBrazos, anchoPerp: op.anchosPerp?.[0] })), def, zs, W, losa, op.pesoSoloBrazos), def.E, n) }));
   // viento por las losas (en los pisos) o, si la fachada cuelga del exo, ya puesto como carga de las barras de borde
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
@@ -942,7 +1081,7 @@ export const CATALOGO_HORMIGON: Seccion[] = Array.from({ length: 18 }, (_, i) =>
 const catalogo = (def: ExoDef) => (def.material === 'hormigon' ? CATALOGO_HORMIGON : CATALOGO_TUBOS);
 
 /** lo que necesita calcularExo para un viento */
-export interface EntradaExo { zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[] }
+export interface EntradaExo { /** viento de estas caras (para las barras de un solo viento) */ dir?: 'A' | 'B'; zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[] }
 
 /** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
 /**
@@ -960,8 +1099,8 @@ export function pesoCinturon(def: ExoDef, en: EntradaExo): number {
 }
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
-  return entradas.reduce((s, en, i) => {
-    const c = armarCara(def, en.ancho, en.zs, 'cara', en.anchos, en.corr, { anchoPerp: en.anchosPerp?.[0] });
+  return entradas.reduce((s, en, i) => s + (i === 0 ? pesoCinturon(def, en) : 0) + en.tCaras.reduce((s2, t) => {
+    const c = armarCara(paraLado(paraViento(def, en.dir), t), en.ancho, en.zs, 'cara', en.anchos, en.corr, { anchoPerp: en.anchosPerp?.[0] });
     const anchoEn = (k: number) => (c.nudos[k].piso >= 0 ? en.anchos?.[c.nudos[k].piso] ?? en.ancho : en.ancho);
     const centroEn = (k: number) => (c.nudos[k].piso >= 0 && def.tipo !== 'E' ? en.corr?.[c.nudos[k].piso] ?? 0 : 0);
     const esquina = (b: Barra) => b.clase === 'columna' && (b.fraccion ?? 1) === 1 && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s - centroEn(k)) - anchoEn(k) / 2) < 1e-6);
@@ -969,9 +1108,9 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
     // perpendiculares) sí, con su cantidad (cada cara perpendicular aparece una vez en cada viento como ala)
     // ficha F: las columnas de la cara se pesan todas (las que el cinturón hace trabajar en parte también son de acero entero)
     const colsF = def.tipo === 'F' && def.cinturon !== false ? Math.max(1, Math.round(def.columnasCara ?? 4)) / 2 : 1;
-    const factor = (b: Barra) => (b.nucleo ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : def.tipo === 'E' ? 0 : b.fraccion);
-    return s + (i === 0 ? pesoCinturon(def, en) : 0) + en.tCaras.length * c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
-  }, 0);
+    const factor = (b: Barra) => (b.nucleo ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : b.deMastil ? 0 : b.fraccion);
+    return s2 + c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
+  }, 0), 0);
 }
 
 export interface Dimensionado { def: ExoDef; verifica: boolean; peso: number; pasos: number; motivo: string }
@@ -984,7 +1123,7 @@ export interface Dimensionado { def: ExoDef; verifica: boolean; peso: number; pa
 export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 80): Dimensionado {
   const CAT = catalogo(base);
   const idx = { columna: 0, diagonal: 0, viga: 0, mastil: 0 };
-  const conMastil = base.tipo === 'E';
+  const conMastil = base.tipo === 'E' || !!base.zonas?.some(z => z.tipo === 'E');
   // ficha E: el mástil también se dimensiona; si se afina en altura (tramos), arriba va tres tamaños más chico
   const armar = (): ExoDef => ({
     ...base, columna: CAT[idx.columna], diagonal: CAT[idx.diagonal], viga: CAT[idx.viga],
@@ -996,13 +1135,13 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
     const falla = { columna: false, diagonal: false, viga: false };
     let flecha = false;
     entradas.forEach(en => {
-      const r = calcularExo(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
+      const r = calcularExo(paraViento(def, en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
       r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
     // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
-      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
+      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir, corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
     (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
@@ -1168,12 +1307,13 @@ export const limitesPared = (E: number, Fy: number, costura = true) => { const k
  *  - pared del tubo: b/t ≤ 1,40·√(E/Fy) (si no, la pared abolla antes: se avisa como que no verifica).
  */
 export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, ancho: number, tCaras: number[], Eh: number, anchos?: number[], Fy = FY_F24,
-  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** torre inclinada: corrimiento de la cara en cada cota */ corr?: number[]; /** ancho de la cara perpendicular en cada cota */ anchosPerp?: number[] } = {}): Cirsoc301Barra[] {
+  op: { combos?: CombExo[]; costura?: boolean; /** el viento perpendicular, para los vientos oblicuos (combos con «otro») */ otro?: EntradaExo; /** viento de estas caras */ dir?: 'A' | 'B'; /** torre inclinada: corrimiento de la cara en cada cota */ corr?: number[]; /** ancho de la cara perpendicular en cada cota */ anchosPerp?: number[] } = {}): Cirsoc301Barra[] {
+  const def0 = def; def = paraViento(def0, op.dir);
   const losas = !!def.losas && def.losas.franja > 0;
   const combos = (losas ? combosConLosas(op.combos ?? COMBOS_CURSO) : op.combos ?? COMBOS_CURSO).filter(c => !c.otro || op.otro);
   const anchosPerp = op.anchosPerp ?? (op.otro ? op.otro.zs.map((_, k) => op.otro!.anchos?.[k] ?? op.otro!.ancho) : undefined);
   const rW = calcularExo({ ...def, pesoPropio: false }, zs, W, EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: 0, anchosPerp });
-  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...def, pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0, anchosPerp: op.otro.anchosPerp ?? zs.map((_, k) => anchos?.[k] ?? ancho) })) : null;
+  const esqOtro = op.otro ? esquinasPorAltura(calcularExo({ ...paraViento(def0, op.otro.dir), pesoPropio: false }, op.otro.zs, op.otro.W, op.otro.EJ, op.otro.ancho, op.otro.tCaras, op.otro.Eh, op.otro.anchos, op.otro.corr, { qLosa: 0, anchosPerp: op.otro.anchosPerp ?? zs.map((_, k) => anchos?.[k] ?? ancho) })) : null;
   // D: el peso propio y el peso de las losas; L: la sobrecarga de las losas (si apoyan en el exo)
   // ficha F con los brazos conectados al final: D baja sin pasar por ellos (salvo el peso de los propios brazos)
   const rD = calcularExo({ ...def, pesoPropio: true }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: def.losas?.qD ?? LOSA_QD, anchosPerp, casoD: true });

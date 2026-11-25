@@ -3,13 +3,22 @@ import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/abert
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, confirmar, pedirTexto } from './tarjeta';
 import { estado, COLORES } from './estado';
-import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro } from '../engine/modelo';
-import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanar, imanarNodo, muroDesdeTramo, nodosMuro, tuboEnTabiques, type Punto } from '../engine/dibujo';
+import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
+import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
-import type { TipoEsquina } from '../engine/contorno';
+import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
+import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { montarCorte } from './corteTorre';
+import { abrirDesplegado } from './desplegado';
+import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
+import { avisosDiseno, rangoNiveles, type AvisoDiseno } from '../engine/avisos';
+import { antihorario, FORMAS_LOSA, formaLosa, ladosLosa, salienteEnLado, seCruza, type FormaLosa, type MedidasLosa } from '../engine/losas';
+import { prepararSecciones } from '../engine/loft';
+import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
+import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
@@ -18,7 +27,7 @@ import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerf
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
-import { hacerMovible } from './flotantes';
+import { hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
@@ -171,7 +180,6 @@ export function montarPlanta(cont: HTMLElement) {
     bSel('Borrar', 'Borra el grupo con todo lo que tiene (Supr)', () => { conGrupo((pp, id) => borrarGrupo(pp, id), 'Grupo borrado. Ctrl+Z deshace.'); estado.grupoSel = null; estado.avisarPanel(); }, 'peligro'));
   cont.appendChild(barraGrupo);
   // opciones del lazo
-  let bMasRef: HTMLButtonElement | null = null;
   /** dibujo de muros: ortogonal (lo normal) o en cualquier ángulo (F8 o el botón «Orto»); los diagonales son perfiles */
   let orto = true;
   /** línea de referencia del muro que se dibuja: el muro a la izquierda de la línea, centrado o a la derecha */
@@ -295,7 +303,16 @@ export function montarPlanta(cont: HTMLElement) {
   /** en el modo «Silueta»: se edita el contorno de la losa (false) o el de la carpintería (true) */
   let editaCarp = false;
   /** lo elegido en «Esquinas de la torre» (vive mientras la página está abierta) */
-  const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'ambas' as 'ambas' | 'losa' | 'carpinteria', todos: true };
+  /** loft de losas en armado: la otra losa (cota), las intermedias que también mandan, tipo, giro y si escribe B y L */
+  /** losa desde cero: forma y medidas elegidas, lado para salientes, y el contorno que se dibuja a mano (null: no se dibuja) */
+  const dc = { abierto: null as boolean | null, forma: 'rect' as FormaLosa, med: { ...FORMAS_LOSA.rect.def } as MedidasLosa, bl: true, lado: 0, ancho: 4, prof: 1.5, centro: null as number | null, orto: true,
+    /** qué se muestra en fantasma sobre la planta antes de aplicarlo (null: nada) */
+    previa: null as 'forma' | 'sacar' | 'meter' | null };
+  let trazo: Punto[] | null = null, trazoCursor: Punto | null = null;
+  /** perfil de la torre: la sección abierta y el punto elegido */
+  const pfLosas = { abierto: false, sel: null as number | null }, pfEnv = { abierto: true, sel: null as number | null };
+  const lft = { abierto: false, otra: null as number | null, medias: [] as number[], tipo: 'recto' as 'recto' | 'suave', giro: 0, bl: true };
+  const esq = { abierto: false, tipo: 'redondeada' as TipoEsquina, a: 2, b: 2, que: 'losa' as 'ambas' | 'losa' | 'carpinteria', queCarp: 'carpinteria' as 'ambas' | 'losa' | 'carpinteria', todos: true };
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
@@ -309,10 +326,93 @@ export function montarPlanta(cont: HTMLElement) {
   bDibujar.title = 'Clic en el inicio y clic en el fin: el muro sale horizontal o vertical y se pega a los extremos de otros muros. Sigue encadenado; Esc o doble clic termina. Después del primer punto se puede escribir el largo y Enter.';
   bArmar.title = 'Los muros que se tocan forman una pieza (T1, T2… en el viento A y T1B, T2B… en el B); el ala queda pegada a su alma.';
   let refrescarBarraTr = () => { /* se completa cuando está la barra de transformaciones */ };
-  const ponerModo = (m: typeof modo) => { bMasRef?.setAttribute('aria-pressed', String(m === 'silueta')); if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); bSil.setAttribute('aria-pressed', String(m === 'silueta')); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); };
+  /**
+   * indicación de la herramienta activa: qué hacer ahora, en una línea sobre la leyenda (en una tablet no hay globos de
+   * ayuda al pasar el mouse). Se puede ocultar (✕) y volver a prender con «?» en la barra.
+   */
+  const indic = document.createElement('div'); indic.className = 'indicacion-planta'; indic.setAttribute('role', 'status');
+  const indicTxt = document.createElement('span'), indicX = document.createElement('button');
+  indicX.type = 'button'; indicX.textContent = '✕'; indicX.title = 'Ocultar las indicaciones (se vuelven a prender con «?» en la barra de herramientas)'; indicX.setAttribute('aria-label', 'Ocultar las indicaciones');
+  indic.append(indicTxt, indicX);
+  let conIndic = (() => { try { return localStorage.getItem('torre3d.indicaciones') !== '0'; } catch { return true; } })();
+  const INDIC: Record<'mover' | 'dibujar' | 'calibrar' | 'silueta' | 'insertar' | 'calar' | 'lazo' | 'colocar', string> = {
+    mover: 'Mover: tocá un muro para elegirlo y arrastralo (flechas: 5 cm). Arrastrá el fondo para correr la vista; rueda o pellizco para el zoom; Mayúsculas + arrastrar elige varios.',
+    lazo: 'Lazo: dibujá un lazo alrededor de lo que querés elegir (entra todo muro con el centro adentro). Mayúsculas suma, Alt saca, Supr borra lo elegido.',
+    dibujar: 'Dibujar muros: tocá el inicio y el fin; sale horizontal o vertical y se pega a otros muros. Sigue encadenado: escribí el largo y Enter, o Esc para terminar.',
+    calibrar: 'Calibrar el calco: tocá dos puntos de la imagen y escribí la distancia real entre ellos.',
+    silueta: 'Losa: arrastrá los vértices (□) de la losa o de la carpintería. En la carta: formas (con vista previa), dibujarla a mano, balcones, loft y herramientas de CAD. Esc sale.',
+    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Esc sale.',
+    calar: 'Calar: tocá el muro donde va el vano (puerta, ventana o hueco). Tocá un vano hecho para moverlo o sacarlo. Esc sale.',
+    colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
+  };
+  const INDIC_TRAZO = 'Dibujar la losa: tocá los vértices uno por uno (se pegan a la grilla; con «a 90°» o Mayúsculas salen horizontales o verticales). Tocá el primero o Enter para cerrar · Retroceso borra el último · Esc cancela.';
+  const indicar = (t: string) => { indicTxt.textContent = t; indic.hidden = !conIndic || !t; bIndic.hidden = conIndic; };
+  indicX.addEventListener('click', () => { conIndic = false; try { localStorage.setItem('torre3d.indicaciones', '0'); } catch { /* sin almacenamiento */ } indic.hidden = true; bIndic.hidden = false; bIndic.setAttribute('aria-pressed', 'false'); });
+  const bIndic = document.createElement('button'); bIndic.type = 'button'; bIndic.textContent = '?'; bIndic.className = 'b-indic';
+  bIndic.title = 'Indicaciones: qué hacer con la herramienta elegida (una línea sobre la planta)'; bIndic.setAttribute('aria-label', 'Indicaciones de las herramientas');
+  bIndic.addEventListener('click', () => { conIndic = true; try { localStorage.setItem('torre3d.indicaciones', conIndic ? '1' : '0'); } catch { /* sin almacenamiento */ } bIndic.setAttribute('aria-pressed', String(conIndic)); indicar(INDIC[modo]); });
+  /**
+   * avisos de diseño (tabique fuera de la losa, carpintería afuera, B × L distinto de la losa…): se recalculan cuando
+   * cambia el proyecto (no en cada cuadro de un arrastre); botón con la cantidad y una carta con la lista
+   */
+  let avisos: AvisoDiseno[] = [], revAvisos = -1;
+  const bAvisos = document.createElement('button'); bAvisos.type = 'button'; bAvisos.className = 'b-avisos';
+  bAvisos.title = 'Avisos de diseño: lo que conviene revisar (tocá uno para ir al nivel y al muro)';
+  const panelAv = document.createElement('div'); panelAv.className = 'calco-panel avisos-panel'; panelAv.hidden = true;
+  let avAbierto = false;
+  bAvisos.addEventListener('click', () => { avAbierto = !avAbierto; armarAvisos(); });
+  function recalcularAvisos() {
+    const rev = estado.revision ?? 0;
+    if (rev === revAvisos) return;
+    revAvisos = rev;
+    try { avisos = avisosDiseno(estado.proyecto, estado.calculo?.asig?.papeles as Record<string, { A?: string; B?: string }> | undefined); } catch { avisos = []; }
+    bAvisos.textContent = avisos.length ? `⚠ ${avisos.length}` : '✓';
+    bAvisos.classList.toggle('hay', avisos.length > 0);
+    bAvisos.setAttribute('aria-label', avisos.length ? `${avisos.length} avisos de diseño` : 'Sin avisos de diseño');
+    if (avAbierto) armarAvisos();
+    if (typeof refrescarPasosSiHay === 'function') refrescarPasosSiHay();
+  }
+  function refrescarPasosSiHay() { try { refrescarPasos(); } catch { /* la tira todavía no está armada */ } }
+  function armarAvisos() {
+    panelAv.hidden = !avAbierto; bAvisos.setAttribute('aria-pressed', String(avAbierto));
+    if (!avAbierto) return;
+    panelAv.replaceChildren();
+    const t = document.createElement('b'); t.textContent = avisos.length ? `Avisos de diseño (${avisos.length})` : 'Avisos de diseño'; panelAv.append(t);
+    if (!avisos.length) { const p0 = document.createElement('p'); p0.className = 'nota-losa'; p0.textContent = 'Nada para revisar: los tabiques apoyan en la losa, la carpintería está adentro y la planilla usa las medidas de la losa.'; panelAv.append(p0); }
+    avisos.forEach(a => {
+      const d = document.createElement('div'); d.className = 'aviso-item';
+      const tx = document.createElement('span'); tx.textContent = a.texto;
+      const ar = document.createElement('span'); ar.className = 'nota-losa'; ar.textContent = a.arreglo;
+      d.append(tx, ar);
+      if (a.muro || a.cotas.length) {
+        const ver = document.createElement('button'); ver.type = 'button'; ver.textContent = 'Ver';
+        ver.title = a.cotas.length ? `Ir ${rangoNiveles(estado.proyecto, a.cotas.slice(0, 1))}${a.muro ? ` y elegir ${a.muro}` : ''}` : `Elegir ${a.muro}`;
+        ver.addEventListener('click', () => {
+          if (a.cotas.length) { const z = [...a.cotas].sort((x, y) => y - x)[0]; const iPB = estado.proyecto.niveles.reduce((k, x, i) => (x.cota >= 0 ? i : k), -1); estado.nivelPlanta = Math.abs((estado.proyecto.niveles[iPB]?.cota ?? 0) - z) < 1e-6 ? null : z; }
+          if (a.muro) { estado.grupoSel = null; estado.seleccion = a.muro; estado.avisarPanel(); }
+          dibujar();
+        });
+        d.append(ver);
+      }
+      // un muro que no toma viento a propósito (un núcleo solo de gravedad): se marca y deja de avisar
+      if (a.tipo === 'sin-pieza' && a.muro) {
+        const g = document.createElement('button'); g.type = 'button'; g.textContent = 'Es solo de gravedad';
+        g.title = `${a.muro} no toma viento a propósito (lleva solo peso): deja de avisar. Se desmarca en la columna «Solo gravedad» de la hoja T3D Muros`;
+        g.addEventListener('click', () => estado.cambiar(pp => { const m = pp.muros.find(x => x.id === a.muro); if (m) m.soloGravedad = true; }));
+        d.append(g);
+      }
+      panelAv.append(d);
+    });
+  }
+  const ponerModo = (m: typeof modo) => { if (m !== 'mover' && m !== 'lazo' && m !== 'colocar') { col.cerrar(); gui.cerrar(); if (edc.activo()) edc.cerrar(); } modo = m; lazo = null; bLazo.setAttribute('aria-pressed', String(m === 'lazo')); svg.classList.toggle('con-lazo', m === 'lazo'); inicio = null; calib = []; bMover.setAttribute('aria-pressed', String(m === 'mover')); bDibujar.setAttribute('aria-pressed', String(m === 'dibujar')); pintarLosaCarp(m); svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar'); svg.classList.toggle('editando-silueta', m === 'silueta'); panelSil.hidden = m !== 'silueta'; bIns.setAttribute('aria-pressed', String(m === 'insertar')); panelIns.hidden = m !== 'insertar'; svg.classList.toggle('dibujando', m === 'dibujar' || m === 'calibrar' || m === 'insertar'); if (m === 'insertar') armarPanelIns(); bCalar.setAttribute('aria-pressed', String(m === 'calar')); panelCal.hidden = m !== 'calar'; svg.classList.toggle('calando', m === 'calar'); previaCalar = null; abSel = null; vanoSel = null; arrAb = null; if (m === 'calar') armarPanelCal(); dibujar(); refrescarBarraTr(); indicar(INDIC[m]); };
   bMover.addEventListener('click', () => ponerModo('mover'));
   bDibujar.addEventListener('click', () => ponerModo(modo === 'dibujar' ? 'mover' : 'dibujar'));
-  bArmar.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); }));
+  bArmar.addEventListener('click', () => {
+    estado.cambiar(() => { estado.proyecto.muros = armarPiezas(estado.proyecto.muros); });
+    const ms = estado.proyecto.muros, nA = new Set(ms.map(m => m.piezaA).filter(Boolean)).size, nB = new Set(ms.map(m => m.piezaB).filter(Boolean)).size;
+    const t = `Piezas armadas: ${nA} en el viento A y ${nB} en el viento B (los muros que se tocan forman una pieza; el ala queda pegada a su alma).`;
+    mensaje(t); indicar(t);
+  });
   // calcar un plano: imagen de fondo con escala (dos clics y la medida real), posición y transparencia
   const bCalco = document.createElement('label');
   bCalco.className = 'boton';
@@ -342,12 +442,13 @@ export function montarPlanta(cont: HTMLElement) {
   dock.className = 'dock-planta';
   cont.appendChild(dock);
   // clic en el título de un panel: se pliega o se despliega
-  dock.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel')) t.parentElement.classList.toggle('plegado'); });
+// (en todas las cartas, también las sueltas: un toque en el título las pliega y deja libre la planta)
+  cont.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel') && t === t.parentElement.querySelector(':scope > b')) { t.parentElement.classList.toggle('plegado'); firmaReservas = ''; } });
   const panelCad = document.createElement('div');
   panelCad.className = 'calco-panel cad-panel';
   panelCad.hidden = true;
   dock.appendChild(panelCad);
-  const COLOR_USO: Record<string, string> = { referencia: 'var(--dim)', muros: 'var(--ink)', losa: 'var(--ink2)', 'carpintería': 'var(--serie-1)' };
+  const COLOR_USO: Record<string, string> = { referencia: 'var(--dim)', muros: 'var(--ink)', losa: 'var(--ink2)', 'carpintería': 'var(--carpinteria)' };
   function cargarDXF(nombre: string, texto: string) {
     const d = leerDXFCompleto(texto);
     if (!d.entidades.length) { mensaje(`${nombre}: no tiene líneas, polilíneas ni círculos en la sección de entidades.`); return; }
@@ -509,7 +610,7 @@ export function montarPlanta(cont: HTMLElement) {
     const contorno = (u: 'losa' | 'carpintería') => boton(u === 'losa' ? 'Usar como losa' : 'Usar como carpintería', u === 'losa' ? 'El contorno cerrado más grande de las capas «losa» pasa a ser la silueta de este nivel.' : 'El contorno cerrado más grande de las capas «carpintería» pasa a ser la carpintería de este nivel: su caja da a máx y b máx.', () => {
       const v = contornoDesdeCAD(deUso(u));
       if (!v) { mensaje(`No hay un contorno cerrado (polilínea cerrada) en las capas marcadas como «${u}».`); return; }
-      estado.cambiar(() => { const n = estado.proyecto.niveles[iNivel]; if (u === 'losa') n.silueta = v.map(q => ({ ...q })); else n.carpinteria = v.map(q => ({ ...q })); });
+      estado.cambiar(() => { const n = estado.proyecto.niveles[iNivel]; if (u === 'losa') n.silueta = v.map(q => ({ ...q })); else { soltarCarp(n); n.carpinteria = v.map(q => ({ ...q })); } });
     });
     const quitar = boton('Quitar plano', 'Saca el dibujo de fondo (lo creado con él queda)', () => { estado.cad = null; armarPanelCad(); dibujar(); });
     const acciones = document.createElement('div'); acciones.className = 'acciones-cad';
@@ -518,17 +619,36 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // silueta del piso: mover vértices, doble clic en un borde agrega uno, clic derecho en un vértice lo borra
   const bSil = document.createElement('button');
-  bSil.type = 'button'; bSil.textContent = 'Contornos';
-  bSil.title = 'Editar el contorno de la losa o de la carpintería de este piso: arrastrar los vértices, doble clic en un borde para agregar uno, clic derecho en un vértice para borrarlo. También se importa de AutoCAD (DXF).';
-  bSil.addEventListener('click', () => ponerModo(modo === 'silueta' ? 'mover' : 'silueta'));
+  bSil.type = 'button'; bSil.textContent = 'Losa';
+  bSil.title = 'Losa y carpintería de este piso: formas de arranque, dibujarla a mano, balcones, loft y herramientas de CAD. Se edita el contorno de la losa o de la carpintería de este piso: arrastrar los vértices, doble clic en un borde para agregar uno, clic derecho en un vértice para borrarlo. También se importa de AutoCAD (DXF).';
+  bSil.addEventListener('click', () => { if (modo === 'silueta' && !editaCarp) { ponerModo('mover'); return; } editaCarp = false; vSel = null; if (modo === 'silueta') { pintarLosaCarp(modo); armarPanelSil(); dibujar(); } else ponerModo('silueta'); });
+  // la carpintería, con botón propio: la misma carta, del lado «Carpintería» (tramos, por piso o envolvente, panelería)
+  const bCarp = document.createElement('button');
+  bCarp.type = 'button'; bCarp.textContent = 'Carpintería';
+  bCarp.title = 'Carpintería (el contorno al que le pega el viento): por tramos (sin, por piso o envolvente), plana o curva, panelería; o a mano, piso por piso';
+  bCarp.addEventListener('click', () => { if (modo === 'silueta' && editaCarp) { ponerModo('mover'); return; } editaCarp = true; vSel = null; if (modo === 'silueta') { pintarLosaCarp(modo); armarPanelSil(); dibujar(); } else ponerModo('silueta'); });
+  function pintarLosaCarp(m: string) { bSil.setAttribute('aria-pressed', String(m === 'silueta' && !editaCarp)); bCarp.setAttribute('aria-pressed', String(m === 'silueta' && editaCarp)); }
   const panelSil = document.createElement('div');
   panelSil.className = 'calco-panel silueta-panel';
   panelSil.hidden = true;
   dock.appendChild(panelSil);
+  /** editar a mano la carpintería de un piso que calcula un tramo la suelta (los tramos dejan de recalcularla) */
+  const soltarCarp = (n: Nivel) => { const t = tramoEn(estado.proyecto, n.cota); if (t && t.modo !== 'sin' && !n.carpManual && !estado.proyecto.carpinteriaFija) { n.carpManual = true; delete n.carpinteriaPartida; mensaje(`Carpintería de ${n.nombre} editada a mano: el tramo ya no la recalcula. Para volver, «Volver a atar» en la carta.`); } };
   /** la silueta del nivel a la vista, como propia (si heredaba, se copia al editarla) */
+  /** ver en la planta el nivel k (como el selector de planta) */
+  const irANivel = (k: number) => { const p = estado.proyecto, iPB = p.niveles.reduce((j, x, i) => (x.cota >= 0 ? i : j), -1); estado.nivelPlanta = k === iPB ? null : p.niveles[k].cota; dibujar(); estado.avisarSeleccion(); };
+  /** la sección de la envolvente en el nivel i (si la piel va por secciones y este piso es una): se edita en la planta */
+  const seccionEnv = (i: number) => {
+    const p = estado.proyecto, n = p.niveles[i], env = p.envolvente;
+    if (!n || !env || !seccionesEnvolvente(env) || n.carpManual || p.carpinteriaFija || tramoEn(p, n.cota)?.modo !== 'continua') return null;
+    return env.secciones!.find(x => Math.abs(x.cota - n.cota) < 1e-6) ?? null;
+  };
   const siluetaPropia = (): Vertice[] => {
     const n = estado.proyecto.niveles[iNivel];
     if (editaCarp) {
+      const sec = seccionEnv(iNivel);
+      if (sec) return sec.v;                                   // editar la sección de la envolvente (no suelta el piso)
+      soltarCarp(n);
       if (!n.carpinteria || n.carpinteria.length < 3) n.carpinteria = (carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta).map(v => ({ ...v }));
       return n.carpinteria;
     }
@@ -536,7 +656,20 @@ export function montarPlanta(cont: HTMLElement) {
     return n.silueta;
   };
   /** los vértices que se están editando (losa o carpintería), propios o heredados */
-  const verticesEd = (): Vertice[] => (editaCarp ? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
+  const verticesEd = (): Vertice[] => (editaCarp ? seccionEnv(iNivel)?.v ?? carpinteriaDeNivel(estado.proyecto, iNivel)?.v ?? plantaDeNivel(estado.proyecto, iNivel).silueta : plantaDeNivel(estado.proyecto, iNivel).silueta);
+  /** la relación losa ↔ carpintería, a la vista: si la carpintería sigue a las losas (tramos) se puede fijar */
+  function estadoCarpLosas(): HTMLElement[] {
+    const p = estado.proyecto, tramos = tramosCarpinteria(p).length > 0;
+    const l = (t: string) => { const x = document.createElement('span'); x.className = 'estado-carp'; x.textContent = t; return x; };
+    const bt = (t: string, ti: string, f: () => void) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; x.addEventListener('click', f); return x; };
+    const fila = (...xs: HTMLElement[]) => { const d = document.createElement('div'); d.className = 'fila-acciones'; d.append(...xs); return d; };
+    if (tramos && !p.carpinteriaFija) return [l('carpintería: sigue a las losas (por tramos); si cambiás una losa, se recalcula'),
+      fila(bt('Fijar la carpintería', 'La carpintería queda como está ahora: las losas se editan (a mano, perfil, loft, planos de corte) sin tocarla. Los avisos dicen si queda fuera de una losa o sobre un vacío.', () => estado.cambiar(pp => { pp.carpinteriaFija = true; })))];
+    if (tramos) return [l('carpintería: fija; las losas se editan sin tocarla'),
+      fila(bt('Que siga a las losas', 'Los tramos vuelven a calcular la carpintería con las losas de ahora (se pierde la carpintería fija)', () => estado.cambiar(pp => { delete pp.carpinteriaFija; })))];
+    const hay = p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3);
+    return [l(hay ? 'carpintería: dibujada a mano, independiente de las losas' : 'sin carpintería: el viento toma el borde de la losa')];
+  }
   function armarPanelSil() {
     const p = estado.proyecto, n = p.niveles[iNivel];
     if (!n) return;
@@ -559,10 +692,10 @@ export function montarPlanta(cont: HTMLElement) {
       const u = ((await pedirTexto('Unidad del dibujo', `Escribí m, cm o mm. El contorno mide ${ext.B.toFixed(1)} × ${ext.L.toFixed(1)} en el DXF.`, guess, 'Importar')) ?? '').trim().toLowerCase();
       const factor = u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : u === 'm' ? 1 : NaN;
       if (!isFinite(factor)) return;
-      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); if (editaCarp) nv.carpinteria = c; else nv.silueta = c; });
+      estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; const c = ajustarContorno(mayor, factor, true); const sec = editaCarp ? seccionEnv(iNivel) : null; if (sec) sec.v = c; else if (editaCarp) { soltarCarp(nv); nv.carpinteria = c; } else nv.silueta = c; });
     });
     const que = document.createElement('div'); que.className = 'seg seg-chico'; que.setAttribute('role', 'group'); que.setAttribute('aria-label', 'Contorno a editar');
-    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
+    ([['Losa', false], ['Carpintería', true]] as const).forEach(([t, v]) => { const x = boton(t, () => { editaCarp = v; vSel = null; pintarLosaCarp(modo); armarPanelSil(); dibujar(); }, v ? 'Contorno de la carpintería (cerramiento): su caja da a máx y b máx' : 'Contorno de la losa (silueta del piso)'); x.setAttribute('aria-pressed', String(editaCarp === v)); que.append(x); });
     // vértices: agregar, borrar y escribir coordenadas (en una tablet, el doble clic y el clic derecho no andan bien)
     const vs = verticesEd();
     if (vSel !== null && vSel >= vs.length) vSel = null;
@@ -594,10 +727,9 @@ export function montarPlanta(cont: HTMLElement) {
       ponerModo('mover');
       edc.abrirContorno({
         titulo: `${carp ? 'Carpintería' : 'Losa'} del nivel ${nombre}`, v: v0,
-        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel]; if (carp) nv.carpinteria = v; else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
+        guardar: v => { estado.cambiar(() => { const nv = estado.proyecto.niveles[nivel], sec = carp ? seccionEnv(nivel) : null; if (sec) sec.v = v; else if (carp) { soltarCarp(nv); nv.carpinteria = v; } else nv.silueta = v; }); editaCarp = carp; ponerModo('silueta'); },
       });
     }, 'Arcos (por tres puntos o por radio), empalmes, chaflanes, dividir lados, largo y ángulo exactos, desfasar, simetría, girar, escalar y formas (círculo, polígono, elipse). El mismo editor que el contorno de los muros.');
-    cad.classList.add('primario');
     filaV.append(agregar, borrar, cad);
     if (vSel !== null) {
       const k = vSel, v0 = vs[k];
@@ -611,43 +743,489 @@ export function montarPlanta(cont: HTMLElement) {
     if (editaCarp) {
       const car = carpinteriaDeNivel(p, iNivel);
       const f2 = (x: number) => x.toFixed(2).replace('.', ',');
-      panelSil.append(que, b(`Carpintería de ${n.nombre}`),
+      // carpintería por tramos de altura: sin, por losa (de losa a losa, entre las dos) o continua; se recalcula sola
+      const tramos = tramosCarpinteria(p);
+      const segue = document.createElement('div'); segue.className = 'sigue-losa';
+      const ponerTramos = (f: (ts: TramoCarpinteria[]) => void) => estado.cambiar(pp => { const ts = tramosCarpinteria(pp).map(t => ({ ...t })); f(ts); delete pp.carpinteriaRetiro; if (ts.length) pp.carpinteriaTramos = ts.sort((x, y) => x.desde - y.desde); else delete pp.carpinteriaTramos; });
+      const nivelesFach = p.niveles.filter(x => x.cota >= -1e-6).sort((x, y) => x.cota - y.cota);
+      if (!tramos.length) {
+        // el método para toda la torre (un tramo desde el nivel más bajo); los tramos quedan para después, con «+ tramo»
+        const metodo = (modo: 'losa' | 'continua') => () => ponerTramos(ts => { ts.push({ desde: nivelesFach[0]?.cota ?? 0, modo, retiro: 0.3, forma: 'plana' }); });
+        const bPiso = boton('Por piso (recomendado)', metodo('losa'), 'Vertical, de la losa de abajo a la de arriba, en lo común a las dos (nunca sobre un vacío); plana, metida 0,30 m. Sigue sola a las losas.');
+        bPiso.className = 'primario';
+        segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: '¿Cómo es la carpintería de la torre?' }),
+          h2(bPiso, boton('Envolvente', metodo('continua'), 'Una piel que pasa por el borde de cada losa y sigue la superficie de la torre; plana, metida 0,30 m.')),
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Las dos siguen solas a las losas (se pueden fijar después). Para mezclar, por ejemplo una base abierta y una corona envolvente, después agregá tramos con «+ tramo». O dibujala a mano, piso por piso, arrastrando los vértices.' }));
+      } else {
+        segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Carpintería por tramos' }));
+        tramos.forEach((t, k) => {
+          const fila = document.createElement('div'); fila.className = 'tramo-carp';
+          const sd = document.createElement('select'); sd.setAttribute('aria-label', 'Desde qué nivel');
+          if (!nivelesFach.some(x => Math.abs(x.cota - t.desde) < 1e-6)) sd.append(new Option(`a ${String(+t.desde.toFixed(2)).replace('.', ',')} m`, String(t.desde), false, true));
+          nivelesFach.forEach(x => sd.append(new Option(x.nombre, String(x.cota), false, Math.abs(x.cota - t.desde) < 1e-6)));
+          sd.addEventListener('change', () => ponerTramos(ts => { ts[k].desde = +sd.value; }));
+          // el modo, a la vista: un control segmentado como el resto de la app
+          const sm = document.createElement('div'); sm.className = 'seg chico modo-tramo'; sm.setAttribute('role', 'group'); sm.setAttribute('aria-label', 'Modo del tramo');
+          const AYUDA_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería: la base abierta', losa: 'Vertical, de la losa de abajo a la de arriba (siempre entre las dos)', continua: 'Sigue la superficie de borde a borde de las losas' };
+          const CORTO: Record<ModoCarpinteria, string> = { sin: 'Sin', losa: 'Por piso', continua: 'Envolvente' };
+          (Object.keys(NOMBRE_MODO) as ModoCarpinteria[]).forEach(m => { const x = boton(CORTO[m], () => { if (m !== t.modo) ponerTramos(ts => { ts[k].modo = m; }); }, AYUDA_MODO[m]); x.setAttribute('aria-pressed', String(m === t.modo)); sm.append(x); });
+          const rt = document.createElement('input'); rt.type = 'text'; rt.inputMode = 'decimal'; rt.className = 'campo-vertice'; rt.value = String(t.retiro ?? 0).replace('.', ','); rt.setAttribute('aria-label', 'Retiro desde el borde de la losa');
+          rt.addEventListener('change', () => { const x = parseFloat(rt.value.replace(',', '.')); if (isFinite(x) && x >= 0) ponerTramos(ts => { ts[k].retiro = x; }); });
+          const lab = (t2: string, ...h: (string | Node)[]) => { const l = document.createElement('label'); l.className = 'campo-esq'; l.append(t2, ...h); return l; };
+          const quitar = boton('✕', () => ponerTramos(ts => { ts.splice(k, 1); }), 'Sacar este tramo'); quitar.className = 'quitar-tramo'; quitar.setAttribute('aria-label', 'Sacar este tramo');
+          const arriba = document.createElement('div'); arriba.className = 'tramo-cab'; arriba.append(lab('desde ', sd), ...(t.modo === 'sin' ? [] : [lab('metida ', rt, ' m')]), quitar);
+          // la forma: plana (facetas rectas, un paño plano por faceta) o curva (sigue los arcos de la losa)
+          const sf = document.createElement('div'); sf.className = 'seg chico forma-tramo'; sf.setAttribute('role', 'group'); sf.setAttribute('aria-label', 'Forma de los paños');
+          const forma = t.forma === 'plana' ? 'plana' : 'curva';
+          ([['plana', 'Plana', `Paños planos: los lados curvos de la losa pasan a facetas rectas de hasta ${String(moduloFacetas(p)).replace('.', ',')} m (el módulo de la panelería)`], ['curva', 'Curva', 'Sigue los arcos y las curvas de la losa (vidrio curvo)']] as const).forEach(([f2, nom, ti]) => {
+            const x = boton(nom, () => { if (f2 !== forma) ponerTramos(ts => { ts[k].forma = f2; }); }, ti); x.setAttribute('aria-pressed', String(f2 === forma)); sf.append(x);
+          });
+          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf]));
+          segue.append(fila);
+        });
+        const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
+        segue.append(h2(...(sig ? [boton('+ tramo', () => ponerTramos(ts => { ts.push({ desde: sig.cota, modo: 'continua', retiro: ult.retiro ?? 0.3, forma: ult.forma ?? 'plana' }); }), `Otro tramo desde ${sig.nombre}`)] : []),
+          boton('Volver a la carpintería a mano', () => ponerTramos(ts => { ts.length = 0; }), 'Las carpinterías quedan como están ahora y se editan nivel por nivel')),
+          Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Por piso: vertical, de la losa de abajo a la de arriba, con el contorno de lo común a las dos (nunca queda en el aire). Envolvente: pasa por el borde de cada losa y sigue la superficie. Sin: la base abierta (como el Citicorp debajo del cajón). Plana: los lados curvos pasan a facetas rectas, cada una un paño plano; Curva: vidrio que sigue la curva.' }));
+        // envolvente: la piel diseñada aparte de las losas (su planta base, su forma en altura y sus planos de corte)
+        const tEnv = tramos.find(x => x.modo === 'continua');
+        if (tEnv) {
+          const nota = (t: string) => Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: t });
+          segue.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Envolvente' }));
+          if (!p.envolvente) {
+            const bEnv = boton('Diseñar la envolvente aparte', () => estado.cambiar(pp => { pp.envolvente = envolventeDesdeLosas(pp, tEnv.retiro ?? 0); }), 'Arranca igual que hoy (la losa base metida el retiro, con el perfil y los planos de las losas) y desde ahí la piel se diseña sola: las losas se editan sin tocarla');
+            bEnv.className = 'primario';
+            segue.append(nota('Hoy la envolvente sigue el borde de las losas. Diseñala aparte para darle forma propia (perfil, giro, planos de corte) y editar las losas sin tocarla; si una losa sale de la piel, hay un aviso.'), h2(bEnv));
+          } else {
+            const bp = boton('Recortar con un plano…', () => { ponerModo('mover'); corte.abrir('envolvente'); }, 'En el corte de la torre: dos puntos y el plano recorta la envolvente (las losas no se tocan)');
+            const nPl = p.envolvente.planos?.length ?? 0;
+            // la forma: por perfil o por secciones (pisos clave que se editan en la planta; los de en medio pasan de una a otra)
+            const secs = seccionesEnvolvente(p.envolvente);
+            const forma: HTMLElement[] = [];
+            if (secs) {
+              const lista = document.createElement('div'); lista.className = 'secciones-env';
+              secs.forEach(sx => {
+                const nv = p.niveles.find(x => Math.abs(x.cota - sx.cota) < 1e-6);
+                const it = document.createElement('span'); it.className = 'seccion-item';
+                const ir = boton(nv?.nombre ?? `${String(sx.cota).replace('.', ',')} m`, () => { const k = p.niveles.findIndex(x => Math.abs(x.cota - sx.cota) < 1e-6); if (k >= 0) irANivel(k); }, 'Ir a este piso para editar la sección');
+                const x = boton('✕', () => estado.cambiar(pp => { if (!pp.envolvente) return; const xs = (pp.envolvente.secciones ?? []).filter(q => Math.abs(q.cota - sx.cota) > 1e-6); pp.envolvente = { ...pp.envolvente, secciones: xs.length ? xs : null }; }), 'Quitar esta sección'); x.className = 'quitar-tramo';
+                it.append(ir, x); lista.append(it);
+              });
+              const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'Paso entre secciones');
+              ([[false, 'Recto', 'De una sección a la otra en línea recta (aristas en las secciones)'], [true, 'Suave', 'Curva suave que pasa por todas las secciones']] as const).forEach(([v, t, ti]) => { const bx = boton(t, () => estado.cambiar(pp => { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, suave: v || null }; }), ti); bx.setAttribute('aria-pressed', String(!!p.envolvente!.suave === v)); sg.append(bx); });
+              forma.push(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: `Forma por secciones (${secs.length})` }), lista, sg,
+                nota('Cada sección se edita en su piso, en la planta, arrastrando los vértices. Para otra: andá a un piso y «Hacer sección en este piso».'),
+                h2(boton('Volver al perfil', () => estado.cambiar(pp => { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, secciones: null }; }), 'Se quitan las secciones: la piel vuelve a la planta base con su perfil')));
+            } else forma.push(seccionPerfil('envolvente'),
+              nota('Para darle forma piso por piso (como un loft): andá a un piso y «Hacer sección en este piso»; se editan sus vértices en la planta.'));
+            segue.append(nota(`Diseñada aparte: las losas se editan sin tocarla. En la planta se ve su sombra en cada piso.${nPl ? ` ${nPl} ${nPl === 1 ? 'plano la recorta' : 'planos la recortan'}.` : ''}`),
+              ...forma,
+              h2(bp,
+                boton('Planta base = la losa', () => estado.cambiar(pp => { if (!pp.envolvente) return; const e2 = envolventeDesdeLosas(pp, tEnv.retiro ?? 0); pp.envolvente = { ...pp.envolvente, planta: e2.planta }; }), 'La planta base de la piel vuelve a ser la losa base metida el retiro (la forma en altura y los planos quedan)'),
+                boton('Que siga a las losas', () => estado.cambiar(pp => { delete pp.envolvente; }), 'Se quita la envolvente: la piel vuelve a pasar por el borde de cada losa')));
+          }
+        }
+        // panelería: montantes cada «módulo» m (en las esquinas siempre), antepecho opaco y travesaños intermedios
+        const pn = p.paneleria;
+        const pan = document.createElement('div'); pan.className = 'paneleria';
+        const cpn = (rot: string, val: number, f: (x: number) => void, unidad: string, ti: string) => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(val).replace('.', ','); i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x) && x >= 0) f(x); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, unidad ? ` ${unidad}` : ''); return l; };
+        const ponerPn = (f: (q: NonNullable<typeof pn>) => void) => estado.cambiar(pp => { const q = { ...(pp.paneleria ?? { modulo: 1.5, antepecho: 0.9, intermedios: 0 }) }; f(q); pp.paneleria = q; });
+        if (!pn) pan.append(boton('Panelería: montantes y antepechos', () => ponerPn(() => { /* los valores de siempre */ }), 'Montantes cada 1,5 m (y en las esquinas), travesaño en cada losa y un antepecho opaco de 0,90 m'));
+        else {
+          const r = calcularPaneleria(bandasFachada(p, prepararSecciones), pn);
+          const f1 = (x: number) => x.toFixed(1).replace('.', ',');
+          pan.append(Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Panelería' }),
+            cpn(pn.regla === 'fijo' ? 'módulo' : 'montantes cada (máx.)', pn.modulo, x => ponerPn(q => { q.modulo = Math.max(0.3, x); }), 'm', pn.regla === 'fijo' ? 'ancho exacto de cada paño; el sobrante queda en los bordes de la cara' : 'ancho máximo de los paños: cada cara se reparte en partes iguales (siempre hay un montante en cada esquina)'),
+            ...(() => {
+              // reglas de la grilla: parejo (sin pasar del módulo) o módulo fijo, desde dónde arranca y un desfase
+              const seg = (rot: string, ops: [string, string, string][], val: string, f: (v: string) => void) => {
+                const w = document.createElement('div'); w.className = 'campo-esq regla-grilla';
+                const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', rot);
+                ops.forEach(([v, t, ti]) => { const x = boton(t, () => { if (v !== val) f(v); }, ti); x.setAttribute('aria-pressed', String(v === val)); sg.append(x); });
+                w.append(rot + ' ', sg); return w;
+              };
+              const out: HTMLElement[] = [seg('reparto', [['maximo', 'Parejo', 'Partes iguales en cada cara, sin pasar del módulo'], ['fijo', 'Módulo fijo', 'Cada módulo exacto; el sobrante queda en los bordes']], pn.regla === 'fijo' ? 'fijo' : 'maximo', v => ponerPn(q => { if (v === 'fijo') q.regla = 'fijo'; else { delete q.regla; delete q.origen; delete q.desfase; } }))];
+              if (pn.regla === 'fijo') out.push(
+                seg('desde', [['inicio', 'Inicio', 'La modulación arranca en el comienzo de cada cara'], ['centro', 'Centro', 'Centrada: el sobrante se reparte igual en los dos bordes'], ['fin', 'Fin', 'La modulación arranca en el final de cada cara']], pn.origen ?? 'centro', v => ponerPn(q => { q.origen = v as 'inicio' | 'centro' | 'fin'; })),
+                cpn('desfase', pn.desfase ?? 0, x => ponerPn(q => { if (x) q.desfase = x; else delete q.desfase; }), 'm', 'corre la modulación desde el origen (por ejemplo, para que un montante caiga sobre el eje de un tabique)'));
+              return out;
+            })(),
+            cpn('antepecho opaco', pn.antepecho ?? 0, x => ponerPn(q => { q.antepecho = x; }), 'm', 'banda opaca sobre cada losa (0 = todo vidrio)'),
+            (() => {
+              // tolerancia de alabeo: hasta cuánto puede salirse del plano un paño antes de partirlo o avisar
+              const w = document.createElement('div'); w.className = 'campo-esq regla-grilla';
+              const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'Tolerancia de alabeo');
+              const act = pn.alabeoMax === -1 ? 'libre' : (pn.alabeoMax ?? 0.005) > 0.0075 ? 'frio' : 'plano';
+              ([['plano', 'Plano · 5 mm', 'Cada paño plano: hasta 5 mm fuera del plano', 0.005], ['frio', 'Curvado en frío · 15 mm', 'Vidrio plano curvado en obra sobre el marco: hasta 15 mm', 0.015], ['libre', 'Libre', 'Sin límite (vidrio curvo de fábrica)', -1]] as const).forEach(([k, t, ti, v]) => {
+                const x = boton(t, () => ponerPn(q => { if (v === 0.005) delete q.alabeoMax; else q.alabeoMax = v; }), ti); x.setAttribute('aria-pressed', String(act === k)); sg.append(x);
+              });
+              w.append('alabeo ', sg); return w;
+            })(),
+            cpn('travesaños intermedios', pn.intermedios ?? 0, x => ponerPn(q => { q.intermedios = Math.round(x); }), '', 'travesaños de más en el vidrio de cada piso'),
+            Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: `${r.caras ? `${r.caras} caras planas, cada una con su grilla a plomo · ` : ''}${r.vidrio.n} paneles de vidrio (${f1(r.vidrio.area)} m²) · ${r.opacos.n} antepechos (${f1(r.opacos.area)} m²) · montantes ${f1(r.largoMontantes)} m · travesaños ${f1(r.largoTravesanos)} m. ${r.curvados ? ` · ${r.curvados} paños curvados en frío (dentro de la tolerancia).` : ''}${r.alabeados ? ` · ${r.alabeados} paños pasan la tolerancia de alabeo${r.caras ? ' (en las caras planas se parten en dos triángulos)' : ''}: para que sean planos, usá «Plana» y losas de los mismos lados en el tramo, o «Por piso».` : r.curvados ? '' : ' · todos los paños son planos.'} En el 3D: capa «Fachada».` }),
+            h2(boton('Alzado desplegado…', () => abrirDesplegado(), 'Las caras de la fachada una al lado de la otra, en verdadera magnitud, con la lista de paños; tocá una cara para hacerla opaca o abierta o darle su propio módulo'), boton('Sin panelería', () => estado.cambiar(pp => { delete pp.paneleria; }), '')));
+        }
+        segue.append(pan);
+        const tn = tramoEn(p, n.cota);
+        // este piso: lo calcula el tramo, o se soltó para editarlo a mano (con control de que no pase sobre un vacío)
+        const piso: HTMLElement[] = [];
+        if (tn && tn.modo !== 'sin' && !p.carpinteriaFija) {
+          const pt = n.carpinteriaPartida;
+          if (!n.carpManual) {
+            const sec = seccionEnv(iNivel);
+            if (tn.modo === 'continua' && p.envolvente && sec) piso.push(linea('este piso es una sección de la envolvente: arrastrá sus vértices (o «Herramientas CAD…»); los pisos de en medio pasan de una sección a la otra'), filaV,
+              h2(boton('Quitar esta sección', () => estado.cambiar(pp => { if (!pp.envolvente) return; const xs = (pp.envolvente.secciones ?? []).filter(x => Math.abs(x.cota - n.cota) > 1e-6); pp.envolvente = { ...pp.envolvente, secciones: xs.length ? xs : null }; }), 'Este piso vuelve a ser uno de en medio (con dos o más secciones; si queda una sola, la piel vuelve al perfil)')));
+            else if (tn.modo === 'continua' && p.envolvente) piso.push(linea('la genera la envolvente: en la planta se ve su sombra; se diseña en «Envolvente», más abajo, o haciendo una sección en este piso'),
+              h2(boton('Hacer sección en este piso', () => estado.cambiar(pp => { if (!pp.envolvente) return; pp.envolvente = { ...pp.envolvente, secciones: conSeccion(pp, n.cota) }; }), 'La forma de la piel en este piso pasa a editarse acá, con sus vértices; los pisos de en medio pasan suave o recto de una sección a otra (como un loft)'),
+                boton('Soltar este piso', () => estado.cambiar(pp => { pp.niveles[iNivel].carpManual = true; }), 'Este piso deja de seguir a la envolvente y se edita a mano (un balcón o un retiro puntual). Los avisos controlan que no quede sobre un vacío.')));
+            else piso.push(linea(pt ? `lo común a esta losa y la de arriba son ${pt.piezas} piezas separadas: la carpintería va por la más grande y ${String(pt.area).replace('.', ',')} m² quedan sin carpintería (ver avisos)` : 'la calcula el tramo: se recalcula sola si cambian las losas'),
+              h2(boton('Soltar este piso (editar a mano)', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.carpManual = true; delete nv.carpinteriaPartida; }), 'Queda con la forma de ahora y el tramo deja de recalcularla. Si pasa sobre un vacío, aparece un aviso.')));
+          } else {
+            const vol = document.createElement('label'); vol.className = 'campo-esq'; vol.title = 'Un vidrio en voladizo o un atrio hecho a propósito: no se avisa aunque salga de lo común a las dos losas';
+            const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!n.carpVoladizo;
+            cb.addEventListener('change', () => estado.cambiar(pp => { if (cb.checked) pp.niveles[iNivel].carpVoladizo = true; else delete pp.niveles[iNivel].carpVoladizo; }));
+            vol.append(cb, ' voladizo a propósito (no avisar)');
+            piso.push(linea('editada a mano: el tramo no la recalcula'), filaV,
+              h2(boton('Volver a atar al tramo', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; delete nv.carpManual; delete nv.carpVoladizo; }), 'Se pierde lo editado a mano en este piso: vuelve a ser lo común a su losa y la de arriba')), vol);
+          }
+        }
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
+        return;
+      }
+      panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
         linea(!car ? 'sin carpintería: arrastrá un vértice y se copia la silueta de la losa' : car.propia ? 'propia de este nivel' : 'heredada de otro nivel (de arriba o, si arriba no hay, de abajo; se copia al editarla)'),
         ...(car ? [linea(`a máx ${f2(car.a)} × b máx ${f2(car.b)} m · área ${areaSilueta(car.v).toFixed(1).replace('.', ',')} m²`)] : []),
         linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m${car && (Math.abs(car.a - pl.B) > 0.01 || Math.abs(car.b - pl.L) > 0.01) ? ' (distinto de la caja)' : ''}`),
         filaV, dxf,
-        boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
+        h2(boton('Copiar de la losa', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = pl.silueta.map(v => ({ ...v })); }), 'La carpintería arranca igual que la silueta de la losa; después se mueven los vértices hacia adentro.'),
         ...(car ? [boton('Usar a máx y b máx como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +car.a.toFixed(2); nv.L = +car.b.toFixed(2); }), 'Escribe en este nivel B = a máx y L = b máx (es lo que lee la planilla para el viento). No se hace solo: queda a tu criterio.')] : []),
         ...(car ? [boton('Copiar a todos los niveles', async () => {
           if (!(await confirmar('Copiar la carpintería', `La carpintería de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
           estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.carpinteria = car.v.map(q => JSON.parse(JSON.stringify(q))); }); });
           mensaje(`Carpintería de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles: el viento (túneles y presiones) la usa en toda la torre.`);
         }, 'La misma carpintería en todos los pisos: lo que usan el túnel 2D, el túnel 3D y las presiones en cada piso.')] : []),
-        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).'),
-        seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L)));
+        boton('Quitar carpintería', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].carpinteria = null; }), 'Vuelve a la del nivel de arriba (o a ninguna).')),
+        seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L), true));
       return;
     }
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), linea(pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    const delLoft = loftDeNivel(p, iNivel);
+    const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !n.manual;
+    // piso por piso: una losa generada se suelta para editarla a mano; una suelta se vuelve a atar
+    const generable = !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) || (p.lofts ?? []).some(l => nivelesDeLoft(p, l).intermedios.includes(iNivel));
+    const bSoltar = (delLoft || delPerfil) ? [boton('Soltar esta losa (editarla a mano)', () => estado.cambiar(pp => { pp.niveles[iNivel].manual = true; }), 'Queda con la forma que tiene ahora y deja de recalcularse: la editás como cualquier losa. Los demás pisos siguen con el perfil o el loft.')]
+      : n.manual && generable ? [boton('Volver a atar (que la genere el perfil o el loft)', () => estado.cambiar(pp => { delete pp.niveles[iNivel].manual; }), 'Se pierde lo editado a mano en este piso')] : [];
+    const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
+    const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
-      filaV, dxf,
-      boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
+      ...estadoCarpLosas(),
+      // primero la forma (lo que hace falta en una torre en blanco), después ajustarla, al final lo demás
+      seccionDesdeCero(),
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
+      filaV,
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
+      dxf,
+      h2(boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
         estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.silueta = pl.silueta.map(q => JSON.parse(JSON.stringify(q))); }); });
         mensaje(`Silueta de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles.`);
       }, 'La misma silueta de losa en todos los pisos.'),
-      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.'),
+      boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.')),
+      seccionPerfil(),
+      seccionLoft(),
       seccionEsquinas(Math.min(caja.B, caja.L)));
+  }
+  /**
+   * perfil de la torre (alzado): la planta de la losa base se escala, se gira y se corre con la altura. Un alzado chico
+   * con los puntos de la curva: se arrastran (a los costados cambia el ancho, arriba y abajo la altura), un toque en
+   * el alzado agrega un punto; el punto elegido se ajusta con números.
+   */
+  function seccionPerfil(objetivo: 'losas' | 'envolvente' = 'losas'): HTMLElement {
+    const env = objetivo === 'envolvente';
+    // el mismo editor para el perfil de las losas y para la forma de la envolvente: cambia de dónde lee y dónde escribe
+    const leer = (pp: Proyecto): PerfilTorre | null => (env ? pp.envolvente?.perfil ?? null : pp.perfilTorre ?? null);
+    const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else pp.perfilTorre = q; };
+    const ab = env ? pfEnv : pfLosas;
+    const p = estado.proyecto, pf = leer(p);
+    const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre-carta'; det.open = ab.abierto;
+    det.addEventListener('toggle', () => { ab.abierto = det.open; });
+    const sum = document.createElement('summary'); sum.textContent = env ? 'Forma de la envolvente' : `Perfil de la torre${pf ? ' · activo' : ''}`; det.append(sum);
+    let pfSel = ab.sel;
+    const nota = (t: string) => Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: t });
+    const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
+    const poner = (f: (q: PerfilTorre) => void) => estado.cambiar(pp => { const q: PerfilTorre = structuredClone(leer(pp) ?? { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 1 }] }); f(q); q.puntos.sort((a, b) => a.h - b.h); escribir(pp, q); });
+    det.append(nota(env ? 'La piel toma su planta base y la cambia con la altura, sin tocar las losas: más angosta o más ancha, girada o inclinada. Elegí un perfil y ajustalo arrastrando los puntos del alzado.' : 'El edificio entero toma la forma de la losa base y la cambia con la altura: más angosto o más ancho, girado o inclinado. Elegí un perfil y ajustalo arrastrando los puntos del alzado.'));
+    // plantillas
+    const pls = document.createElement('div'); pls.className = 'galeria-perfiles';
+    PERFILES.forEach(x => pls.append(boton(x.nombre, x.texto, () => { pfSel = ab.sel = null; poner(q => { q.puntos = structuredClone(x.p.puntos); q.suave = x.p.suave ?? false; q.giro = x.p.giro ?? 0; }); })));
+    det.append(pls);
+    if (!pf) return det;
+    // alzado: eje vertical = altura (0 abajo, 1 arriba), a los costados el ancho (factor 1 = la base)
+    const W = 260, H = 230, mx = W / 2, y0 = H - 16, y1 = 14, K = 62;
+    const iB = nivelBase(p, pf), zb = p.niveles[iB].cota, zt = p.niveles[0].cota;
+    const baseB = (env && p.envolvente ? cajaSilueta(p.envolvente.planta).B : plantaDeNivel(p, iB).B) || 20, kd = K / (baseB / 2);
+    const Yh = (h: number) => y0 - h * (y0 - y1), Xf = (f: number, dx: number) => mx + f * K + dx * kd;
+    const sv = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'alzado-perfil', role: 'img', 'aria-label': env ? 'Alzado de la envolvente' : 'Alzado del perfil de la torre' }) as SVGSVGElement;
+    const dibujarAlzado = (q: PerfilTorre) => {
+      sv.replaceChildren();
+      // niveles
+      p.niveles.forEach((nv, i) => { if (i > iB) return; const h = (nv.cota - zb) / (zt - zb || 1); sv.append(el('line', { x1: 8, x2: W - 8, y1: Yh(h), y2: Yh(h), class: 'nivel' })); });
+      // la torre: borde derecho (fx) y el izquierdo en espejo, corridos por dx; en trazos, la cara en y (fy) si es distinta
+      const hs = Array.from({ length: 61 }, (_, k) => k / 60), vs = hs.map(h => valorPerfil(q, h));
+      const der = hs.map((h, k) => `${Xf(vs[k].fx, vs[k].dx).toFixed(1)},${Yh(h).toFixed(1)}`), izq = hs.map((h, k) => `${Xf(-vs[k].fx, vs[k].dx).toFixed(1)},${Yh(h).toFixed(1)}`).reverse();
+      sv.append(el('polygon', { points: [...der, ...izq].join(' '), class: 'torre' }));
+      if (q.puntos.some(x => x.fy !== null && x.fy !== undefined && Math.abs(x.fy - x.fx) > 1e-6)) sv.append(el('polyline', { points: hs.map((h, k) => `${Xf(vs[k].fy, vs[k].dy).toFixed(1)},${Yh(h).toFixed(1)}`).join(' '), class: 'cara-y' }));
+      sv.append(el('line', { x1: mx, x2: mx, y1: y0 + 6, y2: y1 - 6, class: 'eje' }));
+      q.puntos.forEach((x, i) => {
+        const c = el('circle', { cx: Xf(x.fx, x.dx ?? 0), cy: Yh(x.h), r: pfSel === i ? 8 : 6, class: 'punto' + (pfSel === i ? ' sel' : ''), 'data-i': i });
+        sv.append(c);
+      });
+      const t = el('text', { x: 8, y: H - 2, class: 'rot' }); t.textContent = `base: ${p.niveles[iB].nombre}`; sv.append(t);
+      const t2 = el('text', { x: 8, y: 11, class: 'rot' }); t2.textContent = p.niveles[0].nombre; sv.append(t2);
+    };
+    let q = structuredClone(pf);
+    dibujarAlzado(q);
+    // arrastrar un punto: a los costados el ancho, arriba y abajo la altura (el primero y el último quedan en la base y la azotea)
+    const aLocal = (ev: PointerEvent) => { const r = sv.getBoundingClientRect(); return { x: ((ev.clientX - r.left) / r.width) * W, y: ((ev.clientY - r.top) / r.height) * H }; };
+    let arr: { i: number; id: number; movio: boolean } | null = null;
+    sv.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      const t = (ev.target as Element).closest?.('[data-i]');
+      const l = aLocal(ev);
+      if (t) { arr = { i: +t.getAttribute('data-i')!, id: ev.pointerId, movio: false }; pfSel = ab.sel = arr.i; }
+      else {
+        // un toque en el alzado agrega un punto a esa altura, con el ancho que marca el toque
+        const h = Math.max(0.01, Math.min(0.99, (y0 - l.y) / (y0 - y1))), v = valorPerfil(q, h);
+        q.puntos.push({ h: +h.toFixed(3), fx: +Math.max(0.05, Math.abs(l.x - mx - v.dx * kd) / K).toFixed(3) });
+        q.puntos.sort((a, b) => a.h - b.h); pfSel = ab.sel = q.puntos.findIndex(x => Math.abs(x.h - h) < 1e-3);
+        arr = { i: pfSel, id: ev.pointerId, movio: true };
+      }
+      try { sv.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
+      dibujarAlzado(q);
+    });
+    sv.addEventListener('pointermove', ev => {
+      if (!arr || ev.pointerId !== arr.id) return;
+      const l = aLocal(ev), x = q.puntos[arr.i], n = q.puntos.length;
+      x.fx = +Math.max(0.05, Math.min(3, (l.x - mx - (x.dx ?? 0) * kd) / K)).toFixed(3);
+      if (arr.i > 0 && arr.i < n - 1) x.h = +Math.max(q.puntos[arr.i - 1].h + 0.005, Math.min(q.puntos[arr.i + 1].h - 0.005, (y0 - l.y) / (y0 - y1))).toFixed(3);
+      arr.movio = true; dibujarAlzado(q);
+    });
+    const soltarP = () => { if (!arr) return; const m = arr.movio; arr = null; if (m) estado.cambiar(pp => { escribir(pp, structuredClone(q)); }); else armarPanelSil(); };
+    sv.addEventListener('pointerup', soltarP); sv.addEventListener('pointercancel', soltarP);
+    det.append(sv);
+    // forma de la curva, giro, base
+    const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Curva del perfil');
+    ([[false, 'Tramos rectos'], [true, 'Curva suave']] as const).forEach(([v, t]) => { const x = boton(t, v ? 'Curva suave que pasa por todos los puntos (sin pasarse de ellos)' : 'Rectas entre los puntos: aristas y escalones', () => poner(z => { z.suave = v; })); x.setAttribute('aria-pressed', String(!!pf.suave === v)); seg.append(x); });
+    const num = (rot: string, val: number, f: (x: number) => void, unidad: string, ti = '') => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(val).replace('.', ','); i.addEventListener('change', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x)) f(x); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, ` ${unidad}`); return l; };
+    const sb = document.createElement('select'); sb.setAttribute('aria-label', 'Losa base');
+    p.niveles.forEach((nv, i) => { if (nv.cota >= -1e-6 && i > 0) sb.append(new Option(nv.nombre, String(nv.cota), false, i === iB)); });
+    sb.addEventListener('change', () => poner(z => { z.base = +sb.value; }));
+    const lb = document.createElement('label'); lb.className = 'campo-esq'; lb.append('losa base ', sb);
+    det.append(seg, lb, num('giro total', pf.giro ?? 0, x => poner(z => { z.giro = x; }), '°', 'de la base a la azotea, antihorario'));
+    // el punto elegido
+    if (pfSel !== null && pf.puntos[pfSel]) {
+      const i = pfSel, x = pf.puntos[i], alt = zb + x.h * (zt - zb);
+      const caja = document.createElement('div'); caja.className = 'punto-perfil';
+      caja.append(Object.assign(document.createElement('b'), { textContent: `Punto ${i + 1} · a ${alt.toFixed(1).replace('.', ',')} m` }),
+        num('ancho en x', +(x.fx * 100).toFixed(1), v => poner(z => { z.puntos[i].fx = v / 100; }), '%', 'respecto de la losa base'),
+        num('ancho en y', +((x.fy ?? x.fx) * 100).toFixed(1), v => poner(z => { z.puntos[i].fy = Math.abs(v / 100 - z.puntos[i].fx) < 1e-9 ? null : v / 100; }), '%', 'igual que en x si no se cambia'),
+        num('corrimiento x', x.dx ?? 0, v => poner(z => { z.puntos[i].dx = v; }), 'm', 'torre inclinada'),
+        num('corrimiento y', x.dy ?? 0, v => poner(z => { z.puntos[i].dy = v; }), 'm'));
+      if (i > 0 && i < pf.puntos.length - 1) caja.append(boton('Sacar este punto', '', () => { pfSel = ab.sel = null; poner(z => { z.puntos.splice(i, 1); }); }));
+      det.append(caja);
+    } else det.append(nota('Tocá un punto del alzado para ajustarlo con números; tocá en otro lado del alzado para agregar uno.'));
+    const lofts = env ? 0 : (p.lofts ?? []).length;
+    if (lofts) det.append(nota(`Hay ${lofts} ${lofts === 1 ? 'loft' : 'lofts'}: mandan sobre los niveles que generan.`));
+    if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
+    void aplicarPerfil;
+    return det;
+  }
+  /**
+   * losa desde cero: formas de arranque con sus medidas, dibujarla a mano vértice por vértice, y salientes (balcones,
+   * voladizos) o entrantes (retiros) en un lado. Abierta de entrada si el nivel todavía no tiene silueta propia.
+   */
+  function seccionDesdeCero(): HTMLElement {
+    const p = estado.proyecto, n = p.niveles[iNivel], pl = plantaDeNivel(p, iNivel);
+    const det = document.createElement('details'); det.className = 'esquinas-torre losa-cero';
+    det.open = dc.abierto ?? (!pl.propia || !p.muros.length);
+    // (un details nuevo ya abierto también avisa «toggle»: solo cuenta si cambió, si no la carta se rearma sin fin)
+    det.addEventListener('toggle', () => { if (dc.abierto === det.open) return; dc.abierto = det.open; if (!det.open && dc.previa) { dc.previa = null; pedirDibujo(); } });
+    const sum = document.createElement('summary'); sum.textContent = 'Losa desde cero'; det.append(sum);
+    const nota = (t: string) => { const x = document.createElement('p'); x.className = 'nota-losa'; x.textContent = t; return x; };
+    const boton = (t: string, ti: string, f: () => void, prim = false) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; if (prim) x.className = 'primario'; x.addEventListener('click', f); return x; };
+    // galería de formas con su dibujito
+    const gal = document.createElement('div'); gal.className = 'galeria-formas'; gal.setAttribute('role', 'group'); gal.setAttribute('aria-label', 'Forma de la losa');
+    (Object.keys(FORMAS_LOSA) as FormaLosa[]).forEach(f => {
+      const v = formaLosa(f, FORMAS_LOSA[f].def), x = document.createElement('button'); x.type = 'button'; x.title = `${FORMAS_LOSA[f].nombre}: ${FORMAS_LOSA[f].texto}`; x.setAttribute('aria-pressed', String(dc.forma === f));
+      if (!('error' in v)) {
+        const ps = puntosSilueta(v, 10), xs = ps.map(q => q.x), ys = ps.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), k = 26 / Math.max(x1 - x0, y1 - y0);
+        const sv = el('svg', { viewBox: '0 0 30 30', width: 30, height: 30, 'aria-hidden': 'true' });
+        sv.append(el('polygon', { points: ps.map(q => `${(15 + (q.x - (x0 + x1) / 2) * k).toFixed(1)},${(15 - (q.y - (y0 + y1) / 2) * k).toFixed(1)}`).join(' ') }));
+        x.append(sv);
+      }
+      const t = document.createElement('span'); t.textContent = FORMAS_LOSA[f].nombre; x.append(t);
+      x.addEventListener('click', () => { dc.forma = f; dc.med = { ...FORMAS_LOSA[f].def }; dc.previa = 'forma'; armarPanelSil(); dibujar(); });
+      gal.append(x);
+    });
+    det.append(nota('1 · Elegí una forma y escribí sus medidas (en metros). Queda centrada en la planta.'), gal);
+    const ROT: Record<keyof MedidasLosa, string> = { B: 'B (ancho en x)', L: 'L (largo en y)', a: 'a (ancho de las alas)', r: 'r (radio de las esquinas)', n: 'lados', Bs: 'ancho de arriba' };
+    const campos = document.createElement('div'); campos.className = 'campos-forma';
+    FORMAS_LOSA[dc.forma].medidas.forEach(k => {
+      const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = String(dc.med[k] ?? '').replace('.', ',');
+      i.addEventListener('input', () => { const x = parseFloat(i.value.replace(',', '.')); if (isFinite(x)) dc.med[k] = x; dc.previa = 'forma'; avisoForma(); pedirDibujo(); });
+      const l = document.createElement('label'); l.className = 'campo-esq'; l.append(ROT[k] + ' ', i, k === 'n' ? '' : ' m'); campos.append(l);
+    });
+    // lo que está mal en las medidas se dice acá mismo, mientras se escribe (y la vista previa no se dibuja)
+    const errF = document.createElement('p'); errF.className = 'error-losa'; errF.setAttribute('role', 'status');
+    const avisoForma = () => { const v = formaLosa(dc.forma, dc.med); errF.textContent = 'error' in v ? v.error : dc.previa === 'forma' ? `Vista previa en la planta (línea de trazos). «Usar» la aplica.` : ''; errF.classList.toggle('mal', 'error' in v); };
+    avisoForma();
+    const blc = document.createElement('input'); blc.type = 'checkbox'; blc.checked = dc.bl; blc.addEventListener('change', () => { dc.bl = blc.checked; });
+    const lbl = document.createElement('label'); lbl.className = 'campo-linea'; lbl.title = 'La planilla toma de cada nivel B y L (para el viento): con esto quedan iguales a la caja de la forma'; lbl.append(blc, ' B y L de la planilla = la caja de la forma');
+    const usar = (todos: boolean) => {
+      const v = formaLosa(dc.forma, dc.med);
+      if ('error' in v) { void avisar('error', 'No se puede armar la forma', v.error); return; }
+      estado.cambiar(pp => {
+        const c = cajaSilueta(v);
+        (todos ? pp.niveles.map((_, k) => k) : [iNivel]).forEach(k => { pp.niveles[k].silueta = v.map(q => JSON.parse(JSON.stringify(q))); if (dc.bl) { pp.niveles[k].B = +c.B.toFixed(2); pp.niveles[k].L = +c.L.toFixed(2); } });
+      });
+      dc.previa = null;
+      mensaje(`${FORMAS_LOSA[dc.forma].nombre} en ${todos ? 'todos los niveles' : n.nombre}. Ajustala arrastrando los vértices o con «Herramientas CAD…».`);
+    };
+    det.append(campos, errF, lbl, h2(boton(`Usar en ${n.nombre}`, 'La losa de este nivel pasa a tener esta forma', () => usar(false), true), boton('Usar en todos los niveles', 'Todas las losas con esta forma (después se cambian de a una o con un loft)', async () => { if (await confirmar('Forma en todos los niveles', `Las losas de los ${p.niveles.length} niveles pasan a ser «${FORMAS_LOSA[dc.forma].nombre}» (se reemplazan las que tengan). Se puede deshacer.`, 'Usar')) usar(true); })));
+    // a mano
+    det.append(nota('2 · O dibujala a mano: tocá los vértices en la planta, uno por uno, y cerrala tocando el primero.'));
+    const ort = document.createElement('input'); ort.type = 'checkbox'; ort.checked = dc.orto; ort.addEventListener('change', () => { dc.orto = ort.checked; });
+    const lo = document.createElement('label'); lo.className = 'campo-linea'; lo.append(ort, ' a 90° (horizontal o vertical)');
+    det.append(h2(trazo ? boton('Cancelar el dibujo', 'Esc', () => { trazo = null; trazoCursor = null; armarPanelSil(); dibujar(); indicar(INDIC.silueta); })
+      : boton('Dibujar la losa a mano', 'Tocá los vértices en la planta; se pegan a la grilla. Enter o tocar el primero: cierra. Retroceso: borra el último. Esc: cancela.', () => { trazo = []; trazoCursor = null; armarPanelSil(); dibujar(); indicar(INDIC_TRAZO); }, true), lo));
+    // salientes y entrantes
+    const lados = ladosLosa(pl.silueta);
+    if (dc.lado >= lados.length) dc.lado = 0;
+    det.append(nota('3 · Balcones, voladizos y retiros: un rectángulo que sale (o entra) de un lado recto.'));
+    const sl = document.createElement('select'); sl.setAttribute('aria-label', 'Lado');
+    lados.forEach(l => sl.append(new Option(`Lado ${l.i + 1} · mira ${l.mira} · ${l.largo.toFixed(2).replace('.', ',')} m${l.recto ? '' : ' (curvo)'}`, String(l.i), false, l.i === dc.lado)));
+    sl.addEventListener('change', () => { dc.lado = +sl.value; if (dc.previa !== 'meter') dc.previa = 'sacar'; avisoSal(); dibujar(); });
+    const num = (rot: string, val: number | null, f: (x: number | null) => void, ti = '') => { const i = document.createElement('input'); i.type = 'text'; i.inputMode = 'decimal'; i.className = 'campo-vertice'; i.value = val === null ? '' : String(val).replace('.', ','); i.placeholder = val === null ? 'medio' : ''; i.addEventListener('input', () => { const x = parseFloat(i.value.replace(',', '.')); f(isFinite(x) ? x : null); if (dc.previa !== 'meter') dc.previa = 'sacar'; avisoSal(); pedirDibujo(); }); const l = document.createElement('label'); l.className = 'campo-esq'; l.title = ti; l.append(rot + ' ', i, ' m'); return l; };
+    const errS = document.createElement('p'); errS.className = 'error-losa'; errS.setAttribute('role', 'status');
+    const avisoSal = () => {
+      if (!dc.previa || dc.previa === 'forma') { errS.textContent = ''; return; }
+      const r = salienteEnLado(pl.silueta, dc.lado, dc.ancho, (dc.previa === 'meter' ? -1 : 1) * Math.abs(dc.prof), dc.centro);
+      errS.textContent = 'error' in r ? r.error : `Vista previa del ${dc.previa === 'meter' ? 'retiro' : 'balcón'} en la planta.`;
+      errS.classList.toggle('mal', 'error' in r);
+    };
+    const bSacar = boton('Sacar (balcón)', 'Agrega un rectángulo hacia afuera del lado elegido (resaltado en la planta)', () => aplicar(1), true), bMeter = boton('Meter (retiro)', 'Saca un rectángulo hacia adentro del lado elegido', () => aplicar(-1));
+    // al pasar por encima (o tocar el campo) cada botón muestra lo que haría
+    ([[bSacar, 'sacar'], [bMeter, 'meter']] as const).forEach(([b, q]) => { b.addEventListener('pointermove', () => { if (dc.previa !== q) { dc.previa = q; avisoSal(); pedirDibujo(); } }); b.addEventListener('focus', () => { dc.previa = q; avisoSal(); pedirDibujo(); }); });
+    const botonesSal = h2(bSacar, bMeter);
+    avisoSal();
+    const aplicar = (signo: 1 | -1) => {
+      const r = salienteEnLado(pl.silueta, dc.lado, dc.ancho, signo * Math.abs(dc.prof), dc.centro);
+      if ('error' in r) { void avisar('error', signo > 0 ? 'No se puede agregar el saliente' : 'No se puede hacer el entrante', r.error); return; }
+      dc.previa = null;
+      estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.silueta = r; if (dc.bl) { const c = cajaSilueta(r); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); } });
+      mensaje(signo > 0 ? `Saliente de ${dc.ancho} × ${dc.prof} m en el lado ${dc.lado + 1}.` : `Entrante de ${dc.ancho} × ${dc.prof} m en el lado ${dc.lado + 1}.`);
+    };
+    det.append(sl,
+      num('ancho', dc.ancho, x => { if (x && x > 0) dc.ancho = x; }), num('profundidad', dc.prof, x => { if (x && x > 0) dc.prof = x; }),
+      num('centro a', dc.centro, x => { dc.centro = x; }, 'distancia del centro del saliente al primer vértice del lado (vacío: en el medio del lado)'),
+      errS, botonesSal);
+    return det;
+  }
+  /** fila de botones */
+  function h2(...xs: HTMLElement[]) { const d = document.createElement('div'); d.className = 'fila-acciones'; d.append(...xs); return d; }
+  /**
+   * loft de losas (como el de Rhino): la losa que se está viendo es la primera; se elige la otra (y, si se quiere,
+   * losas del medio que también mandan) y las siluetas de todas las losas entre ellas salen de interpolarlas
+   */
+  function seccionLoft(): HTMLElement {
+    const p = estado.proyecto, n = p.niveles[iNivel];
+    const det = document.createElement('details'); det.className = 'esquinas-torre loft-losas'; det.open = lft.abierto;
+    det.addEventListener('toggle', () => { lft.abierto = det.open; });
+    const sum = document.createElement('summary'); sum.textContent = `Loft de losas${p.lofts?.length ? ` (${p.lofts.length})` : ''}`; det.append(sum);
+    const nota = (t: string) => { const x = document.createElement('p'); x.className = 'nota'; x.textContent = t; return x; };
+    const fila = (rot: string, ...hijos: (HTMLElement | string)[]) => { const l = document.createElement('label'); l.className = 'campo-esq'; l.append(rot, ...hijos); return l; };
+    const nombreDe = (z: number) => p.niveles.find(x => Math.abs(x.cota - z) < 1e-6)?.nombre ?? `${z} m`;
+    const fz = (z: number) => z.toFixed(2).replace('.', ',');
+    det.append(nota('Como el Loft de Rhino: elegís dos losas y la silueta de todas las que quedan entre ellas sale de pasar de una forma a la otra. Las losas sección se siguen editando; las del medio se recalculan solas.'));
+    // la otra losa
+    if (lft.otra !== null && (Math.abs(lft.otra - n.cota) < 1e-6 || !p.niveles.some(x => Math.abs(x.cota - lft.otra!) < 1e-6))) lft.otra = null;
+    lft.medias = lft.medias.filter(z => p.niveles.some(x => Math.abs(x.cota - z) < 1e-6) && Math.abs(z - n.cota) > 1e-6 && (lft.otra === null || Math.abs(z - lft.otra) > 1e-6));
+    const sOtra = document.createElement('select');
+    sOtra.append(new Option('— elegí la otra losa —', ''));
+    p.niveles.forEach(x => { if (Math.abs(x.cota - n.cota) > 1e-6) sOtra.append(new Option(`${x.nombre} (${fz(x.cota)} m)`, String(x.cota), false, lft.otra !== null && Math.abs(x.cota - lft.otra) < 1e-6)); });
+    sOtra.addEventListener('change', () => { lft.otra = sOtra.value === '' ? null : Number(sOtra.value); armarPanelSil(); });
+    det.append(fila('Losa 1 ', Object.assign(document.createElement('b'), { textContent: `${n.nombre} (la que estás viendo)` })), fila('Losa 2 ', sOtra));
+    if (lft.otra !== null) {
+      const z0 = Math.min(n.cota, lft.otra), z1 = Math.max(n.cota, lft.otra);
+      const entre = p.niveles.filter(x => x.cota > z0 + 1e-6 && x.cota < z1 - 1e-6);
+      // losas del medio que también mandan (loft por varias secciones)
+      const sMed = document.createElement('select');
+      sMed.append(new Option('+ losa del medio que también manda…', ''));
+      entre.filter(x => !lft.medias.some(z => Math.abs(z - x.cota) < 1e-6)).forEach(x => sMed.append(new Option(`${x.nombre} (${fz(x.cota)} m)`, String(x.cota))));
+      sMed.addEventListener('change', () => { if (sMed.value !== '') lft.medias.push(Number(sMed.value)); armarPanelSil(); });
+      if (entre.length > 1) det.append(fila('Secciones ', sMed));
+      lft.medias.forEach(z => { const q = document.createElement('button'); q.type = 'button'; q.textContent = `✕ ${nombreDe(z)}`; q.title = 'Sacar esta losa de las secciones'; q.addEventListener('click', () => { lft.medias = lft.medias.filter(w => Math.abs(w - z) > 1e-6); armarPanelSil(); }); det.append(q); });
+      const seg = document.createElement('div'); seg.className = 'seg seg-chico'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Tipo de loft');
+      ([['recto', 'Recto'], ['suave', 'Suave']] as const).forEach(([v, t]) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.setAttribute('aria-pressed', String(lft.tipo === v)); x.title = v === 'recto' ? 'Tramos rectos entre secciones («Straight sections» de Rhino): las caras son planas o regladas.' : 'Curva suave en altura («Normal» de Rhino): pasa por todas las secciones y llega vertical a las de los extremos.'; x.addEventListener('click', () => { lft.tipo = v; armarPanelSil(); }); seg.append(x); });
+      const giro = document.createElement('input'); giro.type = 'text'; giro.inputMode = 'decimal'; giro.className = 'campo-vertice'; giro.value = String(lft.giro).replace('.', ',');
+      giro.addEventListener('change', () => { const g = parseFloat(giro.value.replace(',', '.')); lft.giro = isFinite(g) ? g : 0; });
+      const bl = document.createElement('input'); bl.type = 'checkbox'; bl.checked = lft.bl; bl.addEventListener('change', () => { lft.bl = bl.checked; });
+      const generadas = entre.filter(x => !lft.medias.some(z => Math.abs(z - x.cota) < 1e-6)).length;
+      det.append(fila('Forma ', seg), fila('Giro total ', giro, ' °'),
+        fila('B y L de la caja ', bl),
+        nota(`Genera ${generadas} ${generadas === 1 ? 'losa' : 'losas'} entre ${nombreDe(z0)} y ${nombreDe(z1)}. El giro (antihorario, de la losa más baja a la más alta) se reparte con la altura. Con «B y L de la caja», cada losa generada le pasa a la planilla su ancho y su largo; si no, siguen los B y L que tenga.`));
+      const hacer = document.createElement('button'); hacer.type = 'button'; hacer.className = 'primario'; hacer.textContent = 'Hacer el loft';
+      hacer.addEventListener('click', async () => {
+        const p2 = estado.proyecto;
+        const l: Loft = { id: nuevoIdLoft(p2), cotas: [n.cota, lft.otra!, ...lft.medias].sort((a, b) => a - b), ...(lft.tipo === 'suave' ? { tipo: 'suave' as const } : {}), ...(lft.giro ? { giro: lft.giro } : {}), ...(lft.bl ? {} : { bl: false }) };
+        const pr = problemaLoft(p2, l);
+        if (pr) { await avisar('error', 'No se puede hacer el loft', pr); return; }
+        // dos lofts no pueden generar la misma losa ni pisarse: cada losa la manda uno solo
+        const choca = (p2.lofts ?? []).find(o => { const a = [...o.cotas].sort((x, y) => x - y); return a[0] < z1 - 1e-6 && a[a.length - 1] > z0 + 1e-6; });
+        if (choca) { const a = [...choca.cotas].sort((x, y) => x - y); await avisar('error', 'Se pisa con otro loft', `El loft ${choca.id} ya va de ${nombreDe(a[0])} a ${nombreDe(a[a.length - 1])}. Dos lofts pueden compartir una losa extrema, pero no superponerse: quitá ese loft o elegí otras losas.`); return; }
+        estado.cambiar(pp => { pp.lofts = [...(pp.lofts ?? []), l]; });
+        lft.otra = null; lft.medias = [];
+        mensaje(`Loft ${l.id}: ${generadas} ${generadas === 1 ? 'losa generada' : 'losas generadas'} entre ${nombreDe(z0)} y ${nombreDe(z1)}. Miralas en el 3D.`);
+        armarPanelSil();
+      });
+      det.append(hacer);
+    }
+    // lofts hechos
+    (p.lofts ?? []).forEach(l => {
+      const a = [...l.cotas].sort((x, y) => x - y), pr = problemaLoft(p, l), { intermedios } = nivelesDeLoft(p, l);
+      const caja = document.createElement('div'); caja.className = 'loft-item';
+      const t = document.createElement('span');
+      t.textContent = `${l.id} · ${a.map(nombreDe).join(' → ')} · ${l.tipo === 'suave' ? 'suave' : 'recto'}${l.giro ? ` · giro ${String(l.giro).replace('.', ',')}°` : ''} · ${intermedios.length} losas${pr ? ` · ⚠ ${pr}` : ''}`;
+      const ir = document.createElement('button'); ir.type = 'button'; ir.textContent = 'Ver'; ir.title = 'Ir a la losa más baja del loft';
+      ir.addEventListener('click', () => { estado.nivelPlanta = a[0]; dibujar(); });
+      const quitar = document.createElement('button'); quitar.type = 'button'; quitar.textContent = 'Quitar';
+      quitar.title = 'Saca el loft: las losas que generó quedan con la forma que tienen ahora (como siluetas propias).';
+      quitar.addEventListener('click', () => { estado.cambiar(pp => { pp.lofts = (pp.lofts ?? []).filter(o => o.id !== l.id); if (!pp.lofts.length) delete pp.lofts; }); mensaje(`Loft ${l.id} quitado: las losas quedan como estaban.`); armarPanelSil(); });
+      const borrar = document.createElement('button'); borrar.type = 'button'; borrar.textContent = 'Quitar y borrar losas';
+      borrar.title = 'Saca el loft y borra la silueta, B y L de las losas que generó: vuelven a heredar las de arriba.';
+      borrar.addEventListener('click', async () => {
+        if (!(await confirmar('Quitar el loft', `Se saca el loft ${l.id} y ${intermedios.length} losas vuelven a heredar la silueta, B y L del nivel de arriba. Se puede deshacer.`, 'Quitar'))) return;
+        estado.cambiar(pp => { intermedios.forEach(i => { const nv = pp.niveles[i]; nv.silueta = null; nv.B = null; nv.L = null; }); pp.lofts = (pp.lofts ?? []).filter(o => o.id !== l.id); if (!pp.lofts.length) delete pp.lofts; });
+        armarPanelSil();
+      });
+      caja.append(t, ir, quitar, borrar);
+      det.append(caja);
+    });
+    return det;
   }
   /**
    * esquinas de la torre de una vez: redondeadas, en chaflán o sustraídas, en la losa y/o la carpintería de este nivel
    * o de todos. Cambia la forma que recibe el viento (presiones 3D y túneles), no B y L de la planilla.
    */
-  function seccionEsquinas(ancho: number): HTMLElement {
+  /** @param enCarp desde la carta de la carpintería: por defecto cambia solo la carpintería (desde la losa, solo la losa) */
+  function seccionEsquinas(ancho: number, enCarp = false): HTMLElement {
+    const queAhora = () => (enCarp ? esq.queCarp : esq.que);
     const det = document.createElement('details'); det.className = 'esquinas-torre'; det.open = esq.abierto;
     det.addEventListener('toggle', () => { esq.abierto = det.open; });
-    const sum = document.createElement('summary'); sum.textContent = 'Esquinas de la torre (viento)'; det.append(sum);
+    const sum = document.createElement('summary'); sum.textContent = 'Esquinas (viento)'; det.append(sum);
     const elegir = <T extends string>(rot: string, ops: [T, string][], val: T, al: (x: T) => void) => {
       const s2 = document.createElement('select');
       ops.forEach(([v, t]) => s2.append(new Option(t, v, false, v === val)));
@@ -664,7 +1242,7 @@ export function montarPlanta(cont: HTMLElement) {
       elegir<TipoEsquina>('Forma', [['redondeada', 'redondeadas (arco)'], ['chaflan', 'en chaflán (ochava)'], ['sustraida', 'sustraídas (retranqueo)']], esq.tipo, x => { esq.tipo = x; }),
       medida(esq.tipo === 'redondeada' ? 'radio r ' : esq.tipo === 'chaflan' ? 'corte d ' : 'a ', esq.a, x => { esq.a = x; }),
       ...(esq.tipo === 'sustraida' ? [medida('b ', esq.b, x => { esq.b = x; })] : []),
-      elegir('Contorno', [['ambas', 'losa y carpintería'], ['losa', 'solo la losa'], ['carpinteria', 'solo la carpintería']], esq.que, x => { esq.que = x; }),
+      elegir('Contorno', [['ambas', 'losa y carpintería'], ['losa', 'solo la losa'], ['carpinteria', 'solo la carpintería']], queAhora(), x => { if (enCarp) esq.queCarp = x; else esq.que = x; }),
       elegir('Niveles', [['todos', 'todos los niveles'], ['este', 'solo este nivel']], esq.todos ? 'todos' : 'este', x => { esq.todos = x === 'todos'; }),
     );
     const nota = document.createElement('p'); nota.className = 'nota';
@@ -677,10 +1255,30 @@ export function montarPlanta(cont: HTMLElement) {
     aplicar.addEventListener('click', async () => {
       const p2 = estado.proyecto;
       const niveles = esq.todos ? p2.niveles.map((_, k) => k) : [iNivel];
-      const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: esq.que, niveles });
+      const r = esquinasEnNiveles(p2, { tipo: esq.tipo, a: esq.a, b: esq.b, que: queAhora(), niveles });
       if (!r.cambios.length) { await avisar('error', 'No se cambió ninguna esquina', r.avisos.join(' ') || 'No hay esquinas salientes entre lados rectos.'); return; }
-      estado.cambiar(() => { r.cambios.forEach(c => { const nv = estado.proyecto.niveles[c.i]; if (c.que === 'losa') nv.silueta = c.v; else nv.carpinteria = c.v; }); });
-      if (r.avisos.length) await avisar('info', 'Esquinas tratadas, con avisos', r.avisos.join(' '));
+      // con envolvente diseñada aparte, la carpintería de sus pisos no se toca piso por piso: se tratan las esquinas de
+      // la piel (las secciones de esos pisos, o la planta base si va por perfil) y los pisos la siguen
+      let enPiel = 0, saltados = 0, base = false;
+      estado.cambiar(() => {
+        const pp = estado.proyecto, env = pp.envolvente;
+        r.cambios.forEach(c => {
+          const nv = pp.niveles[c.i];
+          if (c.que === 'losa') { nv.silueta = c.v; return; }
+          const genEnv = !!env && tramoEn(pp, nv.cota)?.modo === 'continua' && !nv.carpManual && !pp.carpinteriaFija;
+          if (!genEnv) { soltarCarp(nv); nv.carpinteria = c.v; return; }
+          const sec = seccionEnv(c.i);
+          if (sec) { const t = tratarEsquinas(sec.v, esq.tipo, esq.a, esq.b ?? esq.a); if (!('error' in t)) { sec.v = t.map(q => ({ x: q.x, y: q.y, ...(q.b ? { b: q.b } : {}) })); enPiel++; } return; }
+          if (!seccionesEnvolvente(env) && !base) { const t = tratarEsquinas(env!.planta, esq.tipo, esq.a, esq.b ?? esq.a); if (!('error' in t)) { env!.planta = t.map(q => ({ x: q.x, y: q.y, ...(q.b ? { b: q.b } : {}) })); base = true; enPiel++; } return; }
+          if (!seccionesEnvolvente(env)) return;
+          saltados++;
+        });
+      });
+      const msj = [...r.avisos];
+      if (base) msj.push('En la envolvente se trataron las esquinas de su planta base: todos sus pisos las siguen.');
+      else if (enPiel) msj.push(`En la envolvente se trataron ${enPiel} ${enPiel === 1 ? 'sección' : 'secciones'}.`);
+      if (saltados) msj.push(`${saltados} ${saltados === 1 ? 'piso' : 'pisos'} de la envolvente que no son sección pasan de una sección a otra: para tratarlos, hacé una sección en ese piso.`);
+      if (msj.length) await avisar('info', 'Esquinas tratadas', msj.join(' '));
     });
     const pie = document.createElement('p'); pie.className = 'nota';
     pie.textContent = 'Se tratan las esquinas salientes entre lados rectos (las entrantes y las curvas quedan). Se puede deshacer. Cambia la forma que recibe el viento en las presiones 3D y en los túneles 2D y 3D (ahí se comparan el arrastre, la fuerza lateral y la velocidad crítica); la planilla y el CIRSOC 102 siguen con B, L y los Cp de la norma, que no premian la forma de las esquinas (eso pide un ensayo en túnel de viento).';
@@ -1317,20 +1915,100 @@ export function montarPlanta(cont: HTMLElement) {
   estado.suscribirSeleccion(() => { col.refrescar(); refrescarTr(); });
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
-  const bMas = document.createElement('button'); bMasRef = bMas; bMas.type = 'button'; bMas.textContent = '⋯'; bMas.title = 'Más: importar un plano, contornos de losa y carpintería, áreas de influencia'; bMas.setAttribute('aria-label', 'Más herramientas'); bMas.setAttribute('aria-haspopup', 'true');
+  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas ▾'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
   const bJuntas = document.createElement('button'); bJuntas.type = 'button';
   const pintarJuntas = () => { bJuntas.textContent = estado.juntasLimpias ? 'Juntas: unidas ✓' : 'Juntas: muros separados'; bJuntas.setAttribute('aria-pressed', String(estado.juntasLimpias)); };
   bJuntas.title = 'Unidas: los muros que se encuentran (L, T, X, también en ángulo) se dibujan como una sola pieza, sin la línea de la junta y sin superposición. Separados: cada muro con su rectángulo.';
   bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
   pintarJuntas();
-  listaMas.append(bCalco, bSil, bAreas, bJuntas);
+  // «Ayudas»: guías, cotas y grilla (antes en la barra) y lo que se usa menos
+  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
   mas.append(bMas);
   cont.appendChild(listaMas);
-  barra.append(bMover, bLazo, bDibujar, bArmar, bIns, bCalar, ...col.botones.slice(0, 1), gui.boton, ...col.botones.slice(1), bGrilla, mas);
+  // la barra en grupos con nombre: Forma (losa, carpintería, corte), Estructura (muros y piezas) y Ayudas
+  const rotuloGrupo = (t: string) => { const x = document.createElement('span'); x.className = 'grupo-rot'; x.textContent = t; x.setAttribute('aria-hidden', 'true'); return x; };
+  barra.append(bMover, bLazo, rotuloGrupo('Forma'), bSil, bCarp, rotuloGrupo('Estructura'), bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar, mas);
+  // corte de la torre: la silueta se ajusta en un corte vertical, con el plano del proyecto calcado debajo
+  const corte = montarCorte(cont, mensaje);
+  const bCorte = document.createElement('button'); bCorte.type = 'button'; bCorte.textContent = 'Corte';
+  bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
+  bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
+  barra.insertBefore(bCorte, bCarp.nextSibling);
+  // ---------------------------------------------------------------- tira de pasos: el recorrido de diseño de la torre
+  // seis pasos en orden; cada uno abre su herramienta y dice qué sigue. Está hecho lo que ya tiene el proyecto (o lo que
+  // se saltó a propósito); se puede plegar
+  type IdPaso = 'pisos' | 'losa' | 'forma' | 'carp' | 'estructura' | 'verificar';
+  const vistos = new Set<IdPaso>();
+  let pasoAct: IdPaso | null = null;
+  let pasosPlegados = (() => { try { return localStorage.getItem('torre3d.pasos') === '0'; } catch { return false; } })();
+  const pasos = document.createElement('div'); pasos.className = 'pasos-torre'; pasos.setAttribute('role', 'navigation'); pasos.setAttribute('aria-label', 'Pasos para diseñar la torre');
+  const clicEn = (sel: string, texto: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>(sel)].find(x => x.textContent?.includes(texto)); b?.click(); };
+  const PASOS: { id: IdPaso; nombre: string; ayuda: string; hecho: () => boolean; acciones: () => [string, string, () => void][] }[] = [
+    { id: 'pisos', nombre: 'Pisos', ayuda: 'Cuántos pisos tiene la torre y qué altura tiene cada uno (tabla de niveles, a la izquierda).',
+      hecho: () => estado.proyecto.niveles.length >= 3, acciones: () => [['Abrir la tabla de niveles', 'La tabla de niveles: nombre, cota, B y L', () => clicEn('#subpasos button', 'Niveles')]] },
+    { id: 'losa', nombre: 'Losa', ayuda: 'La forma de la planta: una forma de arranque (rectángulo, círculo, en L…) o dibujada a mano.',
+      hecho: () => estado.proyecto.niveles.some(n => n.silueta && n.silueta.length >= 3), acciones: () => [['Abrir Losa', 'La carta de la losa, con «Losa desde cero» arriba', () => { if (!(modo === 'silueta' && !editaCarp)) bSil.click(); }]] },
+    { id: 'forma', nombre: 'Forma en altura', ayuda: '¿La torre cambia de forma al subir? Si es recta, seguí de largo.',
+      hecho: () => { const p = estado.proyecto; return !!p.perfilTorre || !!p.lofts?.length || !!p.planosCorte?.length || !!p.envolvente || vistos.has('forma'); },
+      acciones: () => [
+        ['Recta: seguir', 'La misma planta en toda la altura', () => { vistos.add('forma'); irA(siguiente('forma')); }],
+        ['Perfil (ahusada, barril, retorcida…)', 'El alzado de la torre: cómo se escala, se corre o gira la planta con la altura', () => { pfLosas.abierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Loft entre dos losas', 'Las losas de en medio pasan suave de una forma a otra', () => { lft.abierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Recortar con un plano', 'Un plano inclinado que recorta las losas (en el corte de la torre)', () => bCorte.click()]] },
+    { id: 'carp', nombre: 'Carpintería', ayuda: 'El contorno al que le pega el viento: por piso (de losa a losa) o envolvente, o a mano.',
+      hecho: () => { const p = estado.proyecto; return tramosCarpinteria(p).length > 0 || p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3); },
+      acciones: () => [['Abrir Carpintería', 'La carta de la carpintería: tramos, plana o curva, panelería', () => { if (!(modo === 'silueta' && editaCarp)) bCarp.click(); }]] },
+    { id: 'estructura', nombre: 'Estructura', ayuda: 'Tabiques, núcleos y columnas: dibujalos, insertá piezas tipo o colocalos con la carta; después «Armar» forma las piezas.',
+      hecho: () => estado.proyecto.muros.length > 0,
+      acciones: () => [['Dibujar', 'Muros a mano, encadenados', () => bDibujar.click()], ['Insertar…', 'Piezas tipo: núcleos, tubos, columnas', () => bIns.click()], ...(col.botones[0] ? [['Colocar', 'Colocar con números', () => col.botones[0].click()] as [string, string, () => void]] : []), ['Armar', 'Los muros que se tocan forman piezas', () => bArmar.click()]] },
+    { id: 'verificar', nombre: 'Verificar', ayuda: 'Los avisos de diseño y las etapas de cálculo (viento, fuerzas, estabilidad…, a la izquierda).',
+      hecho: () => estado.proyecto.muros.length > 0 && avisos.length === 0,
+      acciones: () => [[avisos.length ? `Ver los ${avisos.length} avisos` : 'Sin avisos ✓', 'Lo que conviene revisar, con un botón para ir a cada uno', () => { if (!avAbierto) bAvisos.click(); }], ['Ir a Viento', 'La etapa 02: el viento sobre la torre', () => clicEn('.etapas button, nav button, .riel button', 'Viento')]] },
+  ];
+  const siguiente = (desde: IdPaso): IdPaso => { const k = PASOS.findIndex(x => x.id === desde); return (PASOS.slice(k + 1).find(x => !x.hecho()) ?? PASOS[Math.min(k + 1, PASOS.length - 1)]).id; };
+  function irA(id: IdPaso) { pasoAct = id; vistos.add(id); refrescarPasos(); const a = PASOS.find(x => x.id === id)!.acciones(); if (a.length === 1) a[0][2](); }
+  function refrescarPasos() {
+    const actual = pasoAct ?? (PASOS.find(x => !x.hecho()) ?? PASOS[PASOS.length - 1]).id;
+    const nHechos = PASOS.filter(x => x.hecho()).length;
+    pasos.replaceChildren();
+    pasos.classList.toggle('plegada', pasosPlegados);
+    const plegar = document.createElement('button'); plegar.type = 'button'; plegar.className = 'pasos-plegar';
+    plegar.textContent = pasosPlegados ? `Pasos ${nHechos}/6 ▾` : '▴'; plegar.title = pasosPlegados ? 'Mostrar los pasos para diseñar la torre' : 'Plegar los pasos';
+    plegar.setAttribute('aria-expanded', String(!pasosPlegados));
+    plegar.addEventListener('click', () => { pasosPlegados = !pasosPlegados; try { localStorage.setItem('torre3d.pasos', pasosPlegados ? '0' : '1'); } catch { /* */ } refrescarPasos(); acomodar(); });
+    if (pasosPlegados) { pasos.append(plegar); return; }
+    const fila = document.createElement('div'); fila.className = 'pasos-fila';
+    PASOS.forEach((x, k) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'paso';
+      if (x.hecho()) b.classList.add('hecho');
+      if (x.id === actual) { b.classList.add('act'); b.setAttribute('aria-current', 'step'); }
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = x.hecho() && x.id !== actual ? '✓' : String(k + 1);
+      b.append(n, x.nombre); b.title = x.ayuda;
+      b.addEventListener('click', () => irA(x.id));
+      fila.append(b);
+      if (k < PASOS.length - 1) { const f = document.createElement('span'); f.className = 'pasos-flecha'; f.textContent = '›'; f.setAttribute('aria-hidden', 'true'); fila.append(f); }
+    });
+    fila.append(plegar);
+    const p0 = PASOS.find(x => x.id === actual)!, k0 = PASOS.indexOf(p0);
+    const det = document.createElement('div'); det.className = 'pasos-det';
+    const t = document.createElement('span'); t.className = 'pasos-ayuda'; t.textContent = `${k0 + 1} · ${p0.nombre}: ${p0.ayuda}`;
+    det.append(t);
+    p0.acciones().forEach(([nom, ti, f]) => { const a = document.createElement('button'); a.type = 'button'; a.textContent = nom; a.title = ti; a.addEventListener('click', () => { vistos.add(p0.id); f(); refrescarPasos(); }); det.append(a); });
+    if (k0 < PASOS.length - 1) { const sg = document.createElement('button'); sg.type = 'button'; sg.className = 'primario'; const ns = siguiente(p0.id); sg.textContent = `Siguiente: ${PASOS.find(x => x.id === ns)!.nombre} ›`; sg.addEventListener('click', () => { vistos.add(p0.id); irA(ns); }); det.append(sg); }
+    pasos.append(fila, det);
+  }
+  cont.appendChild(pasos);
+  refrescarPasos();
+  // «?» (prende las indicaciones cuando están ocultas) abajo, donde va la indicación; los avisos, un chip arriba a la
+  // derecha debajo del selector de planta: así la barra de herramientas entra en la planta
+  bIndic.className = 'b-indic-flotante'; bAvisos.className = 'chip-avisos';
+  cont.append(bIndic, bAvisos); bIndic.setAttribute('aria-pressed', String(conIndic)); bIndic.hidden = conIndic;
+  cont.appendChild(panelAv);
+  cont.appendChild(indic); indicar(INDIC[modo]);
   cont.appendChild(barra);
   const panelCalco = document.createElement('div');
   panelCalco.className = 'calco-panel';
@@ -1547,7 +2225,26 @@ export function montarPlanta(cont: HTMLElement) {
   // vista: acercar (rueda, pellizco, botones) y desplazar (arrastrar el fondo); zoom 1 = toda la planta
   let zoom = 1, centroVista = { x: 0, y: 0 };
   /** ancho útil de la última vista (sin el cuadro flotante de la derecha): el centro del zoom se mide sobre él */
-  let wUtilVista = 0;
+  let wUtilVista = 0, firmaReservas = '0|0';
+  /**
+   * cuánto tapan las cartas abiertas a cada costado de la planta (px): las del dock y las sueltas que no se movieron a
+   * mano. Las que aparecen solas al elegir algo (medidas del muro, precisión) no cuentan: si no, la planta saltaría al
+   * tocar un muro y el muro se iría de abajo del cursor. Las de la izquierda corren el encuadre a la derecha y al revés; cada costado, a lo sumo el 40 % del ancho.
+   */
+  function reservasCartas(w: number): { izq: number; der: number } {
+    const R = svg.getBoundingClientRect();
+    if (!R.width) return { izq: 0, der: 0 };
+    const cartas = [...cont.querySelectorAll<HTMLElement>(':scope > .calco-panel, :scope > .contorno-panel, :scope > .dock-planta')]
+      .filter(e => !e.hidden && !e.classList.contains('movido') && !e.classList.contains('med-panel') && !e.classList.contains('prec-panel') && getComputedStyle(e).position === 'absolute' && (!e.classList.contains('dock-planta') || !!e.querySelector(':scope > .calco-panel:not([hidden])')));
+    let izq = 0, der = 0;
+    cartas.forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom < R.top + 60) return;
+      if ((r.left + r.right) / 2 < R.left + R.width / 2) izq = Math.max(izq, r.right - R.left + 12);
+      else der = Math.max(der, R.right - r.left + 12);
+    });
+    return { izq: Math.min(izq, w * 0.4), der: Math.min(der, w * 0.4) };
+  }
   const ZMIN = 0.5, ZMAX = 16;
 
   const aMundo = (ev: PointerEvent) => {
@@ -1586,6 +2283,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (rotulo) rotulo.textContent = '';
     iNivel = iN;
     const pl = plantaDeNivel(p, iN);
+    recalcularAvisos();
+    const conAviso = new Set(avisos.filter(a => a.muros && (a.tipo === 'sin-pieza' || a.cotas.some(z => Math.abs(z - (p.niveles[iN]?.cota ?? 0)) < 1e-6))).flatMap(a => a.muros!));
     const B = pl.B, L = pl.L;
     if (modo === 'silueta') armarPanelSil();
     const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
@@ -1594,11 +2293,12 @@ export function montarPlanta(cont: HTMLElement) {
     const ext = Math.max(B, L, ...p.muros.map(m => 2 * (Math.abs(m.x) + huella(m).ax / 2)), ...p.muros.map(m => 2 * (Math.abs(m.y) + huella(m).ay / 2))) + (w < 520 ? 12 : 6);   // en pantallas chicas, más margen para los rótulos
     // con un cuadro flotante abierto a la derecha (calar, insertar, silueta) la planta se encuadra en lo que queda
     // libre a su izquierda: si no, el cuadro tapaba justo los muros de ese lado
-    const panelDer = [panelCal, panelIns, panelSil, svg.parentElement?.querySelector<HTMLElement>('.contorno-panel') ?? null].find(x => x && !x.hidden) ?? undefined;
-    const reservaD = panelDer && w > 640 ? Math.min(panelDer.offsetWidth + 16, w * 0.4) : 0, wUtil = w - reservaD;
+    // las cartas abiertas que el usuario no movió se reservan su costado (izquierdo o derecho, según dónde estén)
+    const { izq: reservaI, der: reservaD } = w > 640 ? reservasCartas(w) : { izq: 0, der: 0 }, wUtil = w - reservaI - reservaD;
     escala = (Math.min(wUtil, h) / ext) * zoom;
-    ox = wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
-    wUtilVista = wUtil;
+    ox = reservaI + wUtil / 2 - centroVista.x * escala; oy = h / 2 + centroVista.y * escala;
+    // (el centro de la vista en pantalla queda en wUtilVista / 2: lo usan el zoom y el pellizco)
+    wUtilVista = 2 * reservaI + wUtil;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.replaceChildren();
     const X = (x: number) => ox + x * escala, Y = (y: number) => oy - y * escala;
@@ -1643,9 +2343,14 @@ export function montarPlanta(cont: HTMLElement) {
     }
     // carpintería del nivel: contorno y su caja (a máx × b máx), que es lo que se carga a mano como B y L
     const car = carpinteriaDeNivel(p, iN);
+    // la carpintería que calcula un tramo (no soltada ni fija) no se edita acá; la de la envolvente se ve como su sombra
+    const tCar = p.niveles[iN] ? tramoEn(p, p.niveles[iN].cota) : null;
+    const carGenerada = !!tCar && tCar.modo !== 'sin' && !p.niveles[iN]?.carpManual && !p.carpinteriaFija;
+    const esSecc = !!seccionEnv(iN);
+    const carSombra = carGenerada && tCar!.modo === 'continua' && !!p.envolvente && !esSecc;
     if (car) {
       const pc = puntosSilueta(car.v);
-      svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' }));
+      svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
       const xs = pc.map(q => q.x), ys = pc.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
       svg.appendChild(el('rect', { x: X(x0), y: Y(y1), width: (x1 - x0) * escala, height: (y1 - y0) * escala, class: 'caja-carpinteria' }));
       const tx = el('text', { x: X(x0) + 4, y: Y(y1) - 6, class: 'etiqueta caja-txt' }, `carpintería: a máx ${car.a.toFixed(2).replace('.', ',')} × b máx ${car.b.toFixed(2).replace('.', ',')} m (B y L se cargan en Niveles)`);
@@ -1656,7 +2361,7 @@ export function montarPlanta(cont: HTMLElement) {
     svg.appendChild(pathC);
     if (modo === 'silueta') {
       const vEd = verticesEd();
-      const objetivo = editaCarp ? el('polygon', { points: puntosSilueta(vEd).map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria editando' }) : pathC;
+      const objetivo = editaCarp ? el('polygon', { points: puntosSilueta(vEd).map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria editando' + (carSombra ? ' sombra-env' : '') }) : pathC;
       if (editaCarp) svg.appendChild(objetivo);
       // doble clic en un borde: vértice nuevo en el tramo más cercano
       objetivo.addEventListener('dblclick', ev => {
@@ -1667,7 +2372,8 @@ export function montarPlanta(cont: HTMLElement) {
         estado.cambiar(() => { const s2 = siluetaPropia(); s2[mejor] = { ...s2[mejor], b: 0 }; s2.splice(mejor + 1, 0, { x: aj(q.x), y: aj(q.y) }); });
       });
       const tactil = matchMedia('(pointer: coarse)').matches;
-      vEd.forEach((v, i) => {
+      // las losas que genera un loft no se editan a mano (se recalculan solas): sin manijas
+      (!editaCarp && (loftDeNivel(estado.proyecto, iNivel) || (estado.proyecto.perfilTorre && iNivel < nivelBase(estado.proyecto, estado.proyecto.perfilTorre) && !estado.proyecto.niveles[iNivel]?.manual)) || (editaCarp && carGenerada && !esSecc) ? [] : vEd).forEach((v, i) => {
         // manija: un círculo visible y otro invisible más grande para agarrarlo (con el dedo, más grande todavía)
         const hnd = el('g', { class: 'manija-vertice', tabindex: 0 });
         hnd.appendChild(el('circle', { cx: X(v.x), cy: Y(v.y), r: tactil ? 16 : 9, class: 'vertice-zona' }));
@@ -1813,7 +2519,7 @@ export function montarPlanta(cont: HTMLElement) {
       const esta = presenteEn(m, zN, zFund, zTop);
       const grupoSel = (!!m.grupo && p.muros.find(x => x.id === estado.seleccion)?.grupo === m.grupo) || (!!estado.grupoSel && estado.grupoSel !== estado.contexto && dentroDe(p, m, estado.grupoSel));
       const fueraCtx = !dentroDe(p, m, estado.contexto), bloq = muroBloqueado(p, m);
-      const grupo = el('g', { class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : ''), 'data-id': m.id, tabindex: 0 });
+      const grupo = el('g', { 'data-muro': m.id, class: 'muro' + (estado.seleccion === m.id && !estado.grupoSel ? ' sel' : grupoSel || estado.seleccion === m.id ? ' sel-grupo' : '') + (m.llega ? '' : ' fuera') + (esta ? '' : ' ausente') + (fueraCtx ? ' fuera-ctx' : '') + (bloq ? ' bloqueado' : '') + (enMulti(m) ? ' multi' : '') + (conAviso.has(m.id) ? ' con-aviso' : ''), 'data-id': m.id, tabindex: 0 });
       const forma = el('g');
       if (limpias.has(m.id)) limpias.get(m.id)!.forEach(pg => forma.appendChild(el('polygon', { points: ptsPg(pg), fill: COLORES[papel], class: 'limpio' })));
       else if (t === 'perfil') {
@@ -1902,6 +2608,38 @@ export function montarPlanta(cont: HTMLElement) {
     gui.capa({ X, Y, escala });
     col.capa({ X, Y, escala });
     edc.capa({ X, Y, escala });
+    if (modo === 'silueta' && !editaCarp) {
+      // lado elegido para un saliente (resaltado) y el contorno que se dibuja a mano
+      const lados = ladosLosa(pl.silueta), w = antihorario(pl.silueta);
+      // vista previa (fantasma): la forma elegida o el contorno con el balcón o el retiro, antes de aplicarlos
+      if (!trazo && dc.previa) {
+        const v = dc.previa === 'forma' ? formaLosa(dc.forma, dc.med) : salienteEnLado(pl.silueta, dc.lado, dc.ancho, (dc.previa === 'meter' ? -1 : 1) * Math.abs(dc.prof), dc.centro);
+        if (!('error' in v)) {
+          const ps = puntosSilueta(v, 6), c = cajaSilueta(v);
+          const g = el('g', { class: 'previa-losa' });
+          g.append(el('polygon', { points: ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ') }));
+          const t = el('text', { x: X(c.cx), y: Y(c.cy + c.L / 2) - 8, 'text-anchor': 'middle' });
+          t.textContent = `vista previa · ${c.B.toFixed(2).replace('.', ',')} × ${c.L.toFixed(2).replace('.', ',')} m · ${areaSilueta(v).toFixed(1).replace('.', ',')} m²`;
+          g.append(t);
+          svg.append(g);
+        }
+      }
+      if (!trazo && lados[dc.lado] && (dc.abierto ?? true)) {
+        const a = w[dc.lado], b2 = w[(dc.lado + 1) % w.length];
+        svg.append(el('line', { x1: X(a.x), y1: Y(a.y), x2: X(b2.x), y2: Y(b2.y), class: 'lado-saliente' }));
+      }
+      if (trazo) {
+        const g = el('g', { class: 'trazo-losa' });
+        const pts = [...trazo, ...(trazoCursor ? [trazoCursor] : [])];
+        if (pts.length >= 2) g.append(el('polyline', { points: pts.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ') }));
+        if (trazo.length >= 3 && trazoCursor) g.append(el('line', { x1: X(trazoCursor.x), y1: Y(trazoCursor.y), x2: X(trazo[0].x), y2: Y(trazo[0].y), class: 'cierre' }));
+        trazo.forEach((q, k) => g.append(el('circle', { cx: X(q.x), cy: Y(q.y), r: k === 0 ? 7 : 4, class: k === 0 ? 'primero' : '' })));
+        if (trazoCursor && trazo.length) { const u = trazo[trazo.length - 1], t = el('text', { x: X(trazoCursor.x) + 10, y: Y(trazoCursor.y) - 10, class: 'medida-trazo' }); t.textContent = `${Math.hypot(trazoCursor.x - u.x, trazoCursor.y - u.y).toFixed(2).replace('.', ',')} m${ultimoIman ? ` · ${ultimoIman}` : ''}`; g.append(t); }
+        else if (trazoCursor && ultimoIman) { const t = el('text', { x: X(trazoCursor.x) + 10, y: Y(trazoCursor.y) - 10, class: 'medida-trazo' }); t.textContent = ultimoIman; g.append(t); }
+        if (trazoCursor) guiasIman.forEach(gi => { g.append(el('line', { x1: X(gi.de.x), y1: Y(gi.de.y), x2: X(gi.a.x), y2: Y(gi.a.y), class: 'guia-inferencia' }), el('circle', { cx: X(gi.de.x), cy: Y(gi.de.y), r: 3, class: 'guia-inferencia-punto' })); });
+        svg.append(g);
+      }
+    }
     if (lazo && lazo.pts.length > 1) {
       const pol = opLazo.forma === 'rect' ? rectPol(lazo.pts[0], lazo.pts[1]) : lazo.pts;
       const crit = opLazo.forma === 'rect' && opLazo.criterio === 'auto' ? (lazo.pts[1].x >= lazo.pts[0].x ? 'entero' : 'tocando') : opLazo.criterio;
@@ -2073,7 +2811,9 @@ export function montarPlanta(cont: HTMLElement) {
         pr.appendChild(el('circle', { cx: X(inicio.x), cy: Y(inicio.y), r: 4, class: 'iman' }));
       }
       pr.appendChild(el('circle', { cx: X(cursor.x), cy: Y(cursor.y), r: iman === 'grilla' ? 2 : 3.5, class: `iman ${iman}` }));
-      if (ultimoIman && ultimoIman !== 'grilla') pr.appendChild(el('text', { x: X(cursor.x) + 10, y: Y(cursor.y) - 10, class: 'etiqueta iman-txt' }, ultimoIman));
+      guiasIman.forEach(g => { pr.appendChild(el('line', { x1: X(g.de.x), y1: Y(g.de.y), x2: X(g.a.x), y2: Y(g.a.y), class: 'guia-inferencia' })); pr.appendChild(el('circle', { cx: X(g.de.x), cy: Y(g.de.y), r: 3, class: 'guia-inferencia-punto' })); });
+      // el rótulo, del lado del cursor donde entra (cerca del borde derecho, a la izquierda)
+      if (ultimoIman && ultimoIman !== 'grilla') { const izq = X(cursor.x) + 10 + ultimoIman.length * 6.6 > (svg.clientWidth || 600) - 8; pr.appendChild(el('text', { x: X(cursor.x) + (izq ? -10 : 10), y: Y(cursor.y) - 10, class: 'etiqueta iman-txt', 'text-anchor': izq ? 'end' : 'start' }, ultimoIman)); }
       svg.appendChild(pr);
     }
     // línea de referencia de los muros elegidos que se dibujaron por una cara (como ArchiCAD: se ve al elegirlos)
@@ -2120,11 +2860,19 @@ export function montarPlanta(cont: HTMLElement) {
     const q = aMundo(ev), tol = tolPx() / escala + 0.05;
     const nc = estado.cad ? imanCAD(q, estado.cad.nodos, tol) : null;
     if (nc) { iman = nc.t === 'intersección' || nc.t === 'centro' ? 'extremo' : 'eje'; ultimoIman = nc.t; return { x: +nc.p.x.toFixed(3), y: +nc.p.y.toFixed(3) }; }
-    const r = imanar(q, excluir ? estado.proyecto.muros.filter(m => !excluir.has(m.id)) : estado.proyecto.muros, tol);
+    // inferencias: extremos y medios de los muros de este nivel, su eje, alineaciones con esos puntos (y con el
+    // arranque del tramo), y si no, la grilla; las guías del plano tienen prioridad si están más cerca
+    const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
+    const ms = estado.proyecto.muros.filter(m => (!excluir || !excluir.has(m.id)) && presenteEn(m, zN, zF, zT));
+    const r = inferir(q, ms, tol, cadenaDibujo.map((p0, k) => ({ p: p0, rotulo: k === 0 ? 'el arranque' : `el vértice ${k + 1}` })));
     const gm = imanDeGuias(q, tol);
-    if (gm && (r.a === 'grilla' || (gm.punto && (r.a === 'eje' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { iman = gm.punto ? 'extremo' : 'eje'; ultimoIman = gm.t; return gm.p; }
-    iman = r.a; ultimoIman = r.a; return r.p;
+    guiasIman = [];
+    if (gm && (r.a === 'grilla' || r.a === 'alineado' || (gm.punto && (r.a === 'eje' || Math.hypot(gm.p.x - q.x, gm.p.y - q.y) < Math.hypot(r.p.x - q.x, r.p.y - q.y))))) { iman = gm.punto ? 'extremo' : 'eje'; ultimoIman = gm.t; return gm.p; }
+    iman = r.a === 'extremo' || r.a === 'medio' ? 'extremo' : r.a === 'grilla' ? 'grilla' : 'eje'; ultimoIman = r.rotulo || 'grilla'; guiasIman = r.guias; return r.p;
   };
+  /** guías de la última inferencia (líneas de puntos de alineación) y los puntos del muro encadenado que se dibuja */
+  let guiasIman: GuiaInferencia[] = [];
+  let cadenaDibujo: Punto[] = [];
   let ultimoIman = '';
   /** imán al arrastrar desde un nodo: nodos del plano CAD, nodos y caras de los otros elementos, grilla */
   const pegarNodo = (ev: PointerEvent, excluir: Set<string>) => {
@@ -2160,7 +2908,7 @@ export function montarPlanta(cont: HTMLElement) {
     acercarEn(Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015)), ev.clientX - r.left, ev.clientY - r.top);
   }, { passive: false });
   const punteros = new Map<number, { x: number; y: number }>();
-  let pan: { sx: number; sy: number; c: { x: number; y: number } } | null = null;
+  let pan: { sx: number; sy: number; c: { x: number; y: number }; toque?: boolean } | null = null;
   let pellizco: { d: number; z: number; mx: number; my: number; c: { x: number; y: number } } | null = null;
   const local = (ev: PointerEvent) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
   const esFondo = (t: EventTarget | null) => !(t as Element | null)?.closest?.('.muro, .nodos, .vertice, .manija-vertice, .editando, .areas-inf text');
@@ -2177,6 +2925,49 @@ export function montarPlanta(cont: HTMLElement) {
     }, true);
   }
   // lazo: en el modo «Lazo», o con Mayúsculas arrastrando el fondo en «Mover»
+  // dibujar la losa a mano: cada toque agrega un vértice; tocar el primero (o Enter) la cierra
+  const puntoTrazo = (ev: PointerEvent): Punto => {
+    // inferencias también al dibujar la losa: los vértices ya puestos (el primero, para cerrar a escuadra), las
+    // esquinas de la losa del nivel y los extremos y medios de los muros
+    const q = aMundo(ev), u = trazo?.[trazo.length - 1], tol = tolPx() / escala + 0.05;
+    const extra = [...(trazo ?? []).map((p0, k) => ({ p: p0, rotulo: k === 0 ? 'el primer vértice' : `el vértice ${k + 1}` })), ...plantaDeNivel(estado.proyecto, iNivel).silueta.map((v, k) => ({ p: { x: v.x, y: v.y }, rotulo: `la esquina ${k + 1} de la losa` }))];
+    const zN = estado.proyecto.niveles[iNivel]?.cota ?? 0, zF = estado.proyecto.niveles.at(-1)?.cota ?? 0, zT = estado.proyecto.niveles[0]?.cota ?? 0;
+    const ms = estado.proyecto.muros.filter(m => presenteEn(m, zN, zF, zT));
+    let r;
+    if (u && (dc.orto || ev.shiftKey)) {
+      // a 90°: el tramo manda en una coordenada y la inferencia ajusta la otra
+      const horiz = Math.abs(q.x - u.x) >= Math.abs(q.y - u.y);
+      r = inferir(horiz ? { x: q.x, y: u.y } : { x: u.x, y: q.y }, ms, tol, extra, horiz ? 'x' : 'y');
+      r.p = horiz ? { x: r.a === 'grilla' ? aj(q.x) : r.p.x, y: u.y } : { x: u.x, y: r.a === 'grilla' ? aj(q.y) : r.p.y };
+    } else { r = inferir(q, ms, tol, extra); if (r.a === 'grilla') r.p = { x: aj(q.x), y: aj(q.y) }; }
+    guiasIman = r.guias; ultimoIman = r.rotulo;
+    return r.p;
+  };
+  const cerrarTrazo = async () => {
+    if (!trazo || trazo.length < 3) { mensaje('Hacen falta al menos tres vértices.'); return; }
+    const v = antihorario(trazo.map(q => ({ x: q.x, y: q.y })));
+    if (seCruza(v)) { await avisar('error', 'El contorno se cruza', 'Dos lados de la losa se cruzan. Borrá los últimos vértices (Retroceso) y seguí por otro lado.'); return; }
+    trazo = null; trazoCursor = null;
+    estado.cambiar(pp => { const nv = pp.niveles[iNivel]; nv.silueta = v; if (dc.bl) { const c = cajaSilueta(v); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); } });
+    indicar(INDIC.silueta);
+    mensaje(`Losa dibujada: ${v.length} vértices, ${areaSilueta(v).toFixed(1).replace('.', ',')} m². Ajustala arrastrando los vértices o con «Herramientas CAD…».`);
+  };
+  svg.addEventListener('pointerdown', ev => {
+    if (modo !== 'silueta' || !trazo || ev.button !== 0) return;
+    ev.stopImmediatePropagation(); ev.preventDefault();
+    const q = puntoTrazo(ev);
+    if (trazo.length >= 3) { const a = trazo[0], d = Math.hypot((q.x - a.x) * escala, (q.y - a.y) * escala); if (d < (ev.pointerType === 'touch' ? 22 : 12)) { void cerrarTrazo(); return; } }
+    const u = trazo[trazo.length - 1];
+    if (u && Math.hypot(u.x - q.x, u.y - q.y) < 1e-6) return;
+    trazo.push(q); pedirDibujo();
+  }, true);
+  svg.addEventListener('pointermove', ev => { if (modo === 'silueta' && trazo) { trazoCursor = puntoTrazo(ev); pedirDibujo(); } });
+  document.addEventListener('keydown', ev => {
+    if (modo !== 'silueta' || !trazo || (ev.target as HTMLElement).closest?.('input, textarea, select')) return;
+    if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); void cerrarTrazo(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); trazo = null; trazoCursor = null; armarPanelSil(); dibujar(); indicar(INDIC.silueta); }
+    else if (ev.key === 'Backspace' || ev.key === 'Delete') { ev.preventDefault(); ev.stopImmediatePropagation(); trazo.pop(); pedirDibujo(); }
+  }, true);
   svg.addEventListener('pointerdown', ev => {
     if (lazo) { lazo = null; pedirDibujo(); return; }          // segundo dedo: se suelta el lazo y se pellizca
     if (ev.button !== 0) return;
@@ -2224,7 +3015,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (ev.button === 1 || (ev.button === 0 && modo === 'mover' && esFondo(ev.target))) {
       ev.preventDefault();
-      pan = { sx: ev.clientX, sy: ev.clientY, c: { ...centroVista } };
+      pan = { sx: ev.clientX, sy: ev.clientY, c: { ...centroVista }, toque: ev.button === 0 && !ev.shiftKey };
       try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
       if (ev.button === 1) ev.stopImmediatePropagation();
     }
@@ -2250,7 +3041,14 @@ export function montarPlanta(cont: HTMLElement) {
       pedirDibujo();
     }
   }, true);
-  const finPuntero = (ev: PointerEvent) => { punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null; };
+  const finPuntero = (ev: PointerEvent) => {
+    // un toque en el fondo (sin arrastrar) suelta lo elegido: con el lápiz o el dedo no hay tecla Esc
+    if (pan?.toque && ev.type === 'pointerup' && punteros.size === 1 && modo === 'mover' && Math.hypot(ev.clientX - pan.sx, ev.clientY - pan.sy) < (ev.pointerType === 'mouse' ? 3 : 8)
+      && (estado.seleccion || estado.grupoSel || estado.multi.m.length || estado.multi.g.length)) {
+      estado.multi = { m: [], g: [] }; estado.grupoSel = null; estado.seleccion = null; estado.avisarPanel(); pedirDibujo();
+    }
+    punteros.delete(ev.pointerId); if (punteros.size < 2) pellizco = null; if (!punteros.size) pan = null;
+  };
   svg.addEventListener('pointerup', finPuntero, true);
   svg.addEventListener('pointercancel', finPuntero, true);
   // botones de la vista
@@ -2286,8 +3084,35 @@ export function montarPlanta(cont: HTMLElement) {
   function acomodar() {
     const R = cont.getBoundingClientRect();
     if (!R.width) return;
+    // la barra de herramientas puede ocupar dos líneas (pantalla angosta o táctil): el selector de planta, el chip de
+    // avisos y las cartas del costado bajan para no taparla
+    // si la barra no entra en una línea, los nombres de los grupos se vuelven separadores finos
+    barra.classList.remove('compacta');
+    if (barra.getBoundingClientRect().height > 44) barra.classList.add('compacta');
+    // la barra de herramientas va debajo de la tira de pasos
+    { const pr = pasos.getBoundingClientRect(); barra.style.top = pr.height ? `${Math.round(pr.bottom - R.top + 4)}px` : ''; }
+    {
+      const bb = barra.getBoundingClientRect(), abajo = bb.bottom - R.top + 6;
+      const bajar = (e: HTMLElement, base: number) => { e.style.top = ''; if (!e.classList.contains('movido') && e.getBoundingClientRect().top - R.top < abajo && e.getBoundingClientRect().left < bb.right) e.style.top = `${Math.max(base, abajo)}px`; };
+      bajar(dock, 44); bajar(selNivel, 46);
+      const sn = selNivel.getBoundingClientRect(); bAvisos.style.top = `${Math.round(sn.bottom - R.top + 6)}px`;
+    }
+    // si cambió lo que tapan las cartas (se abrió, se cerró, se plegó o se agrandó una), la planta se vuelve a encuadrar
+    const w0 = svg.clientWidth || 600, rs = w0 > 640 ? reservasCartas(w0) : { izq: 0, der: 0 }, firma = `${Math.round(rs.izq)}|${Math.round(rs.der)}`;
+    if (firma !== firmaReservas) { firmaReservas = firma; pedirDibujo(); }
+    // con la herramienta «Mover», la indicación es la de la carta abierta del costado (colocar, cotas o guías)
+    if (modo === 'mover' || modo === 'lazo') {
+      const gu = [...dock.querySelectorAll<HTMLElement>(':scope > .guias-panel')].find(visible), co = [...dock.querySelectorAll<HTMLElement>(':scope > .colocar-panel:not(.guias-panel)')].find(visible);
+      const tit = (co?.querySelector(':scope > b')?.textContent ?? '').toLowerCase();
+      const t = edc.activo() ? 'Editar el contorno: arrastrá los vértices (□); tocá el medio de un lado (○) para elegirlo (recto, arco o Bézier); en un arco, arrastrá su centro (✛) sin mover los extremos. Enter: listo · Esc: cancelar.'
+        : gu ? 'Guías: armá la grilla de ejes o elegí una herramienta de líneas o círculos en la carta y tocá la planta. Con el imán prendido, los muros se pegan a las guías.'
+        : co ? (tit.startsWith('cota') ? 'Cotas: tocá el primer punto y después el segundo (se pegan a esquinas, medios y centros de los muros); la cota sigue al muro si se mueve.' : INDIC.colocar)
+        : !estado.proyecto.muros.length && modo === 'mover' ? 'Planta vacía: empezá por la losa (botón «Losa» → «Losa desde cero»: una forma o dibujada a mano) y después dibujá los muros («Dibujar») o insertá piezas («Insertar…»).'
+        : INDIC[modo];
+      if (indicTxt.textContent !== t) indicar(t);
+    }
     // abajo, de abajo hacia arriba: leyenda, herramientas, barras de selección y de grupo, barra del grupo que se edita
-    const pila = [ley, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
+    const pila = [ley, indic, bIndic, barraTr, ...cont.querySelectorAll<HTMLElement>(':scope > .barra-sel, :scope > .barra-lazo'), barraCtx];
     const puestos: DOMRect[] = [];
     pila.forEach(e => {
       if (!visible(e)) return;
@@ -2333,6 +3158,17 @@ export function montarPlanta(cont: HTMLElement) {
   hacerMovible(dock, cont, 'paneles');
   ([[panelIns, 'insertar'], [panelCal, 'calar'], [panelMed, 'medidas'], [panelPrec, 'precision']] as const).forEach(([e, k]) => hacerMovible(e, cont, k));
   const pc = cont.querySelector<HTMLElement>(':scope > .contorno-panel'); if (pc) hacerMovible(pc, cont, 'contorno');
+  // todas las cartas (sueltas y las del costado) cambian de tamaño con el tirador ◢; las sueltas que falten, también se mueven
+  const claveCarta = (e: HTMLElement, i: number) => [...e.classList].find(c => c.endsWith('-panel') && c !== 'calco-panel' && c !== 'colocar-panel' && c !== 'piezas-panel') ?? (e.classList.contains('colocar-panel') ? 'colocar' : `carta${i}`);
+  const prepararCartas = () => cont.querySelectorAll<HTMLElement>(':scope > .calco-panel, :scope > .contorno-panel, :scope > .dock-planta > .calco-panel').forEach((e, i) => {
+    const k = claveCarta(e, i);
+    if (e.parentElement === cont) hacerMovible(e, cont, k);
+    hacerRedimensionable(e, cont, k);
+  });
+  prepararCartas();
+  new MutationObserver(prepararCartas).observe(cont, { childList: true });
+  new MutationObserver(prepararCartas).observe(dock, { childList: true });
+  cont.addEventListener('carta-cambiada', () => { firmaReservas = ''; pedirAcomodar(); });
   ([[barraSel, 'barra-eleccion'], [barraGrupo, 'barra-grupo'], [barraLazo, 'barra-lazo'], [barraDib, 'barra-dibujo'], [barraTr, 'barra-transformar'], [barraCtx, 'barra-contexto']] as const).forEach(([e, k]) => hacerMovible(e, cont, k, { enLinea: true }));
   let cuadroAcomodar = 0;
   const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
@@ -2437,9 +3273,13 @@ export function montarPlanta(cont: HTMLElement) {
       toqueDibujo = null; inicio = null; dibujar(); return;                // doble toque: termina el muro encadenado
     }
     toqueDibujo = { t: ahora, x: ev.clientX, y: ev.clientY };
+    // con el lápiz o el dedo, volver a tocar el último punto (a menos de 12 px) termina el encadenado: no hace un muro
+    // de pocos centímetros por el pulso
+    if (ev.pointerType !== 'mouse' && inicio) { const l = local(ev); if (Math.hypot(l.x - (ox + inicio.x * escala), l.y - (oy - inicio.y * escala)) < (ev.pointerType === 'touch' ? 20 : 12)) { inicio = null; dibujar(); mensaje('Muro terminado.'); return; } }
     const q = pegar(ev);
-    if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; dibujar(); return; }
+    if (!inicio) { inicio = q; cursor = q; largoTipeado = ''; cadenaDibujo = [q]; dibujar(); return; }
     muroHasta(q);
+    if (inicio) cadenaDibujo = [...cadenaDibujo, inicio as Punto].slice(-12);
   });
   /** largo tipeado mientras se dibuja un muro (Enter lo aplica en la dirección del cursor) */
   let largoTipeado = '';
@@ -2635,7 +3475,7 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (modo === 'silueta') {
       if (arrastreV === null || !pasoUmbral(ev)) return;
-      const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? nv.carpinteria : nv.silueta;
+      const q = aMundo(ev), nv = estado.proyecto.niveles[iNivel], v = editaCarp ? (seccionEnv(iNivel)?.v ?? nv.carpinteria) : nv.silueta;
       if (v && v[arrastreV]) {
         // los puntos de control de las Bézier que llegan y salen de este vértice se mueven con él
         const k = arrastreV, a = v[k], dx = aj(q.x) - a.x, dy = aj(q.y) - a.y, pr = v[(k - 1 + v.length) % v.length];

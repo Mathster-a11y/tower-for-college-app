@@ -46,6 +46,17 @@ export interface Nivel {
    * (ancho) y el b máx (largo) del perfil al que se le aplica el viento; B y L se cargan a mano.
    */
   carpinteria?: VerticeContorno[] | null;
+  /** la silueta de este nivel se editó a mano: el perfil, los lofts y el plano de corte no la tocan (vacío = no) */
+  manual?: boolean | null;
+  /**
+   * lo común a la losa de abajo y la de arriba se partió en varias piezas: la carpintería es la más grande y el resto
+   * queda sin carpintería (se avisa). Lo calculan los tramos «por piso»; no va al Excel
+   */
+  carpinteriaPartida?: { piezas: number; area: number } | null;
+  /** la carpintería de este piso se editó a mano: los tramos no la recalculan (vacío = no) */
+  carpManual?: boolean | null;
+  /** la carpintería a mano sale de lo común a propósito (un vidrio en voladizo, un atrio): no se avisa (vacío = no) */
+  carpVoladizo?: boolean | null;
   /**
    * torre de perfil variable (editor del perfil): cuánto se corre el nivel entero respecto de PB, en x y en y (m).
    * La planta (muros y contornos) sigue en sus coordenadas; el nivel se corre como un todo (torre inclinada). Vacío = 0
@@ -92,6 +103,11 @@ export interface Muro {
   /** cota donde arranca el muro (vacío = en la fundación) y donde termina (vacío = en la azotea) */
   zDesde?: number | null;
   zHasta?: number | null;
+  /**
+   * solo de gravedad: el muro no forma pieza a propósito (un núcleo que lleva solo peso, como en las torres con
+   * exoesqueleto o diagrid, que toman todo el viento). No cambia ningún cálculo: solo saca el aviso «no forma pieza»
+   */
+  soloGravedad?: boolean | null;
   /**
    * papel del muro en el molde de la hoja J, elegido a mano para cada viento (vacío = el que propone la app):
    * alma (izquierda), alma der., ala sup., ala inf. o fuera (no entra al molde)
@@ -301,10 +317,29 @@ export interface Proyecto {
    * del J (enJ: false = no va a la hoja J; sus muros quedan fuera del cálculo en ese viento)
    */
   clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
-  /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
+  /** exoesqueleto de acero en el perímetro, por fuera de la fachada o detrás de la piel (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
   /** el perfil de la torre dibujado en el editor (Diseño → Perfil); los niveles guardan lo que escribió (B, L, dx, dy) */
   perfil?: import('./perfilTorre').PerfilTorre | null;
+  /**
+   * lofts de losas (como el Loft de Rhino): se eligen dos o más losas sección y las siluetas de las losas que quedan
+   * entre ellas salen de interpolarlas en altura (ver loft.ts); se vuelven a aplicar solos con cada cambio
+   */
+  lofts?: import('./loft').Loft[];
+  /** perfil de la torre en alzado: la planta de cada losa sale de la del nivel base escalada, girada y corrida (perfil_torre.ts) */
+  perfilTorre?: import('./perfil_torre').PerfilTorre | null;
+  /** la carpintería de cada nivel sigue a su losa, desfasada hacia adentro estos metros (vacío = a mano) */
+  carpinteriaRetiro?: number | null;
+  /** carpintería por tramos de altura: sin, por losa (de losa a losa) o continua (carpinteria.ts); manda sobre «carpinteriaRetiro» */
+  carpinteriaTramos?: import('./carpinteria').TramoCarpinteria[];
+  /** la carpintería no sigue a las losas: los tramos no la recalculan y las losas se editan sin tocarla (vacío = sigue) */
+  carpinteriaFija?: boolean | null;
+  /** la envolvente diseñada aparte de las losas: la usan los tramos «Envolvente» (vacío = la piel sigue el borde de las losas) */
+  envolvente?: import('./envolvente').Envolvente | null;
+  /** panelería de la carpintería: montantes cada «modulo» m, antepecho opaco y travesaños intermedios (vacío = sin paneles) */
+  paneleria?: import('./carpinteria').Paneleria | null;
+  /** planos que recortan las losas (la corona a 45° del Citicorp), dibujados en el corte de la torre (planos_corte.ts) */
+  planosCorte?: import('./planos_corte').PlanoCorte[];
   /**
    * cómo se calcula este proyecto: método (planilla, guía…), versión de la planilla y armado de las piezas, más la
    * versión de las fórmulas con la que se guardó. Va dentro del proyecto para que el archivo dé los mismos resultados
@@ -424,7 +459,7 @@ export function ejemploCiticorp(): Proyecto {
     hormigon: 'H40',
     muros: [
       // núcleo octogonal de 63 × 72 ft (19,2 × 21,9 m) como un tubo rectangular; solo gravedad (sin pieza)
-      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 19.2, ladoY: 21.9, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 1145, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' },
+      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 19.2, ladoY: 21.9, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 1145, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', soloGravedad: true },
       col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
     ],
     exo: {

@@ -177,6 +177,51 @@ export function arcoConRadio(vs: Anillo, i: number, R: number): Anillo | { error
   return out.map(limpio);
 }
 
+/**
+ * geometría del arco del lado i (con bulge): centro, radio, punto medio de la cuerda M, normal izquierda n (de a→b) y d,
+ * la distancia con signo del centro a la cuerda sobre la mediatriz (centro = M + d·n). null si el lado es recto.
+ */
+export function geometriaArco(vs: Anillo, i: number): { cx: number; cy: number; r: number; d: number; mx: number; my: number; nx: number; ny: number; c: number; mayor: boolean; flecha: number } | null {
+  const a = vs[i], b = vs[(i + 1) % vs.length], bu = a.b ?? 0;
+  const dx = b.x - a.x, dy = b.y - a.y, c = Math.hypot(dx, dy);
+  if (Math.abs(bu) < 1e-12 || c < 1e-12) return null;
+  const th = 4 * Math.atan(bu), d = c / 2 / Math.tan(th / 2);
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, nx = -dy / c, ny = dx / c;
+  const r = Math.hypot(c / 2, d);
+  // flecha: del medio de la cuerda al arco (r − d del lado de la panza)
+  return { cx: mx + nx * d, cy: my + ny * d, r, d, mx, my, nx, ny, c, mayor: Math.abs(th) > Math.PI + 1e-12, flecha: r + (bu > 0 ? d : -d) };
+}
+/** bulge del arco de cuerda c con el centro a la distancia d (sobre la mediatriz) y la panza del lado «signo» (el del bulge) */
+export function bulgeConCentro(c: number, d: number, signo: number): number {
+  const th = signo >= 0 ? 2 * Math.atan2(c / 2, d) : -2 * Math.atan2(c / 2, -d);
+  return Math.tan(th / 4);
+}
+/** el arco del lado i con el centro a la distancia d de la cuerda (sobre la mediatriz): los extremos no se mueven */
+export function arcoConCentro(vs: Anillo, i: number, d: number): Anillo {
+  const a = vs[i], b = vs[(i + 1) % vs.length], c = Math.hypot(b.x - a.x, b.y - a.y);
+  const sg = a.b ? Math.sign(a.b) : Math.sign(areaConSigno(vs)) || 1;
+  const out = vs.map(q => ({ ...q }));
+  out[i] = { x: a.x, y: a.y, b: bulgeConCentro(c, d, sg) };
+  return out.map(limpio);
+}
+/** el arco del lado i con radio R, sin cambiar los extremos ni de qué lado de la cuerda queda el centro (arco menor o mayor) */
+export function arcoConRadioMismoLado(vs: Anillo, i: number, R: number): Anillo | { error: string } {
+  const g = geometriaArco(vs, i);
+  if (!g) return arcoConRadio(vs, i, R);
+  if (R < g.c / 2 - 1e-9) return { error: `El radio tiene que ser al menos la mitad de la cuerda (${(g.c / 2).toFixed(3).replace('.', ',')} m).` };
+  const dd = Math.sqrt(Math.max(0, R * R - (g.c / 2) ** 2));
+  return arcoConCentro(vs, i, (g.d < 0 ? -1 : 1) * dd);
+}
+/** arco menor ↔ mayor: el mismo radio, con el centro del otro lado de la cuerda */
+export function arcoComplementario(vs: Anillo, i: number): Anillo {
+  const g = geometriaArco(vs, i);
+  return g ? arcoConCentro(vs, i, -g.d) : vs;
+}
+/** la panza del arco del otro lado de la cuerda (el mismo radio, en espejo) */
+export function invertirArco(vs: Anillo, i: number): Anillo {
+  return vs.map((q, j) => (j === i && q.b ? { ...q, b: -q.b } : { ...q })).map(limpio);
+}
+
 // ------------------------------------------------------------------ todo el contorno
 /** contorno paralelo a la distancia d: positiva hacia afuera, negativa hacia adentro. Arcos exactos, esquinas en inglete. */
 export function desfasarAnillo(vs: Anillo, d: number): Anillo | { error: string } {

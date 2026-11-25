@@ -12,6 +12,8 @@ import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe 
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
 import { carpinteriaDeNivel, plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { prepararSecciones } from '../engine/loft';
+import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
 import { nivelesOutrigger } from '../engine/exo';
 import { diagridCircular, radioEn, type DiagridCircular } from '../engine/diagridCircular';
@@ -236,9 +238,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
       prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN));
     });
-    // la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: una piel de vidrio que une los contornos
+    // fachada: una superficie que une la carpintería (o, si no hay, la losa) de cada nivel de PB a la azotea; muestra
+    // el perfil, los lofts y las curvas como una piel continua (sin la deformada: ahí se mueven las losas)
+    if (estado.capas.fachada && !roto) agregarFachada();
+    // (con la capa «Fachada» apagada) la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: una piel de vidrio que une los contornos
     // de los niveles (cada uno a la mitad del tramo que cubre, como en el túnel); arriba cierra en el último nivel
-    if (estado.capas.losas && !def && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) {
+    else if (estado.capas.losas && !def && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) {
       const niv = p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= 0).sort((a, b) => a.n.cota - b.n.cota);
       const anillos = niv.map((x, k) => {
         const c = carpinteriaDeNivel(p, x.i)?.v ?? plantaDeNivel(p, x.i).silueta;
@@ -450,6 +455,41 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         p.forEach((q, i) => tubo(q, p[(i + 1) % 4]));
       }));
     }
+  }
+
+  function agregarFachada() {
+    const p = estado.proyecto;
+    const bandas = bandasFachada(p, prepararSecciones);
+    if (!bandas.length) return;
+    const vidrio = new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--dim', '#8a949e')), transparent: true, opacity: 0.28, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
+    const malla = (pos: number[], mat: THREE.Material) => { if (!pos.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); grupo.add(new THREE.Mesh(g, mat)); };
+    const lineas = (lin: number[], color: string, opacidad: number) => { if (!lin.length) return; const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3)); grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: opacidad < 1, opacity: opacidad }))); };
+    const v3 = (q: { x: number; y: number; z?: number }, z = q.z ?? 0) => [q.x, z, -q.y];
+    if (p.paneleria && p.paneleria.modulo > 0) {
+      // panelería: vidrio, antepechos opacos (gris más oscuro: no es tracción ni compresión) y montantes y travesaños
+      const r = calcularPaneleria(bandas, p.paneleria), vid: number[] = [], opa: number[] = [], lin: number[] = [];
+      r.paneles.forEach(pa => {
+        const q = pa.p, dst = pa.opaco ? opa : vid;
+        for (let i = 1; i + 1 < q.length; i++) dst.push(...v3(q[0]), ...v3(q[i]), ...v3(q[i + 1]));
+
+      });
+      r.montantes.forEach(([a, b]) => lin.push(...v3(a), ...v3(b)));
+      // travesaños: en cada losa donde toca la piel, el antepecho, los intermedios y el remate (donde la losa no llega, la piel sigue de largo)
+      r.travesanos.forEach(([a, b]) => lin.push(...v3(a), ...v3(b)));
+      malla(vid, vidrio);
+      malla(opa, new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--ink2', '#5f6b76')), transparent: true, opacity: 0.6, roughness: 0.8, side: THREE.DoubleSide }));
+      lineas(lin, css('--ink', '#1f2328'), 0.55);
+      return;
+    }
+    const pos: number[] = [], lin: number[] = [];
+    bandas.forEach(bd => {
+      const m = bd.a.length;
+      for (let j = 0; j < m; j++) { const a0 = bd.a[j], a1 = bd.a[(j + 1) % m], b0 = bd.b[j], b1 = bd.b[(j + 1) % m]; pos.push(...v3(a0, bd.z0), ...v3(a1, bd.z0), ...v3(b1, bd.z1), ...v3(a0, bd.z0), ...v3(b1, bd.z1), ...v3(b0, bd.z1)); }
+      const paso = Math.max(1, Math.round(m / 24));
+      for (let j = 0; j < m; j += paso) lin.push(...v3(bd.a[j], bd.z0), ...v3(bd.b[j], bd.z1));
+    });
+    malla(pos, vidrio);
+    lineas(lin, css('--ink2', '#556'), 0.35);
   }
 
   /** torre sin deformar (trazos), eje del CR deformado y flecha curva del giro en la azotea */

@@ -24,7 +24,7 @@ describe('sincronización con Google Sheets', () => {
     let recibido: Lectura | null = null;
     const c = new SincroSheets('https://script.google.com/macros/s/X/exec', { remoto: l => { recibido = l; }, estado: () => {} }, fetchFn);
     expect(await c.conectar(() => paquete(p, {}))).toBe('escrito');
-    expect(s.tablas.map(t => t.nombre)).toEqual(['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías']);
+    expect(s.tablas.map(t => t.nombre)).toEqual(['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contornos', 'T3D Grupos', 'T3D Huecos de losa', 'T3D Caminos', 'T3D Cotas', 'T3D Guías']);   // «T3D Lofts» va solo si hay lofts
     // sin cambios en la hoja no trae nada (tampoco su propia escritura)
     expect(await c.revisar()).toBe(false);
     // a mano: el muro M1 pasa a medir 5 m y la velocidad del viento a 50 m/s

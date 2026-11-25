@@ -54,7 +54,7 @@ export function ejemploHancock(): Proyecto {
     fundacion: { b1: r2(ancha(0) * FT) + 4, a1: r2(angosta(0) * FT) + 4, sigmaAdm: 20 },
     hormigon: 'H30',
     // núcleo de hormigón: medidas supuestas (no publicadas); entra en la arriba más angosta (30,5 × 50,3 m)
-    muros: [tubo('N1', 0, 0, 24, 12, 0.5, 1300)],
+    muros: [{ ...tubo('N1', 0, 0, 24, 12, 0.5, 1300), soloGravedad: true }],
     exo: {
       tipo: 'D', separacion: 0, modulo: 8, anchoVariable: true, cortes, alas: 5,
       // secciones dimensionadas con la app (botón «Dimensionar»): las reales no están en las fuentes
@@ -102,7 +102,7 @@ export function ejemploHearst(): Proyecto {
     hormigon: 'H40',
     // núcleo al oeste (supuesto: medidas y que también toma viento); corrido 12 m del centro → torsión
     // núcleo corrido al oeste, solo de gravedad: el viento y la torsión los toma el diagrid (un tubo cerrado)
-    muros: [tubo('N1', -12, 0, 12, 16, 0.6, 700)],
+    muros: [{ ...tubo('N1', -12, 0, 12, 16, 0.6, 700), soloGravedad: true }],
     exo: {
       tipo: 'A', separacion: 0, modulo: 8, pasoH: r2(40 * FT), cortes,
       columna: { b: 0.15, e: 0.008 }, diagonal: { b: 1.2, e: 0.07 }, viga: { b: 0.15, e: 0.008 },
@@ -145,7 +145,7 @@ export function ejemploOnterie(): Proyecto {
     fundacion: { b1: B + 4, a1: L + 4, sigmaAdm: 20 },
     hormigon: 'H40',
     // núcleo de ascensores (supuesto), solo de gravedad: el viento lo toma el tubo de hormigón con las X
-    muros: [tubo('N1', 0, 0, 10, 8, 0.4, 450)],
+    muros: [{ ...tubo('N1', 0, 0, 10, 8, 0.4, 450), soloGravedad: true }],
     exo: {
       tipo: 'D', separacion: 0, modulo: 5, material: 'hormigon',
       // hormigón: E ≈ 3·10⁶ t/m² (H40), tensión admisible de compresión ≈ 0,45·f′c ≈ 1800 t/m²; barras macizas (e = b/2)
@@ -309,7 +309,7 @@ export function ejemploGherkin(): Proyecto {
     hormigon: 'H40',
     // núcleo circular de 24 m, de columnas de acero, solo de gravedad: un tubo que no entra en ninguna pieza (no toma viento),
     // con la pared de hormigón que pesa lo mismo que el 24 % del acero (unas 2000 t)
-    muros: [{ id: 'N1', dir: 'Y', x: 0, y: 0, largo: 24, espesor: 0.07, tipo: 'tubo-circ', llega: true, areaInf: 450, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', zHasta: r2(38 * dz) }],
+    muros: [{ id: 'N1', dir: 'Y', x: 0, y: 0, largo: 24, espesor: 0.07, tipo: 'tubo-circ', llega: true, areaInf: 450, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', zHasta: r2(38 * dz), soloGravedad: true }],
     exo: {
       tipo: 'A', separacion: 0, modulo: 4, cortes, anchoVariable: true, pasoH: 9.65, circular: { nudos: 18, hasta: hTop },
       columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.5, e: 0.06 }, viga: { b: 0.3, e: 0.016 },
