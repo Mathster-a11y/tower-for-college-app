@@ -62,7 +62,7 @@ export interface SueloCirsoc { G: number; Lt: number; sigmaAdm: number; dirs: Su
 export function sueloCirsoc(p: Proyecto, w: Viento102): SueloCirsoc {
   const d1 = datos101De(p), Lq = sobrecarga(d1);
   let B = 0, Lp = 0, area = 0;
-  p.niveles.forEach(n => { B = n.B ?? B; Lp = n.L ?? Lp; area += B * Lp; });
+  p.niveles.forEach(n => { B = n.B ?? B; Lp = n.L ?? Lp; area += B * Lp * Math.max(1, Math.round(n.pisos ?? 1)); });
   const G = d1.D * area, Lt = Lq * area;
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0), zFund = p.niveles[p.niveles.length - 1]?.cota ?? zPB;
   const brazo = zPB - zFund, sigmaAdm = sigmaAdmDe(p);

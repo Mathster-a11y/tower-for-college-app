@@ -50,14 +50,15 @@ export function ejemploHancock(): Proyecto {
     alumno: '',
     sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: r2(ancha(0) * FT) + 4, a1: r2(angosta(0) * FT) + 4 },
+    // caissons hasta la roca: la platea los representa con una tensión equivalente de 20 kg/cm² (supuesto)
+    fundacion: { b1: r2(ancha(0) * FT) + 4, a1: r2(angosta(0) * FT) + 4, sigmaAdm: 20 },
     hormigon: 'H30',
     // núcleo de hormigón: medidas supuestas (no publicadas); entra en la arriba más angosta (30,5 × 50,3 m)
     muros: [tubo('N1', 0, 0, 24, 12, 0.5, 1300)],
     exo: {
       tipo: 'D', separacion: 0, modulo: 8, anchoVariable: true, cortes, alas: 5,
       // secciones dimensionadas con la app (botón «Dimensionar»): las reales no están en las fuentes
-      columna: { b: 1.6, e: 0.08 }, diagonal: { b: 1.4, e: 0.06 }, viga: { b: 0.9, e: 0.04 },
+      columna: { b: 1.6, e: 0.1 }, diagonal: { b: 1.4, e: 0.08 }, viga: { b: 0.9, e: 0.04 },
       losas: { franja: 7, qD: 0.45, qL: 0.25 },
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
@@ -70,6 +71,7 @@ export function ejemploHancock(): Proyecto {
         'Secciones: las del botón «Dimensionar», con el control del curso y el CIRSOC 301 y las losas apoyadas (columnas de 1,60 m y diagonales de 1,40 m); las reales no están en las fuentes. Medidas del núcleo y viento (V = 48 m/s, exposición de centro de ciudad, con el CIRSOC 102): supuestos.',
         'Control de orden de magnitud: unas 30 lb/ft² de acero en toda la torre (SOM) sobre 2,8 millones de ft² (CTBUH) son unas 38 000 t, con vigas y losas; el tubo dimensionado de la app, con las losas apoyadas, pesa unas 42 100 t: más que eso (el modelo no tiene «shear lag» ni las columnas intermedias de las caras paralelas, y usa el viento del CIRSOC). Otra fuente de divulgación da 46 000 t cortas de acero en toda la torre.',
         'Las losas apoyan en el exo: una franja de 7 m junto a cada fachada (con el núcleo que lleva la otra mitad del peso, como en el estudio JHU: en la base la mitad de la planta son unos 2030 m², arriba unos 770 m²; 7 m es un término medio), con 0,45 t/m² de peso (losa colaborante con contrapiso, cielorraso e instalaciones) y 0,25 t/m² de sobrecarga de oficinas (unas 50 lb/ft²): supuestos. Entran 1,2 D + 1,6 L y 1,2 D + 0,5 L + 1,6 W.',
+        'Criterio CIRSOC (102-25 y 301/302): la base pide columnas de 1,60 m × 100 mm y diagonales de 1,40 m × 80 mm (las del botón «Dimensionar» con el criterio del curso no alcanzan con el viento del 102-25). Fundación: la torre apoya en caissons hasta la roca; la app no los calcula: la platea los representa con una tensión equivalente de 20 kg/cm² (supuesto).',
       ],
     },
   };
@@ -139,20 +141,21 @@ export function ejemploOnterie(): Proyecto {
     alumno: '',
     sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: B + 4, a1: L + 4 },
+    // caissons hasta la roca: la platea los representa con una tensión equivalente de 20 kg/cm² (supuesto)
+    fundacion: { b1: B + 4, a1: L + 4, sigmaAdm: 20 },
     hormigon: 'H40',
-    // núcleo de ascensores (supuesto): también toma viento
-    muros: [tubo('N1', 0, 0, 10, 8, 0.4, 450, 'Núcleo', 'Núcleo B')],
+    // núcleo de ascensores (supuesto), solo de gravedad: el viento lo toma el tubo de hormigón con las X
+    muros: [tubo('N1', 0, 0, 10, 8, 0.4, 450)],
     exo: {
       tipo: 'D', separacion: 0, modulo: 5, material: 'hormigon',
       // hormigón: E ≈ 3·10⁶ t/m² (H40), tensión admisible de compresión ≈ 0,45·f′c ≈ 1800 t/m²; barras macizas (e = b/2)
       // secciones dimensionadas con la app (catálogo de hormigón macizo)
-      columna: { b: 1.7, e: 0.85 }, diagonal: { b: 0.8, e: 0.4 }, viga: { b: 1.6, e: 0.8 },
+      columna: { b: 3.0, e: 1.5 }, diagonal: { b: 1.5, e: 0.75 }, viga: { b: 1.6, e: 0.8 },
       E: 3.0e6, sigmaAdm: 1800, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
         '60 pisos y 570 ft (174 m): Wikipedia («Axis Apartments»). Las X son paneles de hormigón que llenan las ventanas y forman un tubo reticulado; es el primer rascacielos de hormigón con diagonales en el perímetro (Wikipedia; STRUCTURE, «Evolution of the Braced Tube», 2024).',
         'Planta de 48 × 26 m, X cada 10 pisos y núcleo: supuestos (no encontré las medidas en una fuente confiable).',
-        'Barras de hormigón macizas (e = b/2), E = 3·10⁶ t/m², γ = 2,4 t/m³ y σ adm = 1800 t/m² (0,45 f′c de un H40): supuestos para el modelo. Las barras de la app son cuadradas (las del botón «Dimensionar»: columnas de 1,70 m, diagonales de 0,80 m); los paneles reales son placas que llenan las ventanas.',
+        'Barras de hormigón macizas (e = b/2), E = 3·10⁶ t/m², γ = 2,4 t/m³ y σ adm = 1800 t/m² (0,45 f′c de un H40): supuestos para el modelo. Las barras de la app son cuadradas y equivalen a los paneles reales, que son placas que llenan los vanos entre ventanas: columnas de 3,0 × 1,5 m y diagonales de 1,5 × 0,75 m, las medidas con que verifican tensión, pandeo y la deriva con CIRSOC y FEM. Fundación: platea con σ adm = 20 kg/cm² (supuesto de roca o pilotes; el original va sobre cajones).',
         'Un nivel de la app cada 2 pisos (la planilla admite 49 niveles).',
       ],
     },
@@ -200,7 +203,7 @@ export function ejemploBasicoExo(): Proyecto {
 export function ejemploShanghai(): Proyecto {
   const h = 632, n = 48, dz = h / n, B = 55;                   // un nivel de la app cada 13,2 m ≈ 2,7 pisos reales
   const niveles: Nivel[] = [];
-  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Corona (632 m)' : `nivel ${k} (≈ piso ${Math.round((k * dz) / (h / 128))})`, cota: r2(k * dz), ...(k === n ? { B, L: B } : {}) });
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Corona (632 m)' : `nivel ${k} (≈ piso ${Math.round((k * dz) / (h / 128))})`, cota: r2(k * dz), pisos: k % 3 === 0 ? 2 : 3, ...(k === n ? { B, L: B } : {}) });
   niveles.push({ nombre: 'PB', cota: 0, B, L: B }, { nombre: 'Subsuelo', cota: -10 });
   // juntas de zona: nueve zonas iguales (supuesto); los brazos van en el nivel de la app más cercano
   const juntas = Array.from({ length: 8 }, (_, j) => r2(Math.round(((j + 1) * h) / 9 / dz) * dz));
@@ -210,25 +213,27 @@ export function ejemploShanghai(): Proyecto {
     alumno: '',
     sitio: { V: 42, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: B + 6, a1: B + 6 },
-    hormigon: 'H40',
+    fundacion: { b1: 107, a1: 107, sigmaAdm: 20 },
+    hormigon: 'H70',
     // núcleo de hormigón de 30 × 30 m (Thornton Tomasetti); pared de 1,50 m (supuesto); toma el viento de los dos lados
-    muros: [tubo('N1', 0, 0, 30, 30, 1.5, (B * B) / 2, 'Núcleo', 'Núcleo B')],
+    // la pared se angosta con la altura (supuesto): 2,5 m abajo, 1,8 m desde 211 m y 1,2 m desde 421 m
+    muros: [{ ...tubo('N1', 0, 0, 30, 30, 2.5, (B * B) / 2, 'Núcleo', 'Núcleo B'), espesores: [{ desde: 211, e: 1.8 }, { desde: 421, e: 1.2 }] }],
     exo: {
       tipo: 'F', separacion: 0, modulo: 4, nucleo: 30, outriggers: juntas, cinturon: false,
       losas: { franja: 6.25, qD: 0.5, qL: 0.25 },
       // supercolumnas compuestas como cajones de acero equivalentes, por tramos (supuesto); brazos: botón «Dimensionar»
-      columna: { b: 4.0, e: 0.25 }, diagonal: { b: 1.2, e: 0.06 }, viga: { b: 0.15, e: 0.008 },
-      tramos: [{ clase: 'columna', desde: 0, sec: { b: 4.0, e: 0.25 } }, { clase: 'columna', desde: 211, sec: { b: 3.5, e: 0.2 } }, { clase: 'columna', desde: 421, sec: { b: 2.5, e: 0.15 } }],
+      columna: { b: 5.5, e: 0.4 }, diagonal: { b: 2.0, e: 0.10 }, viga: { b: 0.15, e: 0.008 },
+      tramos: [{ clase: 'columna', desde: 0, sec: { b: 5.5, e: 0.4 } }, { clase: 'columna', desde: 211, sec: { b: 4.5, e: 0.3 } }, { clase: 'columna', desde: 421, sec: { b: 3.5, e: 0.2 } }],
       E: 2.1e7, sigmaAdm: 14000,
       notas: [
         '632 m y nueve zonas de 12 a 15 pisos, con dos pisos de máquinas y refugio en cada junta (Wikipedia; Designing Buildings). Acá nueve zonas iguales (supuesto).',
-        'Núcleo de hormigón de unos 90 × 90 ft (30 m): Thornton Tomasetti. Pared de 1,50 m y que toma el viento de los dos lados: supuestos.',
+        'Núcleo de hormigón de unos 90 × 90 ft (30 m): Thornton Tomasetti. Pared que se angosta con la altura (2,50 m abajo, 1,80 m desde 211 m y 1,20 m desde 421 m), de hormigón de alta resistencia (H70; la obra usó C60 a C70) y que toma el viento de los dos lados: supuestos.',
         'Outriggers de acero de dos pisos de alto en los pisos de máquinas, cinturones dobles en cada zona y ocho supercolumnas compuestas (acero y hormigón) atadas al núcleo por los brazos: AISC (Modern Steel Construction, abril 2013) y ENR. Acá los brazos son de un piso de alto (un nivel de la app, 13,2 m) y van en las ocho juntas (supuesto: las fuentes no dicen en cuántas).',
-        'Planta cuadrada de 55 m (supuesto: la torre real es redondeada y se angosta con la altura). Un nivel de la app cada 13,2 m (unos 2,7 pisos reales; la planilla admite 49 niveles).',
-        'Supercolumnas pareadas a media cara, alineadas con los brazos: cada brazo toma la suya (sin el reparto del cinturón, que en la obra lleva sobre todo el peso de cada zona). Son compuestas (acero y hormigón) y cada una lleva unas 24 000 t: un tubo de acero no alcanza. Acá son cajones de acero equivalentes por tramos: 4,0 m × 250 mm hasta 211 m, 3,5 m × 200 mm hasta 421 m y 2,5 m × 150 mm arriba (supuestos). Por eso el «acero» que informa la app (unas 107 000 t) no es el de la obra: la mayor parte son las supercolumnas, que en la realidad son sobre todo hormigón.',
-        'Brazos dimensionados con la app (diagonales de 1,20 m × 60 mm; los cordones quedan en el tubo más chico porque el brazo de 13,2 m de alto los descarga). Flecha de la azotea unos h/650 con el viento de la planilla; sin los brazos, h/210.',
+        'Planta cuadrada de 55 m (supuesto: la torre real es redondeada y se angosta con la altura). Un nivel de la app cada 13,2 m: cada uno junta 2 o 3 pisos reales (128 en total) y carga sus losas (la planilla admite 49 niveles).',
+        'Supercolumnas pareadas a media cara, alineadas con los brazos: cada brazo toma la suya (sin el reparto del cinturón, que en la obra lleva sobre todo el peso de cada zona). Son compuestas (acero y hormigón) y cada una lleva unas 24 000 t: un tubo de acero no alcanza. Acá son cajones de acero equivalentes por tramos: 5,5 m × 400 mm hasta 211 m, 4,5 m × 300 mm hasta 421 m y 3,5 m × 200 mm arriba (supuestos, las medidas con que verifican con CIRSOC y FEM). Por eso el «acero» que informa la app (unas 107 000 t) no es el de la obra: la mayor parte son las supercolumnas, que en la realidad son sobre todo hormigón.',
+        'Brazos de 2,0 m × 100 mm (diagonales; los cordones quedan en el tubo más chico porque el brazo de 13,2 m de alto los descarga).',
         'Las losas apoyan en el perímetro: la mitad de cada losa (franja de 6,25 m), con 0,5 t/m² de peso y 0,25 t/m² de sobrecarga (supuesto); la otra mitad, en el núcleo. Los brazos se conectan al terminar la obra gruesa.',
+        'Fundación: platea cuadrada de 107 m, de la misma área que la losa circular real de 121 m de diámetro sobre 955 pilotes; σ adm = 20 kg/cm² como equivalente de los pilotes (supuesto).',
         'Viento: CIRSOC 102 con V = 42 m/s y exposición de centro de ciudad (supuesto: del orden de la presión básica de 0,55 kPa de Shanghái pasada a ráfaga; hay tifones).',
       ],
     },
