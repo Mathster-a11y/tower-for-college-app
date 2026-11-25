@@ -59,20 +59,19 @@ const SOLO = process.env.SOLO ? process.env.SOLO.split(',') : null;
       } catch (e) { linea.push(`  ${ex}: SIN DESCARGA (${e.message.slice(0, 80)})`); }
       await cerrar(); await pg.keyboard.press('Escape').catch(() => {});
     }
-    // lo que se imprime (abre otra ventana con la hoja lista para imprimir o guardar como PDF)
+    // lo que se imprime: la app arma la hoja en la misma página y llama a imprimir (acá se intercepta la llamada y se mide
+    // lo que quedó armado para imprimir)
     for (const ex of IMPRIMIR) {
       try {
         const e0 = errs.length;
+        await pg.evaluate(() => { window.__impreso = null; window.print = () => { const b = document.body; window.__impreso = { n: b.innerText.length, dibujos: b.querySelectorAll('svg, img, canvas').length, raro: (b.innerText.match(/.{0,30}(NaN|undefined|\[object).{0,30}/) || [''])[0] }; }; });
         await pg.evaluate(() => document.getElementById('b-exportar-menu').click());
-        const espera = ctx.waitForEvent('page', { timeout: 90000 });
         await pg.evaluate(i => document.getElementById(i).click(), ex);
-        const w = await espera; const we = []; w.on('pageerror', e => we.push(e.message.slice(0, 120)));
-        await w.waitForLoadState('load').catch(() => {}); await w.waitForTimeout(4000);
-        const info = await w.evaluate(() => ({ n: document.body.innerText.length, svg: document.querySelectorAll('svg, img, canvas').length, raro: (document.body.innerText.match(/.{0,30}(NaN|undefined|\[object).{0,30}/) || [''])[0] }));
-        await w.screenshot({ path: path.join(S, `${id}_${ex}.png`) }).catch(() => {});
-        linea.push(`  ${ex}: ventana con ${info.n} letras y ${info.svg} dibujos${info.raro ? ` · texto raro «${info.raro}»` : ''}${we.length ? ` · errores ${we.join(' / ')}` : ''}${errs.length > e0 ? ` · ${errs.slice(e0).join(' / ')}` : ''}`);
-        await w.close();
-      } catch (e) { linea.push(`  ${ex}: NO ABRIÓ (${e.message.slice(0, 80)})`); }
+        const info = await pg.waitForFunction(() => window.__impreso, null, { timeout: 90000 }).then(h => h.jsonValue());
+        await pg.screenshot({ path: path.join(S, `${id}_${ex}.png`) }).catch(() => {});
+        await pg.evaluate(() => window.dispatchEvent(new Event('afterprint'))); await pg.waitForTimeout(500);
+        linea.push(`  ${ex}: hoja con ${info.n} letras y ${info.dibujos} dibujos${info.raro ? ` · texto raro «${info.raro}»` : ''}${errs.length > e0 ? ` · ${errs.slice(e0).join(' / ')}` : ''}`);
+      } catch (e) { linea.push(`  ${ex}: NO SE ARMÓ (${e.message.slice(0, 80)})`); }
       await cerrar();
     }
     if (errs.length) linea.push(`  errores: ${[...new Set(errs)].slice(0, 5).join(' / ')}`);
