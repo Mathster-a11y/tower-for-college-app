@@ -1,4 +1,4 @@
-import{s as D}from"./tunel3d-gSMD8Et9.js";import"./index-Cq5oD5cA.js";import"./OrbitControls-CGJ5OEkm.js";const N=`#!/usr/bin/env python3
+import{s as D}from"./tunel3d-BXxJfrQy.js";import"./index-Sq24jXyc.js";import"./OrbitControls-CGJ5OEkm.js";const N=`#!/usr/bin/env python3
 # Torre 3D: el Cd de la torre a partir de los resultados de OpenFOAM, sin función de OpenFOAM (por si «forceCoeffs»
 # no arranca en tu instalación). Suma la presión de cada cara de la torre por su área (solo presión, sin el roce).
 # Uso:  python3 calcular_cd.py . <tiempo> torre <U de referencia m/s> <área B·H m²>

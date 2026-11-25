@@ -6,6 +6,7 @@
  * Cotas: horizontales, verticales o alineadas, pegadas a los nodos de los muros (siguen al muro), y las medidas del
  * elemento elegido.
  */
+import { diagridCircular, radioEn } from '../engine/diagridCircular';
 import { estado, fmt } from './estado';
 import { agregarVecino } from '../viento/contexto';
 import { medidasNiveles } from '../engine/perfilTorre';
@@ -562,7 +563,18 @@ export function montarColocar(api: ApiPlanta) {
     });
     // el exoesqueleto (etapa 08): su contorno a la separación de la fachada, las columnas de esquina y las de las alas,
     // en el nivel a la vista (si la torre está corrida o las caras siguen la planta, como en ese nivel)
-    if (p.exo) {
+    const dcir = p.exo ? diagridCircular(p) : null;
+    if (dcir) {
+      // diagrid sobre la planta circular (30 St Mary Axe): la fachada y los nudos del anillo más cercano al nivel a la vista
+      const z = estado.nivelPlanta ?? 0, R = radioEn(p, z);
+      const an = dcir.anillos.reduce((m, a) => (Math.abs(a.z - z) < Math.abs(m.z - z) ? a : m), dcir.anillos[0]);
+      const ge = el('g', { class: 'exo-planta' });
+      ge.append(el('circle', { cx: X(0), cy: Y(0), r: X(R) - X(0), class: 'exo-contorno' }));
+      const lado = Math.max(0.6, (p.exo!.diagonal?.b ?? 0.5) * 1.6);
+      an.th.forEach(th => { const x = R * Math.cos(th), y = R * Math.sin(th); ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna', transform: `rotate(${(-th * 180) / Math.PI + 45} ${X(x)} ${Y(y)})` })); });
+      ge.append(el('text', { x: X(-R) + 4, y: Y(-R) + 16, class: 'exo-rot' }, `diagrid: ${dcir.n} nudos por anillo, anillo a ${fmt(an.z, 1)} m (cada anillo gira ${fmt(180 / dcir.n, 0)}°)`));
+      g.append(ge);
+    } else if (p.exo) {
       const ms = medidasNiveles(p), pb = ms.find(m => Math.abs(m.z) < 1e-6) ?? ms[ms.length - 1];
       const nv = (estado.nivelPlanta !== null ? ms.find(m => Math.abs(m.n.cota - estado.nivelPlanta!) < 1e-6) : undefined) ?? pb;
       if (pb && nv) {

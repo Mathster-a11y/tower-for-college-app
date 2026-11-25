@@ -126,6 +126,13 @@ export interface ExoDef {
   gamma?: number;
   /** de dónde sale cada número del ejemplo (fuentes y supuestos), para mostrar en la etapa 08 */
   notas?: string[];
+  /**
+   * solo para el dibujo (3D y planta): el diagrid sobre una planta circular, como el de 30 St Mary Axe: «nudos» nudos
+   * por anillo, anillos en los bordes y en la mitad de cada módulo (cortes), cada uno girado media separación respecto
+   * del de abajo, sobre la fachada (el radio sale de la silueta de cada nivel). El cálculo sigue con las caras planas
+   * equivalentes (las de las fichas): esto no cambia ningún número.
+   */
+  circular?: { nudos: number; /** el diagrid se dibuja hasta esta cota; arriba, la carpintería (una cúpula de vidrio) */ hasta?: number };
 }
 export interface LosasExo { franja: number; qD?: number; qL?: number }
 /** peso de las losas y sobrecarga por m² (t/m²): los mismos de la planilla (0,7 descargado, 0,9 cargado) */

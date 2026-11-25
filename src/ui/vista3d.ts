@@ -11,9 +11,10 @@ import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { carpinteriaDeNivel, plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { datosExo, momentoTabiques } from './exo';
 import { nivelesOutrigger } from '../engine/exo';
+import { diagridCircular, radioEn, type DiagridCircular } from '../engine/diagridCircular';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
@@ -235,6 +236,31 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
       prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN));
     });
+    // la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: una piel de vidrio que une los contornos
+    // de los niveles (cada uno a la mitad del tramo que cubre, como en el túnel); arriba cierra en el último nivel
+    if (estado.capas.losas && !def && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) {
+      const niv = p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= 0).sort((a, b) => a.n.cota - b.n.cota);
+      const anillos = niv.map((x, k) => {
+        const c = carpinteriaDeNivel(p, x.i)?.v ?? plantaDeNivel(p, x.i).silueta;
+        const z = k + 1 < niv.length ? (x.n.cota + niv[k + 1].n.cota) / 2 : x.n.cota;
+        return { z, pts: puntosSilueta(c, 16) };
+      });
+      anillos.unshift({ z: niv[0].n.cota, pts: anillos[0].pts });
+      const iguales = anillos.every(a => a.pts.length === anillos[0].pts.length);
+      if (iguales) {
+        const nP = anillos[0].pts.length, pos: number[] = [], idx: number[] = [];
+        anillos.forEach(a => a.pts.forEach(q => pos.push(q.x, a.z, -q.y)));
+        for (let k = 0; k + 1 < anillos.length; k++) for (let j = 0; j < nP; j++) {
+          const a = k * nP + j, b = k * nP + ((j + 1) % nP), c2 = (k + 1) * nP + j, d2 = (k + 1) * nP + ((j + 1) % nP);
+          idx.push(a, b, d2, a, d2, c2);
+        }
+        const gV = new THREE.BufferGeometry();
+        gV.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gV.setIndex(idx); gV.computeVertexNormals();
+        const vidrio = new THREE.Mesh(gV, new THREE.MeshStandardMaterial({ color: 0x8fb3cc, transparent: true, opacity: 0.16, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
+        vidrio.renderOrder = 2;
+        grupo.add(vidrio);
+      }
+    }
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const h = top - fondoCota;
@@ -339,7 +365,48 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
    * Exoesqueleto: las cuatro caras como tubos de acero. Las dos caras paralelas al viento elegido se pintan con su
    * esfuerzo normal (tracción o compresión, más intenso cuanto mayor |N|); las otras dos, en gris acero.
    */
+  /**
+   * diagrid circular (30 St Mary Axe): las barras sobre la fachada real. El color es el esfuerzo de un tubo de n barras
+   * con el momento que toma el exo en esa altura (rojo tracción del lado del viento, azul compresión del otro) más el
+   * peso de las losas que apoyan en él; es la lectura del cálculo con caras planas, repartida en la vuelta.
+   */
+  function agregarExoCircular(dc: DiagridCircular) {
+    const d = datosExo(estado.dir);
+    const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
+    const eje = new THREE.Vector3(0, 1, 0);
+    const def = estado.proyecto.exo!;
+    const interp = (vs: number[], zs: number[], z: number) => { const k = zs.findIndex(q => q >= z - 1e-9); return k <= 0 ? vs[Math.max(0, k)] ?? 0 : vs[k - 1] + ((vs[k] - vs[k - 1]) * (z - zs[k - 1])) / (zs[k] - zs[k - 1] || 1); };
+    const Mexo = (z: number) => (d ? interp(d.r.Msin.map((m, k) => m - d.r.Mtab[k]), d.r.zs, z) : 0);
+    // peso que baja por el diagrid: la franja de losa de cada piso que apoya en él, de arriba hasta z
+    const franja = def.losas?.franja ?? 0, q = (def.losas?.qD ?? 0.7) + 0.5 * (def.losas?.qL ?? 0.2);
+    const pesos = estado.proyecto.niveles.filter(n => n.cota > 0).map(n => { const R = radioEn(estado.proyecto, n.cota); return { z: n.cota, P: franja > 0 ? Math.PI * (R * R - Math.max(0, R - franja) ** 2) * q : 0 }; });
+    const G = (z: number) => pesos.filter(x => x.z > z + 1e-6).reduce((a, x) => a + x.P, 0);
+    const nMax = { v: 1e-9 };
+    const esf = dc.barras.map(b => {
+      if (b.clase !== 'diagonal') return 0;
+      const zm = (b.a.z + b.b.z) / 2, R = radioEn(estado.proyecto, zm) || 1, L = Math.hypot(b.b.x - b.a.x, b.b.y - b.a.y, b.b.z - b.a.z), sen = Math.abs(b.b.z - b.a.z) / (L || 1);
+      // viento A hacia +y: del lado y < 0 tracciona; viento B hacia +x: del lado x < 0
+      const s = estado.dir === 'A' ? -Math.sin(b.th) : -Math.cos(b.th);
+      const N = ((Mexo(zm) * s) / (dc.n * R) - G(zm) / (2 * dc.n)) / (sen || 1);
+      nMax.v = Math.max(nMax.v, Math.abs(N));
+      return N;
+    });
+    const matAnillo = new THREE.MeshStandardMaterial({ color: acero, roughness: 0.45, metalness: 0.3 });
+    const rd = Math.max(0.15, Math.min(0.35, (def.diagonal?.b ?? 0.4) * 0.6)), ra = Math.max(0.12, Math.min(0.3, (def.viga?.b ?? 0.3) * 0.5));
+    dc.barras.forEach((b, i) => {
+      const A = new THREE.Vector3(b.a.x, b.a.z, -b.a.y), Bv = new THREE.Vector3(b.b.x, b.b.z, -b.b.y), L = A.distanceTo(Bv);
+      if (L < 1e-6) return;
+      const mat = b.clase === 'anillo' ? matAnillo : new THREE.MeshStandardMaterial({ color: acero.clone().lerp(esf[i] >= 0 ? cT : cC, 0.35 + 0.65 * Math.min(1, Math.abs(esf[i]) / nMax.v)), roughness: 0.45, metalness: 0.3 });
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(b.clase === 'anillo' ? ra : rd, b.clase === 'anillo' ? ra : rd, L, 6), mat);
+      m.position.copy(A.clone().add(Bv).multiplyScalar(0.5));
+      m.quaternion.setFromUnitVectors(eje, Bv.clone().sub(A).normalize());
+      grupo.add(m);
+    });
+  }
+
   function agregarExo() {
+    const dc = diagridCircular(estado.proyecto);
+    if (dc) { agregarExoCircular(dc); return; }
     const caras = (['A', 'B'] as const).map(dir => ({ dir, d: datosExo(dir) }));
     // N > 0 tracción (rojo, --traccion) y N < 0 compresión (azul, --compresion), como en el alzado de la etapa 08
     const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
