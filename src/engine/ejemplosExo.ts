@@ -251,35 +251,37 @@ export function ejemploGherkin(): Proyecto {
   const lado = (d: number) => r2(Math.sqrt(Math.PI / 4) * d);
   const circulo = (d: number) => { const r = r2(d / 2), b = Math.tan(Math.PI / 8); return [{ x: r, y: 0, b }, { x: 0, y: r, b }, { x: -r, y: 0, b }, { x: 0, y: -r, b }]; };
   const uso = (k: number) => (k === 40 ? 'bar, entrepiso bajo la cúpula' : k >= 38 ? 'comedores y salas' : k === 37 ? 'cocina y máquinas' : k >= 35 ? 'máquinas' : k === 1 ? 'locales' : 'oficinas');
+  // pozos de luz: la losa de cada piso de oficinas termina en seis triángulos abiertos a la fachada (no son huecos dentro
+  // de la losa: son su contorno). Cada triángulo va de un nudo del diagrid al siguiente (20°) y su punta llega al 63 % del
+  // radio (plantas de Foster). Siguen las espirales: los nudos de la franja avanzan 5° por piso, así que el centro del
+  // triángulo está en 10° + 5° · k (k = piso) y sus vértices sobre la fachada caen sobre dos diagonales. Del 2º al 30º;
+  // el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).
+  const conPozos = (k: number) => k >= 2 && k <= 30 && k !== 16;
+  const losaConPozos = (k: number) => {
+    const R = r2(D(k * dz) / 2), g = Math.PI / 180, pt = (r: number, a: number, b = 0) => ({ x: r2(r * Math.cos(a)), y: r2(r * Math.sin(a)), ...(b ? { b } : {}) });
+    const v: { x: number; y: number; b?: number }[] = [];
+    for (let j = 0; j < 6; j++) {
+      const c = (10 + 5 * k + 60 * j) * g;
+      // del nudo de la derecha del triángulo j: arco de 40° (los «dedos» de oficinas) hasta el nudo izquierdo del siguiente
+      v.push(pt(R, c - 10 * g), pt(0.63 * R, c), pt(R, c + 10 * g, Math.tan((40 * g) / 4)));
+    }
+    return v;
+  };
   const niveles: Nivel[] = [];
   // cada nivel: la losa con el diámetro de su cota y la carpintería (el vidrio que ve el viento) con el del medio del
   // tramo que cubre, hasta el nivel de arriba
-  const nivel = (nombre: string, z: number, zArriba: number, losa: number | null): Nivel => {
+  const nivel = (nombre: string, z: number, zArriba: number, losa: number | null, contorno?: Nivel['silueta']): Nivel => {
     const dv = D((z + zArriba) / 2);
     // la cúpula no tiene losas: su «losa» es un punto (0,3 m) para que no se dibuje
-    return { nombre, cota: r2(z), B: lado(dv), L: lado(dv), silueta: circulo(losa ?? 0.3), carpinteria: circulo(dv) };
+    return { nombre, cota: r2(z), B: lado(dv), L: lado(dv), silueta: contorno ?? circulo(losa ?? 0.3), carpinteria: circulo(dv) };
   };
   // la cúpula (de 166 a 179,77 m): solo cerramiento de vidrio, sin estructura ni losas (lleva la lente de 2,4 m)
   const cupula = [hLente, 176.5, 172.5, 169];
   niveles.push({ nombre: 'Lente (179,77 m)', cota: hLente, B: 1.5, L: 1.5, silueta: circulo(2.4), carpinteria: circulo(2.4) });
   for (let j = 1; j < cupula.length; j++) niveles.push(nivel(`Cúpula de vidrio (${String(cupula[j]).replace('.', ',')} m)`, cupula[j], cupula[j - 1], null));
   niveles.push(nivel(`40º (${uso(40)})`, hTop, cupula[cupula.length - 1], D(hTop)));
-  for (let k = 39; k >= 1; k--) niveles.push(nivel(`${k}º (${uso(k)})`, k * dz, (k + 1) * dz, D(k * dz)));
+  for (let k = 39; k >= 1; k--) niveles.push(nivel(`${k}º (${uso(k)})`, k * dz, (k + 1) * dz, D(k * dz), conPozos(k) ? losaConPozos(k) : undefined));
   niveles.push(nivel('PB (hall de doble altura)', 0, dz, D(0)), { nombre: 'Subsuelo', cota: -6.15 });
-  // pozos de luz: seis cuñas por piso, de 26° junto a la fachada hasta el 62 % del radio, que giran 5° por piso; en las
-  // oficinas del 2º al 30º (en el 31º ya no están: plano del piso 31), y el 16º entero (folleto de 2024)
-  const huecosLosa: import('./modelo').HuecoLosa[] = [];
-  for (let k = 2; k <= 30; k++) {
-    // el giro sigue las espirales del diagrid: una diagonal avanza 10° cada 2 pisos (5° por piso) y la franja entre dos
-    // diagonales tiene su centro en 10° + 5° · k; cada cuña queda centrada en esa franja, entre dos nudos
-    const z = k * dz, R = D(z) / 2 - 0.3, rIn = 0.62 * R, ab = (26 * Math.PI) / 180, gir = ((10 + 5 * k) * Math.PI) / 180 - ab / 2;
-    if (k === 16) continue;
-    for (let j = 0; j < 6; j++) {
-      const a0 = gir + (j * Math.PI) / 3, a1 = a0 + ab, am = (a0 + a1) / 2;
-      huecosLosa.push({ id: `P${k}-${j + 1}`, nombre: `Pozo de luz ${j + 1}, piso ${k}`, zDesde: r2(z), zHasta: r2(z),
-        v: [{ x: r2(rIn * Math.cos(am)), y: r2(rIn * Math.sin(am)) }, { x: r2(R * Math.cos(a0)), y: r2(R * Math.sin(a0)) }, { x: r2(R * Math.cos(a1)), y: r2(R * Math.sin(a1)) }] });
-    }
-  }
   // un rombo cada 4 pisos (anillos de nudos cada 2 pisos, 8,3 m); el último anillo, en el piso 40 (166 m)
   // en el cálculo, un módulo más (de 166 m a la lente) lleva el viento y el peso de la cúpula al anillo del piso 40: es el
   // marco de la cúpula, que en el dibujo es carpintería (circular.hasta)
@@ -293,7 +295,6 @@ export function ejemploGherkin(): Proyecto {
     calculo: { metodo: 'cirsoc' },
     sitio: { V: 40, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    huecosLosa,
     // 333 pilotes de 750 mm y unos 27 m, con 117 000 t de capacidad: en la app, una platea con la tensión equivalente
     fundacion: { b1: 52, a1: 52, sigmaAdm: 4.3 },
     hormigon: 'H40',
@@ -316,7 +317,7 @@ export function ejemploGherkin(): Proyecto {
         'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38 (Archinomy). La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,50 m × 60 mm hasta el piso 13, 0,45 × 50 mm hasta el 25, 0,40 × 30 mm hasta el 33 y 0,30 × 20 mm arriba. Anillos: cajón de 0,30 m × 16 mm (supuesto).',
         'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. En las plantas del folleto (CBRE, 2024) mide casi la mitad del diámetro del piso; New Steel Construction da 24 m. Acá es un tubo de 24 m, que no entra en ninguna pieza, hasta el piso 38 (arriba la planta ya es más chica); su pared de 7 cm de hormigón pesa como las columnas de acero del núcleo (24 % de 8358 t).',
         'Losas: compuestas de 160 mm sobre chapa Ribdeck 80, con vigas radiales cada 10° del núcleo a la fachada y una viga radial que ata cada nudo al núcleo; sin columnas interiores (New Steel Construction). El diagrid lleva una franja de 7 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga.',
-        'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá seis cuñas de 26° por piso, alineadas con las espirales del diagrid (centradas entre dos diagonales, que avanzan 5° por piso), de la fachada al 62 % del radio (medidas sobre las plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
+        'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá la losa termina en seis triángulos abiertos a la fachada (son su contorno, no huecos): cada uno va de un nudo del diagrid al siguiente (20°) con la punta al 63 % del radio, y giran 5° por piso con las espirales, así que sus vértices caen sobre las diagonales (plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
         'Áreas útiles del folleto (CBRE, 2024): piso 16, 19 558 ft² (1817 m²); 22, 17 878; 30, 12 226 ft² (1136 m²). Ascensores en tres tramos (medio, alto y expreso al restaurante), con transferencia en los pisos 21 y 22; 2,75 m de piso a cielorraso.',
         'Acero: 8358 t según el modelo de Arup: 29 % en el diagrid, 24 % en las columnas del núcleo y 47 % en vigas (Archinomy); Arup da unas 10 000 t y 2500 t de diagrid. Fundación: 333 pilotes de 750 mm de unos 27 m, con 117 000 t de capacidad (New Steel Construction); la app no calcula pilotes: platea de 52 × 52 m con la tensión equivalente, 4,3 kg/cm².',
         'Viento: Londres no está en el CIRSOC; V = 40 m/s y exposición de centro de ciudad (supuesto, del lado seguro). Frecuencia: el CIRSOC no tiene fórmula para un diagrid; la de tabiques (1.9-5) da un Gf de unos 1,36, del lado seguro (queda en «atención»).',
