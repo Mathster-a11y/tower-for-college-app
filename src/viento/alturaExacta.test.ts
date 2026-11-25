@@ -14,11 +14,23 @@ describe('túnel 3D · paredes exactas en altura', () => {
   it('alinear dos plantas: los mismos puntos y lo que corre la piel', () => {
     const a = circulo(10), b = circulo(7).map(q => ({ x: q.x + 1, y: q.y }));
     const r = alinearPlantas(a, b, 64);
-    expect(r.a.length).toBe(64);
-    expect(r.b.length).toBe(64);
+    expect(r.a.length).toBe(r.b.length);
+    expect(r.a.length).toBeGreaterThanOrEqual(48);
     // el punto k de abajo va con el k de arriba: el corrimiento es el de un radio que achica 3 m más 1 m de costado
     expect(r.corre).toBeGreaterThan(2);
     expect(r.corre).toBeLessThan(4.2);
+  });
+
+  it('con los mismos lados, esquina con esquina (la corona cortada a 45° no se retuerce)', () => {
+    // un cuadrado de 48 m que arriba es una franja de 48 × 8 m pegada a un lado (el corte de un plano inclinado)
+    const cuadro: P[] = [{ x: 0, y: 0 }, { x: 48, y: 0 }, { x: 48, y: 48 }, { x: 0, y: 48 }];
+    const franja: P[] = [{ x: 0, y: 40 }, { x: 48, y: 40 }, { x: 48, y: 48 }, { x: 0, y: 48 }];
+    const r = alinearPlantas(cuadro, franja, 128);
+    // las esquinas de abajo van con las de arriba: las del lado alto no se mueven y las otras corren 40 m derecho
+    const esquina = (p: P) => r.a.findIndex(q => Math.hypot(q.x - p.x, q.y - p.y) < 1e-9);
+    expect(r.b[esquina({ x: 48, y: 48 })]).toEqual({ x: 48, y: 48 });
+    expect(r.b[esquina({ x: 0, y: 0 })]).toEqual({ x: 0, y: 40 });
+    expect(r.corre).toBeCloseTo(40, 6);
   });
 
   it('un cono: con la piel interpolada el volumen de celdas se acerca al real (con escalones queda más grande)', () => {

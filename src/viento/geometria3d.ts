@@ -79,6 +79,15 @@ const PUNTOS_LOFT = 128;
 /** la piel se interpola si la planta corre menos de 3 veces la altura del piso (más que eso es un retiro o un basamento) */
 export const CORRIMIENTO_MAX = 3;
 const areaPol = (p: P[]) => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2;
+/** los vértices de una planta en sentido antihorario, sin repetidos ni los que están en medio de un lado recto */
+function vertices(p0: P[]): P[] {
+  const p = (areaPol(p0) >= 0 ? p0 : [...p0].reverse()).filter((q, i, arr) => { const r = arr[(i + 1) % arr.length]; return Math.hypot(q.x - r.x, q.y - r.y) > 1e-9; });
+  return p.filter((q, i) => {
+    const a = p[(i + p.length - 1) % p.length], c = p[(i + 1) % p.length];
+    const cruz = (q.x - a.x) * (c.y - q.y) - (q.y - a.y) * (c.x - q.x), l = Math.hypot(q.x - a.x, q.y - a.y) * Math.hypot(c.x - q.x, c.y - q.y);
+    return l > 0 && Math.abs(cruz) / l > 1e-6;
+  });
+}
 /** n puntos repartidos por largo de arco, en sentido antihorario, desde el primer vértice */
 function remuestrear(p0: P[], n: number): P[] {
   const p = areaPol(p0) >= 0 ? p0 : [...p0].reverse();
@@ -100,6 +109,28 @@ function remuestrear(p0: P[], n: number): P[] {
  * cuánto se corre la planta (el mayor desplazamiento de un punto).
  */
 export function alinearPlantas(a0: P[], b0: P[], n = PUNTOS_LOFT): { a: P[]; b: P[]; corre: number } {
+  // con los mismos lados (torre ahusada, corona cortada por un plano, la misma forma escalada): esquina con esquina, cada
+  // lado con los mismos puntos en las dos plantas (así las esquinas no se redondean ni la piel se retuerce)
+  const va = vertices(a0), vb = vertices(b0);
+  if (va.length === vb.length && va.length >= 3) {
+    const m = va.length;
+    let mejor = 0, min = Infinity;
+    for (let s = 0; s < m; s++) { let suma = 0; for (let i = 0; i < m; i++) { const q = vb[(i + s) % m]; suma += (va[i].x - q.x) ** 2 + (va[i].y - q.y) ** 2; } if (suma < min) { min = suma; mejor = s; } }
+    const vb2 = va.map((_, i) => vb[(i + mejor) % m]);
+    const largo = (p: P[], i: number) => Math.hypot(p[(i + 1) % m].x - p[i].x, p[(i + 1) % m].y - p[i].y);
+    const L = va.map((_, i) => Math.max(largo(va, i), largo(vb2, i))), total = L.reduce((x, y) => x + y, 0) || 1;
+    const a: P[] = [], b: P[] = [];
+    for (let i = 0; i < m; i++) {
+      const k = Math.max(1, Math.round((n * L[i]) / total)), j = (i + 1) % m;
+      for (let t = 0; t < k; t++) {
+        const u = t / k;
+        a.push({ x: va[i].x + (va[j].x - va[i].x) * u, y: va[i].y + (va[j].y - va[i].y) * u });
+        b.push({ x: vb2[i].x + (vb2[j].x - vb2[i].x) * u, y: vb2[i].y + (vb2[j].y - vb2[i].y) * u });
+      }
+    }
+    const corre = a.reduce((mx, q, i) => Math.max(mx, Math.hypot(q.x - b[i].x, q.y - b[i].y)), 0);
+    return { a, b, corre };
+  }
   const a = remuestrear(a0, n), b = remuestrear(b0, n);
   let mejor = 0, min = Infinity;
   for (let s = 0; s < n; s++) {
