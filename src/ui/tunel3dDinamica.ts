@@ -40,6 +40,8 @@ function derivasDe(c: { z: number; d: number }[]): { z: number; d: number; deriv
   const o = [...c].sort((a, b) => a.z - b.z);
   return o.map((q, i) => ({ ...q, deriva: i > 0 && q.z - o[i - 1].z > 1e-9 ? Math.abs(q.d - o[i - 1].d) / (q.z - o[i - 1].z) : 0 }));
 }
+/** quién toma el viento cuando los tabiques no alcanzan (para el aviso de la frecuencia) */
+const estadoExoTxt = (info: InfoDinamica) => (info.corrimientos ? 'el exoesqueleto' : 'otra estructura (no los tabiques)');
 /** el nombre corto de un nivel para el eje: «39° (comedores)» → «39°» */
 const nivelCorto = (n: string) => n.replace(/\s*\(.*\)\s*$/, '').trim() || n;
 
@@ -56,7 +58,10 @@ export function seccionDinamica(cont: HTMLElement, fz: Fuerzas3D | null, info: I
   const fLo = Math.max(2 * eY.df, (0.05 * info.VH) / info.B), fHi = (0.3 * info.VH) / info.B;
   const fs = fHi > fLo ? frecuenciaPico(eY, fLo, fHi) : NaN, St = (fs * info.B) / info.VH;
   const ciclos = fs * T, fNyq = 1 / (2 * dt);
-  const Vcr = isFinite(St) && St > 0 ? (info.n1Costado * info.B) / St : NaN, margen = Vcr / info.V23;
+  // sin frecuencia de costado (la 1.9-5 de tabiques da 0 cuando el viento lo toma un exo o un diagrid): sin
+  // velocidad crítica ni aceleración, en vez de mostrar «0 km/h» y «0 mili-g» como si fueran resultados
+  const sinN1 = !(info.n1Costado > 0.01);
+  const Vcr = !sinN1 && isFinite(St) && St > 0 ? (info.n1Costado * info.B) / St : NaN, margen = Vcr / info.V23;
   const M = masaGeneralizada(info.masas, info.H);
   const lat10 = aceleracion(eY, info.n1Costado, M, cfgDin.zeta, info.f10), lat5 = aceleracion(eY, info.n1Costado, M, cfgDin.zeta, info.f5);
   const vie10 = aceleracion(eX, info.n1Viento, M, cfgDin.zeta, info.f10);
@@ -88,13 +93,14 @@ export function seccionDinamica(cont: HTMLElement, fz: Fuerzas3D | null, info: I
     h('div', { class: 'kpis' },
       kpi('Strouhal', isFinite(St) ? fmt(St, 3) : '—', `${isFinite(fs) ? `remolinos cada ${fmt(1 / fs, 1)} s (${fmt(fs, 2)} Hz)` : 'todavía sin pico claro'} con el viento de diseño · un prisma cuadrado da ≈ 0,12`),
       kpi('Velocidad crítica', isFinite(Vcr) ? `${fmt(Vcr * 3.6, 0)} km/h` : '—', `n₁ = ${fmt(info.n1Costado, 2)} Hz de costado · diseño a 2/3 h: ${fmt(info.V23 * 3.6, 0)} km/h${isFinite(margen) ? ` (${margen > 1.3 ? 'lejos: no entra en resonancia' : margen > 1 ? 'cerca: revisar' : 'la supera: resonancia posible'})` : ''}`, colorEstado(isFinite(margen) ? (margen > 1.3 ? true : margen > 1 ? null : false) : null)),
-      kpi('Aceleración en la azotea', `${fmt(peor10, 1)} mili-g`, `la peor con vientos de hasta 10 años${barrido.pico >= Math.max(lat10.pico, vie10.pico) - 1e-9 ? `: de costado, con ${fmt(barrido.f * info.VH * 3.6, 0)} km/h en la azotea` : ''} · con el de 10 años: de costado ${fmt(lat10.pico, 1)}, en el sentido del viento ${fmt(vie10.pico, 1)} · 5 años: ${fmt(lat5.pico, 1)} · referencia ${cfgDin.uso}: ${lim} mili-g`, colorEstado(fueraRango ? null : peor10 <= lim)),
+      sinN1 ? kpi('Aceleración en la azotea', '—', 'sin la frecuencia de costado de la torre no se puede estimar (ver el aviso de abajo)', colorEstado(null)) : kpi('Aceleración en la azotea', `${fmt(peor10, 1)} mili-g`, `la peor con vientos de hasta 10 años${barrido.pico >= Math.max(lat10.pico, vie10.pico) - 1e-9 ? `: de costado, con ${fmt(barrido.f * info.VH * 3.6, 0)} km/h en la azotea` : ''} · con el de 10 años: de costado ${fmt(lat10.pico, 1)}, en el sentido del viento ${fmt(vie10.pico, 1)} · 5 años: ${fmt(lat5.pico, 1)} · referencia ${cfgDin.uso}: ${lim} mili-g`, colorEstado(fueraRango ? null : peor10 <= lim)),
       kpi('Deriva entre pisos', hSobre(peorD(dSim)), `con el viento de servicio, la peor · CIRSOC ${hSobre(peorD(dReg))} · límite h/${info.limD}`, colorEstado(peorD(dSim) <= 1 / info.limD && peorD(dReg) <= 1 / info.limD))),
-    ...(info.metodoN1.includes('1.9-5') && info.n1Guia > 2 * info.n1Costado ? [h('p', { class: 'aviso-linea' }, `La frecuencia de costado (${fmt(info.n1Costado, 2)} Hz) sale de la fórmula 1.9-5 de tabiques, que con tabiques esbeltos da valores bajos: con la 1.9-4 sería ${fmt(info.n1Otros, 2)} Hz y con la de la guía 2005, ${fmt(info.n1Guia, 2)} Hz. La velocidad crítica y la aceleración cambian mucho con ella: elegí el método en Viento → CIRSOC 102-25 o usá la del análisis modal (método FEM).`)] : []),
+    ...(sinN1 ? [h('p', { class: 'aviso-linea' }, `La frecuencia de costado del CIRSOC sale ${fmt(info.n1Costado, 2)} Hz: la fórmula 1.9-5 cuenta solo los tabiques, y en esta torre el viento lo toma ${estadoExoTxt(info)}. Sin ella no hay velocidad crítica ni aceleración. Con la 1.9-4 sería ${fmt(info.n1Otros, 2)} Hz y con la de la guía 2005, ${fmt(info.n1Guia, 2)} Hz: elegí el método en Viento → CIRSOC 102-25 o usá el método FEM (análisis modal).`)] : []),
+    ...(!sinN1 && info.metodoN1.includes('1.9-5') && info.n1Guia > 2 * info.n1Costado ? [h('p', { class: 'aviso-linea' }, `La frecuencia de costado (${fmt(info.n1Costado, 2)} Hz) sale de la fórmula 1.9-5 de tabiques, que con tabiques esbeltos da valores bajos: con la 1.9-4 sería ${fmt(info.n1Otros, 2)} Hz y con la de la guía 2005, ${fmt(info.n1Guia, 2)} Hz. La velocidad crítica y la aceleración cambian mucho con ella: elegí el método en Viento → CIRSOC 102-25 o usá la del análisis modal (método FEM).`)] : []),
     ...(fueraRango ? [h('p', { class: 'aviso-linea' }, `El muestreo de la simulación no llega a la frecuencia de la torre (${fmt(info.n1Costado, 2)} Hz): la aceleración queda sin dato confiable. Con la placa de video y una grilla más fina se muestrea más seguido.`)] : []),
     h('figure', { class: 'diagrama' }, h('figcaption', {}, 'Con qué ritmo empuja el viento de costado (espectro de la fuerza lateral)'), graficoEspectro(eY, fs, info.n1Costado / info.f10, Math.max(320, Math.min(460, (cont.clientWidth || 380) - 10))),
       h('p', { class: 'nota chica' }, 'Cada barra es cuánta energía tiene la fuerza lateral en esa frecuencia. El pico violeta son los remolinos que se desprenden de un costado y del otro. La raya verde es la frecuencia de la torre llevada al viento de 10 años: si cae cerca del pico, la torre se mece al ritmo de los remolinos.')),
-    h('figure', { class: 'diagrama' }, graficoAltura({ titulo: `Deriva entre pisos con el viento de servicio${info.corrimientos ? ' (torre con el exoesqueleto)' : ''}`, eje: 'corrimiento entre pisos por metro de altura', unidad: 'mm/m', decimales: 2,
+    h('figure', { class: 'diagrama' }, graficoAltura({ titulo: `Deriva entre pisos con el viento de servicio${info.corrimientos ? ' (torre con el exoesqueleto)' : ''}`, eje: 'deriva', unidad: 'mm por m de altura', decimales: 2,
       series: [{ nombre: 'con las fuerzas de la simulación', color: 'deformada', tipo: 'linea', puntos: dSim.map(x => ({ z: x.z, x: x.deriva * 1000, nivel: nombreEn(x.z) })) },
         { nombre: 'con las del CIRSOC 102-25', color: 'tinta', tipo: 'linea', punteada: true, puntos: dReg.map(x => ({ z: x.z, x: x.deriva * 1000, nivel: nombreEn(x.z) })) }],
       referencias: [{ x: 1000 / info.limD, texto: `límite h/${info.limD}` }] }, { ancho: Math.max(300, Math.min(460, (cont.clientWidth || 380) - 10)), alto: 300 }),
