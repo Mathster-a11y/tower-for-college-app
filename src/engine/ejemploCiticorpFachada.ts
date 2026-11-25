@@ -125,6 +125,14 @@ export function ejemploCiticorpFachada(): Proyecto {
   for (const sg of [-1, 1]) { barra('diagonal', [sg * S, z16], [sg * S / 2, z12]); barra('diagonal', [sg * S / 2, z12], [sg * S / 4, z10]); }
   [-S / 2, 0, S / 2].forEach((x, k, xs) => { if (k) barra('viga', [xs[k - 1], z12], [x, z12]); });
   [-S, -S / 2, 0, S / 2, S].forEach((x, k, xs) => { if (k) barra('viga', [xs[k - 1], z16], [x, z16]); });
+  // las columnas de los cuartos siguen de corrido del 16º al 20º (la ficha E las arranca a medio módulo, en el 20º).
+  // La ficha pone su cuarto a la altura relativa del 20º en el módulo (no justo a S/2: los pisos no son todos iguales,
+  // unos 3 mm de diferencia): el tramo va del nudo del 16º al de la ficha en el 20º, así quedan unidas (sin redondear
+  // al milímetro, que es como se pegan a los nudos de la ficha)
+  const z20 = p.niveles.find(n => n.nombre.startsWith('20º'))!.cota, z24 = p.niveles.find(n => n.nombre.startsWith('24º'))!.cota;
+  const s16 = r3(S / 2), sq = (S * (z20 - z16)) / (z24 - z16), sEn = (z: number) => (z <= z16 + 1e-6 ? s16 : z >= z20 - 1e-6 ? sq : s16 + ((sq - s16) * (z - z16)) / (z20 - z16));
+  const pisos2 = p.niveles.map(n => n.cota).filter(z => z >= z16 - 1e-6 && z <= z20 + 1e-6).sort((a, b) => a - b);
+  pisos2.forEach((z, k) => { if (k) for (const sg of [-1, 1]) nb.push({ clase: 'columna', a: [sg * sEn(pisos2[k - 1]), pisos2[k - 1]], b: [sg * sEn(z), z] }); });
   const cols = [-S, -S / 2, 0, S / 2, S];                                  // los nudos del tope del último módulo
   // el cajón (z56 → zc), en las cuatro caras: columnas y la viga del techo
   cols.forEach(s => barra('columna', [s, z56], [s, zc]));

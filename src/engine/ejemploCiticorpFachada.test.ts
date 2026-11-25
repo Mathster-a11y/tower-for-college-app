@@ -93,4 +93,30 @@ describe('Citicorp: los chevrones se unen solo por el mástil', () => {
       topes.forEach(z => expect(esq.filter(b => Math.abs(Math.max(c.nudos[b.a].z, c.nudos[b.b].z) - z) < 1e-6).length).toBe(0));
     });
   });
+
+  it('las columnas de los cuartos van de corrido, piso por piso, del 10º al 56º', () => {
+    const p = ejemploCiticorpFachada(), def = p.exo!;
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
+    const ancho = 47.85 + 2 * def.separacion, S = ancho / 2;
+    const cota = (k: number) => p.niveles.find(n => n.nombre.startsWith(`${k}º`))!.cota;
+    const tramo = zs.filter(z => z >= cota(10) - 1e-6 && z <= cota(56) + 1e-6);
+    (['A', 'B'] as const).forEach(dir => {
+      const c = armarCara(paraLado(paraViento(def, dir), S), ancho, zs);
+      for (const s of [-S / 2, S / 2]) {
+        const cols = c.barras.filter(b => b.clase === 'columna' && [b.a, b.b].every(k => Math.abs(c.nudos[k].s - s) < 0.01));
+        tramo.forEach((z, k) => {
+          if (!k) return;
+          const hay = cols.some(b => Math.abs(Math.min(c.nudos[b.a].z, c.nudos[b.b].z) - tramo[k - 1]) < 1e-6 && Math.abs(Math.max(c.nudos[b.a].z, c.nudos[b.b].z) - z) < 1e-6);
+          expect(hay, `cara ${dir}, cuarto ${s.toFixed(2)}, ${tramo[k - 1].toFixed(2)} → ${z.toFixed(2)}`).toBe(true);
+          // y unidas: el nudo de abajo de cada tramo es el de arriba del tramo de abajo
+          if (k >= 2) {
+            const de = (z0: number, z1: number) => cols.find(b => Math.abs(Math.min(c.nudos[b.a].z, c.nudos[b.b].z) - z0) < 1e-6 && Math.abs(Math.max(c.nudos[b.a].z, c.nudos[b.b].z) - z1) < 1e-6)!;
+            const ab = de(tramo[k - 2], tramo[k - 1]), ar = de(tramo[k - 1], z);
+            const arriba = c.nudos[ab.a].z > c.nudos[ab.b].z ? ab.a : ab.b, abajo = c.nudos[ar.a].z < c.nudos[ar.b].z ? ar.a : ar.b;
+            expect(abajo, `cara ${dir}, cuarto ${s.toFixed(2)}, nudo a ${tramo[k - 1].toFixed(2)}`).toBe(arriba);
+          }
+        });
+      }
+    });
+  });
 });
