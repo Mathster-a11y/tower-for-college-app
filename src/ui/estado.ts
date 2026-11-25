@@ -46,7 +46,7 @@ export interface Calculo {
   /** los valores del método: la planilla tal cual (Planilla virgen), la guía, o el CIRSOC (planilla con el viento del 102-25) */
   valores: PlanillaRes;
   /** método CIRSOC: viento del 102-25, cálculo con ese viento y verificación del 201 de cada pieza */
-  cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[] };
+  cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[]; /** el exo en el cálculo (con el viento del 102-25) */ exo?: Record<'A' | 'B', import('../engine/exoReglamento').ExoDireccion> | null };
   /** método FEM: modelo, modos, casos de carga resueltos y reparto (cirsoc lleva el viento con las frecuencias del modelo) */
   fem?: ResultadoMetodoFem;
   /** método Combinado: los cuatro métodos con la misma torre, comparados (las etapas muestran la Planilla virgen) */
@@ -90,8 +90,8 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
     const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n)?.map(x => ({ M: x.M * fM(d), V: x.V * fV(d) })) ?? null : undefined);
     const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A')),
       ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'))];
-    const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel);
-    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif }, fem,
+    const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel, ex);
+    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif, exo: ex }, fem,
       controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, SJ, fem?.deriva, ex ?? undefined) };
   }
   return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,

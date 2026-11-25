@@ -132,4 +132,7 @@ describe('Citicorp: los chevrones se unen solo por el mástil', () => {
     const reaccion = (r: typeof conLosas) => r.caras.reduce((s, c) => s + c.reacciones.reduce((q, x) => q + x.V, 0), 0);
     expect(Math.abs(reaccion(conLosas))).toBeGreaterThan(Math.abs(reaccion(sinLosas)) * 1.5);
   });
+  it('abre con el método CIRSOC (el exo entra en el cálculo)', () => {
+    expect(ejemploCiticorpFachada().calculo?.metodo).toBe('cirsoc');
+  });
 });

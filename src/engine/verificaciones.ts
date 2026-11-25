@@ -26,7 +26,9 @@ export const TENSION_ADM = (hormigon: string) => (parseFloat(hormigon.replace(/[
 import { profundidadEstudio, sigmaAdmDe } from './fundaciones';
 import { esPerfilVariable } from './perfilTorre';
 import { protocoloDelCalculo } from './perfilVariable';
-export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: ResultadoCorregido, hormigon: string, piezas: PiezaEquivalente[] = [], filaNivel: number[] = []): Control[] {
+import type { ExoDireccion } from './exoReglamento';
+export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: ResultadoCorregido, hormigon: string, piezas: PiezaEquivalente[] = [], filaNivel: number[] = [],
+  /** el exo en el cálculo (métodos CIRSOC y FEM): el P-Δ usa el corrimiento de la torre con el exo */ exo?: Record<'A' | 'B', ExoDireccion> | null): Control[] {
   const out: Control[] = [];
   const m = r.mnyq, g = c.guia.mnyq;
   const est = (ok: boolean) => (ok ? 'verifica' : 'no verifica') as Estado;
@@ -158,11 +160,11 @@ export function controles(p: Proyecto, d: PlanillaDatos, r: PlanillaRes, c: Resu
   // torre de perfil variable (Diseño → Perfil): peso corrido, viento excéntrico y P-Δ (propuesta del exo, pág. 14)
   if (esPerfilVariable(p) && filaNivel.length && piezas.length) {
     for (const dir of ['A', 'B'] as const) {
-      const pr = protocoloDelCalculo(p, c.guia, piezas, filaNivel, hormigon, dir);
+      const pr = protocoloDelCalculo(p, c.guia, piezas, filaNivel, hormigon, dir, exo?.[dir]);
       if (!(pr.Mv > 0)) continue;
       out.push({ grupo: 'Estabilidad', nombre: `Efecto P-Δ, viento ${dir}`, criterio: 'θ = M_PΔ / Mv ≤ 0,10 (se desprecia) · < 0,25', fuente: 'protocolo de perfil variable, paso 7',
         planilla: null, guia: pr.theta, unidad: '', estado: pr.theta <= 0.1 ? 'verifica' : pr.theta < 0.25 ? 'atención' : 'no verifica',
-        nota: pr.theta <= 0.1 ? undefined : pr.theta < 0.25 ? `Hay que sumarlo: el momento del viento sube ${nf(pr.MPD, 0)} tm (amplificación ${nf(pr.amp, 2)}).` : 'La torre es demasiado flexible: rigidizala (más J) o achicá el corrimiento.' });
+        nota: [exo?.[dir] ? 'δ: el corrimiento de la torre con el exoesqueleto.' : '', pr.theta <= 0.1 ? '' : pr.theta < 0.25 ? `Hay que sumarlo: el momento del viento sube ${nf(pr.MPD, 0)} tm (amplificación ${nf(pr.amp, 2)}).` : 'La torre es demasiado flexible: rigidizala (más J) o achicá el corrimiento.'].filter(Boolean).join(' ') || undefined });
       if (dir === 'A') {
         const Me = g.K99, f = pr.Mtotal > 0 ? Me / pr.Mtotal : NaN;
         out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con el perfil (peso corrido y P-Δ)', criterio: 'Me / (Mv + |M_G| + M_PΔ) ≥ 1,5', fuente: 'guía 2.2 + protocolo de perfil variable, pasos 4 y 7',

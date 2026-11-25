@@ -27,6 +27,9 @@ export function ejemploCiticorpFachada(): Proyecto {
   const ys = -m + 5.9;                                                      // arranque de la pendiente (una crujía del borde sur)
   const yTop = ys + (zTop - zc);                                            // donde la pendiente llega a la azotea
   p.nombre = 'Citicorp Center (Nueva York, 1977) · forma y fachada';
+  // abre con el método CIRSOC, como los ejemplos del exo: con los de la cátedra el exo es un estudio aparte y los
+  // tabiques solos no alcanzan (ΣJ, la flecha de la ménsula y el P-Δ no verifican)
+  p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' };
 
   // niveles: el techo del cajón de la corona es un nivel; para no pasar de los 49 de la planilla, el 11º y el 12º van
   // juntos (el 10º, techo del cajón de transición, queda: ahí arranca el primer módulo)

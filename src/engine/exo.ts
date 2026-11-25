@@ -704,14 +704,72 @@ function barraLocal(E: number, br: Barra, x1: number, z1: number, x2: number, z2
  * es un piso (master) o un gdl propio (esclavo), o si está fijo. Devuelve K condensada (n × n) y lo necesario para
  * recuperar los esclavos.
  */
-interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number }
+interface Condensada { K: Mat; Kss: Mat; Ksm: Mat; nEsc: number; /** Kss⁻¹·B (factorizada una vez) */ resolverSs: (B: Mat) => Mat }
+/**
+ * Factoriza una matriz de rigidez (simétrica, cada nudo unido solo a sus vecinos) para resolver A·X = B con varios B:
+ * se renumeran las incógnitas para que las unidas queden cerca (Cuthill-McKee inverso) y se elimina solo dentro de la
+ * banda que queda, sin pivotear (la rigidez es simétrica y no negativa). Da lo mismo que «resolver» y, en una cara con
+ * muchos nudos, es decenas de veces más rápido. Si un pivote se anula (un mecanismo) o la banda no achica la matriz, se
+ * resuelve con «resolver», que da su mensaje.
+ */
+function factorizarRigidez(A: Mat): (B: Mat) => Mat {
+  const n = A.length, denso = (B: Mat) => resolver(A, B);
+  if (n < 60) return denso;
+  // vecinos de cada incógnita
+  const vec: number[][] = A.map((f, i) => { const v: number[] = []; for (let j = 0; j < n; j++) if (j !== i && f[j] !== 0) v.push(j); return v; });
+  // Cuthill-McKee: por componentes, desde la de menos vecinos; cada una suma sus vecinos de menos a más vecinos
+  const orden: number[] = [], visto = new Uint8Array(n);
+  const porGrado = [...Array(n).keys()].sort((a, b) => vec[a].length - vec[b].length);
+  for (const ini of porGrado) {
+    if (visto[ini]) continue;
+    visto[ini] = 1; orden.push(ini);
+    for (let h = orden.length - 1; h < orden.length; h++) {
+      const nuevos = vec[orden[h]].filter(j => !visto[j]).sort((a, b) => vec[a].length - vec[b].length);
+      for (const j of nuevos) { visto[j] = 1; orden.push(j); }
+    }
+  }
+  orden.reverse();
+  const pos = new Int32Array(n); orden.forEach((i, k) => { pos[i] = k; });
+  let bw = 0;
+  vec.forEach((v, i) => v.forEach(j => { bw = Math.max(bw, Math.abs(pos[i] - pos[j])); }));
+  if (bw > n / 3) return denso;
+  // eliminación en la banda: arriba queda U; abajo de la diagonal, los multiplicadores (L)
+  const P = orden.map(i => orden.map(j => A[i][j]));
+  const escala = P.reduce((mx, f, i) => Math.max(mx, Math.abs(f[i])), 0), cero = Math.max(1e-14, escala * 1e-13);
+  for (let c = 0; c < n; c++) {
+    const piv = P[c][c], fc = P[c];
+    if (!(Math.abs(piv) >= cero)) return denso;
+    const hasta = Math.min(n - 1, c + bw);
+    for (let r = c + 1; r <= hasta; r++) {
+      const fr = P[r], f = fr[c] / piv;
+      if (f === 0) continue;
+      for (let k = c + 1; k <= hasta; k++) fr[k] -= f * fc[k];
+      fr[c] = f;
+    }
+  }
+  return (B: Mat) => {
+    const m = B[0]?.length ?? 0, Q = orden.map(i => [...B[i]]);
+    for (let c = 0; c < n; c++) {
+      const hasta = Math.min(n - 1, c + bw), qc = Q[c];
+      for (let r = c + 1; r <= hasta; r++) { const f = P[r][c]; if (f === 0) continue; const qr = Q[r]; for (let k = 0; k < m; k++) qr[k] -= f * qc[k]; }
+    }
+    for (let r = n - 1; r >= 0; r--) {
+      const hasta = Math.min(n - 1, r + bw), fr = P[r], qr = Q[r];
+      for (let k = 0; k < m; k++) { let s = qr[k]; for (let j = r + 1; j <= hasta; j++) s -= fr[j] * Q[j][k]; qr[k] = s / fr[r]; }
+    }
+    const X = ceros(n, m);
+    orden.forEach((i, k) => { X[i] = Q[k]; });
+    return X.some(f => f.some(v => !Number.isFinite(v))) ? denso(B) : X;
+  };
+}
 function condensar(Kg: Mat, master: number[], esclavos: number[]): Condensada {
   const Kmm = master.map(i => master.map(j => Kg[i][j])), Kms = master.map(i => esclavos.map(j => Kg[i][j]));
   const Ksm = esclavos.map(i => master.map(j => Kg[i][j])), Kss = esclavos.map(i => esclavos.map(j => Kg[i][j]));
-  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0 };
-  const X = resolver(Kss, Ksm);                        // Kss⁻¹·Ksm
+  if (!esclavos.length) return { K: Kmm, Kss, Ksm, nEsc: 0, resolverSs: B => B };
+  const resolverSs = factorizarRigidez(Kss);
+  const X = resolverSs(Ksm);                           // Kss⁻¹·Ksm
   const K = Kmm.map((f, i) => f.map((v, j) => v - Kms[i].reduce((s, kv, p) => s + kv * X[p][j], 0)));
-  return { K, Kss, Ksm, nEsc: esclavos.length };
+  return { K, Kss, Ksm, nEsc: esclavos.length, resolverSs };
 }
 
 /** cara armada y condensada a los pisos 1..n (el piso 0 es la base) */
@@ -795,14 +853,14 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
   const c = condensar(Kg, master, esc);
   const Fs = esc.map(i => [Fg[i]]);
-  const KssFs = c.nEsc ? resolver(c.Kss, Fs).map(f => f[0]) : [];
+  const KssFs = c.nEsc ? c.resolverSs(Fs).map(f => f[0]) : [];
   const Fc = master.map(i => Fg[i] - esc.reduce((sm, j, p) => sm + Kg[i][j] * KssFs[p], 0));
   const desplaz = (u: number[]) => {
     const d = new Array<number>(N).fill(0);
     u.forEach((v, i) => (d[i] = v));
     if (c.nEsc) {
       const rhs = c.Ksm.map((f, i) => [Fg[esc[i]] - f.reduce((s, kv, j) => s + kv * u[j], 0)]);
-      const x = resolver(c.Kss, rhs);
+      const x = c.resolverSs(rhs);
       x.forEach((f, i) => (d[nPisos + i] = f[0]));
     }
     return d;

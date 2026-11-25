@@ -11,7 +11,7 @@ import type { PiezaEquivalente } from './mapping';
 import type { Viento102 } from './cargas/cirsoc102';
 import { datosAltura, moduloHormigon, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
-import { calcularExo, type ResultadoExo } from './exo';
+import { calcularExo, paraViento, type ResultadoExo } from './exo';
 
 export interface ExoDireccion {
   r: ResultadoExo;
@@ -19,6 +19,8 @@ export interface ExoDireccion {
   z: number[]; h: number;
   /** parte del momento y del corte en la base que les queda a los tabiques (1 = sin exo) */
   fM: number; fV: number;
+  /** viento de cada piso sobre PB (t), el de las cotas z[1…] */
+  W: number[];
 }
 
 export function exoConViento(p: Proyecto, valores: PlanillaRes, piezas: PiezaEquivalente[], filaNivel: number[], w: Viento102,
@@ -49,12 +51,13 @@ export function exoConViento(p: Proyecto, valores: PlanillaRes, piezas: PiezaEqu
     const c = zs.map(z => { const nv = nivEn(z); return (nv && (A ? nv.dy : nv.dx)) || 0; });
     const corr = c.some(x => Math.abs(x) > 1e-9) ? c : undefined;
     const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
-    const r = calcularExo(def, zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
+    // (las barras dibujadas a mano para un solo viento van solo en sus caras)
+    const r = calcularExo(paraViento(def, dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
     // la base de los tabiques: con interacción tabique-exo el corte puede repartirse distinto que el momento
     const fM = Math.abs(r.Msin[0]) > 1e-9 ? Math.abs(r.Mtab[0] / r.Msin[0]) : 1;
     const fV = Math.abs(r.Vsin[0]) > 1e-9 ? Math.abs(r.Vtab[0] / r.Vsin[0]) : 1;
     // los corrimientos van con las cotas del resultado (calcularExo puede agregar nudos, como el arranque del mástil)
-    return { r, z: r.zs.map(z => z - zPB), h: r.zs[r.zs.length - 1] - zPB, fM, fV };
+    return { r, z: r.zs.map(z => z - zPB), h: r.zs[r.zs.length - 1] - zPB, fM, fV, W };
   };
   try {
     const a = uno('A'), b = uno('B');

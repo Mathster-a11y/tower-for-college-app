@@ -293,7 +293,8 @@ const fuerzas: Etapa = {
 // ------------------------------------------------------------------ 04 Estabilidad
 /** Estabilidad con una torre de perfil variable (Diseño → Perfil): los pasos 2, 4, 5 y 7 del protocolo */
 function panelPerfilVariable(c: HTMLElement, d: ReturnType<typeof datos>) {
-  const pr = protocoloDelCalculo(d.p, d.R, d.asig.piezas, d.asig.filaNivel, d.p.hormigon || 'H30', d.dir);
+  const pr = protocoloDelCalculo(d.p, d.R, d.asig.piezas, d.asig.filaNivel, d.p.hormigon || 'H30', d.dir, estado.calculo.cirsoc?.exo?.[d.dir]);
+  const conExo = !!estado.calculo.cirsoc?.exo?.[d.dir];
   const s = seccion(`Perfil variable · viento ${d.dir}`);
   const inclinadas = pr.niveles.some(x => Math.abs(x.beta) > 1e-4);
   const okT = pr.theta <= 0.1, malT = pr.theta >= 0.25;
@@ -307,7 +308,7 @@ function panelPerfilVariable(c: HTMLElement, d: ReturnType<typeof datos>) {
     ...(inclinadas ? [formula('2 · Fachada inclinada: el viento empuja normal a la fachada', `${v('W', 'h')}${op('=')}Σ ${v('W')} · cos ${v('β')}${op('=')}${r(pr.Wh, 1, 't')}  ·  ${v('W', 'v')}${op('=')}Σ ${v('W')} · sen ${v('β')}${op('=')}${r(pr.Wv, 1, 't')}`, `de W = ${fmt(pr.W, 1)} t; Wv > 0 empuja hacia abajo (alivia el vuelco), Wv < 0 levanta`)] : []),
     formula('4 · Peso corrido: cada nivel pesa donde está', `${v('M', 'G')}${op('=')}Σ ${v('P', 'i')} · ${v('e', 'i')}${op('=')}${r(pr.MG, 0, 'tm')}`, 'P = 0,7 t/m² · B · L · pisos; e = corrimiento del nivel en el sentido del viento'),
     formula('5 · Viento excéntrico: torsor que se suma', `${v('M', 't')}${op('=')}Σ ${v('W', 'i')} · ${v('c', 'i')}${op('=')}${r(pr.MtExtra, 1, 'tm')}`, 'c = corrimiento del nivel a lo ancho (la planilla ya suma Q · e)'),
-    formula('7 · P-Δ: el peso sobre la torre deformada', `${v('θ')}${op('=')}Σ ${v('P', 'i')} · ${v('δ', 'i')} / ${v('M', 'v')}${op('=')}${n(pr.MPD1, 1)} / ${n(pr.Mv, 0)}${op('=')}${r(pr.theta, 3)}  ·  ${v('M', 'PΔ')}${op('=')}${n(pr.MPD1, 1)} / (1 − ${n(pr.theta, 3)})${op('=')}${r(pr.MPD, 1, 'tm')}`, 'δ = la deformada de la etapa Rigidez (con el J de cada nivel)', okT ? 'verifica' : malT ? 'no verifica' : undefined),
+    formula('7 · P-Δ: el peso sobre la torre deformada', `${v('θ')}${op('=')}Σ ${v('P', 'i')} · ${v('δ', 'i')} / ${v('M', 'v')}${op('=')}${n(pr.MPD1, 1)} / ${n(pr.Mv, 0)}${op('=')}${r(pr.theta, 3)}  ·  ${v('M', 'PΔ')}${op('=')}${n(pr.MPD1, 1)} / (1 − ${n(pr.theta, 3)})${op('=')}${r(pr.MPD, 1, 'tm')}`, conExo ? 'δ = el corrimiento de la torre con el exoesqueleto (etapa 08), llevado al viento de esta etapa' : 'δ = la deformada de la etapa Rigidez (con el J de cada nivel)', okT ? 'verifica' : malT ? 'no verifica' : undefined),
   );
   const t = tablaValores(['Nivel', 'z (m)', 'ancho (m)', 'e (m)', 'c (m)', 'β (°)', 'P (t)', 'W (t)', 'δ (mm)'],
     [...pr.niveles].reverse().map(x => [x.nivel, x.z, x.ancho, x.e, x.c, (x.beta * 180) / Math.PI, x.P, x.W, x.delta * 1000]), [0, 1, 2, 2, 2, 1, 0, 2, 1]);

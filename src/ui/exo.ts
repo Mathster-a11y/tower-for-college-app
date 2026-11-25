@@ -156,8 +156,30 @@ export function entradaExo(dir: 'A' | 'B', def: ExoDef): EntradaExo | null {
   return d.entrada;
 }
 
+/**
+ * Memoria de los resultados del exo: la etapa 08, el riel, el avance, los controles y el informe piden lo mismo varias
+ * veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez (en una torre con muchas barras,
+ * decenas de segundos). Se guarda por cálculo (los valores de la planilla de ese cálculo), revisión del proyecto, viento
+ * y la ficha tal como está (texto): cualquier cambio de la ficha, aunque sea en el mismo objeto, se calcula de nuevo.
+ */
+const memoExo = new WeakMap<object, Map<string, { v: unknown; error: string }>>();
+function recordar<T>(clave: string, def: ExoDef, f: () => T): T {
+  const base = estado.calculo?.valores as object | undefined;
+  if (!base) return f();
+  let m = memoExo.get(base);
+  if (!m) { m = new Map(); memoExo.set(base, m); }
+  const k = `${estado.revision}|${estado.config.metodo}|${clave}|${JSON.stringify(def)}`;
+  const x = m.get(k);
+  if (x) { ultimoError = x.error; return x.v as T; }
+  const v = f();
+  m.set(k, { v, error: ultimoError });
+  return v;
+}
 export function datosExo(dir: 'A' | 'B' = estado.dir, def: ExoDef | null | undefined = estado.proyecto.exo): (DatosExo & { entrada: EntradaExo }) | null {
   if (!def) return null;
+  return recordar(`datos ${dir}`, def, () => datosExoSinMemoria(dir, def));
+}
+function datosExoSinMemoria(dir: 'A' | 'B', def: ExoDef): (DatosExo & { entrada: EntradaExo }) | null {
   ultimoError = '';
   try {
     const { asig } = estado.calculo, p = estado.proyecto;
@@ -230,6 +252,9 @@ export function vientoReglamento(): Viento102 | null {
 }
 /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
 export function verif301(d: DatosExo & { entrada: EntradaExo }) {
+  return recordar(`301 ${d.dir} ${d.ancho} ${d.tCaras.join(' ')}`, d.def, () => verif301SinMemoria(d));
+}
+function verif301SinMemoria(d: DatosExo & { entrada: EntradaExo }) {
   const en = d.entrada, reglamento = !!vientoReglamento();
   // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
   const otro = datosExo(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;

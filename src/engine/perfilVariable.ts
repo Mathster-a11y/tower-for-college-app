@@ -21,6 +21,7 @@ import { medidasNiveles } from './perfilTorre';
 import type { PlanillaRes } from './planilla';
 import type { PiezaEquivalente } from './mapping';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
+import type { ExoDireccion } from './exoReglamento';
 
 export interface NivelProtocolo {
   nivel: string; z: number;
@@ -73,8 +74,18 @@ export function protocoloPerfil(p: Proyecto, dir: 'A' | 'B', alt: { z: number; F
  * El protocolo con los datos del cálculo: el viento de cada nivel (datosAltura) y la deformada de la etapa Rigidez
  * (con el J de cada nivel), como los muestra la app. R = los valores con los que se calcula (los de la guía).
  */
-export function protocoloDelCalculo(p: Proyecto, R: PlanillaRes, piezas: PiezaEquivalente[], filaNivel: number[], hormigon: string, dir: 'A' | 'B'): Protocolo {
+export function protocoloDelCalculo(p: Proyecto, R: PlanillaRes, piezas: PiezaEquivalente[], filaNivel: number[], hormigon: string, dir: 'A' | 'B',
+  exo?: ExoDireccion | null): Protocolo {
   const alt = datosAltura(p, R.viento, R.mnyq, filaNivel, dir);
+  // con el exo en el cálculo (métodos CIRSOC y FEM) la torre se corre como la torre con el exo, no como los tabiques
+  // solos. Ese corrimiento sale con el viento del 102-25; se lleva al de esta etapa con la proporción de los momentos
+  // en PB (en régimen elástico, el corrimiento es proporcional al viento), así θ compara lo mismo con lo mismo
+  if (exo && exo.r.u.length) {
+    const zPB = p.niveles.reduce((v, n) => (n.cota >= 0 ? n.cota : v), 0);
+    const MvExo = exo.W.reduce((s, w, i) => s + w * (exo.z[i + 1] ?? 0), 0), MvAlt = alt.reduce((s, x) => s + x.F * Math.max(0, x.z - zPB), 0);
+    const k = MvExo > 1e-9 ? MvAlt / MvExo : 1;
+    return protocoloPerfil(p, dir, alt.map(x => ({ z: x.z, F: x.F })), exo.z.slice(1).map((z, i) => ({ z, d: (exo.r.u[i] ?? 0) * k })));
+  }
   const W = dir === 'A' ? R.mnyq.H61 : alt.reduce((s, x) => s + x.F, 0);
   const rg = rigidez(R, hormigon).find(x => x.dir === dir)!;
   const Jniv = rigidezPorNivel(p, piezas, dir, rg.J);
