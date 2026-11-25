@@ -66,7 +66,7 @@ describe('Citicorp Center: forma y fachada', () => {
 });
 
 describe('Citicorp: la base', () => {
-  it('debajo del cajón solo baja la supercolumna a media cara (sin esquinas ni diagonales en la plaza)', () => {
+  it('debajo del cajón solo baja la supercolumna reticulada a media cara (sin esquinas ni diagonales en la plaza)', () => {
     const p = ejemploCiticorpFachada(), def = p.exo!;
     const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
     const ancho = 47.85 + 2 * def.separacion;
@@ -74,8 +74,9 @@ describe('Citicorp: la base', () => {
       const c = armarCara(paraLado(paraViento(def, dir), ancho / 2), ancho, zs);
       // las que se dibujan (las alas son las supercolumnas de las otras caras: se dibujan con ellas)
       const abajo = c.barras.filter(b => (b.fraccion ?? 1) === 1 && Math.min(c.nudos[b.a].z, c.nudos[b.b].z) < 34.75 - 1e-6);
-      expect(abajo.length).toBe(1);
-      expect(abajo.every(b => b.clase === 'columna' && Math.abs(c.nudos[b.a].s) < 1e-6 && Math.abs(c.nudos[b.b].s) < 1e-6)).toBe(true);
+      // la supercolumna reticulada: todo adentro de sus 7,30 m de ancho, a media cara (nada en las esquinas)
+      expect(abajo.length).toBeGreaterThan(0);
+      expect(abajo.every(b => Math.abs(c.nudos[b.a].s) <= 3.65 + 1e-6 && Math.abs(c.nudos[b.b].s) <= 3.65 + 1e-6)).toBe(true);
     });
   });
 });
