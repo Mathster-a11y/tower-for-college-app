@@ -34,7 +34,7 @@ import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacer
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
 import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparVarios, hijosGrupo, subgrupos, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
-import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
+import { ajustarContorno, areaSilueta, cajaSilueta, caminoSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 /** «rótulo <b>valor</b> unidad» con nodos de texto */
 function datoPieza(rotulo: string, valor: string, unidad: string): HTMLSpanElement {
@@ -2523,18 +2523,18 @@ export function montarPlanta(cont: HTMLElement) {
     const carSombra = carGenerada && tCar!.modo === 'continua' && !!p.envolvente && !esSecc;
     if (car) {
       const pc = puntosSilueta(car.v);
-      svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
+      svg.appendChild(el('path', { d: caminoSilueta(car.v, X, Y), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
       const xs = pc.map(q => q.x), ys = pc.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
       svg.appendChild(el('rect', { x: X(x0), y: Y(y1), width: (x1 - x0) * escala, height: (y1 - y0) * escala, class: 'caja-carpinteria' }));
       const tx = el('text', { x: X(x0) + 4, y: Y(y1) - 6, class: 'etiqueta caja-txt' }, `carpintería: a máx ${car.a.toFixed(2).replace('.', ',')} × b máx ${car.b.toFixed(2).replace('.', ',')} m (B y L se cargan en Niveles)`);
       svg.appendChild(tx);
     }
-    const contorno = puntosSilueta(pl.silueta);
-    const pathC = el('polygon', { points: contorno.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'contorno' + (modo === 'silueta' && !editaCarp ? ' editando' : '') });
+    // con arcos y Béziers de verdad: la losa curva se ve suave a cualquier zoom (antes, tramos de 10°)
+    const pathC = el('path', { d: caminoSilueta(pl.silueta, X, Y), class: 'contorno' + (modo === 'silueta' && !editaCarp ? ' editando' : '') });
     svg.appendChild(pathC);
     if (modo === 'silueta') {
       const vEd = verticesEd();
-      const objetivo = editaCarp ? el('polygon', { points: puntosSilueta(vEd).map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria editando' + (carSombra ? ' sombra-env' : '') }) : pathC;
+      const objetivo = editaCarp ? el('path', { d: caminoSilueta(vEd, X, Y), class: 'carpinteria editando' + (carSombra ? ' sombra-env' : '') }) : pathC;
       if (editaCarp) svg.appendChild(objetivo);
       // doble clic en un borde: vértice nuevo en el tramo más cercano
       objetivo.addEventListener('dblclick', ev => {

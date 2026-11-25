@@ -15,7 +15,7 @@
  * las áreas usan lo mismo. Cuando cambia una sección, el loft se vuelve a aplicar solo (estado.cambiar).
  */
 import type { Nivel, Proyecto } from './modelo';
-import { cajaSilueta, plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
+import { ajustarArcos, cajaSilueta, plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './silueta';
 
 export interface Loft {
   id: string;
@@ -30,6 +30,8 @@ export interface Loft {
 }
 
 const UNIFORMES = 96;
+/** error máximo (m) al pasar los puntos interpolados a arcos: 5 mm, menos que el espesor de una línea en la planta */
+const TOL_ARCO = 0.005;
 
 const areaConSigno = (p: Punto[]) => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2;
 const centroide = (p: Punto[]) => {
@@ -158,7 +160,9 @@ export function interpolarSilueta(secs: Punto[][], zs: number[], z: number, tipo
     const c = centroide(out), co = Math.cos(ang), si = Math.sin(ang);
     res = out.map(q => ({ x: c.x + (q.x - c.x) * co - (q.y - c.y) * si, y: c.y + (q.x - c.x) * si + (q.y - c.y) * co }));
   }
-  return simplificar(res).map(q => ({ x: +q.x.toFixed(4), y: +q.y.toFixed(4) }));
+  // las curvas salen como arcos de verdad (no un polígono de cien lados): se ven suaves en la planta, el 3D y la fachada,
+  // y la losa queda con pocos vértices para editar. Lo recto sigue recto y las esquinas, esquinas
+  return ajustarArcos(simplificar(res, 1e-9), TOL_ARCO).map(v => (v.b ? { x: +v.x.toFixed(4), y: +v.y.toFixed(4), b: +v.b.toFixed(6) } : { x: +v.x.toFixed(4), y: +v.y.toFixed(4) }));
 }
 
 const igual = (a: number, b: number) => Math.abs(a - b) < 1e-6;

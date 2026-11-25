@@ -36,6 +36,20 @@ describe('loft de losas', () => {
     expect(a).toBeLessThan(400);
     expect(a).toBeGreaterThan(Math.PI * 100);
   });
+  it('curvas suaves: entre dos círculos, las losas del medio son círculos de arcos (pocos vértices), no polígonos', () => {
+    const secs = prepararSecciones([circulo(20), circulo(10)]);
+    const s = interpolarSilueta(secs, [0, 10], 5);
+    expect(s.length).toBeLessThanOrEqual(8);
+    expect(s.every(v => Math.abs(v.b ?? 0) > 0.05)).toBe(true);           // todo arco
+    expect(Math.abs(areaSilueta(s) / (Math.PI * 15 * 15) - 1)).toBeLessThan(0.003);   // el círculo de radio 15, entero
+    const c = cajaSilueta(s);
+    expect(c.B).toBeCloseTo(30, 1); expect(c.L).toBeCloseTo(30, 1);
+  });
+  it('curvas suaves: de un cuadrado a un círculo, rectas y arcos sin quiebres sueltos', () => {
+    const s = interpolarSilueta(prepararSecciones([rectangulo(20, 20), circulo(10)]), [0, 10], 5);
+    expect(s.length).toBeLessThan(40);                                    // antes, un vértice cada 3,75°
+    expect(s.some(v => Math.abs(v.b ?? 0) > 1e-6)).toBe(true);
+  });
   it('la costura se alinea: un cuadrado con los vértices en otro orden no se retuerce', () => {
     const q = rectangulo(20, 20), q2 = [q[2], q[3], q[0], q[1]];
     const secs = prepararSecciones([q, q2]);

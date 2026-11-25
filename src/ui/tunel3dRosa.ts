@@ -76,6 +76,7 @@ export function alMuestrear(c: { geo: Geometria3D; caras: ReturnType<typeof celd
   if (!barrido.env) { barrido.env = new Envolvente(pts); barrido.ref = { d: desplegar(c.caras, c.geo), a: anchoZonaEsquina(ctx.menorDimension) }; }
   barrido.env.sumar(pts, k => c.prom.cp(k) + G_PICO * c.prom.rms(k), k => c.prom.cp(k) - G_PICO * c.prom.rms(k), c.giro, Math.max(1.5, 1.6 / c.geo.escala));
   barrido.idx++;
+  barrido.pasadas = 0;
   if (barrido.idx < barrido.unicos.length) ctx.arrancar(barrido.unicos[barrido.idx]);
   else { barrido.activo = false; ctx.arrancar(0); }
 }
@@ -173,8 +174,11 @@ function dibujarMapa(gr: GrillaPlanta, cat: string[], pel: Uint8Array, silueta: 
   // la torre
   g.fillStyle = '#5f6b76'; g.beginPath(); silueta.forEach((q, n) => (n ? g.lineTo(X(q.x), Y(q.y)) : g.moveTo(X(q.x), Y(q.y)))); g.closePath(); g.fill();
   // el norte: +y apunta al rumbo β; el norte está β grados en sentido antihorario desde +y
-  const b = (gradosRumbo(cfgRosa.norte) * Math.PI) / 180, ang = Math.PI / 2 + b, cx = W - 26, cy = 30, L = 16;
+  const b = (gradosRumbo(cfgRosa.norte) * Math.PI) / 180, ang = Math.PI / 2 + b, cx = W - 30, cy = 32, L = 16;
   const tx = cx + L * Math.cos(ang), ty = cy - L * Math.sin(ang);
+  // un círculo blanco detrás: la flecha se lee sobre cualquier color del mapa
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(cx, cy, 2.1 * L, 0, 2 * Math.PI); g.fill();
+  g.strokeStyle = '#8a949e'; g.lineWidth = 1; g.stroke();
   g.strokeStyle = '#223344'; g.fillStyle = '#223344'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - (tx - cx), cy - (ty - cy)); g.lineTo(tx, ty); g.stroke();
   g.beginPath(); g.arc(tx, ty, 3, 0, 2 * Math.PI); g.fill();
   g.font = '700 12px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText('N', cx + 1.6 * L * Math.cos(ang), cy - 1.6 * L * Math.sin(ang) + 4);

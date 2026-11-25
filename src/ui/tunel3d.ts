@@ -95,6 +95,8 @@ const COL_LAWSON: Record<string, string> = { A: '#e8f5e9', B: '#a5d6a7', C: '#ff
 
 interface Corrida {
   clave: string; geo: Geometria3D; uIn: Float32Array; gpu: Lbm3dGpu | null; error: string | null; cargando: boolean;
+  /** el giro del viento con el que se armó esta corrida (el de cfg puede haber cambiado mientras ella termina su cuadro) */
+  giro: number;
   prom: PromedioCp; caras: ReturnType<typeof celdasDeCara>; campo: Float32Array | null;
   /** fuerzas por piso y en la base (etapa 1 de la propuesta de resultados) y lo del reglamento para comparar; segundos reales por paso */
   fz: Fuerzas3D | null; infoFz: Omit<InfoFuerzas, 'pasadas' | 'angulo' | 'config'> | null; dtPaso: number;
@@ -168,7 +170,7 @@ function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
     // la banda: sin suelo ni toda la altura, no hay fuerzas por piso, dinámica ni vereda; se mide la franja. El campo se
     // lee por lo menos 12 veces por período de los remolinos (T ≈ B / (0,13 U) pasos)
     const Bc = geo.B * geo.escala, nMuestra = Math.max(4, Math.floor(Bc / (0.13 * UH) / 12));
-    return { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz: null, infoFz: null, dtPaso: NaN, infoDin: null, nMuestra, pasosCampo: 0, plano: null,
+    return { clave: claveCorrida(), giro: cfg.angulo, geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz: null, infoFz: null, dtPaso: NaN, infoDin: null, nMuestra, pasosCampo: 0, plano: null,
       corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null, banda: new MedicionBanda(caras, geo, UH, celdaReferencia(geo)) };
   }
   try {
@@ -182,7 +184,7 @@ function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
   try { infoDin = datosDinamica(geo, infoFz); } catch { infoDin = null; }
   // los remolinos de una torre tienen un período de ≈ B / (0,12 · V): se lee el campo por lo menos 10 veces por período
   const VHm = vientoDisenoEn(geo.H) ?? NaN, nMuestra = isFinite(dtPaso) && VHm > 0 ? Math.max(4, Math.floor(geo.B / (0.12 * VHm) / 10 / dtPaso)) : Infinity;
-  return { clave: claveCorrida(), geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0, plano: new MediaPlano(geo, zEval(geo)),
+  return { clave: claveCorrida(), giro: cfg.angulo, geo, uIn, gpu: null, error: null, cargando: true, prom: new PromedioCp(caras, UH, celdaReferencia(geo)), caras, campo: null, fz, infoFz, dtPaso, infoDin, nMuestra, pasosCampo: 0, plano: new MediaPlano(geo, zEval(geo)),
     corriendo: true, ocupado: false, k: 10, mlups: 0, ultimoCampo: 0, ultimasLineas: 0, sinMirar: 0, maxRed: 0, roto: null, guardada: null, banda: null };
 }
 /** las opciones de la geometría de la corrida (se guardan en el archivo para rearmarla igual) */
@@ -254,7 +256,7 @@ async function ciclo() {
         c.fz?.sumar(c.campo, c.campo[celdaReferencia(c.geo) * 4 + 3], c.gpu.pasos * (isFinite(c.dtPaso) ? c.dtPaso : 1));
         c.plano?.sumar(c.campo);
         c.banda?.sumar(c.campo, c.gpu.pasos);
-        if (!c.geo.banda) alMuestrear({ geo: c.geo, caras: c.caras, prom: c.prom, plano: c.plano, uIn: c.uIn, pasadas: (c.gpu.pasos * UH) / c.geo.nx, giro: cfg.angulo }, ctxRosa());
+        if (!c.geo.banda) alMuestrear({ geo: c.geo, caras: c.caras, prom: c.prom, plano: c.plano, uIn: c.uIn, pasadas: (c.gpu.pasos * UH) / c.geo.nx, giro: c.giro }, ctxRosa());
       }
       if (corrida !== c) return;                              // se cambió la grilla o el giro mientras leía
       actualizarCampo();
