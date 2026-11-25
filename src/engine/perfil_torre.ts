@@ -14,7 +14,7 @@
  */
 import type { Proyecto } from './modelo';
 import { desfasarAnillo, escalarAnillo, girarAnillo } from './contorno';
-import { cajaSilueta, plantaDeNivel, puntosSilueta, type Vertice } from './silueta';
+import { cajaSilueta, medidasAlViento, plantaDeNivel, puntosSilueta, type Vertice } from './silueta';
 
 export interface PuntoPerfil { h: number; fx: number; fy?: number | null; dx?: number | null; dy?: number | null }
 export interface PerfilTorre {
@@ -27,6 +27,8 @@ export interface PerfilTorre {
   giro?: number | null;
   /** escribir B y L de la caja en cada losa (vacío = sí) */
   bl?: boolean | null;
+  /** con qué se escriben B y L: la caja de la losa (vacío) o un rectángulo de igual área (plantas curvas) */
+  blCriterio?: 'caja' | 'area' | null;
   /**
    * formas por tramos: desde la cota «desde» hacia arriba (hasta la forma siguiente), el perfil escala, gira y corre esta
    * planta en vez de la losa base. La silueta está como queda en su cota (el perfil la sigue cambiando de ahí para arriba
@@ -133,7 +135,7 @@ export function aplicarPerfil(p: Proyecto): number {
       s = transformarPlanta(fo.silueta, v.fx / v0.fx, v.fy / v0.fy, v.dx - v0.dx, v.dy - v0.dy, v.giro - v0.giro);
     } else s = transformarPlanta(base, v.fx, v.fy, v.dx, v.dy, v.giro);
     nv.silueta = s;
-    if (pf.bl ?? true) { const c = cajaSilueta(s); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); }
+    if (pf.bl ?? true) { const c = medidasAlViento(s, pf.blCriterio ?? 'caja'); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); }
     n++;
   });
   return n;

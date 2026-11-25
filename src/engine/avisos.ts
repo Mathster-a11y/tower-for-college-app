@@ -13,7 +13,7 @@
  */
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { comunLosas, tramoEn } from './carpinteria';
-import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
+import { cajaSilueta, carpinteriaDeNivel, contornoAlViento, medidasAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
 export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
 export interface AvisoDiseno {
@@ -104,10 +104,22 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
       const max = Math.max(...puntosSilueta(c.v, 8).map(q => (adentro(q, pol) ? 0 : distanciaBorde(q, pol))));
       if (max > TOL) { carp.cotas.push(n.cota); carp.max = Math.max(carp.max, max); }
     }
-    // la planilla toma el viento con B × L; si la losa propia de este nivel es otra, conviene igualarlas
-    if (pl.propia) {
-      const k = cajaSilueta(pl.silueta);
-      if (Math.abs(k.B - pl.B) > Math.max(0.1, 0.02 * pl.B) || Math.abs(k.L - pl.L) > Math.max(0.1, 0.02 * pl.L)) {
+    // la planilla toma el viento con B × L; si el contorno que ve el viento (la carpintería o la losa propia) es otro,
+    // conviene igualarlos. Vale la caja (el ancho, el diámetro) o el rectángulo de igual área (plantas curvas), y entre
+    // el contorno de este nivel y el del de arriba (la fachada puede cambiar de ancho dentro del piso)
+    if (pl.propia || c?.propia) {
+      const k = cajaSilueta(pl.propia || !c ? pl.silueta : c.v);
+      const arriba = i > 0 ? contornoAlViento(p, i - 1).v : null;
+      // vale la losa o la carpintería propias de este nivel; en un contorno curvo (la fachada cambia de ancho dentro del
+      // piso), también cualquier valor entre el suyo y el del contorno del nivel de arriba
+      const curvo = (v: typeof pl.silueta) => v.some(q => q.b || (q as { c1?: unknown }).c1) || v.length >= 12;
+      const contornos = [...(pl.propia ? [pl.silueta] : []), ...(c?.propia ? [c.v] : [])];
+      const dentroDe = (crit: 'caja' | 'area') => contornos.some(v => {
+        const m = [medidasAlViento(v, crit), ...(curvo(v) && arriba && arriba.length >= 3 ? [medidasAlViento(arriba, crit)] : [])];
+        const ok = (x: number, xs: number[]) => x >= Math.min(...xs) - Math.max(0.1, 0.02 * x) && x <= Math.max(...xs) + Math.max(0.1, 0.02 * x);
+        return ok(pl.B, m.map(q => q.B)) && ok(pl.L, m.map(q => q.L));
+      });
+      if (!dentroDe('caja') && !dentroDe('area')) {
         const clave = `${pl.B}×${pl.L}|${k.B.toFixed(2)}×${k.L.toFixed(2)}`;
         bl.set(clave, [...(bl.get(clave) ?? []), n.cota]);
       }
@@ -146,7 +158,7 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
   if (carp.cotas.length) out.push({ tipo: 'carpinteria-fuera', cotas: carp.cotas, texto: `La carpintería sale de la losa ${rangoNiveles(p, carp.cotas)} (hasta ${f2(carp.max)} m).`, arreglo: 'Usá «Carpintería que sigue a la losa» (botón «Losa» → Carpintería) o metela a mano: la fachada apoya en el borde de la losa.' });
   bl.forEach((cotas, clave) => {
     const [plan, caja] = clave.split('|');
-    out.push({ tipo: 'bl-caja', cotas, texto: `La losa mide ${caja.replace('×', ' × ').replace(/\./g, ',')} m ${rangoNiveles(p, cotas)}, pero la planilla calcula el viento con B × L = ${plan.replace('×', ' × ').replace(/\./g, ',')} m.`, arreglo: 'Si la fachada es la losa, tocá «Usar la caja como B y L» en la carta de la losa (o hacé que las formas escriban B y L).' });
+    out.push({ tipo: 'bl-caja', cotas, texto: `La losa mide ${caja.replace('×', ' × ').replace(/\./g, ',')} m ${rangoNiveles(p, cotas)}, pero la planilla calcula el viento con B × L = ${plan.replace('×', ' × ').replace(/\./g, ',')} m.`, arreglo: 'En la carta de la losa: «Usar la caja como B y L» (el ancho que enfrenta el viento) o, en una planta curva, «Igual área como B y L» (conserva el área de la planta). También se pueden aplicar a todos los niveles, o hacer que el perfil escriba B y L.' });
   });
   if (papeles) p.muros.forEach(m => {
     const pa = papeles[m.id];

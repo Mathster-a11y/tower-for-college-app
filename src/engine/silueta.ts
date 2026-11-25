@@ -128,3 +128,15 @@ export function puntosAlViento(p: Proyecto, i: number, porArco = 12): { x: numbe
   return puntosSilueta(contornoAlViento(p, i).v, porArco).map(q => ({ x: q.x + dx, y: q.y + dy }));
 }
 
+/**
+ * B y L para el viento de una planta (lo que lee la planilla): «caja», el rectángulo que la encierra (en una planta
+ * redonda, el diámetro: el ancho que enfrenta el viento); «area», un rectángulo con las mismas proporciones que la caja
+ * y la misma área que la planta (en un círculo, un cuadrado de lado 0,886 D: conserva el área y el peso de la losa)
+ */
+export type CriterioAncho = 'caja' | 'area';
+export function medidasAlViento(v: Vertice[], criterio: CriterioAncho): { B: number; L: number } {
+  const c = cajaSilueta(v);
+  if (criterio === 'caja' || !(c.B > 0 && c.L > 0)) return { B: c.B, L: c.L };
+  const k = Math.sqrt(areaSilueta(v) / (c.B * c.L));
+  return { B: c.B * k, L: c.L * k };
+}

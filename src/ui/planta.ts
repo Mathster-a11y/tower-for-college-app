@@ -11,6 +11,7 @@ import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, perfilDesdeTabla, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { contornoAlViento as contornoViento, medidasAlViento, type CriterioAncho } from '../engine/silueta';
 import { montarCorte } from './corteTorre';
 import { abrirDesplegado } from './desplegado';
 import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
@@ -908,6 +909,28 @@ export function montarPlanta(cont: HTMLElement) {
         seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L), true));
       return;
     }
+    /**
+     * B y L que lee la planilla para el viento: la caja del contorno que ve el viento (la carpintería o la losa) o, en una
+     * planta curva, el rectángulo de igual área; en este nivel o en todos
+     */
+    const seccionAnchoViento = (): HTMLElement[] => {
+      const cont = contornoViento(p, iNivel).v, cj = medidasAlViento(cont, 'caja'), ar = medidasAlViento(cont, 'area');
+      const curva = cont.some(q => q.b || (q as { c1?: unknown }).c1) || cont.length >= 12;
+      const poner = (crit: CriterioAncho, todos: boolean) => estado.cambiar(pp => {
+        const idx = todos ? pp.niveles.map((_, i) => i).filter(i => pp.niveles[i].cota >= -1e-6) : [iNivel];
+        idx.forEach(i => { const m = medidasAlViento(contornoViento(pp, i).v, crit); pp.niveles[i].B = +m.B.toFixed(2); pp.niveles[i].L = +m.L.toFixed(2); });
+      });
+      const f2b = (x: number) => x.toFixed(2).replace('.', ',');
+      const out: HTMLElement[] = [h2(
+        boton('Usar la caja como B y L', () => poner('caja', false), `Pone en este nivel B × L = ${f2b(cj.B)} × ${f2b(cj.L)} m: la caja del contorno que ve el viento (el ancho que enfrenta el viento; en una planta redonda, el diámetro).`),
+        boton('Igual área como B y L', () => poner('area', false), `Pone en este nivel B × L = ${f2b(ar.B)} × ${f2b(ar.L)} m: un rectángulo con las proporciones de la caja y la misma área que la planta (en un círculo, un cuadrado de 0,886 D).`))];
+      out.push(h2(
+        boton('Caja en todos los niveles', () => poner('caja', true), 'B y L de cada nivel, de su caja (la de la carpintería si la tiene)'),
+        boton('Igual área en todos', () => poner('area', true), 'B y L de cada nivel, del rectángulo de igual área de su contorno')));
+      if (curva) out.push(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent:
+        `Planta curva: la planilla calcula el viento como en una planta rectangular (Cp de barlovento y sotavento sobre el ancho B). Con la caja (${f2b(cj.B)} m), el ancho es el que de verdad enfrenta el viento y queda del lado seguro; con igual área (${f2b(ar.B)} m), se conserva el área de la losa y el viento baja un ${Math.round((1 - ar.B / cj.B) * 100)} %. Como referencia, el CIRSOC 102 da para secciones circulares coeficientes de fuerza mucho menores que para secciones cuadradas (del orden de 0,5 a 0,9 contra 1,3 a 2,0, según la esbeltez y la rugosidad): la forma redonda ayuda. Elegí uno y consultalo con la cátedra.` }));
+      return out;
+    };
     const delLoft = loftDeNivel(p, iNivel);
     const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !n.manual;
     // piso por piso: una losa generada se suelta para editarla a mano; una suelta se vuelve a atar
@@ -949,7 +972,9 @@ export function montarPlanta(cont: HTMLElement) {
       filaV,
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
       dxf,
-      h2(boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
+      // B y L para el viento: la caja (el ancho que enfrenta el viento) o, en una planta curva, el rectángulo de igual área
+      ...seccionAnchoViento(),
+      h2(
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
         estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.silueta = pl.silueta.map(q => JSON.parse(JSON.stringify(q))); }); });
@@ -1061,6 +1086,14 @@ export function montarPlanta(cont: HTMLElement) {
     sb.addEventListener('change', () => poner(z => { z.base = +sb.value; }));
     const lb = document.createElement('label'); lb.className = 'campo-esq'; lb.append('losa base ', sb);
     det.append(seg, lb, num('giro total', pf.giro ?? 0, x => poner(z => { z.giro = x; }), '°', 'de la base a la azotea, antihorario'));
+    if (!env) {
+      // con qué escribe el perfil B y L de cada losa (lo que lee la planilla para el viento)
+      const sc = document.createElement('select'); sc.setAttribute('aria-label', 'B y L de cada losa');
+      ([['caja', 'su caja (el ancho)'], ['area', 'igual área (plantas curvas)']] as const).forEach(([v, t]) => sc.append(new Option(t, v, false, (pf.blCriterio ?? 'caja') === v)));
+      sc.addEventListener('change', () => poner(z => { z.blCriterio = sc.value === 'area' ? 'area' : null; }));
+      const lc = document.createElement('label'); lc.className = 'campo-esq'; lc.title = 'Lo que lee la planilla para el viento en cada losa que genera el perfil'; lc.append('B y L de cada losa: ', sc);
+      det.append(lc);
+    }
     // el punto elegido
     if (pfSel !== null && pf.puntos[pfSel]) {
       const i = pfSel, x = pf.puntos[i], alt = zb + x.h * (zt - zb);
