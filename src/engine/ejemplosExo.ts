@@ -270,7 +270,9 @@ export function ejemploGherkin(): Proyecto {
   // oficinas del 2º al 30º (en el 31º ya no están: plano del piso 31), y el 16º entero (folleto de 2024)
   const huecosLosa: import('./modelo').HuecoLosa[] = [];
   for (let k = 2; k <= 30; k++) {
-    const z = k * dz, R = D(z) / 2 - 0.3, rIn = 0.62 * R, gir = ((k - 2) * 5 * Math.PI) / 180, ab = (26 * Math.PI) / 180;
+    // el giro sigue las espirales del diagrid: una diagonal avanza 10° cada 2 pisos (5° por piso) y la franja entre dos
+    // diagonales tiene su centro en 10° + 5° · k; cada cuña queda centrada en esa franja, entre dos nudos
+    const z = k * dz, R = D(z) / 2 - 0.3, rIn = 0.62 * R, ab = (26 * Math.PI) / 180, gir = ((10 + 5 * k) * Math.PI) / 180 - ab / 2;
     if (k === 16) continue;
     for (let j = 0; j < 6; j++) {
       const a0 = gir + (j * Math.PI) / 3, a1 = a0 + ab, am = (a0 + a1) / 2;
@@ -314,7 +316,7 @@ export function ejemploGherkin(): Proyecto {
         'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38 (Archinomy). La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,50 m × 60 mm hasta el piso 13, 0,45 × 50 mm hasta el 25, 0,40 × 30 mm hasta el 33 y 0,30 × 20 mm arriba. Anillos: cajón de 0,30 m × 16 mm (supuesto).',
         'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. En las plantas del folleto (CBRE, 2024) mide casi la mitad del diámetro del piso; New Steel Construction da 24 m. Acá es un tubo de 24 m, que no entra en ninguna pieza, hasta el piso 38 (arriba la planta ya es más chica); su pared de 7 cm de hormigón pesa como las columnas de acero del núcleo (24 % de 8358 t).',
         'Losas: compuestas de 160 mm sobre chapa Ribdeck 80, con vigas radiales cada 10° del núcleo a la fachada y una viga radial que ata cada nudo al núcleo; sin columnas interiores (New Steel Construction). El diagrid lleva una franja de 7 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga.',
-        'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá seis cuñas de 26° por piso, de la fachada al 62 % del radio (medidas sobre las plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
+        'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá seis cuñas de 26° por piso, alineadas con las espirales del diagrid (centradas entre dos diagonales, que avanzan 5° por piso), de la fachada al 62 % del radio (medidas sobre las plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
         'Áreas útiles del folleto (CBRE, 2024): piso 16, 19 558 ft² (1817 m²); 22, 17 878; 30, 12 226 ft² (1136 m²). Ascensores en tres tramos (medio, alto y expreso al restaurante), con transferencia en los pisos 21 y 22; 2,75 m de piso a cielorraso.',
         'Acero: 8358 t según el modelo de Arup: 29 % en el diagrid, 24 % en las columnas del núcleo y 47 % en vigas (Archinomy); Arup da unas 10 000 t y 2500 t de diagrid. Fundación: 333 pilotes de 750 mm de unos 27 m, con 117 000 t de capacidad (New Steel Construction); la app no calcula pilotes: platea de 52 × 52 m con la tensión equivalente, 4,3 kg/cm².',
         'Viento: Londres no está en el CIRSOC; V = 40 m/s y exposición de centro de ciudad (supuesto, del lado seguro). Frecuencia: el CIRSOC no tiene fórmula para un diagrid; la de tabiques (1.9-5) da un Gf de unos 1,36, del lado seguro (queda en «atención»).',
