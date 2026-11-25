@@ -282,13 +282,14 @@ export function ejemploGherkin(): Proyecto {
   // cálculo (B y L) es el del medio del tramo que cubre, hasta el nivel de arriba
   const nivel = (nombre: string, z: number, zArriba: number, losa: number | null, contorno?: Nivel['silueta']): Nivel => {
     const dv = D((z + zArriba) / 2);
-    // la cúpula no tiene losas: su «losa» es un punto (0,3 m) para que no se dibuje
+    // la cúpula no tiene losas (niveles «sin losa»); su silueta es un punto (0,3 m), que no se usa
     return { nombre, cota: r2(z), B: lado(dv), L: lado(dv), silueta: contorno ?? circulo(losa ?? 0.3), carpinteria: circulo(D(z)) };
   };
   // la cúpula (de 166 a 179,77 m): solo cerramiento de vidrio, sin estructura ni losas (lleva la lente de 2,4 m)
   const cupula = [hLente, 176.5, 172.5, 169];
-  niveles.push({ nombre: 'Lente (179,77 m)', cota: hLente, B: 1.5, L: 1.5, silueta: circulo(2.4), carpinteria: circulo(2.4) });
-  for (let j = 1; j < cupula.length; j++) niveles.push(nivel(`Cúpula de vidrio (${String(cupula[j]).replace('.', ',')} m)`, cupula[j], cupula[j - 1], null));
+  // (niveles sin losa: solo carpintería; no se dibuja losa ni suma su peso)
+  niveles.push({ nombre: 'Lente (179,77 m)', cota: hLente, B: 1.5, L: 1.5, silueta: circulo(2.4), carpinteria: circulo(2.4), sinLosa: true });
+  for (let j = 1; j < cupula.length; j++) niveles.push({ ...nivel(`Cúpula de vidrio (${String(cupula[j]).replace('.', ',')} m)`, cupula[j], cupula[j - 1], null), sinLosa: true });
   niveles.push(nivel(`40º (${uso(40)})`, hTop, cupula[cupula.length - 1], D(hTop)));
   for (let k = 39; k >= 1; k--) niveles.push(nivel(`${k}º (${uso(k)})`, k * dz, (k + 1) * dz, D(k * dz), conPozos(k) ? losaConPozos(k) : undefined));
   niveles.push(nivel('PB (hall de doble altura)', 0, dz, D(0)), { nombre: 'Subsuelo', cota: -6.15 });

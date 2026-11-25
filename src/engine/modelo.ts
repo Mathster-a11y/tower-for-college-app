@@ -22,6 +22,9 @@ export interface Sitio {
  * o una Bézier cúbica (c1 y c2: puntos de control)
  */
 export type VerticeContorno = { x: number; y: number; b?: number; c1?: { x: number; y: number }; c2?: { x: number; y: number } };
+/** losas reales que carga un nivel: las de los pisos que junta (1 si no dice), o ninguna si es un nivel sin losa */
+export const losasDeNivel = (n: { pisos?: number | null; sinLosa?: boolean | null }) => (n.sinLosa ? 0 : Math.max(1, Math.round(n.pisos ?? 1)));
+
 export interface Nivel {
   nombre: string;
   /** cota del NPT (m) */
@@ -48,6 +51,12 @@ export interface Nivel {
   carpinteria?: VerticeContorno[] | null;
   /** la silueta de este nivel se editó a mano: el perfil, los lofts y el plano de corte no la tocan (vacío = no) */
   manual?: boolean | null;
+  /**
+   * nivel sin losa (cúpula, corona, remate, mástil): solo carpintería. No se dibuja la losa y no suma peso de losa (cuenta
+   * 0 losas en CIRSOC, FEM, la Guía y los libros); el viento sigue con su B y L y su carpintería. La planilla de la
+   * cátedra no cambia (vacío = con losa)
+   */
+  sinLosa?: boolean | null;
   /**
    * lo común a la losa de abajo y la de arriba se partió en varias piezas: la carpintería es la más grande y el resto
    * queda sin carpintería (se avisa). Lo calculan los tramos «por piso»; no va al Excel

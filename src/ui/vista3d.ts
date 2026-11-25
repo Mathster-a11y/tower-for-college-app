@@ -246,7 +246,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       : new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
     p.niveles.forEach((n, iN) => {
-      if (!estado.capas.losas) return;
+      if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
       const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 12);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };

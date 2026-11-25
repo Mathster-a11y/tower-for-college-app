@@ -13,7 +13,7 @@
  *
  * Unidades de la app: m, t, t/m², t·s²/m.
  */
-import type { Proyecto } from '../modelo';
+import { losasDeNivel, type Proyecto } from '../modelo';
 import { entradaFem, E_HORMIGON, G_HORMIGON } from '../femEntrada';
 import { modal, resolverTorre, type CargasPiso, type ModeloTorre, type Modo, type ResultadoFem } from '../fem/pseudo3d';
 import { viento102, type Viento102 } from '../cargas/cirsoc102';
@@ -81,7 +81,7 @@ export function masasDeProyecto(p: Proyecto, mo: ModeloTorre): { masas: number[]
       const h = Math.max(0, Math.min(cota + arriba, z1) - Math.max(cota - abajo, z0));
       return s + m.largo * m.espesor * h * PESO_HORMIGON;
     }, 0);
-    const peso = D * n.B * n.L * Math.max(1, Math.round(n.pisos ?? 1)) + tabiques;
+    const peso = D * n.B * n.L * losasDeNivel(n) + tabiques;
     const m = peso / GRAVEDAD;
     masas.push(m); inercias.push((m * (n.B ** 2 + n.L ** 2)) / 12);
   });

@@ -84,6 +84,7 @@ export function leerProyecto(x: unknown): Lectura {
       if (!num(n.cota)) error(`${quien} («${n.nombre}»): la cota tiene que ser un número.`);
       for (const k of ['B', 'L', 'pisos'] as const) if (!nulo(n[k]) && !(num(n[k]) && (n[k] as number) > 0)) error(`${quien} («${n.nombre}»): «${k}» tiene que ser un número mayor que 0 o quedar vacío.`);
       for (const k of ['dx', 'dy'] as const) if (!nulo(n[k]) && !num(n[k])) error(`${quien} («${n.nombre}»): «${k}» (cuánto se corre el nivel) tiene que ser un número o quedar vacío.`);
+      if (!nulo(n.sinLosa) && typeof n.sinLosa !== 'boolean') error(`${quien} («${n.nombre}»): «sinLosa» tiene que ser sí o no.`);
       for (const k of ['silueta', 'carpinteria'] as const) if (!nulo(n[k]) && !contornoValido(n[k], 0)) error(`${quien} («${n.nombre}»): la ${k === 'silueta' ? 'silueta' : 'carpintería'} está dañada.`);
     });
     if (!errores.length) {
@@ -145,6 +146,7 @@ export function leerProyecto(x: unknown): Lectura {
   if (Array.isArray(q.huecosLosa) && !(q.huecosLosa as Record<string, unknown>[]).every(h => contornoValido(h.v, 0))) error('Hay un hueco de losa con el contorno dañado.');
   if (Array.isArray(q.lofts) && !(q.lofts as Record<string, unknown>[]).every(l => typeof l.id === 'string' && Array.isArray(l.cotas) && (l.cotas as unknown[]).length >= 2 && (l.cotas as unknown[]).every(c => typeof c === 'number' && isFinite(c)))) error('Hay un loft de losas dañado (necesita un nombre y al menos dos cotas).');
   if (!nulo(q.perfilTorre) && !(esObj(q.perfilTorre) && Array.isArray(q.perfilTorre.puntos) && (q.perfilTorre.puntos as unknown[]).every(x => esObj(x) && typeof x.h === 'number' && typeof x.fx === 'number'))) error('El perfil de la torre está dañado (cada punto necesita h y fx).');
+  if (esObj(q.perfilTorre) && !nulo(q.perfilTorre.formas) && !(Array.isArray(q.perfilTorre.formas) && (q.perfilTorre.formas as unknown[]).every(x => esObj(x) && typeof x.desde === 'number' && Array.isArray(x.silueta)))) error('El perfil de la torre está dañado (cada forma por tramo necesita «desde» y su silueta).');
   if (!nulo(q.carpinteriaRetiro) && typeof q.carpinteriaRetiro !== 'number') error('«carpinteriaRetiro» tiene que ser un número o quedar vacío.');
   if (!nulo(q.envolvente) && !(typeof q.envolvente === 'object' && contornoValido((q.envolvente as { planta?: unknown }).planta, 0) && Array.isArray((q.envolvente as { perfil?: { puntos?: unknown } }).perfil?.puntos))) error('La envolvente está dañada (falta la planta o el perfil).');
   for (const k of ['juntas', 'parPerp', 'clasesPieza'] as const) if (!nulo(q[k]) && !esObj(q[k])) error(`«${k}» está dañado.`);

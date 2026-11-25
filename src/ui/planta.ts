@@ -1,7 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/aberturas';
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
-import { avisar, confirmar, pedirTexto } from './tarjeta';
+import { avisar, confirmar, pedirTexto, pedirTextoLargo } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
@@ -10,7 +10,7 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
-import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { aplicarPerfil, nivelBase, perfilDesdeTabla, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { montarCorte } from './corteTorre';
 import { abrirDesplegado } from './desplegado';
 import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
@@ -916,7 +916,30 @@ export function montarPlanta(cont: HTMLElement) {
       : n.manual && generable ? [boton('Volver a atar (que la genere el perfil o el loft)', () => estado.cambiar(pp => { delete pp.niveles[iNivel].manual; }), 'Se pierde lo editado a mano en este piso')] : [];
     const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
     const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    // nivel sin losa (cúpula, corona, remate): solo carpintería; no se dibuja la losa ni suma peso de losa
+    const lSin = document.createElement('label'); lSin.className = 'campo-linea';
+    const cSin = document.createElement('input'); cSin.type = 'checkbox'; cSin.checked = !!n.sinLosa;
+    cSin.addEventListener('change', () => estado.cambiar(pp => { if (cSin.checked) pp.niveles[iNivel].sinLosa = true; else delete pp.niveles[iNivel].sinLosa; }));
+    lSin.title = 'Una cúpula, una corona o un remate: el nivel tiene carpintería (el viento la ve) pero no losa. No se dibuja la losa y no suma su peso en CIRSOC, FEM, la Guía y los libros (la planilla de la cátedra no cambia).';
+    lSin.append(cSin, ' Este nivel no tiene losa (solo carpintería: cúpula, corona, remate)');
+    // formas por tramos del perfil: la losa de este piso pasa a ser la forma desde acá (o solo en este piso)
+    const usarForma: HTMLElement[] = [];
+    if (p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !delLoft) {
+      const tomar = (soloEste: boolean) => estado.cambiar(pp => {
+        const pf2 = pp.perfilTorre!, nv = pp.niveles[iNivel], arriba = soloEste && iNivel > 0 ? pp.niveles[iNivel - 1] : null;
+        // la de arriba, con la forma que tiene ahora (para que la excepción sea de un solo piso)
+        const silArriba = arriba ? plantaDeNivel(pp, iNivel - 1).silueta.map(q => ({ ...q })) : null;
+        const sil = plantaDeNivel(pp, iNivel).silueta.map(q => ({ ...q }));
+        const fs = (pf2.formas ?? []).filter(x => Math.abs(x.desde - nv.cota) > 1e-6 && (!arriba || Math.abs(x.desde - arriba.cota) > 1e-6 || !soloEste));
+        fs.push({ desde: nv.cota, silueta: sil });
+        if (arriba && silArriba && !(pf2.formas ?? []).some(x => Math.abs(x.desde - arriba.cota) < 1e-6)) fs.push({ desde: arriba.cota, silueta: silArriba });
+        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) };
+        delete nv.manual;
+      });
+      usarForma.push(h2(boton('Usar esta losa desde este piso', () => tomar(false), 'Desde este piso hacia arriba, el perfil escala, gira y corre esta planta en vez de la losa base (por ejemplo, el círculo sin pozos de un piso para arriba)'),
+        boton('Solo en este piso', () => tomar(true), 'Esta planta en este piso y, desde el de arriba, la que había: una excepción de un solo piso (por ejemplo, un piso entero entre pisos con pozos)')));
+    }
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), lSin, ...usarForma, ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       ...estadoCarpLosas(),
@@ -943,6 +966,7 @@ export function montarPlanta(cont: HTMLElement) {
    * el alzado agrega un punto; el punto elegido se ajusta con números.
    */
   function seccionPerfil(objetivo: 'losas' | 'envolvente' = 'losas'): HTMLElement {
+    const f2 = (x: number) => x.toFixed(2).replace('.', ',');
     const env = objetivo === 'envolvente';
     // el mismo editor para el perfil de las losas y para la forma de la envolvente: cambia de dónde lee y dónde escribe
     const leer = (pp: Proyecto): PerfilTorre | null => (env ? pp.envolvente?.perfil ?? null : pp.perfilTorre ?? null);
@@ -961,6 +985,18 @@ export function montarPlanta(cont: HTMLElement) {
     const pls = document.createElement('div'); pls.className = 'galeria-perfiles';
     PERFILES.forEach(x => pls.append(boton(x.nombre, x.texto, () => { pfSel = ab.sel = null; poner(q => { q.puntos = structuredClone(x.p.puntos); q.suave = x.p.suave ?? false; q.giro = x.p.giro ?? 0; }); })));
     det.append(pls);
+    // la forma desde una tabla de alturas (cota y ancho o diámetro), pegada de Excel o medida sobre un corte
+    det.append(h2(boton('Pegar una tabla de alturas…', 'Cota y ancho (o diámetro) a cada altura, pegadas de Excel: la forma sale tal cual de la tabla', async () => {
+      const pp = estado.proyecto, ib = nivelBase(pp, leer(pp) ?? { puntos: [] }), z0 = pp.niveles[ib]?.cota ?? 0, z1 = pp.niveles[0]?.cota ?? 0;
+      const txt = await pedirTextoLargo('Forma desde una tabla de alturas',
+        `Pegá dos columnas: la cota (m, como en Niveles) y el ancho o el diámetro a esa altura (m). Con tres columnas, el ancho en x y en y; con cinco, además cuánto se corre (x, y). Se toman en proporción al ancho de la tabla en la losa base (${f2(z0)} m): la losa base da el tamaño y la tabla, la forma. Los títulos se saltean.`, '', 'Usar la tabla');
+      if (txt === null) return;
+      const r = perfilDesdeTabla(txt, z0, z1);
+      if (r.error) { await avisar('error', 'No se pudo leer la tabla', r.error); return; }
+      pfSel = ab.sel = null;
+      poner(q => { q.puntos = r.puntos; q.suave = false; });
+      mensaje(`Forma tomada de ${r.filas} filas${r.fuera ? ` (${r.fuera} fuera de la torre, de ${f2(z0)} a ${f2(z1)} m, no se usan)` : ''}: ${r.puntos.length} puntos, con tramos rectos entre ellos.`);
+    })));
     if (!pf) return det;
     // alzado: eje vertical = altura (0 abajo, 1 arriba), a los costados el ancho (factor 1 = la base)
     const W = 260, H = 230, mx = W / 2, y0 = H - 16, y1 = 14, K = 62;
@@ -1039,6 +1075,16 @@ export function montarPlanta(cont: HTMLElement) {
     } else det.append(nota('Tocá un punto del alzado para ajustarlo con números; tocá en otro lado del alzado para agregar uno.'));
     const lofts = env ? 0 : (p.lofts ?? []).length;
     if (lofts) det.append(nota(`Hay ${lofts} ${lofts === 1 ? 'loft' : 'lofts'}: mandan sobre los niveles que generan.`));
+    // formas por tramos: desde un piso, el perfil sigue con otra planta
+    if (!env) {
+      const fs = [...(pf.formas ?? [])].sort((a, b) => a.desde - b.desde);
+      det.append(nota(fs.length ? 'Formas por tramos: desde cada cota, el perfil sigue escalando otra planta (la que se tomó de ese piso).' : 'Para cambiar la planta desde un piso (sin pozos arriba, otra forma en la corona), dibujá la losa de ese piso y tocá «Usar esta losa desde este piso» en la carta de la losa.'));
+      if (fs.length) {
+        const lista = document.createElement('div'); lista.className = 'fila-acciones';
+        fs.forEach(fo => { const nm = p.niveles.find(nv => Math.abs(nv.cota - fo.desde) < 1e-6)?.nombre ?? `${f2(fo.desde)} m`; lista.append(boton(`✕ desde ${nm}`, 'Sacar esta forma: desde ahí sigue la forma de abajo', () => poner(z => { z.formas = (z.formas ?? []).filter(x => Math.abs(x.desde - fo.desde) > 1e-6); }))); });
+        det.append(lista);
+      }
+    }
     if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
     void aplicarPerfil;
     return det;

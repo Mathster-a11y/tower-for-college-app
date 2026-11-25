@@ -193,7 +193,7 @@ export function tablasProyecto(p: Proyecto): Tabla[] {
   out.push({ nombre: T.proyecto, anchos: [26, 16, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS.map(([k, q, g]) => [k, g(p) ?? null, q] as Valor[]),
     [], ['Estas hojas «T3D …» guardan la torre completa: con ellas la app vuelve a armar el proyecto. Se pueden editar; la app las lee al abrir la planilla.']] });
   if (p.exo) out.push({ nombre: T.exo, anchos: [30, 34, 70], filas: [['Dato', 'Valor', 'Qué es'], ...DATOS_EXO.map(([k, q, g]) => [k, g(p.exo!) ?? null, q] as Valor[])] });
-  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12, 12, 12, 12, 14, 14], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales', 'Corrido x (m)', 'Corrido y (m)', 'Silueta a mano', 'Carpintería a mano', 'Voladizo a propósito'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null, n.dx || null, n.dy || null, n.manual ? SI : null, n.carpManual ? SI : null, n.carpVoladizo ? SI : null])] });
+  out.push({ nombre: T.niveles, anchos: [14, 10, 10, 10, 12, 12, 12, 12, 14, 14, 10], filas: [['Nivel', 'Cota (m)', 'B (m)', 'L (m)', 'Pisos reales', 'Corrido x (m)', 'Corrido y (m)', 'Silueta a mano', 'Carpintería a mano', 'Voladizo a propósito', 'Sin losa'], ...p.niveles.map(n => [n.nombre, n.cota, n.B ?? null, n.L ?? null, n.pisos && n.pisos > 1 ? n.pisos : null, n.dx || null, n.dy || null, n.manual ? SI : null, n.carpManual ? SI : null, n.carpVoladizo ? SI : null, n.sinLosa ? SI : null])] });
   out.push({ nombre: T.muros, anchos: [10, 6, 9, 9, 9, 9, 7, 13, 10, 12, 10, 12, 11, 8, 10, 10, 9, 9, 8, 10, 11, 28, 10, 12, 9, 14, 14, 30, 12, 34, 10, 12], filas: [CAB_MUROS, ...p.muros.map(m => [
     m.id, m.dir, m.x, m.y, m.largo, m.espesor, m.llega ? SI : 'no', m.areaInf, m.piezaA || null, m.pegadoA || null, m.piezaB || null, m.pegadoB || null,
     TIPO_TXT[m.tipo ?? 'tabique'], m.tipo === 'tubo-rect' ? m.ladoY ?? null : null, nombreNivel(m.zDesde), nombreNivel(m.zHasta),
@@ -269,6 +269,7 @@ export function proyectoDesdeTablas(hojas: Hoja[], base: Proyecto): { proyecto: 
     if (sino(g('Silueta a mano'))) n.manual = true;
     if (sino(g('Carpintería a mano'))) n.carpManual = true;
     if (sino(g('Voladizo a propósito'))) n.carpVoladizo = true;
+    if (sino(g('Sin losa'))) n.sinLosa = true;
     // torre inclinada o corrida (Diseño → Perfil): cuánto se corre el nivel respecto de PB
     const dx = num(g('Corrido x (m)')), dy = num(g('Corrido y (m)'));
     if (dx) n.dx = dx;

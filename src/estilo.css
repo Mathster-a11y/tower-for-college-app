@@ -2187,3 +2187,6 @@ body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tuto
   .pasos-plegar, .chip-avisos { min-height: 32px; min-width: 32px; }
   .indicacion-planta > button { min-height: 32px !important; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
 }
+
+/* tabla pegada en una tarjeta (perfil desde una tabla de alturas) */
+.tarjeta-texto { width: 100%; min-width: min(460px, 80vw); font: 12px/1.4 var(--mono); box-sizing: border-box; }

@@ -7,7 +7,7 @@
  * Los valores salen de calcularProyecto: al arrastrar un dato se recalcula el proyecto entero con ese método.
  */
 import { calcularProyecto, type Calculo } from '../estado';
-import type { Proyecto } from '../../engine/modelo';
+import { losasDeNivel, type Proyecto } from '../../engine/modelo';
 import { EXPOSICIONES, KN_POR_T, viento102, type Viento102 } from '../../engine/cargas/cirsoc102';
 import { datos101De } from '../../engine/cargas/cirsoc101';
 import { vuelco102 } from '../../engine/metodos/cirsoc';
@@ -115,7 +115,7 @@ export function grafoCirsoc(p0: Proyecto, metodo: 'cirsoc' | 'fem', s: SelCirsoc
     params: [
       { id: 'Dq', sim: 'D', nombre: 'carga permanente por m² de planta', unidad: 't/m²', dec: 2, min: 0.4, max: 1.6, paso: 0.05, fuente: 'Proyecto → CIRSOC 101', get: d => datos101De(d).D, set: (d, x) => { d.cirsoc101 = { ...(d.cirsoc101 ?? {}), D: x }; } },
       { id: 'b1', sim: 'b_1', nombre: 'lado de la fundación paralelo al viento', unidad: 'm', dec: 2, min: 5, max: 60, paso: 0.5, fuente: 'Proyecto → Fundación', get: d => d.fundacion.b1, set: (d, x) => { d.fundacion = { ...d.fundacion, b1: x }; } },
-      fijo('At', 'A_t', 'suma de las áreas de las plantas (por los pisos que junta cada nivel)', d => { let B = 0, L = 0, s2 = 0; d.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; s2 += B * L * Math.max(1, Math.round(n.pisos ?? 1)); }); return s2; }, 0, 'm²'),
+      fijo('At', 'A_t', 'suma de las áreas de las plantas (por los pisos que junta cada nivel)', d => { let B = 0, L = 0, s2 = 0; d.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; s2 += B * L * losasDeNivel(n); }); return s2; }, 0, 'm²'),
       fijo('hs', 'h_s', 'de PB a la fundación', () => r0.vu.brazo, 2, 'm'),
     ],
     nodos: [
