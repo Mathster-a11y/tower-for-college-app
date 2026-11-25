@@ -10,6 +10,9 @@ import { estado, fmt } from './estado';
 import { h, kpi, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
 import { contornoAlViento, puntosSilueta } from '../engine/silueta';
+import { tramoEn } from '../engine/carpinteria';
+/** paredes: exactas en planta y en altura (la piel interpolada entre pisos), exactas solo en planta (un prisma por piso) o en escalera */
+export type Paredes3DModo = 'exactas' | 'planta' | 'escalera';
 import { datos102De } from '../engine/cargas/cirsoc102';
 import { celdaReferencia, celdasDeCara, cpReglamento, geometria3D, grillaBanda, perfil102, PromedioCp, type Cara, type Geometria3D } from '../viento/geometria3d';
 import { MedicionBanda } from '../viento/banda3d';
@@ -51,7 +54,7 @@ let UH = 0.08;
 const RE = 5000, CS = 0.17;
 const css = (v: string, def: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || def;
 
-const cfg = { tam: 'liviano', paredes: 'exactas' as 'exactas' | 'escalera', angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, colorLineas: 'velocidad' as 'velocidad' | 'uno',
+const cfg = { tam: 'liviano', paredes: 'exactas' as Paredes3DModo, angulo: 0, color: 'velocidad' as 'velocidad' | 'cp', zRel: 0.5, yRel: 0.5, lineas: true, colorLineas: 'velocidad' as 'velocidad' | 'uno',
   /** etapa 3: líneas o tubos, partículas, de dónde salen (rastrillo), escala de la velocidad y modo maqueta */
   estiloLineas: 'lineas' as 'lineas' | 'tubos', particulas: false, rastrillo: 'grilla' as 'grilla' | 'vertical' | 'horizontal', rastPos: 0.5, rastAlto: 0.6, rastN: 14,
   escalaVel: 'fija' as 'fija' | 'auto', maqueta: false,
@@ -120,7 +123,8 @@ const tamActual = () => (cfg.motor === 'procesador' ? TAM_CPU : TAM[cfg.tam]);
 
 function nivelesProyecto() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
-  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(contornoAlViento(p, x.i).v, 12) }));
+  // continua: la carpintería del tramo sigue de este piso al de arriba (no es «por losa», con escalón en cada piso)
+  return p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB).map(x => ({ cota: x.n.cota - zPB, silueta: puntosSilueta(contornoAlViento(p, x.i).v, 12), continua: tramoEn(p, x.n.cota)?.modo !== 'losa' }));
 }
 
 /** lo que necesita la dinámica: frecuencias, viento de 5 y 10 años, masas, fuerzas del CIRSOC y la rigidez de cada nivel */
@@ -174,11 +178,12 @@ function armarCorrida(geo: Geometria3D, uIn: Float32Array): Corrida {
 function opcionesGeo() {
   const T = tamActual(), niveles = nivelesProyecto();
   const banda = cfg.banda ? bandaElegida() : null;
-  if (!banda) return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: vecinos3d(), ...(cfg.ajustado ? { altoRel: 1.25 } : {}) };
+  const alturaExacta = cfg.paredes === 'exactas';
+  if (!banda) return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: T.nx, ny: T.ny, nz: T.nz, contexto: vecinos3d(), alturaExacta, ...(cfg.ajustado ? { altoRel: 1.25 } : {}) };
   // la grilla de la banda: las mismas celdas que la de la torre entera, repartidas en la franja (B y L de una geometría chica)
   const g0 = geometria3D({ niveles, dir: estado.dir, angulo: cfg.angulo, nx: 64, ny: 64, nz: 8, banda });
   const G = grillaBanda(T.nx * T.ny * T.nz, g0.B, g0.L, banda.z1 - banda.z0);
-  return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: G.nx, ny: G.ny, nz: G.nz, contexto: [], banda };
+  return { niveles, dir: estado.dir, angulo: cfg.angulo, nx: G.nx, ny: G.ny, nz: G.nz, contexto: [], banda, alturaExacta };
 }
 /** la altura de la torre sobre PB, el alto de un piso tipo y la banda elegida (m sobre PB) */
 function bandaElegida(): { z0: number; z1: number } {
@@ -202,7 +207,7 @@ async function iniciar() {
   corrida = c;
   try {
     const anchoC = geo.B * geo.escala;
-    const exactas = cfg.paredes === 'exactas';
+    const exactas = cfg.paredes !== 'escalera';
     const o = { nx: T.nx, ny: T.ny, nz: T.nz, nu: (UH * anchoC) / RE, cs: CS, uIn, solido: geo.solido, paredes: exactas ? geo.paredes : undefined, colision: exactas ? 'trt' as const : 'bgk' as const };
     const gpu = cfg.motor === 'procesador' ? (await import('../viento/lbm3dCpu')).crearLbm3dCpu(o) : await (await import('../viento/lbm3dGpu')).crearLbm3dGpu(o);
     if (corrida !== c) { gpu.destruir(); return; }
@@ -300,7 +305,7 @@ function armarVista(cont: HTMLElement) {
   // la torre: con paredes exactas, su contorno real piso por piso (la superficie, coloreada con el Cp de la celda de
   // cara más cercana); en escalera, una cara por celda de cara, como la ve la simulación
   const pos: number[] = [], trozos: { desde: number; n: number; caras: number[] }[] = [];
-  if (cfg.paredes === 'exactas' && g.tramos.length) {
+  if (cfg.paredes !== 'escalera' && g.tramos.length) {
     const m = mallaTorre(g, c.caras);
     for (let k = 0; k < m.pos.length; k += 3) { const q = aMundo(g, m.pos[k], m.pos[k + 1], m.pos[k + 2]); pos.push(q.x, q.y, q.z); }
     trozos.push(...m.trozos);
@@ -1037,7 +1042,7 @@ function seccionTomas(): HTMLElement {
         h('h4', {}, 'Simulación (si cambia, la simulación vuelve a arrancar)'),
         h('div', { class: 'grilla2' },
           fSel('Definición de la geometría (grilla)', si, 'tam', gr.some(([k]) => k === si.tam) ? gr : [...gr, [si.tam, si.tam]]),
-          fSel('Paredes', si, 'paredes', [['exactas', 'exactas: la planta real (fina)'], ['escalera', 'en escalera (gruesa)']]),
+          fSel('Paredes', si, 'paredes', [['exactas', 'exactas en planta y en altura'], ['planta', 'exactas solo en planta (un escalón por piso)'], ['escalera', 'en escalera (gruesa)']]),
           fSel('Giro del viento', si, 'angulo', ['-45', '-30', '-15', '0', '15', '30', '45'].map(a => [a, a === '0' ? '0°' : `${a}°`]), true),
           fChk('Túnel lento (más estable)', si, 'lento'), fChk('Dominio ajustado (1,25 H)', si, 'ajustado'), fChk('Banda de pisos', si, 'banda')),
         ...(si.banda ? [h('div', { class: 'grilla2' }, fNum('Banda: cota del medio (m; vacío = 2/3 H)', si, 'bandaCota', 0, 2000, 0.5), fNum('Banda: pisos', si, 'bandaPisos', 1, 8, 1))] : []),
@@ -1219,7 +1224,7 @@ export function centroTunel3d(c: H, _tam: Tam) {
   if (cr.guardada && cr.campo) { cr.ultimasLineas = 0; actualizarCampo(); }
   if (!cr.corriendo && cr.sinMirar > 30) { cr.sinMirar = 0; cr.corriendo = true; requestAnimationFrame(ciclo); }
   const g = cr.geo;
-  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}${g.banda ? `Banda de pisos de ${fmt(g.banda.z0, 1)} a ${fmt(g.banda.z1, 1)} m sobre PB (${g.nz} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda), sin suelo, con planos deslizantes arriba y abajo · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, parejo, con la velocidad de esa altura` : `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion})`} · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas: el aire choca con la planta real de cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
+  c.append(h('p', { class: 'nota' }, `${cfg.motor === 'procesador' ? 'Simulado con el procesador (sin placa de video), grilla gruesa. ' : ''}${g.vecinos.length ? `Con ${g.vecinos.length} edificios vecinos (en gris: el Cp y las caras son solo de la torre; túnel lento). ` : ''}${g.banda ? `Banda de pisos de ${fmt(g.banda.z0, 1)} a ${fmt(g.banda.z1, 1)} m sobre PB (${g.nz} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda), sin suelo, con planos deslizantes arriba y abajo · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, parejo, con la velocidad de esa altura` : `Torre de ${fmt(g.H, 1)} m (${g.hC} celdas de alto, ${fmt(1 / g.escala, 2)} m por celda) · viento ${estado.dir}${cfg.angulo ? ` girado ${cfg.angulo}°` : ''} entrando por la izquierda, con el perfil del CIRSOC 102-25 (exposición ${datos102De(estado.proyecto).exposicion})`} · ancho ${fmt(g.B, 1)} m, largo ${fmt(g.L, 1)} m · paredes ${cfg.paredes === 'exactas' ? `exactas en planta y en altura: el aire choca con la planta real y, donde la fachada sigue de un piso al otro, con la piel inclinada o curva entre pisos (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : cfg.paredes === 'planta' ? `exactas solo en planta: la planta real de cada piso, con un escalón en cada piso (${g.paredes.celdas.length} celdas de pared con su corte exacto)` : 'en escalera: la pared es el borde de las celdas'}. Caras: Cp promediado en el tiempo, azul la que empuja (comprime) y rojo la que succiona (tracciona). ${cfg.vereda ? (cfg.lawson ? 'Vereda: confort del peatón a 1,5 m, de verde claro (A, para sentarse) a marrón (E, incómodo); los porcentajes, en el panel.' : 'Vereda: velocidad a 1,5 m relativa al campo abierto (blanco quieto, verde igual, ámbar más viento).') : cfg.color === 'cp' ? 'Cortes: Cp instantáneo.' : `Cortes: velocidad con ${textoEspectro()} (60 % más rápido que el viento que llega a esa altura, o más). Las velocidades se leen con ${textoReferencia(zRef3d())}.`} Girá con el mouse.`));
   dibujar();
 }
 
@@ -1260,7 +1265,7 @@ export function panelTunel3d(c: H) {
     sel('Velocidad del túnel', [['normal', 'normal (0,08 de la red)'], ['lento', 'lenta (0,05: más estable, tarda más)']], cfg.lento ? 'lento' : 'normal', x => { cfg.lento = x === 'lento'; }, true),
     sel('Motor', [['placa', soporteGpu === null ? 'placa de video (no hay WebGPU)' : 'placa de video (WebGPU)'], ['procesador', 'procesador (sin placa, más lento)']], cfg.motor, x => { cfg.motor = x as 'placa' | 'procesador'; }, true),
     cfg.motor === 'procesador' ? h('label', { class: 'campo' }, h('span', {}, 'Grilla'), h('span', { class: 'nota chica' }, TAM_CPU.texto)) : sel('Grilla', Object.entries(TAM).map(([k, v]) => [k, v.texto] as [string, string]), cfg.tam, x => { cfg.tam = x; }, true),
-    sel('Paredes', [['exactas', 'exactas: la planta real de cada piso (rebote interpolado + TRT)'], ['escalera', 'en escalera (como antes, para comparar)']], cfg.paredes, x => { cfg.paredes = x as 'exactas' | 'escalera'; }, true),
+    sel('Paredes', [['exactas', 'exactas en planta y en altura: la piel sigue la fachada entre pisos'], ['planta', 'exactas solo en planta: un escalón por piso (para comparar)'], ['escalera', 'en escalera: el borde de las celdas (para comparar)']], cfg.paredes, x => { cfg.paredes = x as Paredes3DModo; }, true),
     sel('Giro del viento', [...new Set(['-45', '-30', '-15', '0', '15', '30', '45', String(cfg.angulo)])].map(a => [a, a === '0' ? `0° (viento ${estado.dir})` : `${a}°`] as [string, string]), String(cfg.angulo), x => { cfg.angulo = +x; }, true),
     sel('Color de los cortes', [['velocidad', 'velocidad'], ['cp', 'presión (Cp)']], cfg.color, x => { cfg.color = x; }),
     rango('Altura del corte horizontal', cfg.zRel, x => { cfg.zRel = x; }),

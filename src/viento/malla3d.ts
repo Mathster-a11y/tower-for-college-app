@@ -46,9 +46,39 @@ export function mallaTorre(g: Geometria3D, caras: CeldaCara[]): MallaTorre {
     [a, b, c, a, c, d].forEach(v => pos.push(v[0], v[1], v[2]));
     trozos.push({ desde, n: 6, caras: cs });
   };
+  /** tapa horizontal (azotea, retiro o voladizo), coloreada arriba con el Cp de las celdas de cubierta encima */
+  const tapa = (pol: P[], z: number, arriba: boolean) => {
+    const tri = triangular(pol), desde = pos.length / 3, deCubierta: number[] = [];
+    if (arriba) { const zt = Math.floor(z) + 1; caras.forEach((f, j) => { if (f.nz === 1 && Math.abs(f.z - zt) <= 1 && dentro(pol, f.x + 0.5, f.y + 0.5)) deCubierta.push(j); }); }
+    tri.forEach(([i, j, l]) => (arriba ? [pol[i], pol[j], pol[l]] : [pol[i], pol[l], pol[j]]).forEach(q => pos.push(q.x, q.y, z)));
+    trozos.push({ desde, n: 3 * tri.length, caras: deCubierta });
+  };
   g.tramos.forEach((t, k) => {
-    const pol = antihorario(t.pol), z0 = t.h0 * g.escala, z1 = t.h1 * g.escala;
+    const z0 = t.h0 * g.escala, z1 = t.h1 * g.escala;
     const filas = Math.max(1, Math.ceil(z1 - z0));
+    const antes = k > 0 ? g.tramos[k - 1] : null, ultimo = k === g.tramos.length - 1;
+    if (t.polArriba) {
+      // piel interpolada (paredes exactas en altura): de pol en h0 a polArriba en h1, punto a punto, en filas de una celda
+      const a = t.pol, b = t.polArriba, n = a.length;
+      const en = (i: number, u: number) => [a[i].x + (b[i].x - a[i].x) * u, a[i].y + (b[i].y - a[i].y) * u];
+      const sentido = area(a) >= 0 ? 1 : -1;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        for (let f = 0; f < filas; f++) {
+          const ua = f / filas, ub = (f + 1) / filas, za = z0 + (z1 - z0) * ua, zb = z0 + (z1 - z0) * ub;
+          const pa0 = en(i, ua), pb0 = en(j, ua), pa1 = en(i, ub), pb1 = en(j, ub);
+          const mx = (pb0[0] + pb1[0] - pa0[0] - pa1[0]) / 2, my = (pb0[1] + pb1[1] - pa0[1] - pa1[1]) / 2, L = Math.hypot(mx, my) || 1;
+          const nxo = (sentido * my) / L, nyo = (-sentido * mx) / L;
+          quad([pa0[0], pa0[1], za], [pb0[0], pb0[1], za], [pb1[0], pb1[1], zb], [pa1[0], pa1[1], zb],
+            caraLateral((pa0[0] + pb1[0]) / 2, (pa0[1] + pb1[1]) / 2, (za + zb) / 2, nxo, nyo));
+        }
+      }
+      // la piel sigue en el tramo de arriba (con la misma planta): tapa solo arriba de todo; abajo, si el de abajo era un prisma
+      if (ultimo) tapa(antihorario(b), z1, true);
+      if (k > 0 && !antes?.polArriba) tapa(antihorario(a), z0, false);
+      return;
+    }
+    const pol = antihorario(t.pol);
     // fachadas: cada lado partido en pedazos de una celda, y en filas de una celda de alto
     for (let i = 0; i < pol.length; i++) {
       const a = pol[i], b = pol[(i + 1) % pol.length], lx = b.x - a.x, ly = b.y - a.y, L = Math.hypot(lx, ly);
@@ -60,18 +90,10 @@ export function mallaTorre(g: Geometria3D, caras: CeldaCara[]): MallaTorre {
         quad([pa[0], pa[1], za], [pb[0], pb[1], za], [pb[0], pb[1], zb], [pa[0], pa[1], zb], caraLateral((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (za + zb) / 2, nxo, nyo));
       }
     }
-    // tapa de arriba (la azotea o el retiro): el Cp promedio de las celdas de cubierta que están encima de la planta
-    const zt = Math.floor(z1) + 1, deCubierta: number[] = [];
-    caras.forEach((f, j) => { if (f.nz === 1 && Math.abs(f.z - zt) <= 1 && dentro(pol, f.x + 0.5, f.y + 0.5)) deCubierta.push(j); });
-    const tri = triangular(pol), desde = pos.length / 3;
-    tri.forEach(([i, j, l]) => [pol[i], pol[j], pol[l]].forEach(q => pos.push(q.x, q.y, z1)));
-    trozos.push({ desde, n: 3 * tri.length, caras: deCubierta });
-    // tapa de abajo (se ve si el piso vuela sobre el de abajo); el suelo no
-    if (k > 0) {
-      const d2 = pos.length / 3;
-      tri.forEach(([i, j, l]) => [pol[i], pol[l], pol[j]].forEach(q => pos.push(q.x, q.y, z0)));
-      trozos.push({ desde: d2, n: 3 * tri.length, caras: [] });
-    }
+    // tapa de arriba (la azotea o el retiro); la de abajo, si el piso vuela sobre el de abajo (no si abajo hay una piel
+    // que termina en esta misma planta); el suelo no
+    tapa(pol, z1, true);
+    if (k > 0 && !antes?.polArriba) tapa(pol, z0, false);
   });
   return { pos: Float32Array.from(pos), trozos };
 }

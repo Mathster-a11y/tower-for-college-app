@@ -9,7 +9,7 @@ import type { NombreCamara, Recorrido } from './tunel3dVista';
 
 export interface SimToma {
   /** grilla: la definición de la geometría (las de TAM; 'procesador' si el motor es el procesador) */
-  tam: string; paredes: 'exactas' | 'escalera'; angulo: number; lento: boolean; ajustado: boolean;
+  tam: string; paredes: 'exactas' | 'planta' | 'escalera'; angulo: number; lento: boolean; ajustado: boolean;
   banda: boolean; bandaCota: number; bandaPisos: number;
 }
 export interface VistaToma {
@@ -60,6 +60,7 @@ export const PLANTILLAS: [string, () => Toma][] = [
   ['Presión en el corte (Cp)', () => base('Presión en el corte (Cp)', { color: 'cp', flechas: 'no', lineas: 'no' }, { camara: 'arriba' })],
   ['Espectro arcoíris', () => base('Velocidad en arcoíris', { espectro: 'arcoiris', lineas: 'lineas', flechas: 'fijas' })],
   ['Geometría gruesa (en escalera)', () => ({ ...base('Geometría en escalera (gruesa)', { lineas: 'lineas', flechas: 'fijas' }), sim: { ...SIM_BASE, paredes: 'escalera' } })],
+  ['Un escalón por piso (para comparar con la piel)', () => ({ ...base('Paredes exactas solo en planta: un escalón por piso', { lineas: 'lineas', flechas: 'fijas' }), sim: { ...SIM_BASE, paredes: 'planta' } })],
   ['Vereda y confort (Lawson)', () => base('Vereda: confort del peatón', { vereda: true, lawson: true, lineas: 'no', flechas: 'fijas' }, { camara: 'arriba' })],
   ['Vuelo del peatón a la vista de arriba', () => base('Vuelo', { lineas: 'tubos', flechas: 'no', horizontal: true }, { recorrido: 'vuelo', segundos: 15 })],
 ];
@@ -90,7 +91,7 @@ export function describirToma(t: Toma, nombresTam: Record<string, string>): stri
   if (v.vereda) que.push(v.lawson ? 'vereda con el confort de Lawson' : 'vereda');
   if (v.maqueta) que.push('modo maqueta'); else if (!v.torreCp) que.push('torre sin colores');
   return [
-    `Simulación: ${s.banda ? `banda de ${s.bandaPisos} pisos` : 'torre entera'}, grilla ${nombresTam[s.tam] ?? s.tam}, paredes ${s.paredes === 'exactas' ? 'exactas (la planta real)' : 'en escalera (geometría gruesa)'}${s.angulo ? `, viento girado ${s.angulo}°` : ''}${s.ajustado && !s.banda ? ', dominio ajustado' : ''}${s.lento ? ', túnel lento' : ''}.`,
+    `Simulación: ${s.banda ? `banda de ${s.bandaPisos} pisos` : 'torre entera'}, grilla ${nombresTam[s.tam] ?? s.tam}, paredes ${s.paredes === 'exactas' ? 'exactas en planta y en altura' : s.paredes === 'planta' ? 'exactas solo en planta' : 'en escalera (geometría gruesa)'}${s.angulo ? `, viento girado ${s.angulo}°` : ''}${s.ajustado && !s.banda ? ', dominio ajustado' : ''}${s.lento ? ', túnel lento' : ''}.`,
     `Se ve: ${que.join(', ') || 'solo la torre'}. Colores de la velocidad: ${v.espectro === 'arcoiris' ? 'arcoíris (el rojo es aire rápido, no tracción)' : 'térmico'}, escala ${v.escalaVel === 'fija' ? 'fija' : 'automática'}.`,
     `Cámara: ${t.camara === 'guardada' ? 'la guardada' : t.camara === 'detalle' ? 'zoom a la esquina' : t.camara}${t.acercar !== 1 ? ` (×${t.acercar})` : ''}, ${t.recorrido === 'quieta' ? 'quieta' : t.recorrido === 'orbita' ? 'una vuelta alrededor' : 'vuelo del peatón a arriba'}, ${t.segundos} s. Llaves ${t.llaves === 'costado' ? 'en una franja al costado' : t.llaves === 'encima' ? 'en una esquina' : 'sin llaves'}.`,
   ];

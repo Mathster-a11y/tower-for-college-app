@@ -277,12 +277,13 @@ export function ejemploGherkin(): Proyecto {
     return v;
   };
   const niveles: Nivel[] = [];
-  // cada nivel: la losa con el diámetro de su cota y la carpintería (el vidrio que ve el viento) con el del medio del
-  // tramo que cubre, hasta el nivel de arriba
+  // cada nivel: la losa y la carpintería (el vidrio que ve el viento) con el diámetro de su cota; la piel va de un piso
+  // al de arriba sin escalones (la capa «Fachada» del 3D y el túnel con paredes exactas en altura). El ancho para el
+  // cálculo (B y L) es el del medio del tramo que cubre, hasta el nivel de arriba
   const nivel = (nombre: string, z: number, zArriba: number, losa: number | null, contorno?: Nivel['silueta']): Nivel => {
     const dv = D((z + zArriba) / 2);
     // la cúpula no tiene losas: su «losa» es un punto (0,3 m) para que no se dibuje
-    return { nombre, cota: r2(z), B: lado(dv), L: lado(dv), silueta: contorno ?? circulo(losa ?? 0.3), carpinteria: circulo(dv) };
+    return { nombre, cota: r2(z), B: lado(dv), L: lado(dv), silueta: contorno ?? circulo(losa ?? 0.3), carpinteria: circulo(D(z)) };
   };
   // la cúpula (de 166 a 179,77 m): solo cerramiento de vidrio, sin estructura ni losas (lleva la lente de 2,4 m)
   const cupula = [hLente, 176.5, 172.5, 169];
