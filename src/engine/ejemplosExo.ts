@@ -233,31 +233,40 @@ export function ejemploShanghai(): Proyecto {
 
 /**
  * 30 St Mary Axe, «the Gherkin» (Londres, 2004, Foster + Partners; estructura Arup). Diagrid de perfil variable: la planta
- * es circular y su diámetro crece desde la base hasta el piso 17 y después se angosta hasta la cúpula.
- *  - 179,8 m a la cima de la cúpula y 167,1 m al último piso ocupado; 40 pisos de oficinas de 4,15 m (Archinomy).
- *  - Diámetro de 49 m en la base, 56,15 m en el piso 17 (el mayor) y 26,5 m en el último piso (Archinomy).
- *  - Diagrid de tubos de acero en «A» de dos pisos de alto, con anillos horizontales en los nudos cada dos pisos; los
- *    tubos van de 508 mm × 40 mm (PB a piso 2) a 273 mm × 12,5 mm (pisos 36 a 38) (Archinomy, Arup).
- *  - El núcleo central es de acero y lleva solo carga vertical: el viento lo toma entero el diagrid (Arup; Archinomy).
- *  - 8358 t de acero según el modelo de Arup, 29 % en el diagrid (Archinomy); Arup: unas 10 000 t, 2500 t del diagrid.
- *  - Losas compuestas de 160 mm sobre vigas radiales cada 10° (New Steel Construction).
+ * es circular y su diámetro crece desde la base hasta el piso 17 y después se angosta hasta la cúpula. Fuentes y supuestos
+ * en exo.notas (las fuentes técnicas: Arup, New Steel Construction, Archinomy, Harvard Design Magazine, CTBUH).
  */
 export function ejemploGherkin(): Proyecto {
-  const nPisos = 40, dz = 4.15, hTop = 167.1;
+  const dz = 4.15, hTop = 167.1, hLente = 179.8;
   const zMax = 16 * dz;                                         // el piso 17 (el más ancho): 16 entrepisos sobre PB
   // diámetro en altura: parábolas con tangente horizontal en el piso 17 (la forma entre los tres datos es supuesta)
   const D = (z: number) => (z <= zMax ? 56.15 - (56.15 - 49) * (1 - z / zMax) ** 2 : 56.15 - (56.15 - 26.5) * ((z - zMax) / (hTop - zMax)) ** 2);
+  // la cúpula de vidrio y acero: de 26,5 m en el piso 40 a la lente de 2,4 m en la cima (casquete, supuesto)
+  const Dcupula = (z: number) => Math.max(2.4, 26.5 * Math.sqrt(Math.max(0, 1 - ((z - hTop) / (hLente - hTop)) ** 2)));
   // planta circular: el cálculo lee un cuadrado de la misma área (lado 0,886 D); la silueta del dibujo es el círculo
-  const lado = (z: number) => r2(Math.sqrt(Math.PI / 4) * D(z));
-  const circulo = (z: number) => { const r = r2(D(z) / 2), b = Math.tan(Math.PI / 8); return [{ x: r, y: 0, b }, { x: 0, y: r, b }, { x: -r, y: 0, b }, { x: 0, y: -r, b }]; };
+  const lado = (d: number) => r2(Math.sqrt(Math.PI / 4) * d);
+  const circulo = (d: number) => { const r = r2(d / 2), b = Math.tan(Math.PI / 8); return [{ x: r, y: 0, b }, { x: 0, y: r, b }, { x: -r, y: 0, b }, { x: 0, y: -r, b }]; };
+  const uso = (k: number) => (k === 40 ? 'bar bajo la cúpula' : k === 39 ? 'restaurante' : k === 38 ? 'comedores privados' : k >= 3 && k <= 34 ? 'oficinas' : '');
   const niveles: Nivel[] = [];
-  for (let k = nPisos; k >= 1; k--) {
-    const z = k === nPisos ? hTop : r2(k * dz);
-    niveles.push({ nombre: k === nPisos ? 'Último piso (40º, bajo la cúpula)' : `${k + 1}º`, cota: z, B: lado(z), L: lado(z), silueta: circulo(z) });
+  const nivel = (nombre: string, z: number, d: number): Nivel => ({ nombre, cota: r2(z), B: lado(d), L: lado(d), silueta: circulo(d) });
+  niveles.push(nivel('Lente de la cúpula (179,8 m)', hLente, 2.4), nivel('Cúpula', (hTop + hLente) / 2 + 2, Dcupula((hTop + hLente) / 2 + 2)));
+  // pisos 3 a 40 (el piso 2 es el entrepiso del hall de doble altura); un nivel de la app por piso real
+  for (let k = 40; k >= 3; k--) { const z = k === 40 ? hTop : (k - 1) * dz; niveles.push(nivel(`${k}º${uso(k) ? ` (${uso(k)})` : ''}`, z, D(z))); }
+  niveles.push(nivel('PB (hall de doble altura)', 0, D(0)), { nombre: 'Subsuelo', cota: -7 });
+  // pozos de luz: seis cuñas por piso, de 20° (dos vanos de 10°) junto a la fachada, que giran 5° por piso (espiral)
+  const huecosLosa: import('./modelo').HuecoLosa[] = [];
+  for (let k = 3; k <= 40; k++) {
+    const z = k === 40 ? hTop : (k - 1) * dz, R = D(z) / 2 - 0.3, rIn = 13.5, gir = ((k - 3) * 5 * Math.PI) / 180;
+    if (R - rIn < 3) continue;
+    for (let j = 0; j < 6; j++) {
+      const a0 = gir + (j * Math.PI) / 3, a1 = a0 + Math.PI / 9, am = (a0 + a1) / 2;
+      huecosLosa.push({ id: `P${k}-${j + 1}`, nombre: `Pozo de luz ${j + 1}, piso ${k}`, zDesde: r2(z), zHasta: r2(z),
+        v: [{ x: r2(rIn * Math.cos(am)), y: r2(rIn * Math.sin(am)) }, { x: r2(R * Math.cos(a0)), y: r2(R * Math.sin(a0)) }, { x: r2(R * Math.cos(a1)), y: r2(R * Math.sin(a1)) }] });
+    }
   }
-  niveles.push({ nombre: 'PB', cota: 0, B: lado(0), L: lado(0), silueta: circulo(0) }, { nombre: 'Subsuelo', cota: -8 });
-  // un rombo cada 4 pisos (dos «A» de dos pisos): nudos en PB y cada 8,3 m; el último módulo llega al último piso
-  const cortes = [0, ...Array.from({ length: 9 }, (_, j) => r2((j + 1) * 4 * dz)), hTop];
+  // un rombo cada 4 pisos (dos «A» de dos pisos), con nudos en los pisos impares; el último módulo cierra la cúpula
+  const zPiso = (k: number) => r2((k - 1) * dz);
+  const cortes = [0, zPiso(5), zPiso(9), zPiso(13), zPiso(17), zPiso(21), zPiso(25), zPiso(29), zPiso(33), zPiso(37), hTop, hLente];
   return {
     version: 1,
     nombre: '30 St Mary Axe, «the Gherkin» (Londres, 2004) · modelo aproximado',
@@ -266,28 +275,34 @@ export function ejemploGherkin(): Proyecto {
     calculo: { metodo: 'cirsoc' },
     sitio: { V: 40, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles,
-    fundacion: { b1: 58, a1: 58 },
+    huecosLosa,
+    // 333 pilotes de 750 mm y unos 27 m, con 117 000 t de capacidad: en la app, una platea con la tensión equivalente
+    fundacion: { b1: 52, a1: 52, sigmaAdm: 4.3 },
     hormigon: 'H40',
-    // núcleo de acero (solo gravedad): se modela como un tubo que no entra en ninguna pieza (no toma viento)
-    muros: [tubo('N1', 0, 0, 22, 22, 0.25, 900)],
+    // núcleo circular de 24 m, de columnas de acero, solo de gravedad: un tubo que no entra en ninguna pieza (no toma viento),
+    // con la pared de hormigón que pesa lo mismo que el 24 % del acero (unas 2000 t)
+    muros: [{ id: 'N1', dir: 'Y', x: 0, y: 0, largo: 24, espesor: 0.07, tipo: 'tubo-circ', llega: true, areaInf: 450, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' }],
     exo: {
-      tipo: 'A', separacion: 0, modulo: 4, cortes, anchoVariable: true, pasoH: 6,
-      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.45, e: 0.05 }, viga: { b: 0.3, e: 0.016 },
-      tramos: [{ clase: 'diagonal', desde: r2(12 * dz), sec: { b: 0.4, e: 0.03 } }, { clase: 'diagonal', desde: r2(24 * dz), sec: { b: 0.35, e: 0.025 } }, { clase: 'diagonal', desde: r2(32 * dz), sec: { b: 0.25, e: 0.016 } }],
-      losas: { franja: 6.5, qD: 0.4, qL: 0.25 }, arriostradas: true,
+      tipo: 'A', separacion: 0, modulo: 4, cortes, anchoVariable: true, pasoH: 9.65,
+      columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.5, e: 0.06 }, viga: { b: 0.3, e: 0.016 },
+      tramos: [{ clase: 'diagonal', desde: zPiso(13), sec: { b: 0.45, e: 0.05 } }, { clase: 'diagonal', desde: zPiso(25), sec: { b: 0.4, e: 0.03 } }, { clase: 'diagonal', desde: zPiso(33), sec: { b: 0.3, e: 0.02 } }, { clase: 'diagonal', desde: hTop, sec: { b: 0.25, e: 0.016 } }],
+      losas: { franja: 7, qD: 0.4, qL: 0.25 }, arriostradas: true,
       E: 2.1e7, sigmaAdm: 14000, uniones: { columna: 'rigida', diagonal: 'rigida', viga: 'rigida', base: 'empotrada' },
       notas: [
-        '179,8 m a la cima de la cúpula y 167,1 m al último piso ocupado; 40 pisos de oficinas de 4,15 m: Archinomy (caso de estudio). Wikipedia: unos 180 m y 41 pisos. La cúpula de vidrio (de 167 a 180 m) no se modela.',
-        'Planta circular: 49 m de diámetro en la base, 56,15 m en el piso 17 (el mayor) y 26,5 m en el último piso: Archinomy. Entre esos tres datos, dos parábolas con la tangente horizontal en el piso 17 (supuesto).',
-        'La planilla y el exo leen caras planas: la planta circular se lleva a un cuadrado de la misma área (lado = 0,886 D), que da el mismo peso de losas. El viento sobre ese cuadrado (Cp 0,8 + 0,5) es mayor que el de un cilindro (del lado seguro). La silueta del dibujo y del 3D es el círculo.',
-        'Diagrid de tubos de acero en «A» de dos pisos de alto, con anillos horizontales en los nudos cada dos pisos: Arup y Archinomy. Acá un rombo (dos «A») cada 4 pisos, 8,3 m; nudos cada 6 m en horizontal (supuesto: diagonales a unos 70°). Las losas arriostran las diagonales en el piso intermedio de cada «A».',
-        'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38: Archinomy. La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,45 m × 50 mm hasta el piso 13, 0,40 × 30 mm hasta el 25, 0,35 × 25 mm hasta el 33 y 0,25 × 16 mm arriba (el de arriba tiene el área del tubo real; los de abajo son más grandes porque el viento del modelo, sobre caras planas, es mayor). Anillos: cajón de 0,30 m × 16 mm (supuesto).',
-        'El diagrid de la app pesa unas 4200 t, 1,7 veces las 2420 t del real: el viento sobre un cuadrado (en lugar de un cilindro), el del 102-25 y los cajones del lado seguro. Deriva de servicio de la azotea unos 91 mm (h/1830).',
-        'Frecuencia: el CIRSOC no tiene una fórmula para un diagrid; la de tabiques (1.9-5) da 0,07 Hz y un Gf de 1,36, del lado seguro (el control queda en «atención»).',
-        'El núcleo central es de acero y lleva solo carga vertical; el viento lo toma entero el diagrid (Arup; Archinomy). Acá es un tubo de 22 × 22 m que no entra en ninguna pieza (medidas supuestas).',
-        'Acero: 8358 t según el modelo de Arup, 29 % (unas 2420 t) en el diagrid (Archinomy); Arup da unas 10 000 t en total y 2500 t de diagrid.',
-        'Losas compuestas de 160 mm sobre vigas radiales cada 10° (New Steel Construction): el diagrid lleva una franja de 6,5 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga de oficinas (supuestos).',
-        'Viento: Londres no está en el CIRSOC; V = 40 m/s y exposición de centro de ciudad (supuesto, del lado seguro). Platea de 58 × 58 m (supuesto: la obra va sobre pilotes).',
+        'Altura: 179,8 m a la lente de la cúpula y 167,1 m al último piso ocupado (CTBUH, Archinomy). 40 pisos sobre la calle con entrepisos de 4,15 m (Archinomy); el hall de PB es de doble altura (Harvard Design Magazine), por eso no hay nivel en el piso 2.',
+        'Usos: 32 pisos de oficinas arriba del hall (3º a 34º); comedores privados en el 38º, restaurante en el 39º y bar en el 40º, bajo la cúpula (Harvard Design Magazine; Designing Buildings).',
+        'Planta circular: 49 m de diámetro en la base (otra fuente: 50 m en el primer piso), 56,15 m en el piso 17 (el mayor; otra fuente: 57 m) y 26,5 m en el último piso (Archinomy; Wikipedia). Entre esos datos, dos parábolas con la tangente horizontal en el piso 17 (supuesto).',
+        'Cúpula «Lens» de acero y vidrio desde el piso 38; en la cima, una lente de vidrio de 2,4 m y 250 kg, la única pieza de vidrio curvo del edificio (Archinomy; Designing Buildings). Acá el último módulo del diagrid cierra la cúpula (de 26,5 m en el piso 40 a 2,4 m en la cima; la forma del casquete es supuesta).',
+        'La app calcula con caras planas: la planta circular se lleva a un cuadrado de la misma área (lado 0,886 D), que da el mismo peso de losas. El viento sobre ese cuadrado (Cp 0,8 + 0,5) es mayor que sobre un cilindro: del lado seguro. La silueta del dibujo y del 3D es el círculo.',
+        'Diagrid: 36 elementos de acero en espiral (Arquitectura Viva), «A» prefabricadas de dos pisos (Harvard Design Magazine) y un rombo cada cuatro pisos; unos 360 nudos de hasta 2 m de alto, de tres chapas soldadas y abulonados en obra (Engineering Timelines; Arup), es decir 18 nudos por anillo en 20 anillos. Los anillos horizontales («hoops») van en los pisos de los nudos y trabajan a tracción: 7116 kN de diseño en el piso 2 (Archinomy).',
+        'En la app: nudos cada 9,65 m en la cara del cuadrado de la base (20 por anillo en lugar de 18: la app pone rombos enteros en cada cara) que se angostan con el perfil, como en el edificio. Las losas arriostran las diagonales en el piso intermedio de cada «A».',
+        'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38 (Archinomy). La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,50 m × 60 mm hasta el piso 13, 0,45 × 50 mm hasta el 25, 0,40 × 30 mm hasta el 33, 0,30 × 20 mm hasta el 40 y 0,25 × 16 mm en la cúpula (el de arriba tiene el área del tubo real; los de abajo son más grandes porque el viento del modelo es mayor y hay menos nudos). Anillos: cajón de 0,30 m × 16 mm (supuesto).',
+        'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. Los dos últimos pisos los forma la estructura del núcleo, de 24 m de diámetro (New Steel Construction). Acá es un tubo circular de 24 m que no entra en ninguna pieza; su pared de 7 cm de hormigón pesa como las columnas de acero del núcleo (24 % de 8358 t, unas 2000 t).',
+        'Losas: compuestas de 160 mm sobre chapa Ribdeck 80, con vigas radiales cada 10° del núcleo a la fachada (36 por piso) y una viga radial que ata cada nudo al núcleo; sin columnas interiores (New Steel Construction). El diagrid lleva una franja de 7 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga de oficinas (supuestos).',
+        'Cada piso gira 5° respecto del de abajo y deja seis pozos de luz triangulares que suben en espiral (Harvard Design Magazine; Designing Buildings). Acá: seis cuñas de 20° (dos vanos de 10°) por piso, de la fachada hasta 13,5 m del centro, que giran 5° por piso; se ven en la planta y en el 3D (su tamaño es supuesto; el peso de las losas no los descuenta).',
+        'Acero: 8358 t según el modelo de Arup: 29 % en el diagrid, 24 % en las columnas del núcleo y 47 % en vigas (Archinomy). Arup da unas 10 000 t en total y 2500 t de diagrid. El diagrid de la app pesa unas 4970 t, unas 2 veces el real: el viento sobre un cuadrado (en lugar de un cilindro), el del 102-25, los cajones y los nudos en caras planas, todo del lado seguro. Deriva de servicio de la azotea: unos 60 mm (h/3000).',
+        'Fundación: 333 pilotes de 750 mm, rectos, en la arcilla de Londres, de unos 27 m, con 117 000 t de capacidad de diseño, y un subsuelo en todo el terreno (New Steel Construction). La app no calcula pilotes: es una platea de 52 × 52 m con la tensión admisible equivalente, 117 000 t / 2704 m² = 4,3 kg/cm² (supuesto).',
+        'Viento: Londres no está en el CIRSOC; V = 40 m/s y exposición de centro de ciudad (supuesto, del lado seguro). Frecuencia: el CIRSOC no tiene fórmula para un diagrid; la de tabiques (1.9-5) da un Gf de unos 1,36, del lado seguro (el control queda en «atención»).',
       ],
     },
   };
