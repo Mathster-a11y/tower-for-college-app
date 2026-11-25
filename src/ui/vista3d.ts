@@ -28,6 +28,20 @@ const css = (v: string, def: string) => getComputedStyle(document.documentElemen
 export { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 
+/** el corrimiento (dx, dy) a la altura z, lineal entre las cotas de los niveles (la piel entre dos niveles corridos) */
+function corrimientoLineal(p: { niveles: { cota: number; dx?: number | null; dy?: number | null }[] }): (z: number) => P2 {
+  const ns = [...p.niveles].sort((a, b) => a.cota - b.cota);
+  if (!ns.some(n => n.dx || n.dy)) return () => ({ x: 0, y: 0 });
+  const de = (n: typeof ns[number]) => ({ x: n.dx ?? 0, y: n.dy ?? 0 });
+  return z => {
+    if (z <= ns[0].cota) return de(ns[0]);
+    for (let k = 0; k + 1 < ns.length; k++) {
+      const a = ns[k], b = ns[k + 1];
+      if (z <= b.cota + 1e-9) { const t = b.cota > a.cota ? (z - a.cota) / (b.cota - a.cota) : 1; return { x: (a.dx ?? 0) + ((b.dx ?? 0) - (a.dx ?? 0)) * t, y: (a.dy ?? 0) + ((b.dy ?? 0) - (a.dy ?? 0)) * t }; }
+    }
+    return de(ns[ns.length - 1]);
+  };
+}
 /** el corrimiento (dx, dy) del nivel que contiene la altura z: el de cota más alta que no pasa z (0 sin perfil) */
 let corrimientoActual: (z: number) => P2 = () => ({ x: 0, y: 0 });
 function corrimientoDe(p: { niveles: { cota: number; dx?: number | null; dy?: number | null }[] }): (z: number) => P2 {
@@ -248,7 +262,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const anillos = niv.map((x, k) => {
         const c = carpinteriaDeNivel(p, x.i)?.v ?? plantaDeNivel(p, x.i).silueta;
         const z = k + 1 < niv.length ? (x.n.cota + niv[k + 1].n.cota) / 2 : x.n.cota;
-        return { z, pts: puntosSilueta(c, 16) };
+        // (torre inclinada: el contorno va corrido con su nivel)
+        const dx = x.n.dx ?? 0, dy = x.n.dy ?? 0;
+        return { z, pts: puntosSilueta(c, 16).map(q => ({ x: q.x + dx, y: q.y + dy })) };
       });
       anillos.unshift({ z: niv[0].n.cota, pts: anillos[0].pts });
       const iguales = anillos.every(a => a.pts.length === anillos[0].pts.length);
@@ -460,11 +476,14 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   function agregarFachada() {
     const p = estado.proyecto;
     const bandas = bandasFachada(p, prepararSecciones);
+    // torre inclinada (Diseño → Perfil): cada nivel se corre entero (dx, dy); entre dos niveles la piel pasa de un
+    // corrimiento al otro (los contornos están en las coordenadas de cada nivel)
+    const corr = corrimientoLineal(p);
     if (!bandas.length) return;
     const vidrio = new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--dim', '#8a949e')), transparent: true, opacity: 0.28, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
     const malla = (pos: number[], mat: THREE.Material) => { if (!pos.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); grupo.add(new THREE.Mesh(g, mat)); };
     const lineas = (lin: number[], color: string, opacidad: number) => { if (!lin.length) return; const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3)); grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: opacidad < 1, opacity: opacidad }))); };
-    const v3 = (q: { x: number; y: number; z?: number }, z = q.z ?? 0) => [q.x, z, -q.y];
+    const v3 = (q: { x: number; y: number; z?: number }, z = q.z ?? 0) => { const c = corr(z); return [q.x + c.x, z, -(q.y + c.y)]; };
     if (p.paneleria && p.paneleria.modulo > 0) {
       // panelería: vidrio, antepechos opacos (gris más oscuro: no es tracción ni compresión) y montantes y travesaños
       const r = calcularPaneleria(bandas, p.paneleria), vid: number[] = [], opa: number[] = [], lin: number[] = [];
