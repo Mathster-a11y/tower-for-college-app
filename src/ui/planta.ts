@@ -12,6 +12,7 @@ import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
 import { aplicarPerfil, nivelBase, perfilDesdeTabla, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
 import { contornoAlViento as contornoViento, medidasAlViento, type CriterioAncho } from '../engine/silueta';
+import { adivinarModelo, aplicarModelo, leerOBJ, leerSTL, normalizarModelo } from '../engine/importar3d';
 import { montarCorte } from './corteTorre';
 import { abrirDesplegado } from './desplegado';
 import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
@@ -671,6 +672,59 @@ export function montarPlanta(cont: HTMLElement) {
     const hay = p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3);
     return [l(hay ? 'carpintería: dibujada a mano, independiente de las losas' : 'sin carpintería: el viento toma el borde de la losa')];
   }
+  /**
+   * importar un 3D (STL u OBJ) y cortarlo por piso: la planta de cada nivel sale del corte del modelo a su cota. Se
+   * confirman la unidad y el eje vertical (adivinados), los niveles (los de ahora o nuevos cada tantos metros), a dónde
+   * va la forma (losa y carpintería o solo carpintería) y B y L
+   */
+  function importar3D(): HTMLElement {
+    const l = document.createElement('label'); l.className = 'boton'; l.textContent = 'Importar un 3D (STL/OBJ)…';
+    l.title = 'Un modelo 3D de la torre (Rhino, SketchUp, Revit, Blender: STL u OBJ). Se corta a la altura de cada nivel y cada corte es la planta de ese piso.';
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stl,.obj'; inp.hidden = true; l.append(inp);
+    inp.addEventListener('change', async () => {
+      const f = inp.files?.[0]; inp.value = ''; if (!f) return;
+      let tris: Float32Array;
+      try { tris = /\.obj$/i.test(f.name) ? leerOBJ(await f.text()) : leerSTL(await f.arrayBuffer()); }
+      catch (e) { await avisar('error', 'No se pudo leer el 3D', e instanceof Error ? e.message : String(e)); return; }
+      const g = adivinarModelo(tris);
+      const d = document.createElement('dialog'); d.className = 'tarjeta';
+      const ins = document.createElement('span'); ins.className = 'insignia pregunta'; ins.textContent = '?'; ins.setAttribute('aria-hidden', 'true');
+      const cuerpo = document.createElement('div'); cuerpo.className = 'tarjeta-cuerpo'; d.append(ins, cuerpo);
+      const h2t = document.createElement('h2'); h2t.textContent = 'Cortar el 3D por piso';
+      const info = document.createElement('p');
+      const sel = (rot: string, ops: [string, string][], val: string) => { const s2 = document.createElement('select'); ops.forEach(([v, t]) => s2.append(new Option(t, v, false, v === val))); const lb = document.createElement('label'); lb.className = 'campo-linea importar-3d-campo'; lb.append(`${rot} `, s2); return { lb, s2 }; };
+      const un = sel('Unidad del archivo', [['m', 'metros'], ['cm', 'centímetros'], ['mm', 'milímetros']], g.unidad);
+      const ej = sel('Eje vertical', [['z', 'z (Rhino, la mayoría de los STL)'], ['y', 'y (SketchUp, Blender, muchos OBJ)']], g.eje);
+      const nv = sel('Niveles', [['actuales', 'cortar en los niveles de ahora'], ['nuevos', 'niveles nuevos desde PB, cada…']], estado.proyecto.niveles.filter(x => x.cota > 0).length > 1 ? 'actuales' : 'nuevos');
+      const hp = document.createElement('input'); hp.type = 'text'; hp.inputMode = 'decimal'; hp.value = '3,5'; hp.style.width = '64px'; hp.setAttribute('aria-label', 'Altura de cada piso (m)');
+      const cada = document.createElement('span'); cada.append(hp, ' m'); nv.lb.append(cada);
+      const verCada = () => { cada.hidden = nv.s2.value !== 'nuevos'; };
+      nv.s2.addEventListener('change', verCada); verCada();
+      const de = sel('La forma va a', [['ambas', 'la losa y la carpintería'], ['carpinteria', 'solo la carpintería (el vidrio)']], 'ambas');
+      const bl = sel('B y L de cada nivel', [['caja', 'su caja (el ancho)'], ['area', 'igual área (plantas curvas)'], ['', 'no tocarlos']], 'caja');
+      const medir = () => { const m = normalizarModelo(tris, un.s2.value as 'm', ej.s2.value as 'z'); info.textContent = `${f.name}: ${(tris.length / 9).toLocaleString('es-AR')} triángulos · ${m.ancho.toFixed(1).replace('.', ',')} × ${m.largo.toFixed(1).replace('.', ',')} m en planta y ${m.alto.toFixed(1).replace('.', ',')} m de alto. Si las medidas no dan, cambiá la unidad o el eje.`; return m; };
+      un.s2.addEventListener('change', medir); ej.s2.addEventListener('change', medir); medir();
+      const fila = document.createElement('div'); fila.className = 'tarjeta-botones';
+      const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'primario'; ok.textContent = 'Cortar e importar';
+      const no = document.createElement('button'); no.type = 'button'; no.textContent = 'Cancelar';
+      fila.append(ok, no);
+      const nota = document.createElement('p'); nota.className = 'nota-losa'; nota.textContent = 'El modelo se centra en planta (el centro de su caja va al centro de la planta) y su base va a PB. Cada nivel toma el corte del modelo apenas arriba de su piso. Se puede deshacer.';
+      cuerpo.append(h2t, info, un.lb, ej.lb, nv.lb, de.lb, bl.lb, nota, fila);
+      document.body.append(d); d.showModal();
+      no.addEventListener('click', () => { d.close(); d.remove(); });
+      d.addEventListener('cancel', () => d.remove());
+      ok.addEventListener('click', () => {
+        const m = medir();
+        const alt = parseFloat(hp.value.replace(',', '.'));
+        let inf: ReturnType<typeof aplicarModelo> | null = null;
+        estado.cambiar(pp => { inf = aplicarModelo(pp, m, { niveles: nv.s2.value as 'actuales' | 'nuevos', alturaPiso: Number.isFinite(alt) ? alt : 3.5, destino: de.s2.value as 'ambas' | 'carpinteria', bl: (bl.s2.value || null) as CriterioAncho | null }); });
+        d.close(); d.remove();
+        const r = inf as ReturnType<typeof aplicarModelo> | null;
+        if (r) mensaje(`3D cortado en ${r.cortados} niveles (${m.alto.toFixed(1).replace('.', ',')} m de alto)${r.sinCorte.length ? `; sin corte (arriba del modelo): ${r.sinCorte.slice(0, 4).join(', ')}${r.sinCorte.length > 4 ? '…' : ''}` : ''}${r.varias.length ? `; con varias piezas se tomó la más grande en ${r.varias.length} ${r.varias.length === 1 ? 'nivel' : 'niveles'}` : ''}${r.conHuecos.length ? `; los patios o huecos del corte no se pasan (${r.conHuecos.length} ${r.conHuecos.length === 1 ? 'nivel' : 'niveles'}): agregalos como huecos de losa` : ''}.`);
+      });
+    });
+    return l;
+  }
   function armarPanelSil() {
     const p = estado.proyecto, n = p.niveles[iNivel];
     if (!n) return;
@@ -971,7 +1025,7 @@ export function montarPlanta(cont: HTMLElement) {
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
       filaV,
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
-      dxf,
+      dxf, importar3D(),
       // B y L para el viento: la caja (el ancho que enfrenta el viento) o, en una planta curva, el rectángulo de igual área
       ...seccionAnchoViento(),
       h2(

@@ -2190,3 +2190,5 @@ body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tuto
 
 /* tabla pegada en una tarjeta (perfil desde una tabla de alturas) */
 .tarjeta-texto { width: 100%; min-width: min(460px, 80vw); font: 12px/1.4 var(--mono); box-sizing: border-box; }
+/* ventana de importar un 3D: cada campo en su línea */
+.importar-3d-campo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
