@@ -242,8 +242,9 @@ const viento: Etapa = {
     const a = anchos(tam);
     c.append(fila(
       graficoAltura({ titulo: `Presión del viento en altura · p = q·G·Cp`, eje: 'presión', unidad: 'kN/m²', decimales: 2, series: [
-        { nombre: 'barlovento (qz·G·Cp)', color: 'carga', tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pBarlo, nivel: x.nivel })) },
-        { nombre: 'sotavento (qh·G·Cp)', color: 'carga', punteada: true, tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pSota, nivel: x.nivel })) },
+        // la presión que empuja la cara la comprime (azul) y la succión la tracciona (rojo), como en toda la app
+        { nombre: 'barlovento, empuja (qz·G·Cp)', color: 'compresion', tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pBarlo, nivel: x.nivel })) },
+        { nombre: 'sotavento, succiona (qh·G·Cp)', color: 'traccion', punteada: true, tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pSota, nivel: x.nivel })) },
       ] }, a),
       graficoAltura({ titulo: `Fuerza del viento en cada nivel · W = ${fmt(d.W, 1)} t`, eje: 'fuerza Wi', unidad: 't', decimales: 2,
         series: [{ nombre: 'fuerza', color: 'carga', tipo: 'barras', puntos: d.alt.map(x => ({ z: x.z, x: x.F, nivel: x.nivel })) }],

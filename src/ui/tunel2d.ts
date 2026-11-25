@@ -241,6 +241,17 @@ function arrancar(geo: Geometria2D, nivel: string, cota: number) {
   sondas.forEach(q => { q.t = []; q.v = []; q.cp = []; });
 }
 
+/** qué cambió entre dos claves de corrida (ver claveCorrida), en palabras */
+function motivoReinicio(antes: string, ahora: string): string {
+  try {
+    const a = JSON.parse(antes) as unknown[], b = JSON.parse(ahora) as unknown[];
+    if (a[0] === 'alzado' || b[0] === 'alzado') return a[0] !== b[0] ? 'cambió el tipo de corte' : a[1] !== b[1] ? 'cambió el proyecto' : 'cambió una opción del túnel';
+    const nombres = ['cambió el proyecto', 'cambió el viento (A o B)', 'cambió el piso del corte', 'cambió el giro del viento', 'cambió el Reynolds', 'cambió la resolución', 'cambiaron las ochavas', 'cambió la planta', 'cambiaron las paredes', 'cambió el canal', 'cambió la otra torre', 'cambió la separación', 'cambió la velocidad del túnel', 'se prendió o apagó el contexto'];
+    const k = a.findIndex((x, i) => JSON.stringify(x) !== JSON.stringify(b[i]));
+    return nombres[k] ?? 'cambió una opción del túnel';
+  } catch { return 'cambió una opción del túnel'; }
+}
+
 /** pone (o saca, con null) la ventana de detalle en la corrida */
 function ponerVentana(v: Ventana | null) {
   const c = corrida;
@@ -390,6 +401,8 @@ function dibujar() {
   c.geo.contornos.forEach((p, k) => {
     g.fillStyle = k < c.geo.nTorre ? css('--ink', '#223344') : GRIS_VECINO;
     g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q.x * s, (ny - q.y) * s) : g.moveTo(q.x * s, (ny - q.y) * s))); g.closePath(); g.fill();
+    // con la velocidad de fondo, el aire quieto pegado a la torre es casi del mismo color: un borde claro la separa
+    if (esVelocidad(cfg.vista)) { g.strokeStyle = css('--lienzo', '#ffffff'); g.globalAlpha = 0.85; g.lineWidth = 1.5 / zoom.z; g.stroke(); g.globalAlpha = 1; }
   });
   // las flechas de la velocidad, en una grilla pareja de la pantalla (no se amontonan con el zoom)
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -1146,7 +1159,12 @@ function prepararMarcado(cv: HTMLCanvasElement) {
 // ---------------------------------------------------------------------------------------------------- centro
 export function centroTunel(c: H, tam: Tam) {
   if (repro) { centroRepro(c, tam); return; }
-  if (!corrida || corrida.clave !== claveCorrida()) iniciar();
+  if (!corrida || corrida.clave !== claveCorrida()) {
+    // si había una corrida, se dice por qué empieza de nuevo (en la línea de abajo): así un reinicio nunca es un misterio
+    const antes = corrida?.clave;
+    iniciar();
+    if (antes && corrida) mensajeTunel(`El túnel 2D empezó de nuevo: ${motivoReinicio(antes, corrida.clave)}.`);
+  }
   claveLlaves = '';
   const cr = corrida;
   if (!cr) { c.append(h('p', { class: 'nota' }, 'Hace falta una planta con losa sobre PB para armar el túnel.')); return; }
@@ -1221,7 +1239,7 @@ export function panelTunel(c: H) {
     s.addEventListener('change', () => cambiar(() => al(s.value as T)));
     return h('label', { class: 'campo' }, h('span', {}, rot), s);
   };
-  c.append(h('p', { class: 'nota' }, 'Un corte en planta de la torre dentro de un canal de viento, simulado con el método de Lattice Boltzmann. Muestra cómo se despega el aire en las esquinas y cómo se desprenden los remolinos de la estela. Didáctico: no cambia ningún número de ningún método.'));
+  c.append(h('p', { class: 'nota' }, 'Un corte de la torre dentro de un canal de viento, simulado con el método de Lattice Boltzmann: en planta (un piso, visto desde arriba) o vertical (la torre de costado). Muestra cómo se despega el aire en las esquinas y cómo se desprenden los remolinos de la estela. Didáctico: no cambia ningún número de ningún método.'));
   const play = h('button', { type: 'button', class: 'boton' }, corrida && !corrida.corriendo ? '▶ Seguir' : '⏸ Pausa');
   play.addEventListener('click', () => { if (!corrida) return; correr(!corrida.corriendo); play.textContent = corrida.corriendo ? '⏸ Pausa' : '▶ Seguir'; estado.avisarPanel(); });
   const reini = h('button', { type: 'button', class: 'boton' }, '↺ Empezar de nuevo');
