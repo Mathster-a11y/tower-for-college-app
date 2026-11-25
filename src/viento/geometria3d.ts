@@ -77,7 +77,7 @@ export interface Tramo3D { h0: number; h1: number; pol: P[]; polArriba?: P[] }
 /** puntos que se toman de cada planta para interpolar en altura (alcanza para la grilla más fina del túnel) */
 const PUNTOS_LOFT = 128;
 /** la piel se interpola si la planta corre menos de 3 veces la altura del piso (más que eso es un retiro o un basamento) */
-const CORRIMIENTO_MAX = 3;
+export const CORRIMIENTO_MAX = 3;
 const areaPol = (p: P[]) => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2;
 /** n puntos repartidos por largo de arco, en sentido antihorario, desde el primer vértice */
 function remuestrear(p0: P[], n: number): P[] {

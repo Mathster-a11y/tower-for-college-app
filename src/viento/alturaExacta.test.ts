@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { alinearPlantas, geometria3D, type NivelPlanta, type P } from './geometria3d';
-import { mallaTorre } from './malla3d';
+import { mallaTorre, stlTorre } from './malla3d';
 
 const circulo = (r: number, n = 48): P[] => Array.from({ length: n }, (_, k) => ({ x: r * Math.cos((2 * Math.PI * k) / n), y: r * Math.sin((2 * Math.PI * k) / n) }));
 /** un tronco de cono de 60 m: radio 20 m abajo y 8 m arriba, un nivel cada 6 m */
@@ -84,4 +84,26 @@ describe('túnel 3D · paredes exactas en altura', () => {
     }
     expect(horizontales).toBe(0);
   });
+
+  it('STL con piel continua: un solo sólido cerrado, sin rajas entre pisos, con el volumen del cono', () => {
+    const tris = leerStl(stlTorre(cono()));
+    // cada arista la comparten exactamente dos triángulos (cerrado y sin rajas)
+    const aristas = new Map<string, number>();
+    const clave = (p: number[]) => p.map(v => v.toFixed(4)).join(',');
+    tris.forEach(t => [[0, 1], [1, 2], [2, 0]].forEach(([i, j]) => { const a = clave(t[i]), b = clave(t[j]), k = a < b ? `${a}|${b}` : `${b}|${a}`; aristas.set(k, (aristas.get(k) ?? 0) + 1); }));
+    expect([...aristas.values()].every(n => n === 2)).toBe(true);
+    // volumen por el teorema de la divergencia, contra el tronco de cono (el contorno de 48 lados achica un poco el área)
+    const vol = tris.reduce((s, [a, b, c]) => s + (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6, 0);
+    expect(Math.abs(vol - vExacto) / vExacto).toBeLessThan(0.01);
+    // piso por piso (sin piel continua): más triángulos de tapas y el volumen de los escalones (más grande)
+    const vEsc = leerStl(stlTorre(cono(), { alturaExacta: false })).reduce((s, [a, b, c]) => s + (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6, 0);
+    expect(vEsc).toBeGreaterThan(vol);
+  });
 });
+
+/** los triángulos de un STL binario: tres vértices [x, y, z] cada uno */
+function leerStl(buf: ArrayBuffer): number[][][] {
+  const dv = new DataView(buf), n = dv.getUint32(80, true), out: number[][][] = [];
+  for (let k = 0; k < n; k++) { const o = 84 + 50 * k + 12; out.push([0, 1, 2].map(v => [0, 1, 2].map(c => dv.getFloat32(o + 12 * v + 4 * c, true)))); }
+  return out;
+}

@@ -1301,7 +1301,7 @@ export function panelTunel3d(c: H) {
   {
     const stl = h('button', { type: 'button', class: 'boton' }, '⤓ La torre en STL (piso por piso)');
     stl.addEventListener('click', () => {
-      const b = new Blob([stlTorre(nivelesProyecto())], { type: 'model/stl' }), a = document.createElement('a');
+      const b = new Blob([stlTorre(nivelesProyecto(), { alturaExacta: cfg.paredes === 'exactas' })], { type: 'model/stl' }), a = document.createElement('a');
       a.href = URL.createObjectURL(b); a.download = `torre_${(estado.proyecto.nombre || 'proyecto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_|_$/g, '')}.stl`; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     });

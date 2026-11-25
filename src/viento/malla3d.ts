@@ -3,7 +3,7 @@
  * torre en STL para llevarla a otro programa (impresión 3D, CAD, otro simulador de viento).
  */
 import { ShapeUtils, Vector2 } from 'three';
-import type { Geometria3D, NivelPlanta, P } from './geometria3d';
+import { alinearPlantas, CORRIMIENTO_MAX, type Geometria3D, type NivelPlanta, type P } from './geometria3d';
 
 type CeldaCara = { celda: number; x: number; y: number; z: number; nx: number; ny: number; nz: number };
 
@@ -99,11 +99,15 @@ export function mallaTorre(g: Geometria3D, caras: CeldaCara[]): MallaTorre {
 }
 
 /**
- * la torre en STL binario (m, z hacia arriba), en las coordenadas del proyecto: un prisma cerrado por piso, con la
- * planta que rige en ese piso (la de su nivel; el primero desde el suelo). Cada prisma es un sólido cerrado.
+ * la torre en STL binario (m, z hacia arriba), en las coordenadas del proyecto. Con la piel continua (alturaExacta, por
+ * defecto), donde la fachada sigue de un piso al otro (la misma regla que el túnel: carpintería continua y un
+ * corrimiento de menos de 3 pisos de alto) los pisos van juntos en un solo sólido de piel reglada, con las plantas de
+ * todos sus niveles con los mismos puntos (sin rajas entre pisos); donde hay un escalón (o sin alturaExacta), un prisma
+ * cerrado por piso con la planta de su nivel (el primero desde el suelo). Cada sólido es cerrado.
  */
-export function stlTorre(niveles: NivelPlanta[]): ArrayBuffer {
+export function stlTorre(niveles: NivelPlanta[], op: { alturaExacta?: boolean } = {}): ArrayBuffer {
   const niv = niveles.filter(n => n.cota >= 0 && n.silueta.length >= 3).sort((a, b) => a.cota - b.cota);
+  const alturaExacta = op.alturaExacta ?? true;
   const tris: number[][] = [];
   const agregar = (a: number[], b: number[], c: number[], fuera: number[] | null) => {
     // normal; si se pide un sentido (tapas), se da vuelta el triángulo para que mire hacia afuera
@@ -113,21 +117,46 @@ export function stlTorre(niveles: NivelPlanta[]): ArrayBuffer {
     const l = Math.hypot(n[0], n[1], n[2]) || 1;
     tris.push([n[0] / l, n[1] / l, n[2] / l, ...a, ...b, ...c]);
   };
-  for (let k = 0; k < niv.length - 1; k++) {
-    const pol = antihorario(niv[k].silueta), z0 = k === 0 ? 0 : niv[k].cota, z1 = niv[k + 1].cota;
-    if (!(z1 > z0)) continue;
-    for (let i = 0; i < pol.length; i++) {
-      const a = pol[i], b = pol[(i + 1) % pol.length];
-      if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-9) continue;
-      agregar([a.x, a.y, z0], [b.x, b.y, z0], [b.x, b.y, z1], null); agregar([a.x, a.y, z0], [b.x, b.y, z1], [a.x, a.y, z1], null);
+  const tapa = (pol: P[], z: number, arriba: boolean) => {
+    for (const [i, j, l] of triangular(pol)) agregar([pol[i].x, pol[i].y, z], [pol[j].x, pol[j].y, z], [pol[l].x, pol[l].y, z], [0, 0, arriba ? 1 : -1]);
+  };
+  /** costados de un anillo de abajo (en z0) a uno de arriba (en z1), punto a punto, los dos antihorarios */
+  const costados = (a: P[], b: P[], z0: number, z1: number) => {
+    for (let i = 0; i < a.length; i++) {
+      const j = (i + 1) % a.length;
+      if (Math.hypot(a[j].x - a[i].x, a[j].y - a[i].y) < 1e-9 && Math.hypot(b[j].x - b[i].x, b[j].y - b[i].y) < 1e-9) continue;
+      agregar([a[i].x, a[i].y, z0], [a[j].x, a[j].y, z0], [b[j].x, b[j].y, z1], null); agregar([a[i].x, a[i].y, z0], [b[j].x, b[j].y, z1], [b[i].x, b[i].y, z1], null);
     }
-    for (const [i, j, l] of triangular(pol)) {
-      agregar([pol[i].x, pol[i].y, z1], [pol[j].x, pol[j].y, z1], [pol[l].x, pol[l].y, z1], [0, 0, 1]);
-      agregar([pol[i].x, pol[i].y, z0], [pol[j].x, pol[j].y, z0], [pol[l].x, pol[l].y, z0], [0, 0, -1]);
+  };
+  // ¿del nivel k al k + 1 la piel sigue? (la regla del túnel)
+  const sigue = (k: number) => {
+    if (!alturaExacta || niv[k].continua === false) return false;
+    const dz = niv[k + 1].cota - niv[k].cota;
+    if (!(dz > 0)) return false;
+    const c = alinearPlantas(niv[k].silueta, niv[k + 1].silueta).corre;
+    return c > 1e-6 && c <= CORRIMIENTO_MAX * dz;
+  };
+  let k = 0;
+  while (k < niv.length - 1) {
+    const z0 = k === 0 ? 0 : niv[k].cota;
+    if (!sigue(k)) {
+      // un prisma: la planta del nivel de su cota a la del de arriba
+      const pol = antihorario(niv[k].silueta), z1 = niv[k + 1].cota;
+      if (z1 > z0) { costados(pol, pol, z0, z1); tapa(pol, z1, true); tapa(pol, z0, false); }
+      k++; continue;
     }
+    // una piel: todos los pisos seguidos que siguen, con las plantas con los mismos puntos (cada una alineada con la de abajo)
+    const anillos: P[][] = [alinearPlantas(niv[k].silueta, niv[k].silueta).a], cotas = [niv[k].cota];
+    let f = k;
+    while (f < niv.length - 1 && sigue(f)) { anillos.push(alinearPlantas(anillos[anillos.length - 1], niv[f + 1].silueta).b); cotas.push(niv[f + 1].cota); f++; }
+    // si el primer nivel no está en el suelo y es el primero de la torre, un prisma desde el suelo hasta él
+    if (k === 0 && cotas[0] > 1e-9) { const pol = anillos[0]; costados(pol, pol, 0, cotas[0]); tapa(pol, 0, false); tapa(pol, cotas[0], true); }
+    for (let j = 0; j + 1 < anillos.length; j++) costados(anillos[j], anillos[j + 1], cotas[j], cotas[j + 1]);
+    tapa(anillos[0], cotas[0], false); tapa(anillos[anillos.length - 1], cotas[cotas.length - 1], true);
+    k = f;
   }
   const buf = new ArrayBuffer(84 + 50 * tris.length), dv = new DataView(buf);
-  const cab = 'Torre 3D: la torre piso por piso (m, z hacia arriba)';
+  const cab = 'Torre 3D: la torre, piel continua o piso por piso (m, z hacia arriba)';
   for (let i = 0; i < Math.min(80, cab.length); i++) dv.setUint8(i, cab.charCodeAt(i) < 128 ? cab.charCodeAt(i) : 63);
   dv.setUint32(80, tris.length, true);
   tris.forEach((t, k) => { t.forEach((x, j) => dv.setFloat32(84 + 50 * k + 4 * j, x, true)); dv.setUint16(84 + 50 * k + 48, 0, true); });
