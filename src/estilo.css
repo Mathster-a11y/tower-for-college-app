@@ -1436,7 +1436,8 @@ body.vista-planilla { display: flex; flex-direction: column; height: 100vh; marg
 
 /* túnel de viento 2D (simulador de viento, V2) */
 .tunel-marco { border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; background: var(--lienzo); }
-canvas.tunel2d { display: block; width: 100%; height: auto; }
+/* el dedo mueve y pellizca el túnel (no la página): los gestos los maneja el lienzo */
+canvas.tunel2d { display: block; width: 100%; height: auto; touch-action: none; }
 .cartel-tunel { margin: 0 0 6px; padding: 5px 10px; border-left: 4px solid var(--revisar, #b7791f); background: color-mix(in srgb, var(--revisar, #b7791f) 10%, transparent); border-radius: 0 6px 6px 0; font-size: 12px; }
 canvas.corte-gpu { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 1px solid var(--edge); border-radius: 6px; }
 .tunel3d canvas { display: block; width: 100%; height: auto; cursor: grab; }
@@ -1728,6 +1729,7 @@ canvas.tunel2d.marcando { cursor: crosshair; touch-action: none; outline: 2px da
 .zoom-tunel button { min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--lienzo) 90%, transparent); color: var(--ink); cursor: pointer; font-size: 14px; line-height: 1; }
 .zoom-tunel span { align-self: center; font-size: 11px; color: var(--ink2); background: color-mix(in srgb, var(--lienzo) 80%, transparent); padding: 1px 5px; border-radius: 4px; }
 canvas.tunel2d.arrastrable { cursor: grab; }
+canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 .llave-sim.derecha { left: auto; right: 8px; top: 8px; bottom: auto; }
 .llave-sim.llave-simbolos { left: auto; right: 8px; top: auto; bottom: 8px; min-width: 0; max-width: 300px; }
 .llave-simbolos .simbolo { display: flex; gap: 4px; align-items: flex-start; margin-top: 2px; }

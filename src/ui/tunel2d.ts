@@ -997,26 +997,53 @@ function prepararMarcado(cv: HTMLCanvasElement) {
     const bx = zoom.ox + ((e.clientX - b.left) * k) / zoom.z, by = zoom.oy + ((e.clientY - b.top) * k) / zoom.z, s = cv.width / c.geo.nx;
     return { x: bx / s, y: c.geo.ny - by / s };
   };
-  // zoom: rueda (alrededor del puntero), arrastrar para moverse, doble clic para ver todo
+  // zoom: rueda o pellizco (alrededor del puntero), arrastrar con el mouse o un dedo para moverse, doble clic o doble
+  // toque para ver todo. La rueda de costado (o Mayúsculas + rueda, o dos dedos en el panel táctil) corre de costado.
+  const aLienzo = (x: number, y: number) => { const b = cv.getBoundingClientRect(), k = cv.width / b.width; return { x: (x - b.left) * k, y: (y - b.top) * k, k }; };
+  const correr = (dx: number, dy: number) => { zoom.ox += dx / zoom.z; zoom.oy += dy / zoom.z; acotarZoom(cv); dibujar(); };
   cv.addEventListener('wheel', e => {
-    if (!corrida && !repro) return;
     e.preventDefault();
-    const b = cv.getBoundingClientRect(), k = cv.width / b.width;
-    acercar(cv, e.deltaY < 0 ? 1.2 : 1 / 1.2, (e.clientX - b.left) * k, (e.clientY - b.top) * k);
+    const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? cv.height : 1, dx = e.deltaX * px, dy = e.deltaY * px;
+    const p = aLienzo(e.clientX, e.clientY);
+    // pellizco del panel táctil (llega con Ctrl) o rueda común: zoom; desplazamiento de costado o con Mayúsculas: correr
+    if (!e.ctrlKey && (e.shiftKey || Math.abs(dx) > Math.abs(dy))) { if (zoom.z > 1.001) correr((e.shiftKey && !dx ? dy : dx) * p.k, e.shiftKey ? 0 : dy * p.k); return; }
+    acercar(cv, Math.exp(-Math.max(-300, Math.min(300, dy)) * (e.ctrlKey ? 0.01 : 0.0015)), p.x, p.y);
   }, { passive: false });
   cv.addEventListener('dblclick', () => { if (marcando) return; zoom.z = 1; zoom.ox = zoom.oy = 0; acercar(cv, 1); });
-  let paneo: { x: number; y: number; ox: number; oy: number } | null = null;
+  // punteros apoyados (mouse, lápiz o dedos): con uno se corre el dibujo; con dos, pellizco (zoom) y corrimiento juntos
+  const apoyados = new Map<number, { x: number; y: number }>();
+  let gesto: { d: number; mx: number; my: number } | null = null;
+  const dosDedos = () => { const [a, b2] = [...apoyados.values()]; return { d: Math.hypot(a.x - b2.x, a.y - b2.y), mx: (a.x + b2.x) / 2, my: (a.y + b2.y) / 2 }; };
   cv.addEventListener('pointerdown', e => {
-    if (marcando || poniendoSonda || zoom.z <= 1.001) return;
-    paneo = { x: e.clientX, y: e.clientY, ox: zoom.ox, oy: zoom.oy }; cv.setPointerCapture(e.pointerId);
+    if (marcando || poniendoSonda) return;
+    apoyados.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { cv.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
+    if (apoyados.size === 2) gesto = dosDedos();
   });
   cv.addEventListener('pointermove', e => {
-    if (!paneo) return;
+    const q = apoyados.get(e.pointerId);
+    if (!q) return;
     const k = cv.width / cv.getBoundingClientRect().width;
-    zoom.ox = paneo.ox - ((e.clientX - paneo.x) * k) / zoom.z; zoom.oy = paneo.oy - ((e.clientY - paneo.y) * k) / zoom.z; dibujar();
+    if (apoyados.size === 1) {
+      if (zoom.z > 1.001) correr(-(e.clientX - q.x) * k, -(e.clientY - q.y) * k);
+      q.x = e.clientX; q.y = e.clientY;
+      return;
+    }
+    q.x = e.clientX; q.y = e.clientY;
+    if (apoyados.size !== 2 || !gesto) return;
+    const g2 = dosDedos(), p = aLienzo(g2.mx, g2.my);
+    correr(-(g2.mx - gesto.mx) * k, -(g2.my - gesto.my) * k);
+    if (gesto.d > 10) acercar(cv, g2.d / gesto.d, p.x, p.y);
+    gesto = g2;
   });
-  const finPaneo = () => { paneo = null; };
-  cv.addEventListener('pointerup', finPaneo); cv.addEventListener('pointercancel', finPaneo);
+  let ultimoToque = 0;
+  const soltarPuntero = (e: PointerEvent) => {
+    if (!apoyados.delete(e.pointerId)) return;
+    if (apoyados.size < 2) gesto = null;
+    // doble toque con el dedo: ver todo (el doble clic del mouse ya lo hace)
+    if (e.pointerType === 'touch' && apoyados.size === 0) { const t = performance.now(); if (t - ultimoToque < 300 && !marcando) { zoom.z = 1; zoom.ox = zoom.oy = 0; acercar(cv, 1); } ultimoToque = t; }
+  };
+  cv.addEventListener('pointerup', soltarPuntero); cv.addEventListener('pointercancel', soltarPuntero);
   cv.addEventListener('pointerdown', e => {
     if (!poniendoSonda || !corrida || repro) return;
     const p = aRed(e), cel = Math.floor(p.y) * corrida.geo.nx + Math.floor(p.x);
