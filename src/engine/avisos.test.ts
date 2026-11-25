@@ -35,5 +35,8 @@ describe('avisos de diseño', () => {
     expect(a.find(x => x.tipo === 'carpinteria-fuera')?.texto).toMatch(/1,00 m/);
     expect(a.find(x => x.tipo === 'bl-caja')?.texto).toMatch(/20,00 × 18,00 m/);
     expect(a.find(x => x.tipo === 'sin-pieza')?.muro).toBe('M99');
+    // marcado «solo de gravedad» (no toma viento a propósito): deja de avisar
+    p.muros.find(x => x.id === 'M99')!.soloGravedad = true;
+    expect(avisosDiseno(p, aPlanilla(p).papeles).some(x => x.tipo === 'sin-pieza')).toBe(false);
   });
 });

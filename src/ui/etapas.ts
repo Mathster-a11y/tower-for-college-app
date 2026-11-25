@@ -961,7 +961,7 @@ const ecuaciones: Etapa = {
 const exoesqueleto: Etapa = {
   id: 'exo', nro: '08', nombre: 'Exoesqueleto', rol: '--r-rototrasl', dependeDir: true, conFuente: true,
   icono: '<path d="M5 21V3M19 21V3M5 3l14 6M19 3L5 9M5 9l14 6M19 9L5 15M5 15l14 6M19 15L5 21"/>',
-  globo: 'Exoesqueleto|Una estructura de acero por fuera de la fachada que trabaja junto con los tabiques: cuánto viento toma, cuánto baja la flecha y los esfuerzos de cada barra.',
+  globo: 'Exoesqueleto|Una estructura de acero en el perímetro (por fuera de la fachada o detrás de la piel) que trabaja junto con los tabiques: cuánto viento toma, cuánto baja la flecha y los esfuerzos de cada barra.',
   panel(c) { panelExo(c); },
   centro(c, tam) { centroExo(c, tam); },
   nombreCentro: () => `Exoesqueleto · viento ${estado.dir}`,

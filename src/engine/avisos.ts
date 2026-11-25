@@ -150,7 +150,7 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
   });
   if (papeles) p.muros.forEach(m => {
     const pa = papeles[m.id];
-    if (!pa || !m.llega) return;
+    if (!pa || !m.llega || m.soloGravedad) return;
     if ((pa.A ?? 'sin pieza') === 'sin pieza' && (pa.B ?? 'sin pieza') === 'sin pieza') out.push({ tipo: 'sin-pieza', muro: m.id, muros: [m.id], cotas: [], texto: `${m.id} no forma pieza en ningún viento: no toma viento.`, arreglo: 'Tocá «Armar» (los muros que se tocan forman una pieza) o asignale una pieza en Diseño → Muros.' });
   });
   return out;

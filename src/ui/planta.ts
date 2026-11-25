@@ -394,6 +394,13 @@ export function montarPlanta(cont: HTMLElement) {
         });
         d.append(ver);
       }
+      // un muro que no toma viento a propósito (un núcleo solo de gravedad): se marca y deja de avisar
+      if (a.tipo === 'sin-pieza' && a.muro) {
+        const g = document.createElement('button'); g.type = 'button'; g.textContent = 'Es solo de gravedad';
+        g.title = `${a.muro} no toma viento a propósito (lleva solo peso): deja de avisar. Se desmarca en la columna «Solo gravedad» de la hoja T3D Muros`;
+        g.addEventListener('click', () => estado.cambiar(pp => { const m = pp.muros.find(x => x.id === a.muro); if (m) m.soloGravedad = true; }));
+        d.append(g);
+      }
       panelAv.append(d);
     });
   }

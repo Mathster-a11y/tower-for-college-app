@@ -104,6 +104,11 @@ export interface Muro {
   zDesde?: number | null;
   zHasta?: number | null;
   /**
+   * solo de gravedad: el muro no forma pieza a propósito (un núcleo que lleva solo peso, como en las torres con
+   * exoesqueleto o diagrid, que toman todo el viento). No cambia ningún cálculo: solo saca el aviso «no forma pieza»
+   */
+  soloGravedad?: boolean | null;
+  /**
    * papel del muro en el molde de la hoja J, elegido a mano para cada viento (vacío = el que propone la app):
    * alma (izquierda), alma der., ala sup., ala inf. o fuera (no entra al molde)
    */
@@ -312,7 +317,7 @@ export interface Proyecto {
    * del J (enJ: false = no va a la hoja J; sus muros quedan fuera del cálculo en ese viento)
    */
   clasesPieza?: Record<string, { clase?: ClasePieza | null; enJ?: boolean | null }>;
-  /** exoesqueleto de acero por fuera de la fachada (etapa 08); vacío = sin exoesqueleto */
+  /** exoesqueleto de acero en el perímetro, por fuera de la fachada o detrás de la piel (etapa 08); vacío = sin exoesqueleto */
   exo?: import('./exo').ExoDef | null;
   /** el perfil de la torre dibujado en el editor (Diseño → Perfil); los niveles guardan lo que escribió (B, L, dx, dy) */
   perfil?: import('./perfilTorre').PerfilTorre | null;
@@ -454,7 +459,7 @@ export function ejemploCiticorp(): Proyecto {
     hormigon: 'H40',
     muros: [
       // núcleo octogonal de 63 × 72 ft (19,2 × 21,9 m) como un tubo rectangular; solo gravedad (sin pieza)
-      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 19.2, ladoY: 21.9, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 1145, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '' },
+      { id: 'N1', dir: 'Y', x: 0, y: 0, largo: 19.2, ladoY: 21.9, espesor: 0.6, tipo: 'tubo-rect', llega: true, areaInf: 1145, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', soloGravedad: true },
       col('S1', 0, d, 'S1', 'S1B'), col('S2', d, 0, 'S2', 'S2B'), col('S3', 0, -d, 'S3', 'S3B'), col('S4', -d, 0, 'S4', 'S4B'),
     ],
     exo: {

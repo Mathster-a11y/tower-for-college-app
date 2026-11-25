@@ -408,8 +408,10 @@ export function panelExo(c: H) {
   const sw = h('label', { class: 'campo-linea' });
   const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = !!def;
   cb.addEventListener('change', () => estado.cambiar(() => { p.exo = cb.checked ? structuredClone(EXO_POR_DEFECTO) : null; }));
-  sw.append(cb, ' Agregar un exoesqueleto de acero por fuera de la fachada');
-  c.append(h('p', { class: 'nota' }, 'Una estructura de acero por fuera que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.'), sw);
+  sw.append(cb, ' Agregar un exoesqueleto de acero en el perímetro de la torre');
+  // dónde va: por fuera de la fachada (separación ≥ 0) o detrás de la piel (separación < 0, como los chevrones del Citicorp)
+  const adentro = !!def && def.separacion < 0;
+  c.append(h('p', { class: 'nota' }, `Una estructura de acero ${adentro ? `por dentro de la piel (${fmt(-def!.separacion, 2)} m detrás de la fachada)` : 'por fuera de la fachada'} que trabaja junto con los tabiques: las losas las atan y cada una toma el viento según su rigidez, como dos resortes en paralelo.`), sw);
   if (!def) return;
   if (!exoEnElCalculo()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'guia' ? 'Guía' : estado.config.metodo === 'combinado' ? 'comparación' : 'Planilla'}: el método de la cátedra no tiene en cuenta el exoesqueleto. Acá es un estudio aparte: no cambia ningún resultado del método (tabiques, flexocompresión, resumen, desglose ni el Excel). Para que entre en el cálculo, elegí el método CIRSOC o FEM.`));
   if (def.notas?.length) {

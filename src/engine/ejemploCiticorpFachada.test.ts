@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ejemploCiticorpFachada } from './ejemploCiticorpFachada';
 import { aplicarCarpinteriaTramos, bandasFachada, calcularPaneleria } from './carpinteria';
 import { avisosDiseno } from './avisos';
+import { aPlanilla } from './mapping';
 import { leerProyecto } from './lector';
 import { cajaSilueta, carpinteriaDeNivel } from './silueta';
 import { armarCara, paraLado, paraViento } from './exo';
@@ -59,7 +60,7 @@ describe('Citicorp Center: forma y fachada', () => {
   });
   it('sin avisos de la piel, de las losas ni de la planilla', () => {
     const p = armar();
-    expect(avisosDiseno(p).filter(a => a.tipo !== 'sin-pieza').map(a => a.texto)).toEqual([]);
+    expect(avisosDiseno(p, aPlanilla(p).papeles).map(a => a.texto)).toEqual([]);   // el núcleo es solo de gravedad: no avisa
     const i56 = p.niveles.findIndex(n => n.nombre.startsWith('56º'));
     expect([p.niveles[i56].B, p.niveles[i56].L]).toEqual([47.85, 47.85]);
   });
