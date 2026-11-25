@@ -274,7 +274,8 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
       // columna de esquina cortada: no llega al nudo del tope de cada módulo (el último piso de cada módulo no la tiene);
       // cada tramo se apoya abajo en el nudo del tope del módulo de abajo. En el primer módulo no hay nudo abajo (ahí está
       // la transición sobre las supercolumnas): su columna sigue hasta el nudo de arriba y cuelga de él.
-      const topes = new Set(mods.slice(2));
+      // (si la zona arranca más arriba, abajo está el nudo de la zona de abajo: se cortan todos los módulos)
+      const topes = new Set(mods.slice(kI > 0 ? 1 : 2));
       for (const lado of [S0, S1]) for (let k = mods[0]; k < kF; k++) {
         if (def.esquinaCortada && topes.has(k + 1)) continue;
         barra('columna', nudo(lado(k), k), nudo(lado(k + 1), k + 1));

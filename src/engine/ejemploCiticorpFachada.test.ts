@@ -80,3 +80,17 @@ describe('Citicorp: la base', () => {
     });
   });
 });
+
+describe('Citicorp: los chevrones se unen solo por el mástil', () => {
+  it('ninguna columna de esquina llega al nudo del tope de su módulo (termina un piso abajo)', () => {
+    const p = ejemploCiticorpFachada(), def = p.exo!;
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)];
+    const ancho = 47.85 + 2 * def.separacion, S = ancho / 2;
+    const topes = [16, 24, 32, 40, 48, 56].map(k => p.niveles.find(n => n.nombre.startsWith(`${k}º`))!.cota);
+    (['A', 'B'] as const).forEach(dir => {
+      const c = armarCara(paraLado(paraViento(def, dir), S), ancho, zs);
+      const esq = c.barras.filter(b => (b.fraccion ?? 1) === 1 && b.clase === 'columna' && [b.a, b.b].every(k => Math.abs(Math.abs(c.nudos[k].s) - S) < 1e-3));
+      topes.forEach(z => expect(esq.filter(b => Math.abs(Math.max(c.nudos[b.a].z, c.nudos[b.b].z) - z) < 1e-6).length).toBe(0));
+    });
+  });
+});

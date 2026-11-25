@@ -33,7 +33,7 @@ export function ejemploCiticorpFachada(): Proyecto {
   const i11 = p.niveles.findIndex(n => n.nombre === '11º');
   p.niveles.splice(i11, 1);
   const n12 = p.niveles.find(n => n.nombre === '12º')!; n12.nombre = '11º–12º'; n12.pisos = 2;
-  const z10 = p.niveles.find(n => n.nombre === '10º')!.cota, z12 = n12.cota;     // 42,88 y 46,94 m
+  const z10 = p.niveles.find(n => n.nombre === '10º')!.cota, z12 = n12.cota;     // 42,88 y 51,00 m
   const z16 = p.niveles.find(n => n.nombre === '16º')!.cota;
   p.niveles.splice(1, 0, { nombre: 'Corona: techo del cajón (amortiguador de 400 t)', cota: zc, B: lado, L: lado });
   const corona = p.niveles[0];
@@ -84,9 +84,11 @@ export function ejemploCiticorpFachada(): Proyecto {
   const w = 3.65, panel = 10;
   const cordonSC = { b: 1.4, e: 0.17 }, celosia = { b: 0.6, e: 0.03 };    // equivalentes (supuesto)
   const zk = (k: number) => (zBase * k) / panel;
+  // celosía en triángulos con el vértice hacia arriba (^): de los dos cordones al medio del tirante de arriba
   for (let k = 0; k < panel; k++) {
     barra('columna', [-w, zk(k)], [-w, zk(k + 1)], { sec: cordonSC }); barra('columna', [w, zk(k)], [w, zk(k + 1)], { sec: cordonSC });
-    barra('diagonal', k % 2 ? [w, zk(k)] : [-w, zk(k)], k % 2 ? [-w, zk(k + 1)] : [w, zk(k + 1)], { sec: celosia });
+    barra('diagonal', [-w, zk(k)], [0, zk(k + 1)], { sec: celosia }); barra('diagonal', [w, zk(k)], [0, zk(k + 1)], { sec: celosia });
+    if (k + 1 < panel) { barra('viga', [-w, zk(k + 1)], [0, zk(k + 1)], { sec: celosia }); barra('viga', [0, zk(k + 1)], [w, zk(k + 1)], { sec: celosia }); }
   }
   // las supercolumnas de las caras perpendiculares trabajan como alas de esta cara (en sus bordes, media sección): de PB
   // al cajón la supercolumna; arriba, su mástil
@@ -97,14 +99,15 @@ export function ejemploCiticorpFachada(): Proyecto {
   const pisosAla = p.niveles.map(n => n.cota).filter(z => z >= zBase - 1e-6 && z <= p.niveles.find(n => n.nombre === '16º')!.cota + 1e-6).sort((a, b) => a - b);
   pisosAla.forEach((z, k) => { if (k) { barra('columna', [-S, pisosAla[k - 1]], [-S, z], { sec: mastil, ala: true }); barra('columna', [S, pisosAla[k - 1]], [S, z], { sec: mastil, ala: true }); } });
   // el cajón de transición
-  const abajo = [-S, -0.375 * S, -w, 0, w, 0.375 * S, S], arriba = [-S, -S / 2, -S / 4, 0, S / 4, S / 2, S];
+  const abajo = [-S, -0.4 * S, -w, 0, w, 0.4 * S, S], arriba = [-S, -S / 2, -S / 4, 0, S / 4, S / 2, S];
   abajo.forEach((x, k) => { if (k) barra('viga', [abajo[k - 1], zBase], [x, zBase]); });
   arriba.forEach((x, k) => { if (k) barra('viga', [arriba[k - 1], z10], [x, z10]); });
-  barra('columna', [-S, zBase], [-S, z10]); barra('columna', [S, zBase], [S, z10]); barra('columna', [0, zBase], [0, z10], { sec: mastil });
+  barra('columna', [-S, zBase], [-S, z10]); barra('columna', [S, zBase], [S, z10]);         // el mástil no baja al cajón: termina en su techo
   for (const sg of [-1, 1]) {
     barra('diagonal', [sg * S, zBase], [sg * S / 2, z10]);
-    barra('diagonal', [sg * S / 2, z10], [sg * 0.375 * S, zBase]); barra('diagonal', [sg * 0.375 * S, zBase], [sg * S / 4, z10]);
-    barra('diagonal', [sg * S / 4, z10], [sg * w, zBase]); barra('diagonal', [sg * w, zBase], [0, z10]);
+    barra('diagonal', [sg * S / 2, z10], [sg * 0.4 * S, zBase]); barra('diagonal', [sg * 0.4 * S, zBase], [sg * S / 4, z10]);
+    // la V del centro lleva el mástil a los cordones de la supercolumna: sección de transferencia (supuesta, como el cordón)
+    barra('diagonal', [sg * S / 4, z10], [sg * w, zBase]); barra('diagonal', [sg * w, zBase], [0, z10], { sec: { b: 1.4, e: 0.08 } });
   }
   // el primer módulo (6 pisos)
   // columnas de piso a piso (cada losa del módulo se apoya en sus nudos)
@@ -112,10 +115,14 @@ export function ejemploCiticorpFachada(): Proyecto {
   pisos1.forEach((z, k) => {
     if (!k) return;
     const z0 = pisos1[k - 1];
-    for (const x of [-S, -S / 2, S / 2, S]) barra('columna', [x, z0], [x, z]);
+    for (const x of [-S / 2, S / 2]) barra('columna', [x, z0], [x, z]);
+    // las esquinas terminan un piso antes del nudo de arriba: cada chevron se une al de arriba solo por el mástil
+    if (k < pisos1.length - 1) for (const x of [-S, S]) barra('columna', [x, z0], [x, z]);
     barra('columna', [0, z0], [0, z], { sec: mastil });
   });
-  for (const sg of [-1, 1]) barra('diagonal', [sg * S, z16], [sg * S / 2, z10]);
+  // la diagonal: una recta de la esquina de arriba al cuarto de la mitad sobre el cajón, que corta la columna del cuarto
+  // a la altura del piso 12 (ahí la viga de cuarto a cuarto)
+  for (const sg of [-1, 1]) { barra('diagonal', [sg * S, z16], [sg * S / 2, z12]); barra('diagonal', [sg * S / 2, z12], [sg * S / 4, z10]); }
   [-S / 2, 0, S / 2].forEach((x, k, xs) => { if (k) barra('viga', [xs[k - 1], z12], [x, z12]); });
   [-S, -S / 2, 0, S / 2, S].forEach((x, k, xs) => { if (k) barra('viga', [xs[k - 1], z16], [x, z16]); });
   const cols = [-S, -S / 2, 0, S / 2, S];                                  // los nudos del tope del último módulo
@@ -153,7 +160,7 @@ export function ejemploCiticorpFachada(): Proyecto {
     'Niveles: el techo del cajón de la corona es un nivel (244,62 m); para no pasar de los 49 niveles de la planilla, el 11º y el 12º van juntos. El 10º (42,88 m) es el techo del cajón de transición.',
     'Piel: sin carpintería en la plaza; «Por piso» plana del cajón de transición (34,75 m) al techo del cajón de la corona, en el borde de las losas; la corona es una «Envolvente» con su propio plano a 45° (las losas no se recortan). La losa de la azotea es la franja plana del norte.',
     'Estructura siempre adentro de la piel: el exoesqueleto va 0,50 m hacia adentro del borde de las losas (en la obra, los chevrones van detrás del muro cortina; supuesto el valor).',
-    'Llegada al suelo (plano de elevación): la plaza queda libre y en cada cara baja solo la supercolumna reticulada a media cara (24 ft de ancho: dos cordones con diagonales en zigzag; secciones equivalentes supuestas). Encima, el cajón de transición (pisos 8 y 9) en todo el ancho, con diagonales desde las esquinas de abajo y un zigzag que lleva la carga al centro. El primer módulo es de 6 pisos (10 → 16): sus diagonales bajan de las esquinas a los cuartos; desde el piso 16, los chevrones de 8 pisos al mástil. Las supercolumnas de las caras perpendiculares trabajan como alas de cada cara (como el mástil en la ficha E). Sin esquinas abajo, el vuelco baja todo por las supercolumnas: el cajón de acero equivalente pasa de 5 a 6 cm de pared (supuesto; con 5 cm la de sotavento pasa la tensión admisible en un 5 %).',
+    'Llegada al suelo (plano de elevación): la plaza queda libre y en cada cara baja solo la supercolumna reticulada a media cara (24 ft de ancho: dos cordones con diagonales en zigzag; secciones equivalentes supuestas). Encima, el cajón de transición (pisos 8 y 9) en todo el ancho, con diagonales desde las esquinas de abajo y un zigzag que lleva la carga al centro (la V del centro, que recibe el mástil, con sección de transferencia de 1,40 m, supuesta). El mástil termina en el techo del cajón. El primer módulo es de 6 pisos (10 → 16): sus diagonales son una recta de cada esquina a un cuarto de la mitad sobre el cajón, que corta la columna del cuarto en el piso 12; las columnas de esquina, como en todos los módulos, terminan un piso antes del nudo de arriba (cada chevron se une al de arriba solo por el mástil); desde el piso 16, los chevrones de 8 pisos al mástil. Las supercolumnas de las caras perpendiculares trabajan como alas de cada cara (como el mástil en la ficha E). Sin esquinas abajo, el vuelco baja todo por las supercolumnas: el cajón de acero equivalente pasa de 5 a 6 cm de pared (supuesto; con 5 cm la de sotavento pasa la tensión admisible en un 5 %).',
     'Estructura de la corona (zona libre, barra por barra): columnas del cajón en las cuatro caras; en las caras este y oeste, un reticulado bajo la pendiente con el cordón 0,50 m adentro de la piel, montantes en las líneas de los nudos de abajo, un tirante a media altura y diagonales; la cara norte sube hasta la azotea con una V invertida y la sur termina en el cajón (barras de una sola cara). Las líneas de las crujías del plano no coinciden con los nudos del último módulo: se usaron los nudos (supuesto).',
     'Panelería: paños de 3,66 m (12 ft; Wikipedia: segmentos de 12 × 9 ft de vidrio y aluminio, dato de un resumen de la página) repartidos parejo, y antepecho de aluminio de 2,0 m (supuesto). La cara inclinada de la corona, opaca (revestida en aluminio, supuesto).',
   ];
