@@ -375,6 +375,8 @@ export function ejemploAsimetrico(): Proyecto {
   const p = ejemploGuia();
   return {
     ...p, nombre: 'Ejemplo de la guía: T5 aislado (rototraslación)',
+    // ejemplo solo para la planilla: con CIRSOC no verifica (deriva y armadura) y no se redimensiona
+    calculo: { ...p.calculo, metodo: 'planilla' },
     muros: p.muros.filter(m => m.id !== 'M6' && m.id !== 'M7').map(m => (m.id === 'M5' ? { ...m, largo: 4, pegadoB: '' } : m)),
   };
 }

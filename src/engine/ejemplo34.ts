@@ -63,6 +63,8 @@ export function ejemploPlanta34(): Proyecto {
   niveles.push({ nombre: 'PB', cota: 0 }, { nombre: '1º SS', cota: -3.6, B: B + 2, L: L + 2 });
   const p: Proyecto = {
     version: 1, nombre: 'Torre de 34 pisos · planta del PDF', alumno: '',
+    // ejemplo solo para la planilla: con CIRSOC no verifica (suelo, deriva y armadura) y no se redimensiona
+    calculo: { metodo: 'planilla' },
     sitio: { V: 48, Kd: 0.85, I: 1, zg: 457, alfa: 5, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
     niveles, fundacion: { b1: L + 2, a1: B + 2 }, hormigon: 'H30', muros,
   };

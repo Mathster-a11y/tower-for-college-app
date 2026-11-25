@@ -16,7 +16,7 @@ async function idaYVuelta(p: Proyecto) {
   const tablas = tablasProyecto(p);
   const hojas = await leerLibro(await escribirLibro(tablas));
   // la base es otro proyecto: todo tiene que salir de las tablas
-  const r = proyectoDesdeTablas(hojas, ejemploAsimetrico());
+  const r = proyectoDesdeTablas(hojas, { ...ejemploAsimetrico(), calculo: null });
   expect(r).not.toBeNull();
   expect(r!.avisos).toEqual([]);
   // lo que sale de las tablas pasa el lector único sin errores ni reparaciones
