@@ -25,7 +25,7 @@ import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
 import { usarConfig, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
-import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
+import { ejemploGuia, ejemploAsimetrico, proyectoVacio } from './engine/modelo';
 import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
@@ -618,7 +618,6 @@ window.addEventListener('error', e => { if (String(e.message ?? '').includes('Re
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos). Es el de la cátedra, para Planilla y Guía: con CIRSOC la deriva de servicio de la azotea pasa 1/500 y el Resumen lo marca.'); });
-$('b-ejemplo-citicorp').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorp()); cerrarMenus(); mensaje('Cargado el Citicorp Center: núcleo, supercolumnas en la base abierta y el exoesqueleto de chevrones (ficha E) en la etapa 08 · Exoesqueleto.'); });
 $('b-ejemplo-citicorp-fachada').addEventListener('click', () => { plantillaAbierta = null; estado.capas.fachada = true; reemplazarConCopia(ejemploCiticorpFachada()); cerrarMenus(); mensaje('Cargado el Citicorp Center con su forma y su fachada: la plaza abierta, carpintería por piso hasta el cajón de la corona y, arriba, la envolvente con su techo a 45°. El exoesqueleto va adentro de la piel y la corona tiene su reticulado bajo la pendiente (etapa 08). Mirá la capa «Fachada» en el 3D y el alzado desplegado (Carpintería → Panelería). Abre con el método CIRSOC, que cuenta el exo (con Planilla o Guía el exo es un estudio aparte y los tabiques solos no alcanzan).'); });
 // torres de prueba: diez plantas variadas armadas con las piezas tipo (se usan para controlar la app)
 TORRES_PRUEBA.forEach((t, k) => {
