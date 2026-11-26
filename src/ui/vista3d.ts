@@ -173,6 +173,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   let hayQueDibujar = true;
   function pedirCuadro() { hayQueDibujar = true; }
   controles.enableDamping = true;
+  // la rueda y el pellizco acercan hacia donde apunta el cursor (no hacia el centro de la torre): así se llega a un detalle
+  controles.zoomToCursor = true;
   escena.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.4);
   sol.position.set(-60, 120, 80);

@@ -72,6 +72,7 @@ class Disenador {
     this.etiquetas.domElement.className = 'exo3d-etiquetas';
     this.lienzo.append(this.renderer.domElement, this.etiquetas.domElement);
     this.controles = new OrbitControls(this.camara, this.renderer.domElement);
+    this.controles.zoomToCursor = true;            // la rueda acerca hacia donde apunta el cursor
     this.controles.enableDamping = false;
     this.controles.addEventListener('change', () => this.pintar());
     this.escena.add(new THREE.HemisphereLight(0xffffff, 0x8a949e, 1.6));
