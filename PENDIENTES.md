@@ -14,11 +14,13 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 **Hecho hace poco en `alternativa`** (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
 media; la planta que no queda tapada en una notebook; el Citicorp con el criterio CIRSOC (notas de la plaza y la
-fundación) y el 3D que dibuja las losas de los pisos que junta un nivel.
+fundación) y el 3D que dibuja las losas de los pisos que junta un nivel; los pisos de la corona del Citicorp
+(57º–59º en el cajón y siete técnicos bajo el techo a 45°, recortados por la envolvente), que el exo también carga.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
 - Supercolumnas del exo que bajen hasta la fundación.
+- Que los ejemplos con exo abran con CIRSOC (con ese método verifican todos; con la Planilla, ΣJ y la flecha no).
 - Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
 
 **Para la otra rama** (vistos desde acá, sin tocar)

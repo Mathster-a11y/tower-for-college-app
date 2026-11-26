@@ -5,6 +5,7 @@
  *  - el corrimiento de cada piso de la torre con el exo (para la deriva de servicio).
  * Los métodos de la cátedra (Planilla y Guía) no lo usan: ahí el exo es un estudio aparte.
  */
+import { exoConLosasJuntas } from './losasJuntas';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
 import type { PiezaEquivalente } from './mapping';
@@ -52,7 +53,7 @@ export function exoConViento(p: Proyecto, valores: PlanillaRes, piezas: PiezaEqu
     const corr = c.some(x => Math.abs(x) > 1e-9) ? c : undefined;
     const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
     // (las barras dibujadas a mano para un solo viento van solo en sus caras)
-    const r = calcularExo(paraViento(def, dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
+    const r = calcularExo(paraViento(exoConLosasJuntas(p, def, dir), dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
     // la base de los tabiques: con interacción tabique-exo el corte puede repartirse distinto que el momento
     const fM = Math.abs(r.Msin[0]) > 1e-9 ? Math.abs(r.Mtab[0] / r.Msin[0]) : 1;
     const fV = Math.abs(r.Vsin[0]) > 1e-9 ? Math.abs(r.Vtab[0] / r.Vsin[0]) : 1;

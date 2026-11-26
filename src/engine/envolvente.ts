@@ -86,6 +86,11 @@ export function contornoEnvolventeEnZ(p: Proyecto, z: number): Vertice[] | null 
   return recortarPlanos(env, z, formaEnvolvente(p, env, z));
 }
 
+/** un contorno (una losa) recortado por los planos de la envolvente a la cota z (null si lo sacan entero o no hay planos) */
+export function recortarConPlanosEnvolvente(p: Proyecto, z: number, v: Vertice[]): Vertice[] | null {
+  return p.envolvente ? recortarPlanos(p.envolvente, z, v.map(q => ({ ...q }))) : v;
+}
+
 /** el contorno de la piel a la cota z sin los planos de corte (para tomarlo como sección y seguir editándolo) */
 export function formaEnvolventeEn(p: Proyecto, z: number): Vertice[] | null {
   return p.envolvente ? formaEnvolvente(p, p.envolvente, z) : null;

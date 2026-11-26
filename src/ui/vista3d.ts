@@ -4,6 +4,7 @@
  * θ(z) alrededor del centro de rigidez CR (ver rototraslacion3D en el motor). Cada muro se arma como un prisma con
  * un anillo en cada nivel, así se dobla y se revira piso por piso; la torre sin deformar queda en línea de trazos.
  */
+import { losasJuntas } from '../engine/losasJuntas';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
@@ -255,28 +256,16 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       ? new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, roughness: 0.9, side: THREE.DoubleSide })
       : new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
-    // un nivel que junta varios pisos (el 11º–12º del Citicorp, los del Hancock o el Onterie: el cálculo tiene lugar para 49)
-    // dibuja también las losas de los pisos de abajo que junta, repartidas en su tramo, cuando el tramo mide
-    // esos pisos a la altura de piso de la torre. Si no (un cajón alto con «pisos: 2», como el 8º–9º del Citicorp sobre la
-    // plaza), no: esas losas no están repartidas en el tramo
-    const porCota = p.niveles.map((n, i) => ({ n, i })).sort((a, b) => a.n.cota - b.n.cota);
-    const alturas = porCota.map((x, k) => (k > 0 && x.n.cota > 0 ? (x.n.cota - porCota[k - 1].n.cota) / Math.max(1, x.n.pisos ?? 1) : NaN)).filter(v => v > 0.5);
-    const hPiso = alturas.length ? [...alturas].sort((a, b) => a - b)[Math.floor(alturas.length / 2)] : 0;
-    const losasJuntas = new Map<number, number[]>();
-    porCota.forEach((x, k) => {
-      const np = Math.round(x.n.pisos ?? 1), abajo = porCota[k - 1]?.n.cota;
-      if (np < 2 || x.n.sinLosa || abajo === undefined || x.n.cota <= 0 || !(hPiso > 0)) return;
-      const h = (x.n.cota - abajo) / np;
-      if (Math.abs(h - hPiso) > 0.25 * hPiso) return;
-      losasJuntas.set(x.i, Array.from({ length: np - 1 }, (_, j) => x.n.cota - (j + 1) * h));
-    });
+    // las losas de los pisos que junta un nivel (el cálculo tiene lugar para 49 niveles): el 11º–12º y la corona del
+    // Citicorp, los niveles del Hancock; en una «Envolvente» las recortan sus planos (la corona a 45°)
+    const juntas = losasJuntas(p);
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
       const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 5);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
-      for (const z of [n.cota, ...(losasJuntas.get(iN) ?? [])]) {
-        const losa = new Prisma(pol, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
+      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: puntosSilueta(j.v, 5) }))]) {
+        const losa = new Prisma(v, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
         capa(losa.malla, 'Losas', `Losa ${n.nombre}${z === n.cota ? '' : ` (piso de ${f2z(z)} m)`}`);
         prismas.push(losa);
       }
