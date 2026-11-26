@@ -22,7 +22,7 @@ import { prepararSecciones } from '../engine/loft';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
-import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
+import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
 import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
@@ -835,7 +835,13 @@ export function montarPlanta(cont: HTMLElement) {
           ([['plana', 'Plana', `Paños planos: los lados curvos de la losa pasan a facetas rectas de hasta ${String(moduloFacetas(p)).replace('.', ',')} m (el módulo de la panelería)`], ['curva', 'Curva', 'Sigue los arcos y las curvas de la losa (vidrio curvo)']] as const).forEach(([f2, nom, ti]) => {
             const x = boton(nom, () => { if (f2 !== forma) ponerTramos(ts => { ts[k].forma = f2; }); }, ti); x.setAttribute('aria-pressed', String(f2 === forma)); sf.append(x);
           });
-          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf]));
+          // por el borde exterior: la piel cierra los entrantes angostos (pozos, balcones, terrazas) en vez de seguirlos
+          const en = document.createElement('input'); en.type = 'text'; en.inputMode = 'decimal'; en.className = 'campo-vertice'; en.value = t.entrantes ? String(t.entrantes).replace('.', ',') : '';
+          en.placeholder = '—'; en.setAttribute('aria-label', 'Cerrar entrantes de hasta estos metros de boca');
+          en.addEventListener('change', () => { const x = parseFloat(en.value.replace(',', '.')); ponerTramos(ts => { if (isFinite(x) && x > 0) ts[k].entrantes = x; else delete ts[k].entrantes; }); });
+          const lEn = lab('por fuera: cierra entrantes de hasta ', en, ' m');
+          lEn.title = 'Borde exterior: la piel no entra en los pozos, balcones ni terrazas cuya boca mide hasta estos metros (los cierra con un paño recto); los más anchos, como el brazo de una planta en L o en U, los sigue. Vacío: sigue todo el borde de la losa.';
+          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf, lEn]));
           segue.append(fila);
         });
         const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
@@ -1861,7 +1867,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
   const areasDe = (i: number): AreasInfluencia => {
-    const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta])]);
+    const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta]), p.exo?.losas, p.exo?.circular, p.exo?.cortes]);
     if (!areasCache || areasCache.clave !== clave) areasCache = { clave, a: areasInfluencia(p, i) };
     return areasCache.a;
   };
@@ -1870,7 +1876,8 @@ export function montarPlanta(cont: HTMLElement) {
    *  para que también se distingan impresos en blanco y negro; el quinto es de reserva */
   const PALETA_AREAS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1'];
   const RAYADOS = ['d45', 'h', 'd135', 'v', 'd45'] as const;
-  const claveArea = (m: Muro | undefined): { k: string; nombre: string } => {
+  const claveArea = (m: Muro | undefined, id?: string): { k: string; nombre: string } => {
+    if (id === ID_EXO) { const f = estado.proyecto.exo?.losas?.franja ?? 0; return { k: 'exo', nombre: `exoesqueleto (franja de ${String(f).replace('.', ',')} m)` }; }
     if (!m) return { k: '?', nombre: '?' };
     const cad = ancestros(estado.proyecto, m.gd);
     if (cad.length) { const g = cad[cad.length - 1]; return { k: `g:${g.id}`, nombre: g.nombre }; }
@@ -1882,7 +1889,7 @@ export function montarPlanta(cont: HTMLElement) {
   let coloresCache: { a: AreasInfluencia; firma: string; col: Map<string, number> } | null = null;
   const ordenClaves = (a: AreasInfluencia) => {
     const porId = new Map(estado.proyecto.muros.map(m => [m.id, m]));
-    const claves = a.ids.map(id => claveArea(porId.get(id)).k), firma = claves.join('|');
+    const claves = a.ids.map(id => claveArea(porId.get(id), id).k), firma = claves.join('|');
     if (coloresCache && coloresCache.a === a && coloresCache.firma === firma) return coloresCache.col;
     const col = cuatroColores(vecindades(a, o => claves[o]));
     coloresCache = { a, firma, col };
@@ -1895,14 +1902,16 @@ export function montarPlanta(cont: HTMLElement) {
     const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
     panelAreas.replaceChildren(mk('b', `Áreas de influencia · ${p.niveles[i]?.nombre ?? ''}`));
     const suma = a.ids.reduce((q, id) => q + a.area[id], 0);
-    panelAreas.append(mk('span', `losa ${f1(a.total)} m²${a.huecos ? ` (sin ${f1(a.huecos)} m² de huecos)` : ''} · ${a.ids.length} elementos`, 'nota-chica'));
+    panelAreas.append(mk('span', `losa ${f1(a.total)} m²${a.huecos ? ` (sin ${f1(a.huecos)} m² de huecos)` : ''} · ${a.ids.length} elementos${a.ids.includes(ID_EXO) ? `, con el exo: ${f1(a.area[ID_EXO])} m² (${Math.round((100 * a.area[ID_EXO]) / (a.total || 1))} %)` : ''}`, 'nota-chica'));
     // leyenda por grupo: color, área y peso de losa por piso
     const orden = ordenClaves(a), porClave = new Map<string, { nombre: string; area: number; n: number }>();
-    a.ids.forEach(id => { const c = claveArea(p.muros.find(o => o.id === id)); const e = porClave.get(c.k) ?? { nombre: c.nombre, area: 0, n: 0 }; e.area += a.area[id]; e.n++; porClave.set(c.k, e); });
+    a.ids.forEach(id => { const c = claveArea(p.muros.find(o => o.id === id), id); const e = porClave.get(c.k) ?? { nombre: c.nombre, area: 0, n: 0 }; e.area += a.area[id]; e.n++; porClave.set(c.k, e); });
     const ley = mk('div', '', 'areas-leyenda');
     [...porClave.entries()].sort((x, y) => (orden.get(x[0]) ?? 0) - (orden.get(y[0]) ?? 0)).forEach(([k, e]) => {
       const st = estiloArea(k, orden.get(k) ?? 0), sw = mk('i', '', `muestra r-${st.rayado}`); sw.style.setProperty('--c', st.color);
-      const fila2 = mk('div', '', 'areas-ley-fila'); fila2.append(sw, mk('span', `${e.nombre}${e.n > 1 ? ` (${e.n})` : ''}`), mk('span', `${f1(e.area)} m² · ${(e.area * 0.9).toFixed(1).replace('.', ',')} t/piso`, 'n'));
+      // el exo, con el peso y la sobrecarga de sus losas (los de su cálculo); los muros, con 0,9 t/m² (el «cargado» de la planilla)
+      const qL = k === 'exo' ? (p.exo?.losas?.qD ?? 0.45) + (p.exo?.losas?.qL ?? 0.25) : 0.9;
+      const fila2 = mk('div', '', 'areas-ley-fila'); fila2.append(sw, mk('span', `${e.nombre}${e.n > 1 ? ` (${e.n})` : ''}`), mk('span', `${f1(e.area)} m² · ${(e.area * qL).toFixed(1).replace('.', ',')} t/piso`, 'n'));
       ley.append(fila2);
     });
     panelAreas.append(ley);
@@ -1915,12 +1924,13 @@ export function montarPlanta(cont: HTMLElement) {
     const tabla = mk('table', '', 'areas-tabla');
     const fila = (c: string[], th = false) => { const tr = mk('tr'); c.forEach(t => tr.append(mk(th ? 'th' : 'td', t))); return tr; };
     tabla.append(fila(['Muro', 'Calculada', 'Cargada'], true));
-    [...a.ids].sort((x, y) => a.area[y] - a.area[x]).forEach(id => { const m = p.muros.find(o => o.id === id); tabla.append(fila([id, `${f1(a.area[id])} m²`, m ? `${f1(m.areaInf)} m²` : '—'])); });
+    [...a.ids].sort((x, y) => a.area[y] - a.area[x]).forEach(id => { const m = p.muros.find(o => o.id === id); tabla.append(fila([id === ID_EXO ? 'Exo' : id, `${f1(a.area[id])} m²`, m ? `${f1(m.areaInf)} m²` : id === ID_EXO ? 'etapa 08' : '—'])); });
     panelAreas.append(tabla);
+    if (a.ids.includes(ID_EXO)) panelAreas.append(mk('span', `Las losas apoyan en el exoesqueleto: la franja de ${String(p.exo?.losas?.franja ?? 0).replace('.', ',')} m junto a la fachada baja por el exo (es la carga de losas de su cálculo, en la etapa 08); el resto de la losa, por los muros. La franja se cambia en Exoesqueleto › losas.`, 'nota-chica'));
     if (Math.abs(suma - a.total) > 0.05) panelAreas.append(mk('span', `suma ${f1(suma)} m²`, 'nota-chica'));
     const copiar = mk('button', 'Copiar a «Área inf.» de los muros') as HTMLButtonElement; copiar.type = 'button';
     copiar.title = 'Escribe estas áreas en la columna «Área inf.» de cada muro (la usa la flexocompresión, por cada losa que el muro tiene arriba). Los muros que no están en esta planta no cambian.';
-    copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.length} muros.`); });
+    copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.filter(id => id !== ID_EXO).length} muros${a.ids.includes(ID_EXO) ? ' (la franja del exo queda en su cálculo)' : ''}.`); });
     panelAreas.append(copiar, mk('span', 'Criterio: cada punto de la losa va al elemento más cercano (el borde queda a mitad de camino). Elegí la planta tipo arriba antes de copiar.', 'nota-chica'));
   }
   // grilla de discretización de 0,05 m: se ve y los puntos se ajustan a ella; apagada, el ajuste es de 0,01 m
@@ -2579,7 +2589,7 @@ export function montarPlanta(cont: HTMLElement) {
       const ga = el('g', { class: 'areas-inf' });
       // relleno por grupo (color y rayado); una tira por fila y por grupo, para que sea liviano
       const orden = ordenClaves(a), porId = new Map(p.muros.map(m => [m.id, m]));
-      const claveDe = a.ids.map(id => claveArea(porId.get(id)).k);
+      const claveDe = a.ids.map(id => claveArea(porId.get(id), id).k);
       const defsA = el('defs');
       const usados = new Set<string>();
       const patron = (k: string) => {
@@ -2621,7 +2631,7 @@ export function montarPlanta(cont: HTMLElement) {
           for (const dd of [1.2, 2, 3]) cands.push([c.x, c.y + dd], [c.x, c.y - dd], [mu.x + ax / 2 + dd, mu.y], [mu.x - ax / 2 - dd, mu.y], [mu.x, mu.y + ay / 2 + dd * 0.7], [mu.x, mu.y - ay / 2 - dd * 0.7]);
         }
         const t = el('text', { x: X(c.x), y: Y(c.y) + 4, class: 'etiqueta areas-txt', 'text-anchor': 'middle' }, `${v.toFixed(1).replace('.', ',')} m²`);
-        t.appendChild(el('title', {}, `${id}: ${v.toFixed(2).replace('.', ',')} m² de losa`));
+        t.appendChild(el('title', {}, `${id === ID_EXO ? 'exoesqueleto' : id}: ${v.toFixed(2).replace('.', ',')} m² de losa`));
         t.dataset.cands = JSON.stringify(cands.map(([x, y]) => [X(x), Y(y) + 4]));
         ga.appendChild(t);
       });

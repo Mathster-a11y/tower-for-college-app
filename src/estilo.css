@@ -876,7 +876,7 @@ text[data-par].ultimo { font-size: 15px; }
 .tabla-cmp .cmp-info { color: var(--dim); font-size: 11px; }
 .tabla-cmp tr.cmp-cambia td { background: color-mix(in srgb, #f5c400 18%, transparent); }
 .areas-panel { width: 240px; }
-.areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; }
+.areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; flex-shrink: 0; }
 .areas-panel button { font-size: 12px; white-space: normal; }
 .planta .nodos-hover rect, .planta .nodos-hover polygon { stroke: var(--ink2); }
 .planta .iman-destino { fill: none; stroke: var(--elegido); stroke-width: 2; pointer-events: none; }
@@ -1159,8 +1159,10 @@ button.peligro { color: var(--mal); }
 .planta .hueco-losa.sel polygon { stroke: var(--accent); stroke-width: 2.2; }
 .planta .hueco-txt { font-size: 10px; fill: var(--ink2); }
 .planta .hueco-previa { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: 4 3; stroke-width: 1.2; }
-.areas-leyenda { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; max-height: 160px; overflow: auto; }
-.areas-ley-fila { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: center; font-size: 11.5px; }
+.areas-leyenda { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; max-height: 160px; overflow: auto; flex-shrink: 0; }
+.areas-ley-fila { display: grid; grid-template-columns: 16px 1fr; column-gap: 6px; align-items: center; font-size: 11.5px; }
+/* el área y el peso, debajo del nombre: con nombres largos (el exo) no se aprietan */
+.areas-ley-fila .n { grid-column: 2; }
 .areas-ley-fila .n { font-family: var(--mono, monospace); font-size: 11px; color: var(--ink2); }
 .areas-leyenda .muestra { width: 14px; height: 12px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
 .areas-leyenda .muestra.r-d135 { background-image: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
@@ -1883,6 +1885,8 @@ canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 .corte-svg .manija { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: ew-resize; }
 .corte-svg .manija:hover { fill: var(--accent); }
 .corte-svg .calib { fill: var(--elegido, #e8a317); }
+.corte-svg .medida { stroke: var(--elegido, #e8a317); stroke-width: 2.5; fill: none; }
+.corte-svg .medida-linea { stroke: var(--elegido, #e8a317); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; }
 .corte-svg .nivel { font-size: 10px; fill: var(--ink2); }
 .corte-svg .rot { font-size: 12px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
 
@@ -2207,3 +2211,18 @@ body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tuto
 /* túnel 3D, dinámica: la explicación de las cuentas, plegada (es larga) */
 .como-se-calcula { margin-top: 6px; }
 .como-se-calcula > summary { cursor: pointer; font-size: 12.5px; color: var(--accent); }
+
+/* ---- modo presentación: solo el dibujo de la etapa, grande, con una barra para pasar de etapa ---- */
+.pres-barra { display: none; }
+body.presentando .barra, body.presentando .estado-linea, body.presentando .riel, body.presentando .lateral,
+body.presentando .divisor, body.presentando .derecha { display: none !important; }
+body.presentando .app { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+body.presentando .centro { grid-column: 1 / -1; }
+body.presentando .centro .tira { font-size: 16px; }
+body.presentando .centro-dibujos { padding-bottom: 64px; }
+body.presentando .pres-barra { display: flex; align-items: center; gap: 10px; position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 50;
+  padding: 6px 10px; border: 1px solid var(--edge); border-radius: 12px; background: color-mix(in srgb, var(--panel) 92%, transparent); box-shadow: 0 4px 18px rgb(0 0 0 / .18); opacity: .35; transition: opacity .2s; }
+body.presentando .pres-barra:hover, body.presentando .pres-barra:focus-within { opacity: 1; }
+.pres-barra button { font-size: 16px; min-width: 40px; }
+.pres-barra .pres-titulo { font: 600 16px var(--fuente); min-width: 16ch; text-align: center; white-space: nowrap; }
+@media print { .pres-barra { display: none !important; } }

@@ -14,6 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
+import { montarPresentacion } from './ui/modoPresentacion';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
 import { hiloDeEtapa } from './ui/hilo';
 import { leerProyecto, textoErrores } from './engine/lector';
@@ -862,6 +863,10 @@ document.addEventListener('keydown', ev => {
   const k = Number(ev.key);
   if (k >= 1 && k <= ETAPAS.length) { ev.preventDefault(); irA(ETAPAS[k - 1].id); }
 });
+// modo presentación: todas las etapas menos la ayuda, en el orden del riel
+const presentacion = montarPresentacion({ etapas: () => todas().filter(e => e.id !== 'ayuda'), actual: () => estado.etapa, irA, redibujar: () => dibujarTodo() });
+$('b-presentar').addEventListener('click', () => presentacion.alternar());
+$('b-presentar-menu').addEventListener('click', () => { cerrarMenus(); presentacion.alternar(); });
 $('b-exportar').addEventListener('click', () => { void exportar(); });
 $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void abrir(f); (e.target as HTMLInputElement).value = ''; });
 

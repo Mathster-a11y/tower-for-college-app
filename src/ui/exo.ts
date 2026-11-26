@@ -358,6 +358,23 @@ export function panelExo(c: H) {
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
   if (def.tipo !== 'F') campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; delete x.nuevas; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
   if (def.zonas?.length) fo.append(h('p', { class: 'nota aviso-loft nota-ancha' }, `Hay ${def.zonas.length} zonas en altura: cada una tiene su ficha y su módulo (se editan en «Diseño 3D», en el centro). La ficha y el módulo de acá valen para lo que no diga cada zona.`));
+  // ficha A sobre una planta circular (como el Gherkin): nudos por anillo y anillos alternados (lo dibujan el 3D y la planta)
+  if (def.tipo === 'A') {
+    const lc = h('label', { class: 'campo-linea', title: 'El diagrid se dibuja sobre la planta circular: anillos de nudos en los bordes y en la mitad de cada módulo, y en cada anillo los nudos girados media separación respecto del de abajo (anillos alternados). El cálculo sigue con caras planas: las medidas B y L de la planta.' });
+    const cbc = h('input', { type: 'checkbox' }) as HTMLInputElement; cbc.checked = !!def.circular;
+    cbc.addEventListener('change', () => set(x => { x.circular = cbc.checked ? { nudos: 16 } : undefined; }));
+    lc.append(cbc, ' Diagrid sobre planta circular (anillos de nudos)');
+    fo.append(lc);
+    if (def.circular) {
+      const c0 = def.circular, n = Math.max(3, Math.round(c0.nudos));
+      campo(fo, 'Nudos por anillo', 'exo-circ-n', n, nu((x, v) => { if (x.circular) x.circular.nudos = Math.max(3, Math.round(v)); }), { tipo: 'number', ayuda: 'cuántos nudos tiene cada anillo en la vuelta (el Gherkin real tiene 18)' });
+      campo(fo, 'Diagrid hasta la cota', 'exo-circ-hasta', c0.hasta ?? '', v => {
+        const y = parseFloat(v.replace(',', '.'));
+        set(x => { if (x.circular) { if (isFinite(y) && y > 0) x.circular.hasta = y; else delete x.circular.hasta; } });
+      }, { tipo: 'number', unidad: 'm', ayuda: 'arriba de esta cota queda solo la carpintería (una cúpula de vidrio); vacío: hasta la azotea' });
+      fo.append(h('p', { class: 'nota chica nota-ancha' }, `Anillos alternados: cada anillo gira ${fmt(180 / n, 1)}° (media separación entre nudos, 360° / ${n} / 2) respecto del anillo de abajo, así las diagonales de un módulo arrancan donde terminan las del anterior. Hay un anillo en cada borde y otro a mitad de cada módulo de ${def.modulo} pisos.`));
+    }
+  }
   campo(fo, 'Flecha objetivo: h /', 'exo-lim', def.limiteH ?? 500, nu((x, v) => (x.limiteH = Math.max(100, Math.round(v)))), { tipo: 'number', ayuda: 'el curso pide h/500; con un número más grande (h/1000, h/1500) el dimensionado busca un exo que deje la torre más rígida' });
   const sec = (nombre: string, k: 'columna' | 'diagonal' | 'viga') => {
     const s = def[k], pr = propsSeccion(s);
@@ -427,7 +444,7 @@ export function panelExo(c: H) {
     campo(fu, 'Sobrecarga (L)', 'exo-ql', L0.qL ?? LOSA_QL, v => { const y = parseFloat(v.replace(',', '.')); if (isFinite(y) && y >= 0) set(x => { if (x.losas) x.losas.qL = y; }); }, { tipo: 'number', unidad: 't/m²', ayuda: 'la planilla usa 0,9 t/m² cargado: 0,2 t/m² más que el peso' });
     const B = pl.L + 2 * def.separacion, Lp = pl.B + 2 * def.separacion, q = (L0.qD ?? LOSA_QD) + (L0.qL ?? LOSA_QL);
     const porPiso = losaPorPiso(q, L0.franja, B, Lp), planta = pl.B * pl.L * q;
-    fu.append(h('p', { class: 'nota chica' }, `Cada piso le baja al exo hasta ${fmt(porPiso, 0)} t (${fmt(planta > 0 ? (porPiso / planta) * 100 : 0, 0)} % de la planta, con ${fmt(q, 1)} t/m²). Las columnas lo llevan a la base: con 1,2 D + 1,6 L y con el viento (1,2 D + 0,5 L + W) en el CIRSOC 301; el peso, además, le resta tracción a las columnas de barlovento. La planilla de la cátedra sigue cargando toda la losa en los tabiques: para su compresión queda del lado seguro, para su tracción no.`));
+    fu.append(h('p', { class: 'nota chica' }, `Cada piso le baja al exo hasta ${fmt(porPiso, 0)} t (${fmt(planta > 0 ? (porPiso / planta) * 100 : 0, 0)} % de la planta, con ${fmt(q, 1)} t/m²). Las columnas lo llevan a la base: con 1,2 D + 1,6 L y con el viento (1,2 D + 0,5 L + W) en el CIRSOC 301; el peso, además, le resta tracción a las columnas de barlovento. La planilla de la cátedra sigue cargando toda la losa en los tabiques: para su compresión queda del lado seguro, para su tracción no. En Diseño › Áreas se ve, piso por piso, qué parte de la losa baja por el exo y cuál por los muros.`));
   }
   const ar = h('label', { class: 'campo-linea', title: 'Cada diagonal se ata a la losa en cada piso que cruza entre sus nudos (como en el Hearst): ahí comparte el corrimiento de la losa, recibe su carga y pandea de piso a piso en lugar de nudo a nudo. Sirve sobre todo en el diagrid, donde las diagonales cruzan varios pisos.' });
   const cba = h('input', { type: 'checkbox' }) as HTMLInputElement; cba.checked = !!def.arriostradas;

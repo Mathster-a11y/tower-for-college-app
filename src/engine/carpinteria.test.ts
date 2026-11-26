@@ -225,3 +225,18 @@ describe('caras de la fachada', () => {
     expect(enC(calcularPaneleria(b, { modulo: 1.5, caras: [{ id: c.id, modulo: 2.5 }] })).length).toBe(2 * 8);
   });
 });
+
+describe('carpintería por el borde exterior', () => {
+  it('cierra un pozo angosto y sigue el brazo ancho de una L', async () => {
+    const { cerrarEntrantes } = await import('./carpinteria');
+    // cuadrado de 20 con un pozo de 3 m de boca y 4 de fondo en el lado de abajo
+    const pozo = [{ x: -10, y: -10 }, { x: -1.5, y: -10 }, { x: -1.5, y: -6 }, { x: 1.5, y: -6 }, { x: 1.5, y: -10 }, { x: 10, y: -10 }, { x: 10, y: 10 }, { x: -10, y: 10 }];
+    const c = cerrarEntrantes(pozo, 4);
+    const ar = (q: { x: number; y: number }[]) => Math.abs(q.reduce((s, a, i) => { const b = q[(i + 1) % q.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2);
+    expect(ar(c)).toBeCloseTo(400, 6);
+    expect(cerrarEntrantes(pozo, 2)).toBe(pozo);                 // boca de 3 m > 2: lo sigue
+    // L de 20 × 20 sin el cuarto de 10 × 10: la boca del entrante mide 14,1 m
+    const L = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 20 }, { x: 0, y: 20 }];
+    expect(cerrarEntrantes(L, 6)).toBe(L);
+  });
+});

@@ -36,7 +36,42 @@ export interface AreasInfluencia {
   centro: Record<string, Punto>;
 }
 
-/** áreas de influencia en la losa del nivel i (los elementos que están en esa planta) */
+/** id del exoesqueleto en las áreas de influencia (no es un muro: lleva la franja de losa junto a la fachada) */
+export const ID_EXO = 'exo';
+/** franja de losa que apoya en el exo en la cota z (0 si el proyecto no tiene exo, sus losas no apoyan en él o no llega a esa altura) */
+export function franjaExo(p: Proyecto, z: number): number {
+  const x = p.exo;
+  if (!x || !x.losas || !(x.losas.franja > 0)) return 0;
+  const tope = x.circular?.hasta ?? x.cortes?.[x.cortes.length - 1] ?? Infinity;
+  return z <= tope + 1e-6 ? x.losas.franja : 0;
+}
+/** envolvente convexa (cadena monótona): el exo envuelve el contorno de afuera, no entra en las muescas de la losa */
+function envolvente(pts: Punto[]): Punto[] {
+  const q = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (q.length < 3) return q;
+  const cruz = (o: Punto, a: Punto, b: Punto) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const abajo: Punto[] = [], arriba: Punto[] = [];
+  for (const r of q) { while (abajo.length >= 2 && cruz(abajo[abajo.length - 2], abajo[abajo.length - 1], r) <= 0) abajo.pop(); abajo.push(r); }
+  for (let i = q.length - 1; i >= 0; i--) { const r = q[i]; while (arriba.length >= 2 && cruz(arriba[arriba.length - 2], arriba[arriba.length - 1], r) <= 0) arriba.pop(); arriba.push(r); }
+  return [...abajo.slice(0, -1), ...arriba.slice(0, -1)];
+}
+/** distancia de un punto al borde de un polígono */
+function aBorde(q: Punto, pol: Punto[]): number {
+  let d = Infinity;
+  for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+    const a = pol[j], b = pol[i], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / L2)) : 0;
+    d = Math.min(d, Math.hypot(q.x - a.x - t * dx, q.y - a.y - t * dy));
+  }
+  return d;
+}
+
+/**
+ * áreas de influencia en la losa del nivel i (los elementos que están en esa planta). Si las losas apoyan en el
+ * exoesqueleto (exo.losas), la franja de ese ancho junto a la fachada va al exo (id «exo»), como en su cálculo
+ * (etapa 08); el resto, al muro más cercano. La franja se mide desde el contorno de afuera (la envolvente convexa de
+ * la losa, por donde pasa el exo): las muescas de la losa (los atrios del Gherkin) no la corren hacia adentro.
+ */
 export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInfluencia {
   const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
   const z = p.niveles[i]?.cota ?? 0;
@@ -48,24 +83,41 @@ export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInflu
   const x0 = Math.min(...xs), y0 = Math.min(...ys);
   const nx = Math.max(1, Math.ceil((Math.max(...xs) - x0) / paso)), ny = Math.max(1, Math.ceil((Math.max(...ys) - y0) / paso));
   const duenio = new Int16Array(nx * ny).fill(-1);
-  const area: Record<string, number> = Object.fromEntries(ms.map(m => [m.id, 0]));
-  const sx: number[] = ms.map(() => 0), sy: number[] = ms.map(() => 0);
+  const fr = franjaExo(p, z);
+  const contornoExo = fr > 0 ? envolvente(pol) : [];
+  const ids = [...ms.map(m => m.id), ...(fr > 0 ? [ID_EXO] : [])], iExo = fr > 0 ? ms.length : -1;
+  const area: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+  const sx: number[] = ids.map(() => 0), sy: number[] = ids.map(() => 0);
+  // el rótulo del exo va sobre la franja, arriba (su centro de gravedad cae en el medio de la planta, sobre el núcleo)
+  const xMed = (Math.min(...xs) + Math.max(...xs)) / 2, yRot = Math.max(...ys) - fr / 2;
+  let rotExo: Punto | null = null, dRot = Infinity;
   let total = 0, enHuecos = 0;
   for (let j = 0; j < ny; j++) for (let k = 0; k < nx; k++) {
     const q = { x: x0 + (k + 0.5) * paso, y: y0 + (j + 0.5) * paso };
     if (!dentro(q, pol)) continue;
     if (huecos.some(h => dentro(q, h))) { enHuecos += paso * paso; continue; }
     total += paso * paso;
-    if (!ms.length) continue;
-    let mejor = 0, dMin = Infinity;
-    ms.forEach((m, n) => { const d = distancia(q, m); if (d < dMin - 1e-9) { dMin = d; mejor = n; } });
+    let mejor = -1;
+    if (iExo >= 0 && aBorde(q, contornoExo) < fr) {
+      mejor = iExo;
+      const dr = Math.hypot(q.x - xMed, q.y - yRot);
+      if (dr < dRot) { dRot = dr; rotExo = q; }
+    } else if (ms.length) {
+      let dMin = Infinity;
+      ms.forEach((m, n) => { const d = distancia(q, m); if (d < dMin - 1e-9) { dMin = d; mejor = n; } });
+    } else if (iExo >= 0) mejor = iExo;   // arriba del núcleo, toda la losa cuelga del exo
+    if (mejor < 0) continue;
     duenio[j * nx + k] = mejor;
-    area[ms[mejor].id] += paso * paso;
+    area[ids[mejor]] += paso * paso;
     sx[mejor] += q.x; sy[mejor] += q.y;
   }
   const centro: Record<string, Punto> = {};
-  ms.forEach((m, n) => { const c = area[m.id] / (paso * paso); centro[m.id] = c ? { x: sx[n] / c, y: sy[n] / c } : { x: m.x, y: m.y }; area[m.id] = Math.round(area[m.id] * 100) / 100; });
-  return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids: ms.map(m => m.id), centro };
+  ids.forEach((id, n) => {
+    const c = area[id] / (paso * paso), m = ms[n];
+    centro[id] = n === iExo ? (rotExo ?? { x: xMed, y: yRot }) : c ? { x: sx[n] / c, y: sy[n] / c } : { x: m.x, y: m.y };
+    area[id] = Math.round(area[id] * 100) / 100;
+  });
+  return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids, centro };
 }
 
 // ------------------------------------------------------------------ colores del mapa de áreas (cuatro colores)
