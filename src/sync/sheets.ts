@@ -119,6 +119,8 @@ export class SincroSheets {
     if (j.error === 'conflicto') throw new ConflictoSheets(j.version ?? -1);
     if (j.error === 'clave') throw new Error('La clave no es la de esta planilla (la crea «configurar» en Apps Script).');
     if (j.error === 'ocupado') throw new Error('La planilla está ocupada con otra escritura; se reintenta en unos segundos.');
+    // el script de la versión 3 no acepta textos de más de 2000 caracteres (las notas y las barras a mano del exo)
+    if (j.error && /^Valor no permitido en T3D /.test(j.error)) throw new Error(`${j.error}: el script de la planilla es de una versión anterior y no acepta textos largos (las notas o las barras a mano del exoesqueleto). Volvé a pegar docs/sheets/Codigo.gs (versión 4) en Extensiones → Apps Script y publicá una nueva versión de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).`);
     if (j.error) throw new Error(j.error);
     return j;
   }

@@ -1,5 +1,6 @@
 /**
- * Torre 3D · sincronización con Google Sheets (dos vías) · versión 3 (con clave y bloqueo; suma la hoja «T3D Exo»)
+ * Torre 3D · sincronización con Google Sheets (dos vías) · versión 4 (con clave y bloqueo; hoja «T3D Exo»; textos de
+ * hasta 45 000 caracteres por celda: las notas y las barras dibujadas a mano de los ejemplos con exoesqueleto)
  *
  * Cómo se instala (una sola vez, en la copia de la planilla de cada alumno):
  *  1. Subí la planilla .xlsx a Google Drive y abrila con Google Sheets (Archivo → Guardar como Hojas de cálculo de Google).
@@ -30,7 +31,8 @@ const HOJAS_EDITABLES = ['T3D Proyecto', 'T3D Niveles', 'T3D Muros', 'T3D Contor
 const HOJAS_PLANILLA = ['viento', 'M,NyQ', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'Flex comp PB paralelos'];
 const CELDAS_VIENTO = ['C4', 'D4', 'E4', 'F4', 'G4', 'I4', 'J4', 'K4', 'L4', 'O4'];
 const TROZO = 40000;            // largo de cada celda de «T3D» (Sheets admite 50 000 caracteres por celda)
-const MAX_FILAS = 300, MAX_COLS = 60, MAX_TEXTO = 2000, MAX_T3D = 4000000, MAX_FILAS_TABLA = 5000;
+// (Sheets admite 50 000 caracteres por celda; las notas y las barras a mano del exo del Citicorp pasan los 2000 de la versión 3)
+const MAX_FILAS = 300, MAX_COLS = 60, MAX_TEXTO = 45000, MAX_T3D = 4000000, MAX_FILAS_TABLA = 5000;
 
 /** se ejecuta una vez a mano, desde el editor: fija la planilla y crea la clave */
 function configurar() {
