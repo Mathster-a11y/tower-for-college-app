@@ -58,7 +58,7 @@ export function movimientoLosa(d: Pick<DatosRotoPlano, 'Q' | 'Mt' | 'Xr'> & { SJ
 
 export interface RotoAnimada { el: HTMLElement; parar: () => void }
 
-export function rototraslacionAnimada(d: DatosRotoPlano & { SJ: number; SJa2: number }, tam: Tam = {}): RotoAnimada {
+export function rototraslacionAnimada(d: DatosRotoPlano & { SJ: number; SJa2: number }, tam: Tam = {}, rotulos: 'todos' | 'valores' | 'ninguno' = 'todos'): RotoAnimada {
   const ancho = Math.max(420, tam.ancho ?? 640), alto = Math.max(420, tam.alto ?? 560);
   const caja = document.createElement('div');
   caja.className = 'roto-animada';
@@ -171,8 +171,9 @@ export function rototraslacionAnimada(d: DatosRotoPlano & { SJ: number; SJa2: nu
     });
     ordenGrupos.forEach((ps, gi) => {
       const y1 = base + Lmax + 18 + (gi % 2) * 26;
-      fuerzas.append(el('text', { x: X(ps[0].pos), y: y1, class: 'd-eje', 'text-anchor': 'middle' }, ps.map(p => p.nombre).join(' · ')));
-      fuerzas.append(el('text', { x: X(ps[0].pos), y: y1 + 12, class: 'd-valor', 'text-anchor': 'middle' }, ps.map(p => fmt(p.tras * f1 + p.rot * f2, 1)).join(' / ') + ' t'));
+      if (rotulos === 'ninguno') return;
+      if (rotulos === 'todos') fuerzas.append(el('text', { x: X(ps[0].pos), y: y1, class: 'd-eje', 'text-anchor': 'middle' }, ps.map(p => p.nombre).join(' · ')));
+      fuerzas.append(el('text', { x: X(ps[0].pos), y: rotulos === 'todos' ? y1 + 12 : y1 + 6, class: 'd-valor', 'text-anchor': 'middle' }, ps.map(p => fmt(p.tras * f1 + p.rot * f2, 1)).join(' / ') + ' t'));
     });
     // perpendiculares: solo rotación, a lo largo del muro (siguen a la losa)
     if (gira) d.perpendiculares.forEach(p => {

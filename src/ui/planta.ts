@@ -51,6 +51,21 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   return e;
 };
 
+/** íconos de la barra de la planta (24 × 24, trazo como los del riel de etapas) */
+const ICONOS_HERR = {
+  mover: '<path d="M5 3l13 6.5-5.5 1.6L10.8 17z"/><path d="M13.4 11.2l5 5"/>',
+  lazo: '<ellipse cx="12" cy="9.5" rx="8" ry="5.5" stroke-dasharray="3 2.6"/><path d="M8 14.3c-.6 2.6.8 4.7 3 5.2"/>',
+  losa: '<path d="M3 15l7-5h11l-7 5z"/><path d="M3 15v2l11 0 7-5v-2"/>',
+  carpinteria: '<rect x="4" y="3.5" width="16" height="17" rx="1"/><path d="M12 3.5v17M4 12h16"/>',
+  corte: '<path d="M7 21V7l5-4 5 4v14"/><path d="M3 21h18"/><path d="M12 1.5v21" stroke-dasharray="2.5 2"/>',
+  dibujar: '<path d="M4 20l3.5-1 11-11-2.5-2.5-11 11z"/><path d="M14.5 6.5l2.5 2.5"/>',
+  armar: '<path d="M4 4h5v11h11v5H4z"/>',
+  insertar: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M12 8v8M8 12h8"/>',
+  colocar: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
+  calar: '<rect x="3" y="7" width="18" height="10" rx="1"/><path d="M10 17v-6h4v6"/>',
+  ayudas: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M8 12l2 2M11 9l2 2M14 6l2 2"/>',
+};
+
 export function montarPlanta(cont: HTMLElement) {
   const svg = el('svg', { class: 'planta', role: 'img', 'aria-label': 'Planta con los muros del contraviento' });
   cont.appendChild(svg);
@@ -318,7 +333,7 @@ export function montarPlanta(cont: HTMLElement) {
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
-  barra.className = 'herr-planta seg chico';
+  barra.className = 'herr-planta';
   barra.setAttribute('role', 'group');
   barra.setAttribute('aria-label', 'Herramienta');
   const bMover = document.createElement('button'), bDibujar = document.createElement('button'), bArmar = document.createElement('button');
@@ -2072,15 +2087,28 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
   mas.append(bMas);
   cont.appendChild(listaMas);
-  // la barra en grupos con nombre: Forma (losa, carpintería, corte), Estructura (muros y piezas) y Ayudas
-  const rotuloGrupo = (t: string) => { const x = document.createElement('span'); x.className = 'grupo-rot'; x.textContent = t; x.setAttribute('aria-hidden', 'true'); return x; };
-  barra.append(bMover, bLazo, rotuloGrupo('Forma'), bSil, bCarp, rotuloGrupo('Estructura'), bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar, mas);
   // corte de la torre: la silueta se ajusta en un corte vertical, con el plano del proyecto calcado debajo
   const corte = montarCorte(cont, mensaje);
   const bCorte = document.createElement('button'); bCorte.type = 'button'; bCorte.textContent = 'Corte';
   bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
   bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
-  barra.insertBefore(bCorte, bCarp.nextSibling);
+  // la barra en grupos con nombre arriba (Elegir, Forma, Estructura, Dibujo) y cada herramienta con su ícono
+  const grupoBarra = (nombre: string, ...bs: HTMLElement[]) => {
+    const g = document.createElement('div'); g.className = 'herr-grupo'; g.setAttribute('role', 'group'); g.setAttribute('aria-label', nombre);
+    const r = document.createElement('span'); r.className = 'herr-grupo-rot'; r.textContent = nombre; r.setAttribute('aria-hidden', 'true');
+    const f = document.createElement('div'); f.className = 'herr-grupo-bot'; f.append(...bs);
+    g.append(r, f); return g;
+  };
+  const conIcono = (b: HTMLElement, icono: string) => {
+    if (b.querySelector(':scope > svg.ic-herr')) return;
+    const t = document.createElement('span'); t.className = 'tx'; t.append(...Array.from(b.childNodes));
+    const ic = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); ic.setAttribute('viewBox', '0 0 24 24'); ic.setAttribute('aria-hidden', 'true'); ic.classList.add('ic-herr'); ic.innerHTML = icono;
+    b.append(ic, t);
+  };
+  [[bMover, ICONOS_HERR.mover], [bLazo, ICONOS_HERR.lazo], [bSil, ICONOS_HERR.losa], [bCarp, ICONOS_HERR.carpinteria], [bCorte, ICONOS_HERR.corte],
+    [bDibujar, ICONOS_HERR.dibujar], [bArmar, ICONOS_HERR.armar], [bIns, ICONOS_HERR.insertar], [bCalar, ICONOS_HERR.calar], [bMas, ICONOS_HERR.ayudas],
+    ...(col.botones[0] ? [[col.botones[0], ICONOS_HERR.colocar] as [HTMLElement, string]] : [])].forEach(([b, ic]) => conIcono(b as HTMLElement, ic as string));
+  barra.append(grupoBarra('Elegir', bMover, bLazo), grupoBarra('Forma', bSil, bCarp, bCorte), grupoBarra('Estructura', bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar), grupoBarra('Dibujo', mas));
   // ---------------------------------------------------------------- tira de pasos: el recorrido de diseño de la torre
   // seis pasos en orden; cada uno abre su herramienta y dice qué sigue. Está hecho lo que ya tiene el proyecto (o lo que
   // se saltó a propósito); se puede plegar
@@ -3269,9 +3297,9 @@ export function montarPlanta(cont: HTMLElement) {
     if (!R.width) return;
     // la barra de herramientas puede ocupar dos líneas (pantalla angosta o táctil): el selector de planta, el chip de
     // avisos y las cartas del costado bajan para no taparla
-    // si la barra no entra en una línea, los nombres de los grupos se vuelven separadores finos
+    // si la barra no entra en una línea, las herramientas quedan solo con su ícono
     barra.classList.remove('compacta');
-    if (barra.getBoundingClientRect().height > 44) barra.classList.add('compacta');
+    if (barra.getBoundingClientRect().height > 80) barra.classList.add('compacta');   // dos renglones de grupos: solo íconos
     // la barra de herramientas va debajo de la tira de pasos
     { const pr = pasos.getBoundingClientRect(); barra.style.top = pr.height ? `${Math.round(pr.bottom - R.top + 4)}px` : ''; }
     {

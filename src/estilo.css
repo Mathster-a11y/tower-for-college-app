@@ -2226,3 +2226,21 @@ body.presentando .pres-barra:hover, body.presentando .pres-barra:focus-within { 
 .pres-barra button { font-size: 16px; min-width: 40px; }
 .pres-barra .pres-titulo { font: 600 16px var(--fuente); min-width: 16ch; text-align: center; white-space: nowrap; }
 @media print { .pres-barra { display: none !important; } }
+
+/* ---- barra de la planta: grupos con su nombre arriba y herramientas con ícono, con los botones de toda la app ---- */
+.herr-planta { display: flex; align-items: stretch; flex-wrap: wrap; row-gap: 4px; padding: 4px 4px 5px; border: 1px solid var(--field-edge); border-radius: 12px;
+  background: color-mix(in srgb, var(--field) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
+.herr-grupo { display: flex; flex-direction: column; gap: 2px; padding: 0 5px; }
+.herr-grupo + .herr-grupo { border-left: 1px solid var(--rule, var(--edge)); }
+.herr-grupo-rot { padding: 1px 0 0 6px; font: 600 9.5px/1.2 var(--fuente); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; }
+.herr-grupo-bot { display: flex; align-items: center; gap: 2px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 40px; min-width: 44px; padding: 3px 6px 2px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font-size: 11px; line-height: 1.15; box-shadow: none; }
+.herr-planta .herr-grupo-bot > button:not([aria-pressed="true"]):hover, .herr-planta .herr-grupo-bot > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); }
+.herr-planta .herr-grupo-bot > button[aria-pressed="true"], .herr-planta .herr-grupo-bot > .menu-mas > button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; box-shadow: none; }
+.herr-planta .ic-herr { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* si no entra en una línea: solo los íconos (el nombre sigue en el globo de cada botón) */
+.herr-planta.compacta .herr-grupo-bot > button .tx, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button .tx { display: none; }
+.herr-planta.compacta .herr-grupo-bot > button, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button { min-height: 32px; min-width: 34px; padding: 3px 6px; }
+@media (pointer: coarse) { .herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button { min-height: 36px; } }

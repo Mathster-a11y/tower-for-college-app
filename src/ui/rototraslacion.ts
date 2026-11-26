@@ -74,8 +74,11 @@ export interface DatosRotoPlano {
   papeles: Record<string, { A: string; B: string }>;
 }
 export type Paso = 1 | 2 | 3 | 4;
+/** qué rótulos llevan las piezas: nombre y valor, solo el valor o ninguno (para leer el dibujo limpio o presentarlo) */
+export type RotulosRoto = 'todos' | 'valores' | 'ninguno';
 
-export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number } = {}): SVGSVGElement {
+export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number; rotulos?: RotulosRoto } = {}): SVGSVGElement {
+  const conNombre = (opc.rotulos ?? 'todos') === 'todos', sinRotulos = opc.rotulos === 'ninguno';
   const id = `rt${nId++}`;
   const ancho = Math.max(420, tam.ancho ?? 640), alto = Math.max(420, tam.alto ?? 560);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: `grafico rototrasl paso-${paso}`, role: 'img',
@@ -198,7 +201,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const x = X(p.pos), yc = Y(sCentro(p)), L = Math.max(10, (p.J / Jmax) * Lmax);
       g.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(sBot), class: 'rt-accion' }));
       g.append(flecha(x, yc - L / 2, x, yc + L / 2, grosor(p.J), 'rt-J', tip(p)));
-      rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, p.J < 0.1 ? 3 : 2)}`);
+      if (!sinRotulos) rotulo(x, yc - L / 2 - 6, conNombre ? `${p.nombre} · ${fmt(p.J, p.J < 0.1 ? 3 : 2)}` : fmt(p.J, p.J < 0.1 ? 3 : 2));
     });
     // Determinación gráfica como en la clase 5: los J se ordenan de izquierda a derecha y se ponen uno a
     // continuación del otro (polígono de los J). Los tabiques sobre la misma recta de acción (T1 y T3) van seguidos,
@@ -357,17 +360,18 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     // una fila ordenada de izquierda a derecha debajo de las flechas: cada recta de acción con un rótulo por pieza
     // («T1B  43,0 %»), corridos para que no se pisen y con una guía fina hasta su flecha
     const largoF = (p: ElementoPlano) => (medida(p) / Fmax) * Lmax * escala(grupos.get(p.pos.toFixed(2))!.length);
-    const etiquetas = [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).map(ps => {
-      const lineas = ps.map(p => ({ nombre: p.nombre, valor: valor(p) }));
+    const etiquetas = sinRotulos ? [] : [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).map(ps => {
+      // sin nombres, las piezas de una misma recta con el mismo valor van en un solo renglón
+      const lineas = conNombre ? ps.map(p => ({ nombre: p.nombre, valor: valor(p) })) : [...new Set(ps.map(valor))].map(v => ({ nombre: '', valor: v }));
       const w = Math.max(...lineas.map(l => (l.nombre.length + l.valor.length + 2) * 7.1)) + 10;
       return { x: X(ps[0].pos), w, lineas, pie: base + Math.max(...ps.map(p => (desde.get(p) ?? 0) + largoF(p))) + 3 };
     });
     // el viento W va en la misma fila, en su lugar (eje de simetría)
-    { const tx = { nombre: 'W', valor: `${fmt(d.Q, 1)} t` }; const xW = X(0), iW = etiquetas.findIndex(e => e.x > xW);
+    if (!sinRotulos) { const tx = { nombre: 'W', valor: `${fmt(d.Q, 1)} t` }; const xW = X(0), iW = etiquetas.findIndex(e => e.x > xW);
       etiquetas.splice(iW < 0 ? etiquetas.length : iW, 0, { x: xW, w: (tx.nombre.length + tx.valor.length + 2) * 7.1 + 10, lineas: [tx], pie: base + Lmax + 3 }); }
     // las filas que hagan falta para que entren (alternadas: con dos, las pares arriba y las impares abajo)
     const anchoTotal = etiquetas.reduce((a, e) => a + e.w + 6, 0);
-    const nFilas = Math.min(etiquetas.length, Math.max(1, Math.ceil(anchoTotal / (ancho - 16))));
+    const nFilas = Math.max(0, Math.min(etiquetas.length, Math.max(1, Math.ceil(anchoTotal / (ancho - 16)))));
     const filasEt = Array.from({ length: nFilas }, (_, f) => etiquetas.filter((_, i) => i % nFilas === f));
     let yFila = base + Lmax + 26;
     filasEt.forEach(fila => {
@@ -395,8 +399,9 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
           g.append(el('path', { d: `M ${e.x} ${e.pie} L ${e.x} ${Math.max(e.pie, yFila - 18)} L ${cxE} ${yFila - 11}`, class: 'rt-guia' }));
           e.lineas.forEach((l, j) => {
             const t = el('text', { x: cxE, y: yFila + j * 13, class: 'd-valor rt-rotulo', 'text-anchor': 'middle' });
-            const n = el('tspan', { class: 'rt-rot-nombre' }, l.nombre), v = el('tspan', { dx: 6 }, l.valor);
-            t.append(n, v); g.append(t);
+            if (l.nombre) t.append(el('tspan', { class: 'rt-rot-nombre' }, l.nombre), el('tspan', { dx: 6 }, l.valor));
+            else t.append(l.valor);
+            g.append(t);
             ocupados.push({ x0: xx, x1: xx + e.w, y: yFila + j * 13 });
           });
           xx += e.w + GAP;
@@ -427,7 +432,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const yc = Y(p.pos) - 9;                                                // apenas por encima del muro, sin taparlo
       const x1 = X(tc) - (sentido * L) / 2, x2 = X(tc) + (sentido * L) / 2;
       g.append(flecha(x1, yc, x2, yc, w, 'rt-rot', tip(p, true) + `\nel giro lo empuja hacia la ${sentido > 0 ? 'derecha' : 'izquierda'}`));
-      rotulo(X(tc), yc - 8, `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
+      if (!sinRotulos) rotulo(X(tc), yc - 8, conNombre ? `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t` : `${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
     });
     // viento y momento de rotación
     // W en el eje de simetría, en la franja de las flechas (es la fuerza que las piezas se reparten)
