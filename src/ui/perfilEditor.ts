@@ -8,7 +8,7 @@
 import { estado, fmt } from './estado';
 import { h, seccion, type H } from './comp';
 import type { Tam } from './diagramas';
-import { aplicarPerfil, formaPerfil, FORMAS_PERFIL, medidasNiveles, muestrear, perfilDesdeNiveles, xEnZ, type FormaPerfil, type ModoCurva, type PerfilTorre, type PuntoPerfil, type VistaPerfil } from '../engine/perfilTorre';
+import { aplicarPerfil, perfilDesdeVistas, formaPerfil, FORMAS_PERFIL, medidasNiveles, muestrear, perfilDesdeNiveles, xEnZ, type FormaPerfil, type ModoCurva, type PerfilTorre, type PuntoPerfil, type VistaPerfil } from '../engine/perfilTorre';
 
 const NS = 'http://www.w3.org/2000/svg';
 const sv = (t: string, a: Record<string, string | number> = {}, hijo?: string | SVGElement) => { const e = document.createElementNS(NS, t); for (const [k, v] of Object.entries(a)) e.setAttribute(k, String(v)); if (typeof hijo === 'string') e.textContent = hijo; else if (hijo) e.append(hijo); return e; };
@@ -17,6 +17,9 @@ const mensaje = (t: string) => { const e = document.getElementById('mensaje'); i
 
 /** el borrador que se edita (se guarda en el proyecto al aplicar) y con qué revisión del proyecto se armó */
 let borrador: PerfilTorre | null = null, revBorrador = -1;
+/** el perfil de la torre con el que se armó el borrador: si otra herramienta lo cambia (la carta de la planta), se vuelve a leer */
+let firmaPerfil = '';
+const firmaDe = () => JSON.stringify(estado.proyecto.perfilTorre ?? null);
 type Lado = 'izq' | 'der';
 type Sel = { vista: 'A' | 'B'; lado: Lado; i: number } | null;
 let sel: Sel = null;
@@ -25,7 +28,10 @@ let mover: 'espejo' | 'juntos' | 'solo' = 'espejo';
 let verPolilinea = false, ajustarPlantas = true;
 
 function perfilActual(): PerfilTorre {
-  if (!borrador || revBorrador < 0) { borrador = structuredClone(estado.proyecto.perfil ?? perfilDesdeNiveles(estado.proyecto)); revBorrador = estado.revision; }
+  if (!borrador || revBorrador < 0 || firmaPerfil !== firmaDe()) {
+    borrador = structuredClone(estado.proyecto.perfil ?? perfilDesdeNiveles(estado.proyecto)); revBorrador = estado.revision; firmaPerfil = firmaDe();
+    ajustarPlantas = estado.proyecto.perfilTorre?.aplica !== 'medidas';
+  }
   return borrador;
 }
 /** volver a leer el perfil del proyecto (otro proyecto, deshacer…) */
@@ -96,9 +102,10 @@ export function panelPerfil(c: H) {
   aj.querySelector('input')!.addEventListener('change', e => { ajustarPlantas = (e.target as HTMLInputElement).checked; });
   const ap = h('button', { type: 'button', class: 'boton primario' }, 'Aplicar a los niveles');
   ap.addEventListener('click', () => {
-    const r = aplicarPerfil(estado.proyecto, pf, ajustarPlantas);
-    estado.cambiar(p => { p.perfil = structuredClone(pf); p.niveles = r.niveles; });
-    revBorrador = estado.revision;
+    // el editor escribe el perfil de la torre (el mismo de la carta de la planta): la app lo aplica en cada cambio
+    const r = aplicarPerfil(estado.proyecto, pf, false);
+    estado.cambiar(p => { p.perfil = structuredClone(pf); p.perfilTorre = perfilDesdeVistas(p, pf, ajustarPlantas, p.perfilTorre); });
+    revBorrador = estado.revision; firmaPerfil = firmaDe();
     mensaje(`Perfil aplicado a ${r.niveles.length} niveles.${r.avisos.length ? ` ${r.avisos.join(' ')}` : ''} Ctrl+Z deshace.`);
     estado.avisarPanel();
   });

@@ -169,6 +169,41 @@ export function aplicarPerfil(p: Proyecto, pf: PerfilTorre, plantas = false): Ap
   }
   return { niveles, avisos, afuera: [...afuera.keys()] };
 }
+/**
+ * El perfil dibujado en los dos alzados, como el perfil de la torre que la app aplica en cada cambio (el mismo de la
+ * carta «Perfil de la torre» de la planta): un punto por nivel con el ancho y el largo relativos a los de PB y el
+ * corrimiento del nivel. Con «plantas», las losas siguen al perfil (se escalan); si no, solo B, L y el corrimiento. El
+ * giro y las formas por tramos del perfil anterior se conservan (los alzados no los dibujan).
+ */
+export function perfilDesdeVistas(p: Proyecto, pf: PerfilTorre, plantas: boolean, previo?: import('./perfil_torre').PerfilTorre | null): import('./perfil_torre').PerfilTorre {
+  const zPB = zPBde(p), zTop = p.niveles[0]?.cota ?? zPB, H = Math.max(1e-6, zTop - zPB);
+  const d = (v: PuntoPerfil[]) => muestrear(v, pf.modo, pf.tension, pf.sesgo);
+  const A = { i: d(pf.A.izq), d: d(pf.A.der) }, Bv = { i: d(pf.B.izq), d: d(pf.B.der) };
+  const en = (z: number) => {
+    const xi = xEnZ(A.i, z), xd = xEnZ(A.d, z), yi = xEnZ(Bv.i, z), yd = xEnZ(Bv.d, z);
+    return { B: xd - xi, L: yd - yi, cx: (xi + xd) / 2, cy: (yi + yd) / 2 };
+  };
+  const m0 = en(1e-6), r4 = (x: number) => +x.toFixed(4);
+  // un punto por nivel (la medida justo arriba de su cota, como al aplicar), de PB a la azotea
+  const cotas = [...new Set(p.niveles.filter(n => n.cota >= zPB - 1e-9).map(n => +(n.cota - zPB).toFixed(6)))].sort((a, b) => a - b);
+  const todos = cotas.map(z => {
+    const m = en(Math.min(z + 1e-6, H)), fx = m0.B > 0 ? m.B / m0.B : 1, fy = m0.L > 0 ? m.L / m0.L : 1, dx = m.cx - m0.cx, dy = m.cy - m0.cy;
+    return { h: r4(z / H), fx: r4(fx), ...(Math.abs(fy - fx) > 1e-6 ? { fy: r4(fy) } : {}), ...(Math.abs(dx) > 1e-4 ? { dx: r4(dx) } : {}), ...(Math.abs(dy) > 1e-4 ? { dy: r4(dy) } : {}) };
+  });
+  // los puntos intermedios que quedan sobre la recta de sus vecinos (en ancho, largo y corrimiento) no hacen falta: la
+  // carta de la planta muestra solo los que dan la forma (una ahusada, dos puntos; una escalonada, sus escalones)
+  const val = (q: typeof todos[number]) => [q.fx, q.fy ?? q.fx, q.dx ?? 0, q.dy ?? 0];
+  const puntos = todos.filter((q, k) => {
+    if (k === 0 || k === todos.length - 1) return true;
+    const a = todos[k - 1], b = todos[k + 1], t = (q.h - a.h) / ((b.h - a.h) || 1e-9);
+    return val(q).some((v, j) => Math.abs(v - (val(a)[j] + (val(b)[j] - val(a)[j]) * t)) > 2e-3);
+  });
+  return {
+    puntos, aplica: plantas ? 'losas' : 'medidas',
+    ...(previo?.giro ? { giro: previo.giro } : {}), ...(previo?.formas?.length ? { formas: previo.formas } : {}),
+    ...(previo?.blCriterio ? { blCriterio: previo.blCriterio } : {}),
+  };
+}
 /** el contorno de un nivel con la herencia (vacío = el del nivel de arriba) */
 function efectivo(ns: Nivel[], k: number, campo: 'silueta' | 'carpinteria') {
   for (let i = k; i >= 0; i--) { const c = ns[i][campo]; if (c && c.length >= 3) return c; }

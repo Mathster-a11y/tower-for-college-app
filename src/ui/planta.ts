@@ -1042,7 +1042,7 @@ export function montarPlanta(cont: HTMLElement) {
         const fs = (pf2.formas ?? []).filter(x => Math.abs(x.desde - nv.cota) > 1e-6 && (!arriba || Math.abs(x.desde - arriba.cota) > 1e-6 || !soloEste));
         fs.push({ desde: nv.cota, silueta: sil });
         if (arriba && silArriba && !(pf2.formas ?? []).some(x => Math.abs(x.desde - arriba.cota) < 1e-6)) fs.push({ desde: arriba.cota, silueta: silArriba });
-        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) };
+        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) }; delete pp.perfil;
         delete nv.manual;
       });
       usarForma.push(h2(boton('Usar esta losa desde este piso', () => tomar(false), 'Desde este piso hacia arriba, el perfil escala, gira y corre esta planta en vez de la losa base (por ejemplo, el círculo sin pozos de un piso para arriba)'),
@@ -1081,7 +1081,8 @@ export function montarPlanta(cont: HTMLElement) {
     const env = objetivo === 'envolvente';
     // el mismo editor para el perfil de las losas y para la forma de la envolvente: cambia de dónde lee y dónde escribe
     const leer = (pp: Proyecto): PerfilTorre | null => (env ? pp.envolvente?.perfil ?? null : pp.perfilTorre ?? null);
-    const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else pp.perfilTorre = q; };
+    // (el perfil de la torre es el mismo del editor de Diseño → Perfil: sus alzados dibujados dejan de valer y se vuelven a leer de los niveles)
+    const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else { pp.perfilTorre = q; delete pp.perfil; } };
     const ab = env ? pfEnv : pfLosas;
     const p = estado.proyecto, pf = leer(p);
     const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre-carta'; det.open = ab.abierto;
@@ -1204,7 +1205,17 @@ export function montarPlanta(cont: HTMLElement) {
         det.append(lista);
       }
     }
-    if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
+    // a qué se aplica (el mismo perfil del editor de Diseño → Perfil, que lo dibuja en los dos alzados)
+    if (!env && pf) {
+      const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'A qué se aplica el perfil');
+      ([['losas', 'Losas y planilla', 'Escala y gira la losa de cada nivel y escribe B, L y el corrimiento'], ['medidas', 'Solo la planilla', 'Escribe B, L y el corrimiento de cada nivel; las losas quedan como están']] as const).forEach(([v, t, ti]) => {
+        const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; x.setAttribute('aria-pressed', String((pf.aplica ?? 'losas') === v));
+        x.addEventListener('click', () => poner(q => { q.aplica = v === 'losas' ? null : v; }));
+        sg.append(x);
+      });
+      det.append(h2(nota('Se aplica a:')), sg, nota('Es el mismo perfil que se dibuja en los dos alzados de Diseño → Perfil. La inclinación corre el nivel entero (losa y muros).'));
+    }
+    if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; delete pp.perfil; }); })));
     void aplicarPerfil;
     return det;
   }
