@@ -75,7 +75,7 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     await espera(1000);
     anota(tipo, 'correr la vista con el fondo', Math.abs(m1 - m0 - 100) < 15, `${(m1 - m0).toFixed(0)} px`);
     // 5 · dibujar un muro (dos toques) y terminar con doble toque / Esc
-    await boton(tipo, '.herr-planta button:text-is("Dibujar")');
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Dibujar"))');
     const n0 = await est(e => e.proyecto.muros.length);
     const pA = [sv[2].x + sv[2].width * 0.35, yDib], pB = [sv[2].x + sv[2].width * 0.6, yDib];
     await toque(tipo, pA, { espera: 450 }); await toque(tipo, pB, { espera: 450 });
@@ -85,16 +85,16 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     const enc = await pg.evaluate(() => document.querySelector('svg.planta .tramo-nuevo, svg.planta .muro-nuevo, svg.planta line.goma') !== null);
     anota(tipo, 'terminar el encadenado', (await est(e => e.proyecto.muros.length)) === n1, `muros ${await est(e => e.proyecto.muros.length)}`);
     await pg.keyboard.press('Escape'); await espera(200);
-    await boton(tipo, '.herr-planta button:text-is("Mover")');
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Mover"))');
     // 6 · menú Ayudas abre y cierra
-    await boton(tipo, '.herr-planta button:text-is("Ayudas ▾")');
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Ayudas"))');
     const abre = await pg.locator('.menu-mas-lista:not([hidden])').count();
     if (process.env.DEPURAR) console.log('menú', JSON.stringify(await pg.evaluate(() => { const b = [...document.querySelectorAll('.herr-planta button')].find(x => x.textContent === 'Ayudas ▾'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return [Math.round(r.x), Math.round(r.y), e.tagName + '.' + e.className + ':' + e.textContent.slice(0, 12)]; })));
     await toque(tipo, [sv[2].x + sv[2].width * 0.5, sv[2].y + sv[2].height * 0.9]);
     const cierra = await pg.locator('.menu-mas-lista:not([hidden])').count();
     anota(tipo, 'menú Ayudas abre y se cierra afuera', abre === 1 && cierra === 0, `${abre}/${cierra}`);
     // 7 · carta: mover con el asa y cambiar el tamaño
-    await boton(tipo, '.herr-planta button:text-is("Colocar")'); await espera(400);
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Colocar"))'); await espera(400);
     const asa = await caja('.dock-planta > .asa-mover');
     const pos0 = (await caja('.dock-planta'))[2];
     if (asa) await gesto(tipo, [[asa[0], asa[1]], [asa[0] + 80, asa[1] + 40]]);
@@ -105,10 +105,10 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     if (tam) await gesto(tipo, [[tam[0], tam[1]], [tam[0] + 70, tam[1] - 60]]);
     const w1 = (await caja('.colocar-panel:not([hidden])'))[2].width;
     anota(tipo, 'agrandar una carta con el tirador', !!tam && w1 > w0 + 40, tam ? `${w0.toFixed(0)} → ${w1.toFixed(0)}` : 'sin tirador');
-    await boton(tipo, '.herr-planta button:text-is("Colocar")'); await espera(300);
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Colocar"))'); await espera(300);
     // 8 · losa: arrastrar un vértice (con las cartas en su lugar)
     await inicio();
-    await boton(tipo, '.herr-planta button:text-is("Losa")'); await espera(500);
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Losa"))'); await espera(500);
     const vtx = await caja('svg.planta .manija-vertice');
     const s0 = await est(e => JSON.stringify(e.proyecto.niveles.find(n => n.nombre === 'PB').silueta ?? null));
     if (vtx) await gesto(tipo, [[vtx[0], vtx[1]], [vtx[0] - 40, vtx[1] - 30]]);
@@ -137,7 +137,7 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     await pg.keyboard.press('Escape'); await espera(300);
     // 11 · mantener apretado un vértice de la losa (en el toque eso es el «clic derecho») y después arrastrarlo
     await pg.keyboard.press('Escape'); await espera(200);
-    if ((await pg.locator('.herr-planta button:text-is("Losa")').getAttribute('aria-pressed')) !== 'true') await boton(tipo, '.herr-planta button:text-is("Losa")');
+    if ((await pg.locator('.herr-planta button:has(.tx:text-is("Losa"))').getAttribute('aria-pressed')) !== 'true') await boton(tipo, '.herr-planta button:has(.tx:text-is("Losa"))');
     await espera(400);
     const nv0 = await est(e => (e.proyecto.niveles.find(n => n.nombre === 'PB').silueta ?? []).length);
     const vt = await caja('svg.planta .manija-vertice');
@@ -150,7 +150,7 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     const menu = await pg.locator('.menu-contextual:not([hidden])').count();
     anota(tipo, 'mantener apretado un vértice no lo borra', !!vt && nv1 === nv0, `${nv0} → ${nv1} vértices${menu ? ' · se abrió un menú' : ''}`);
     await pg.keyboard.press('Escape'); await espera(200);
-    await boton(tipo, '.herr-planta button:text-is("Mover")').catch(() => {});
+    await boton(tipo, '.herr-planta button:has(.tx:text-is("Mover"))').catch(() => {});
     // 12 · pellizcar (solo con dos dedos)
     if (tipo === 'touch') {
       const svz = (await caja('svg.planta'))[2], cxz = svz.x + svz.width * 0.55, cyz = svz.y + svz.height * 0.5;
