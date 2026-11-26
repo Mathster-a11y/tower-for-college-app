@@ -555,9 +555,17 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
     }));
   }
   // base: empotramientos y reacciones verticales
-  const xsR = cara.reacciones.map(q => X(q.s)).sort((u, v) => u - v);
+  // los valores en filas: cada uno en la primera fila donde no toca a otro (dos columnas juntas, o en el mismo lugar)
+  const filasR: [number, number][][] = [];
+  const filaDe = new Map<object, number>();
+  [...cara.reacciones].sort((p, q) => p.s - q.s).forEach(q => {
+    const w = (`${fmt(Math.abs(q.V), 0)} t`.length + 2) * 7.2, x0 = X(q.s) - w / 2, x1 = X(q.s) + w / 2;
+    let f = filasR.findIndex(fl => fl.every(([a, b]) => x1 + 4 < a || x0 - 4 > b));
+    if (f < 0) { filasR.push([]); f = filasR.length - 1; }
+    filasR[f].push([x0, x1]); filaDe.set(q, f);
+  });
   cara.reacciones.forEach(q => {
-    const x = X(q.s), y = Y(z0), dy = xsR.indexOf(x) % 2 && xsR.some(o => o !== x && Math.abs(o - x) < 70) ? 14 : 0;
+    const x = X(q.s), y = Y(z0), dy = 14 * (filaDe.get(q) ?? 0);
     if ((d.def.uniones?.base ?? 'empotrada') === 'articulada') { svg.append(el('path', { d: `M${x - 9},${y + 11} h18 l-9,-10 z`, class: 'ex-apoyo' })); svg.append(el('circle', { cx: x, cy: y, r: 3, class: 'ex-pin' })); }
     else svg.append(el('rect', { x: x - 11, y: y + 1, width: 22, height: 6, class: 'ex-apoyo' }));
     svg.append(el('text', { x, y: y + 24 + dy, class: `ex-valor ${q.V >= 0 ? 'compresion' : 'traccion'}`, 'text-anchor': 'middle' }, `${q.V >= 0 ? '↑' : '↓'} ${fmt(Math.abs(q.V), 0)} t`));
@@ -573,10 +581,14 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   mk.append(el('path', { d: 'M0,1 L10,5 L0,9 z', class: 'ex-viento-punta' })); defs.append(mk); svg.prepend(defs);
   svg.append(el('text', { x: X(-d.ancho / 2) - 50, y: Y(zT) - 10, class: 'ex-nota', 'text-anchor': 'middle' }, 'viento que toma el exo'));
   // leyenda
-  const ly = H - 44;
+  // si las filas de las reacciones bajan hasta la leyenda, el dibujo se alarga lo que haga falta
+  const yUltR = Y(z0) + 24 + 14 * Math.max(0, filasR.length - 1);
+  const extra = Math.max(0, Math.ceil(yUltR + 26 - (H - 44)));
+  if (extra) svg.setAttribute('viewBox', `0 0 ${W} ${H + extra}`);
+  const ly = H - 44 + extra;
   leyendaModo(svg, 16, ly, escalaS);
   const pie = modo === 'N' ? `Grosor ∝ |N| (máx. ${fmt(Nmax, 0)} t).` : modo === 'M' ? 'M del lado de la fibra traccionada; cruza el eje donde cambia de signo.' : modo === 'Q' ? 'Q constante en cada tramo (cargas solo en los nudos).' : `σ = N/A ± M/W en las dos caras de cada barra. Escala: la tensión máxima de la cara (${fmt(escalaS / d.def.sigmaAdm * 100, 0)} % de σ adm = ${fmt(d.def.sigmaAdm / 10, 0)} kg/cm²); trazo grueso: pasa la admisible.`;
-  svg.append(el('text', { x: 16, y: H - 20, class: 'ex-nota' }, `${pie}${modo === 'sigma' ? '' : ` Ancho de la cara ${fmt(d.ancho)} m, módulo ${d.def.modulo} pisos. Reacciones de la base en t.`}`));
+  svg.append(el('text', { x: 16, y: H - 20 + extra, class: 'ex-nota' }, `${pie}${modo === 'sigma' ? '' : ` Ancho de la cara ${fmt(d.ancho)} m, módulo ${d.def.modulo} pisos. Reacciones de la base en t.`}`));
   // ---- gráficos a la derecha: reparto del viento y deformada
   const gx = x0 + anchoAl + 60, gw = (W - gx - 40) / 2 - 24;
   const graf = (xg: number, titulo: string, series: { v: number[]; clase: string; nombre: string }[], unidad: string, barras = false) => {

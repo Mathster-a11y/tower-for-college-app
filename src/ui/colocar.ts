@@ -572,7 +572,7 @@ export function montarColocar(api: ApiPlanta) {
       ge.append(el('circle', { cx: X(0), cy: Y(0), r: X(R) - X(0), class: 'exo-contorno' }));
       const lado = Math.max(0.6, (p.exo!.diagonal?.b ?? 0.5) * 1.6);
       an.th.forEach(th => { const x = R * Math.cos(th), y = R * Math.sin(th); ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna', transform: `rotate(${(-th * 180) / Math.PI + 45} ${X(x)} ${Y(y)})` })); });
-      ge.append(el('text', { x: X(-R) + 4, y: Y(-R) + 16, class: 'exo-rot' }, `diagrid: ${dcir.n} nudos por anillo, anillo a ${fmt(an.z, 1)} m (cada anillo gira ${fmt(180 / dcir.n, 0)}°)`));
+      ge.append(el('text', { x: X(0) - 12, y: Y(-R) + 16, class: 'exo-rot', 'text-anchor': 'end' }, `diagrid: ${dcir.n} nudos por anillo, anillo a ${fmt(an.z, 1)} m (cada anillo gira ${fmt(180 / dcir.n, 0)}°)`));
       g.append(ge);
     } else if (p.exo) {
       const ms = medidasNiveles(p), pb = ms.find(m => Math.abs(m.z) < 1e-6) ?? ms[ms.length - 1];

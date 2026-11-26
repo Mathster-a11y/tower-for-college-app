@@ -54,6 +54,14 @@ export interface Etapa {
   globo: string;
 }
 
+/** la deformada con el J de los tabiques no tiene sentido si casi no hay tabiques (una torre que toma el viento con el exo,
+ * como el Gherkin): la azotea se correría más que la altura de la torre */
+const deformadaAbsurda = (def: { dTop: number; puntos: { z: number }[] }) =>
+  !isFinite(def.dTop) || Math.abs(def.dTop) > Math.max(1, ...def.puntos.map(q => q.z));
+const textoSinRigidez = (exo: boolean) => exo
+  ? 'Los tabiques casi no tienen rigidez en esta dirección (ΣJ ≈ 0): el viento lo toma el exoesqueleto. La deformada de la torre, con el exo, está en la etapa 08.'
+  : 'Los tabiques casi no tienen rigidez en esta dirección (ΣJ ≈ 0): con ellos solos la deformada no tiene sentido. Sumá o alargá tabiques en este sentido.';
+
 // ------------------------------------------------------------------ datos comunes
 function datos() {
   const { asig, res, corr, controles } = estado.calculo;
@@ -376,7 +384,8 @@ const rigidezE: Etapa = {
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     c.append(h('div', { class: 'kpis' },
       ...rs.map(x => kpi(`ΣJ viento ${x.dir}`, `${fmt(x.J, 1)} / ${fmt(x.minimos.h500, 1)}`, `m⁴ · ${x.J >= x.minimos.h500 ? 'verifica' : 'no verifica'}`, colorEstado(x.J >= x.minimos.h500))),
-      kpi('Azotea', `${fmt(def.dTop * 1000, 1)} mm`, `límite h/500 = ${fmt(def.limite * 1000, 1)} mm`, colorEstado(def.dTop <= def.limite)),
+      deformadaAbsurda(def) ? kpi('Azotea', '—', 'ΣJ ≈ 0: sin tabiques en este sentido', colorEstado(false))
+        : kpi('Azotea', `${fmt(def.dTop * 1000, 1)} mm`, `límite h/500 = ${fmt(def.limite * 1000, 1)} mm`, colorEstado(def.dTop <= def.limite)),
     ));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
@@ -410,7 +419,8 @@ const rigidezE: Etapa = {
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
     c.append(fila(
-      graficoAltura({ titulo: `Deformada · la azotea se corre ${fmt(def.dTop * 1000, 1)} mm (h/500 = ${fmt(def.limite * 1000, 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
+      deformadaAbsurda(def) ? h('p', { class: 'nota aviso' }, textoSinRigidez(!!d.p.exo))
+        : graficoAltura({ titulo: `Deformada · la azotea se corre ${fmt(def.dTop * 1000, 1)} mm (h/500 = ${fmt(def.limite * 1000, 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
         series: [{ nombre: 'deformada', color: 'deformada', tipo: 'linea', puntos: def.puntos.map(x => ({ z: x.z, x: x.d * 1000, nivel: x.nivel })) }], referencias: [{ x: def.limite * 1000, texto: 'h/500' }] }, a),
       varia
         ? graficoAltura({ titulo: 'ΣJ en cada nivel (la planta cambia en altura)', eje: 'ΣJ', unidad: 'm⁴', decimales: 2, series: [{ nombre: 'ΣJ', color: 'acento', tipo: 'barras', puntos: Jniv.map(x => ({ z: x.z, x: x.J, nivel: x.nivel })) }] }, a)
@@ -530,6 +540,7 @@ export function datosRoto3D(): Rototraslacion3D | null {
     // CR y giro de cada nivel: si un muro no llega arriba, los pisos de arriba giran sin él
     const k0 = dp.SJa2 > 1e-12 ? (dp.Xr * dp.SJ) / dp.SJa2 : 0;
     const cr0 = d.dir === 'A' ? { x: dp.Xr, y: dp.Yr } : { x: dp.Yr, y: -dp.Xr };
+    if (deformadaAbsurda(def)) return null;
     const r = rototraslacion3D(def, d.dir, dp.Xr, dp.Yr, dp.SJ, dp.SJa2, torsionPorNivel(d.p, d.asig.piezas, d.dir, { cr: cr0, k: k0 }));
     return r.niveles.length && isFinite(r.dTop) ? r : null;
   } catch { return null; }

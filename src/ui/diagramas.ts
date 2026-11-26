@@ -98,12 +98,17 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   const X = (x: number) => mi + ((x - x0) / (x1 - x0 || 1)) * (ancho - mi - md);
   const Z = (z: number) => ms + ((zMax - z) / (zMax - zMin || 1)) * (alto - ms - mb);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico', role: 'img', 'aria-label': g.titulo });
+  // lo ya escrito (números del eje, valores de las puntas): los valores de las curvas no se les encima
+  const valoresPuestos: { x0: number; x1: number; y: number }[] = [];
+  // las notas de altura (W a hw…) se escriben arriba de su línea, sobre la derecha: los valores no se les encima
+  (g.alturas ?? []).forEach(a => { const xe = ancho - md - 2; valoresPuestos.push({ x0: xe - a.texto.length * 6.6, x1: xe, y: Z(a.z) - 5 }); });
   // grilla y ejes (recesivos)
   tx.forEach(v => {
     svg.append(el('line', { x1: X(v), x2: X(v), y1: ms, y2: alto - mb, class: v === 0 ? 'd-cero' : 'd-grilla' }));
     // la última marca se apoya hacia adentro para que su número no se salga del dibujo
     const ancla = X(v) > ancho - md - 24 ? 'end' : 'middle';
     svg.append(el('text', { x: ancla === 'end' ? Math.min(X(v) + 4, ancho - 2) : X(v), y: alto - mb + 15, class: 'd-eje', 'text-anchor': ancla }, fmt(v, decimales(tx))));
+    { const t = fmt(v, decimales(tx)), w = t.length * 6.6, xe = ancla === 'end' ? Math.min(X(v) + 4, ancho - 2) : X(v); valoresPuestos.push({ x0: ancla === 'end' ? xe - w : xe - w / 2, x1: ancla === 'end' ? xe : xe + w / 2, y: alto - mb + 15 }); }
   });
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, `${g.eje} (${g.unidad})`));
   // niveles: rótulos en el eje vertical (no más de ~10)
@@ -123,7 +128,6 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   const dec = g.decimales ?? 2;
   const nb = g.series.filter(s => s.tipo === 'barras').length;
   let ib = 0;
-  const valoresPuestos: { x0: number; x1: number; y: number }[] = [];
   g.series.forEach(s => {
     if (s.tipo === 'barras') {
       const alturaBarra = Math.max(2, Math.min(8, ((alto - ms - mb) / Math.max(niveles.length, 1)) * 0.6 / nb));
@@ -381,6 +385,7 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       r.append(el('title', {}, `${m.id} (${m.papel})`)); svg.append(r);
     });
     svg.append(el('circle', { cx: X(0), cy: yC, r: 3, class: 'd-pieza-g' })); }
+  const rotulosMuro: { id: string; x: number; w: number; fila: number }[] = [];
   tramos.forEach(({ m, lejos, cerca }) => {
     (['desc', 'carg'] as const).forEach(k => {
       const [a, b] = m[k].map(x => x / 10);
@@ -420,7 +425,14 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       const tx = lado === 'start' ? xp + 7 : lado === 'end' ? xp - 7 : Math.min(ancho - 2 - anchoT / 2, Math.max(2 + anchoT / 2, xp));
       svg.append(el('text', { x: tx, y: Y(m.cargReves / 10) + (lado === 'middle' ? -9 : 4), class: 'd-eje', 'text-anchor': lado }, 'viento al revés'));
     }
-    svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
+    // el nombre del muro abajo: uno solo por muro (un muro partido tiene varios tramos) y en otra fila si toca a otro
+    const xm = X((lejos + cerca) / 2), w = m.id.length * 6.8 + 6;
+    if (!rotulosMuro.some(r => r.id === m.id && Math.abs(r.x - xm) < w)) {
+      let fila = 0;
+      while (rotulosMuro.some(r => r.fila === fila && Math.abs(r.x - xm) < (r.w + w) / 2)) fila++;
+      rotulosMuro.push({ id: m.id, x: xm, w, fila });
+      svg.append(el('text', { x: xm, y: Y(s0) - 4 - 12 * fila, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
+    }
   });
   fig.append(svg);
   return fig;

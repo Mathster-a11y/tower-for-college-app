@@ -101,6 +101,11 @@ function dibujoNM(m: VerifMuro201, W: number, H_: number): SVGSVGElement {
   // cada solicitación (combinación · caso de viento · sentido); la peor, más grande y con su nombre
   sol.forEach(q => el('circle', { cx: X(q.x), cy: Y(q.y), r: q.peor ? 6 : 3.5, fill: q.peor ? 'var(--elegido, #ef9f27)' : 'var(--ink2, #5f6b76)', 'fill-opacity': q.peor ? 1 : 0.7 }));
   const pe = sol.find(q => q.peor);
-  if (pe) { const der = X(pe.x) > W * 0.55; el('text', { x: X(pe.x) + (der ? -10 : 10), y: Y(pe.y) + 18, 'text-anchor': der ? 'end' : 'start', 'font-size': 11, fill: 'currentColor' }, `peor con ρ mín: ${m.peor.combinacion}`); }
+  if (pe) {
+    const der = X(pe.x) > W * 0.55, yEje = Y(0) - 6;
+    // que no pise el nombre del eje φMn (tm), que va a la derecha sobre N = 0
+    let yl = Y(pe.y) + 18;
+    if (Math.abs(yl - yEje) < 16) yl = Math.abs(Y(pe.y) - 12 - yEje) < 16 ? yEje + 18 : Y(pe.y) - 12;
+    el('text', { x: X(pe.x) + (der ? -10 : 10), y: yl, 'text-anchor': der ? 'end' : 'start', 'font-size': 11, fill: 'currentColor' }, `peor con ρ mín: ${m.peor.combinacion}`); }
   return svg;
 }
