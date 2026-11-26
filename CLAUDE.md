@@ -7,6 +7,8 @@
   Única excepción, pedida por el usuario: la opción «arcoíris» para la velocidad (`espectroVel` en `src/ui/campoSuave.ts`),
   apagada por defecto; con ella las llaves avisan que el rojo es aire rápido y no tracción.
 - Las planillas originales de la cátedra no se cambian: solo aceptan secciones enteras por defecto.
+- Los ejemplos tienen que cumplir CIRSOC, no las reglas de la planilla de la cátedra; la excepción es la torre de 34
+  pisos (`src/engine/ejemplo34.ts`), que es el ejemplo de la planilla.
 - App y Excel tienen que dar lo mismo (pruebas con el evaluador y verificación con LibreOffice en `tools/`).
 - Textos de la interfaz y explicaciones al usuario en español rioplatense.
 - Rama de trabajo: la que indique la sesión; nada se une a `main` sin pedido explícito.

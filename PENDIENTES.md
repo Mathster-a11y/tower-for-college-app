@@ -13,18 +13,20 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 
 **Hecho hace poco en `alternativa`** (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
-media; la planta que no queda tapada en una notebook.
+media; la planta que no queda tapada en una notebook; el Citicorp con el criterio CIRSOC (notas de la plaza y la
+fundación) y el 3D que dibuja las losas de los pisos que junta un nivel.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
-- Citicorp: cómo va la plaza abierta en la planilla, otra elección de los dos pisos juntos (hoy 11º y 12º) y la
-  fundación real (con la de la torre la resultante sale del tercio medio).
 - Supercolumnas del exo que bajen hasta la fundación.
 - Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
 
 **Para la otra rama** (vistos desde acá, sin tocar)
 - «Ver la explicación» de Rototraslación: chico para el dedo.
 - Que `tools/revision_punteros.cjs` corra en GitHub en cada cambio a `main`.
+- Que CIRSOC y FEM acepten más de 49 niveles sobre PB: hoy todos los métodos arman los niveles sobre la tabla de la
+  planilla y con 50 el corte, el momento y el vuelco del nivel más alto salen mal. Con eso, los ejemplos (que solo
+  tienen que cumplir CIRSOC) podrían ir piso por piso: el Citicorp separaría el 11º y el 12º.
 
 ## Lo que falta (lista viva, noviembre 2026)
 

@@ -31,8 +31,9 @@ export function ejemploCiticorpFachada(): Proyecto {
   // tabiques solos no alcanzan (ΣJ, la flecha de la ménsula y el P-Δ no verifican)
   p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' };
 
-  // niveles: el techo del cajón de la corona es un nivel; para no pasar de los 49 de la planilla, el 11º y el 12º van
-  // juntos (el 10º, techo del cajón de transición, queda: ahí arranca el primer módulo)
+  // niveles: el techo del cajón de la corona es un nivel; el 11º y el 12º van juntos porque el cálculo de la app (todos los
+  // métodos, CIRSOC incluido) arma los niveles sobre la tabla de la planilla, que tiene lugar para 49 sobre PB (el 10º,
+  // techo del cajón de transición, queda: ahí arranca el primer módulo)
   const i11 = p.niveles.findIndex(n => n.nombre === '11º');
   p.niveles.splice(i11, 1);
   const n12 = p.niveles.find(n => n.nombre === '12º')!; n12.nombre = '11º–12º'; n12.pisos = 2;
@@ -174,7 +175,9 @@ export function ejemploCiticorpFachada(): Proyecto {
   exo.notas = [
     ...(exo.notas ?? []),
     'Corona leída del plano de elevación: un cajón de 14,8 m sobre el piso 56 en todo el ancho (con el amortiguador de 400 t) y, arriba, el techo a 45° hacia el sur (Wikipedia: girado al sur para colectores solares) que arranca a una crujía (5,9 m) del borde sur y llega a la azotea dejando una franja plana de unos 8 m al norte. Las medidas salen de las proporciones del dibujo, llevadas a 278,6 m de altura total (supuesto).',
-    'Niveles: el techo del cajón de la corona es un nivel (244,62 m); para no pasar de los 49 niveles de la planilla, el 11º y el 12º van juntos. El 10º (42,88 m) es el techo del cajón de transición.',
+    'Niveles: el techo del cajón de la corona es un nivel (244,62 m) y el 11º y el 12º van juntos (un nivel de dos pisos: el cálculo suma las dos losas y el 3D dibuja las dos). El ejemplo se verifica con CIRSOC, pero el cálculo de la app, con cualquier método, arma los niveles sobre la tabla de la planilla, que tiene lugar para 49 sobre PB. Se juntaron esos dos porque el 10º (42,88 m, techo del cajón de transición), el 16º y los del medio y el tope de cada chevron tienen nudos del exo.',
+    'Plaza: debajo del cajón de transición no hay losas (la plaza está abierta, de PB a 34,75 m); ahí el viento lo toman las supercolumnas y el núcleo.',
+    'Fundación: las supercolumnas y el núcleo apoyan en zapatas metidas en la roca de Manhattan (esquisto); las medidas no están publicadas. La app la toma como una platea del tamaño de la torre (47,85 m) con la tensión de la roca. Si la resultante del viento cae afuera del tercio medio, Estabilidad lo marca como «atención»: en la obra no pesa igual, porque las zapatas ancladas en roca pueden tomar tracción.',
     'Piel: sin carpintería en la plaza; «Por piso» plana del cajón de transición (34,75 m) al techo del cajón de la corona, en el borde de las losas; la corona es una «Envolvente» con su propio plano a 45° (las losas no se recortan). La losa de la azotea es la franja plana del norte.',
     'Estructura siempre adentro de la piel: el exoesqueleto va 0,50 m hacia adentro del borde de las losas (en la obra, los chevrones van detrás del muro cortina; supuesto el valor).',
     'Llegada al suelo (plano de elevación): la plaza queda libre y en cada cara baja solo la supercolumna reticulada a media cara (24 ft de ancho: dos cordones con diagonales en zigzag; secciones equivalentes supuestas). Encima, el cajón de transición (pisos 8 y 9) en todo el ancho, con diagonales desde las esquinas de abajo y un zigzag que lleva la carga al centro (la V del centro, que recibe el mástil, con sección de transferencia de 1,40 m, supuesta). El mástil termina en el techo del cajón. El primer módulo es de 6 pisos (10 → 16): sus diagonales son una recta de cada esquina a un cuarto de la mitad sobre el cajón, que corta la columna del cuarto en el piso 12; las columnas de esquina, como en todos los módulos, terminan un piso antes del nudo de arriba (cada chevron se une al de arriba solo por el mástil); desde el piso 16, los chevrones de 8 pisos al mástil. Las supercolumnas de las caras perpendiculares trabajan como alas de cada cara (como el mástil en la ficha E). Sin esquinas abajo, el vuelco baja todo por las supercolumnas: el cajón de acero equivalente tiene 8 cm de pared (supuesto: con las losas apoyadas en el exo, la de sotavento, que acá trabaja como ala de la cara y recibe la esquina del cajón de transición, con 6,5 cm pasa la tensión admisible del curso en un 14 % y con 7,5 cm en un 2 %).',
