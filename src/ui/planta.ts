@@ -29,7 +29,7 @@ import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerf
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
-import { hacerMovible, hacerRedimensionable } from './flotantes';
+import { apartarHaciaAbajo, hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
@@ -3385,11 +3385,24 @@ export function montarPlanta(cont: HTMLElement) {
     [dock, panelIns, panelCal, panelMed, cont.querySelector<HTMLElement>(':scope > .contorno-panel')].forEach(e => {
       if (!e) return;
       e.style.maxHeight = '';
-      if (!visible(e) || e.classList.contains('movido')) return;
+      if (!visible(e)) return;
       const r = e.getBoundingClientRect();
+      // (el que movió el usuario queda donde lo dejó, pero sin pasar del borde de abajo de la planta: si no, su tirador
+      //  y lo de abajo quedan afuera)
+      if (e.classList.contains('movido')) { if (r.bottom > R.bottom - 4) { e.style.maxHeight = `${Math.max(120, Math.floor(R.bottom - 4 - r.top))}px`; e.style.overflowY = 'auto'; } return; }
       const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top + 60).reduce((m, p) => Math.min(m, p.top), R.bottom);
       if (r.bottom > abajo - 6) { e.style.maxHeight = `${Math.max(120, Math.floor(abajo - 6 - r.top))}px`; e.style.overflowY = 'auto'; }
     });
+    // ningún cuadro queda debajo (ni encima) de la barra de herramientas (taparía su asa y sus botones; la barra ya va
+    // debajo de la tira de pasos, que abierta es un desplegable pasajero):
+    // tampoco los que movió el usuario, si después la barra creció (dos renglones, la tira de pasos abierta, otra ventana)
+    {
+      const tapan = [barra].filter(visible).map(e => e.getBoundingClientRect());
+      cont.querySelectorAll<HTMLElement>(':scope > .movible').forEach(e => {
+        if (e === barra || e === pasos || e.contains(barra) || !visible(e)) return;
+        for (const t of tapan) { const r = e.getBoundingClientRect(); if (r.left < t.right - 1 && r.right > t.left + 1 && r.top < t.bottom - 1) apartarHaciaAbajo(e, cont, Math.ceil(t.bottom + 6 - r.top)); }
+      });
+    }
     separarRotulos();
   }
   // todo lo que flota sobre la planta se puede mover con su asa (⠿) adonde no moleste; doble clic vuelve a su lugar
@@ -3411,6 +3424,8 @@ export function montarPlanta(cont: HTMLElement) {
   let cuadroAcomodar = 0;
   const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
   new ResizeObserver(pedirAcomodar).observe(cont);
+  // (la barra de herramientas y la tira de pasos cambian de alto solas: dos renglones, la tira abierta o plegada)
+  { const ro = new ResizeObserver(pedirAcomodar); ro.observe(barra); ro.observe(pasos); }
   new MutationObserver(pedirAcomodar).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {

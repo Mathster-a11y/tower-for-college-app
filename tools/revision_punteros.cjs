@@ -105,6 +105,11 @@ const URL = process.env.TORRE_URL ?? 'http://localhost:5191/';
     if (tam) await gesto(tipo, [[tam[0], tam[1]], [tam[0] + 70, tam[1] - 60]]);
     const w1 = (await caja('.colocar-panel:not([hidden])'))[2].width;
     anota(tipo, 'agrandar una carta con el tirador', !!tam && w1 > w0 + 40, tam ? `${w0.toFixed(0)} → ${w1.toFixed(0)}` : 'sin tirador');
+    // la carta también se arrastra desde el borde (acá, el izquierdo, hacia la izquierda)
+    const cd = (await caja('.dock-planta'))[2], bx = cd.x + 3, by = cd.y + Math.min(cd.height / 2, 60);
+    await gesto(tipo, [[bx, by], [bx - 60, by]]);
+    const cd1 = (await caja('.dock-planta'))[2];
+    anota(tipo, 'mover una carta desde el borde', Math.abs(cd1.x - cd.x + 60) < 12, `${(cd1.x - cd.x).toFixed(0)} px`);
     await boton(tipo, '.herr-planta button:has(.tx:text-is("Colocar"))'); await espera(300);
     // 8 · losa: arrastrar un vértice (con las cartas en su lugar)
     await inicio();

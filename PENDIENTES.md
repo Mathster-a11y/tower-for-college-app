@@ -16,7 +16,8 @@ Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cu
 media; la planta que no queda tapada en una notebook; el Citicorp con el criterio CIRSOC (notas de la plaza y la
 fundación) y el 3D que dibuja las losas de los pisos que junta un nivel; los pisos de la corona del Citicorp
 (57º–59º en el cajón y siete técnicos bajo el techo a 45°, recortados por la envolvente), que el exo también carga. Los ejemplos con exo abren con CIRSOC. El Gherkin con un núcleo de hormigón de 22 m que toma
-viento hasta la última losa.
+viento hasta la última losa. Las cartas de la planta no quedan nunca debajo de la barra
+de herramientas y se arrastran desde cualquier parte del borde.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.

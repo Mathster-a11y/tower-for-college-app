@@ -1,6 +1,6 @@
 /**
  * Cuadros flotantes movibles (planta): cada cuadro o barra lleva un asa (⠿) para arrastrarlo con el mouse, el dedo o
- * el lápiz adonde no tape lo que se está dibujando ni otra barra. No sale del área de la planta. La posición se
+ * el lápiz adonde no tape lo que se está dibujando ni otra barra; también se arrastra desde cualquier parte del borde. No sale del área de la planta. La posición se
  * recuerda en este navegador; doble clic (o doble toque) en el asa lo devuelve a su lugar.
  *
  * Las cartas también cambian de tamaño: el tirador de la esquina de abajo a la derecha (◢) se arrastra; el tamaño se
@@ -53,20 +53,21 @@ export function hacerMovible(el: HTMLElement, area: HTMLElement, clave: string, 
   asa.setAttribute('aria-label', 'Mover este cuadro');
   el.prepend(asa);
   const guardado = leer()[clave];
-  if (guardado) poner(el, guardado);
+  // (lo guardado puede haber quedado afuera si cambió la ventana: se vuelve a meter en la planta)
+  if (guardado) { poner(el, guardado); requestAnimationFrame(() => { const p = desplazamiento(el); if (p[0] || p[1]) poner(el, acotar(el, area, p)); }); }
 
-  let arr: { id: number; x: number; y: number; p: Pos } | null = null;
-  asa.addEventListener('pointerdown', ev => {
-    if (ev.button !== 0) return;
+  let arr: { id: number; x: number; y: number; p: Pos; quien: HTMLElement } | null = null;
+  const empezar = (ev: PointerEvent, quien: HTMLElement) => {
     ev.preventDefault(); ev.stopPropagation();
-    arr = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, p: desplazamiento(el) };
-    asa.setPointerCapture(ev.pointerId);
+    arr = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, p: desplazamiento(el), quien };
+    try { quien.setPointerCapture(ev.pointerId); } catch { /* el puntero ya se soltó */ }
     el.classList.add('moviendose');
-  });
-  asa.addEventListener('pointermove', ev => {
+  };
+  const mover = (ev: PointerEvent) => {
     if (!arr || ev.pointerId !== arr.id) return;
+    ev.stopPropagation();
     poner(el, acotar(el, area, [arr.p[0] + ev.clientX - arr.x, arr.p[1] + ev.clientY - arr.y]));
-  });
+  };
   const fin = (ev: PointerEvent) => {
     if (!arr || ev.pointerId !== arr.id) return;
     arr = null; el.classList.remove('moviendose');
@@ -75,8 +76,25 @@ export function hacerMovible(el: HTMLElement, area: HTMLElement, clave: string, 
     if (p[0] || p[1]) mem[clave] = p; else delete mem[clave];
     guardar();
   };
+  asa.addEventListener('pointerdown', ev => { if (ev.button === 0) empezar(ev, asa); });
+  asa.addEventListener('pointermove', mover);
   asa.addEventListener('pointerup', fin);
   asa.addEventListener('pointercancel', fin);
+  // también se arrastra desde cualquier parte del borde (con el dedo, una franja un poco más ancha), salvo sobre un
+  // control (un botón o un campo pegado al borde siguen andando), la barra de desplazamiento o el tirador del tamaño
+  el.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0 || arr || !enBorde(el, ev, ev.pointerType === 'touch' ? BORDE_DEDO : BORDE)) return;
+    empezar(ev, el);
+  }, true);
+  el.addEventListener('pointermove', ev => {
+    if (arr) { mover(ev); return; }
+    if (ev.pointerType === 'mouse') el.classList.toggle('borde-mover', enBorde(el, ev, BORDE));
+  });
+  el.addEventListener('pointerleave', () => el.classList.remove('borde-mover'));
+  el.addEventListener('pointerup', fin);
+  el.addEventListener('pointercancel', fin);
+  // con el dedo, el borde no desplaza el contenido de la carta: la arrastra
+  el.addEventListener('touchstart', ev => { const t = ev.touches[0]; if (ev.touches.length === 1 && t && enBorde(el, { clientX: t.clientX, clientY: t.clientY, target: ev.target }, BORDE_DEDO)) ev.preventDefault(); }, { capture: true, passive: false });
   asa.addEventListener('click', ev => ev.stopPropagation());
   asa.addEventListener('dblclick', ev => { ev.stopPropagation(); poner(el, [0, 0]); delete leer()[clave]; guardar(); });
   asa.addEventListener('keydown', ev => {
@@ -90,6 +108,39 @@ export function hacerMovible(el: HTMLElement, area: HTMLElement, clave: string, 
   new MutationObserver(() => { if (el.firstElementChild !== asa) el.prepend(asa); }).observe(el, { childList: true });
   // si la ventana o el panel cambian de tamaño, el cuadro vuelve a entrar en la planta
   new ResizeObserver(() => { const p = desplazamiento(el); if (p[0] || p[1]) poner(el, acotar(el, area, p)); }).observe(area);
+}
+
+/** ancho de la franja del borde que arrastra el cuadro (px): con el mouse o el lápiz, y con el dedo */
+const BORDE = 10, BORDE_DEDO = 16;
+/** el puntero está en el borde del cuadro, y no sobre un control, la barra de desplazamiento ni el tirador del tamaño */
+function enBorde(el: HTMLElement, ev: { clientX: number; clientY: number; target: EventTarget | null }, b: number): boolean {
+  const r = el.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  if (!(x >= 0 && y >= 0 && x <= r.width && y <= r.height)) return false;
+  if (!(x < b || y < b || r.width - x < b || r.height - y < b)) return false;
+  const t = ev.target instanceof Element ? ev.target : null;
+  if (t && t !== el && t.closest('button, input, select, textarea, a, label, summary, [contenteditable], .asa-tamano, .asa-mover')) return false;
+  // la barra de desplazamiento (a la derecha o abajo, entre el contenido y el borde)
+  const sx = el.clientLeft + el.clientWidth, sy = el.clientTop + el.clientHeight;
+  if ((x >= sx && x < r.width - el.clientLeft) || (y >= sy && y < r.height - el.clientTop)) return false;
+  return true;
+}
+
+/**
+ * Corre el cuadro dy px hacia abajo (sin recordarlo: es para que no quede debajo de la barra de herramientas). Si el
+ * usuario lo había movido, se corre su desplazamiento; si no, su «top».
+ */
+export function apartarHaciaAbajo(el: HTMLElement, area: HTMLElement, dy: number) {
+  if (!(dy > 0)) return;
+  const a = area.getBoundingClientRect(), r0 = el.getBoundingClientRect();
+  if (el.classList.contains('movido')) { const p = desplazamiento(el); poner(el, [p[0], p[1] + dy]); }
+  else el.style.top = `${Math.round(r0.top - a.top + dy)}px`;
+  // si así no entra, se achica hasta el borde de abajo de la planta y su contenido se desplaza por dentro
+  const r = el.getBoundingClientRect(), alto = Math.floor(a.bottom - 4 - r.top);
+  if (r.bottom > a.bottom - 4 && alto > 0) {
+    el.style.setProperty('max-height', `${Math.max(80, alto)}px`, el.classList.contains('con-tamano') ? 'important' : '');
+    if (el.classList.contains('con-tamano')) el.style.setProperty('height', `${Math.max(80, alto)}px`, 'important');
+    el.style.overflowY = 'auto';
+  }
 }
 
 const CLAVE_TAM = 'torre3d.tamanos.v1';
