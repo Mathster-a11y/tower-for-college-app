@@ -53,17 +53,28 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
 
 /** íconos de la barra de la planta (24 × 24, trazo como los del riel de etapas) */
 const ICONOS_HERR = {
-  mover: '<path d="M5 3l13 6.5-5.5 1.6L10.8 17z"/><path d="M13.4 11.2l5 5"/>',
-  lazo: '<ellipse cx="12" cy="9.5" rx="8" ry="5.5" stroke-dasharray="3 2.6"/><path d="M8 14.3c-.6 2.6.8 4.7 3 5.2"/>',
-  losa: '<path d="M3 15l7-5h11l-7 5z"/><path d="M3 15v2l11 0 7-5v-2"/>',
-  carpinteria: '<rect x="4" y="3.5" width="16" height="17" rx="1"/><path d="M12 3.5v17M4 12h16"/>',
-  corte: '<path d="M7 21V7l5-4 5 4v14"/><path d="M3 21h18"/><path d="M12 1.5v21" stroke-dasharray="2.5 2"/>',
-  dibujar: '<path d="M4 20l3.5-1 11-11-2.5-2.5-11 11z"/><path d="M14.5 6.5l2.5 2.5"/>',
-  armar: '<path d="M4 4h5v11h11v5H4z"/>',
-  insertar: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M12 8v8M8 12h8"/>',
-  colocar: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
-  calar: '<rect x="3" y="7" width="18" height="10" rx="1"/><path d="M10 17v-6h4v6"/>',
-  ayudas: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M8 12l2 2M11 9l2 2M14 6l2 2"/>',
+  // flecha de selección
+  mover: '<path d="M6 3.5v14l3.6-3.4 2.6 6 2.4-1-2.6-6H17z"/>',
+  // lazo: un trazo cerrado a mano alzada, punteado, con su cola
+  lazo: '<path d="M7.5 15.5C4 14.5 3 12 3.8 9.6 5 6 9.6 4.2 13.8 4.6c4.6.5 7 3 6.2 6-.8 3-5 4.8-9.6 4.6" stroke-dasharray="2.4 2.2"/><path d="M8.2 15.4c-1 1.4-.9 3.2.4 4.4"/>',
+  // losa en axonometría, con su espesor
+  losa: '<path d="M2.5 13.5 9 9.5h12.5L15 13.5z"/><path d="M2.5 13.5v2.5H15l6.5-4v-2.5M15 13.5v2.5"/>',
+  // carpintería: marco, montante y travesaño
+  carpinteria: '<rect x="4" y="3" width="16" height="18" rx=".5"/><path d="M12 3v18M4 9.5h16"/>',
+  // corte: la marca de corte de los planos (línea con las dos flechas de la vista)
+  corte: '<path d="M12 2.5v19" stroke-dasharray="3 2"/><path d="M12 4.5H6.5l2.5-2.5M12 19.5H6.5l2.5 2.5"/><rect x="14.5" y="6" width="6" height="12" rx=".5"/>',
+  // dibujar un muro: lápiz y el trazo
+  dibujar: '<path d="M14.5 4.5l5 5L9 20H4v-5z"/><path d="M12.5 6.5l5 5"/>',
+  // armar: dos muros que se juntan en una pieza (con el nudo)
+  armar: '<path d="M5 3.5v13.5h14"/><path d="M8.5 3.5v10h10.5" opacity=".55"/><circle cx="5" cy="17" r="1.6"/>',
+  // insertar una pieza tipo: el núcleo en C con el más
+  insertar: '<path d="M14 4H5v16h9"/><path d="M8 7.5V16.5"/><path d="M18 9v6M15 12h6"/>',
+  // colocar con números: mira con el punto
+  colocar: '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.2"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>',
+  // calar: el muro con el vano y su dintel
+  calar: '<path d="M2.5 7h19v10h-19z"/><path d="M9.5 17v-6.5h5V17"/>',
+  // ayudas: escuadra
+  ayudas: '<path d="M4 20V4l16 16z"/><path d="M8 16V13.5M8 16h2.5"/><path d="M4 8h2M4 12h2"/>',
 };
 
 export function montarPlanta(cont: HTMLElement) {
@@ -2073,7 +2084,7 @@ export function montarPlanta(cont: HTMLElement) {
   estado.suscribirSeleccion(() => { col.refrescar(); refrescarTr(); });
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
-  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas ▾'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
+  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
   const bJuntas = document.createElement('button'); bJuntas.type = 'button';
   const pintarJuntas = () => { bJuntas.textContent = estado.juntasLimpias ? 'Juntas: unidas ✓' : 'Juntas: muros separados'; bJuntas.setAttribute('aria-pressed', String(estado.juntasLimpias)); };

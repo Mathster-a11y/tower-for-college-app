@@ -38,7 +38,7 @@
     <div class="grupo">
       <button type="button" id="b-torre-nueva" title="Proyecto nuevo, en blanco: pedís la cantidad de pisos y su altura; la losa y los muros se dibujan desde cero">+ Torre nueva</button>
       <div class="menu-cont">
-        <button type="button" id="b-ejemplos" aria-haspopup="true" aria-expanded="false">Ejemplos ▾</button>
+        <button type="button" id="b-ejemplos" aria-haspopup="true" aria-expanded="false">Ejemplos</button>
         <div class="menu" id="m-ejemplos" role="menu">
           <button type="button" id="b-nuevo" role="menuitem">Proyecto nuevo, en blanco<span class="pista">Pedís la cantidad de pisos y su altura; la losa y los muros se dibujan desde cero</span></button>
           <hr>
@@ -57,7 +57,7 @@
         </div>
       </div>
       <div class="menu-cont">
-        <button type="button" id="b-mis" aria-haspopup="true" aria-expanded="false" title="Versiones del proyecto guardadas en este navegador">Mis proyectos ▾</button>
+        <button type="button" id="b-mis" aria-haspopup="true" aria-expanded="false" title="Versiones del proyecto guardadas en este navegador">Mis proyectos</button>
         <div class="menu menu-mis" id="m-mis" role="menu"></div>
       </div>
       <label class="boton" for="b-abrir" title="Proyecto (.json), planilla del curso, tabla de niveles y muros o líneas de AutoCAD (.xlsx, .csv)">Abrir / importar…<input type="file" id="b-abrir" accept=".xlsx,.json,.csv,.tsv,.txt" hidden /></label>
@@ -71,7 +71,7 @@
     <span class="sep"></span>
     <div class="grupo">
       <div class="menu-cont">
-        <button type="button" id="b-mostrar" aria-haspopup="true" aria-expanded="false">Mostrar ▾</button>
+        <button type="button" id="b-mostrar" aria-haspopup="true" aria-expanded="false">Mostrar</button>
         <div class="menu" id="m-mostrar" role="menu">
           <button type="button" data-tema="" role="menuitem">Aspecto del sistema<span class="pista">Claro u oscuro, según la computadora</span></button>
           <button type="button" data-tema="light" role="menuitem">Clásico (claro)</button>
@@ -82,7 +82,7 @@
         </div>
       </div>
       <div class="menu-cont">
-        <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar ▾</button>
+        <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar</button>
         <div class="menu" id="m-exportar" role="menu">
           <button type="button" id="b-vista-planilla" role="menuitem">Vista previa de la planilla ↗<span class="pista">En otra pestaña: la planilla que se exporta, con las fórmulas calculadas; se actualiza sola mientras editás</span></button>
           <button type="button" id="b-guardar" role="menuitem">Guardar proyecto (.json)<span class="pista">Para seguir en otra computadora</span></button>
@@ -123,7 +123,7 @@
     </section>
     <aside class="derecha" aria-label="Axonometría y avance">
       <div class="bloque3d">
-        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)">📷</button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura">σ</button><button type="button" class="mini" id="b-p3d" aria-pressed="false" title="Presiones del viento: cada cara pintada con la presión del método elegido (barlovento empuja, sotavento y laterales succionan), la fuerza de cada nivel y los cuatro casos de carga del 102-25">p</button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura">J</button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
+        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)"><svg class="ic-mini" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8h3.5l2-3h6l2 3h3.5v11.5h-17z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura"><span class="letra-math">σ</span></button><button type="button" class="mini" id="b-p3d" aria-pressed="false" title="Presiones del viento: cada cara pintada con la presión del método elegido (barlovento empuja, sotavento y laterales succionan), la fuerza de cada nivel y los cuatro casos de carga del 102-25"><span class="letra-math">p</span></button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura"><span class="letra-math">J</span></button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
         <div class="vista3d" id="vista-3d"></div>
         <div class="capas" id="capas"></div>
       </div>

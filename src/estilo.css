@@ -2257,3 +2257,41 @@ body.presentando .pres-barra:hover, body.presentando .pres-barra:focus-within { 
 .alzado-corte .corte { stroke: var(--elegido); stroke-width: 3; stroke-linecap: round; }
 input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; margin: 0; accent-color: var(--elegido); touch-action: none; }
 @media (pointer: coarse) { input.altura-vertical { width: 32px; } .tunel-altura { flex-basis: 86px; } }
+
+/* ---- cada botón con su propio recuadro (sin palabras sueltas dentro de una cápsula común) ---- */
+.seg { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.seg > button, .seg > .menu-mas > button, .seg > .boton { border: 1px solid var(--field-edge); background: var(--field); }
+.seg > button[aria-pressed="true"], .seg > .menu-mas > button[aria-pressed="true"] { border-color: var(--accent); }
+.seg.pasos > button[aria-pressed="true"] { border-color: var(--rolb, var(--accent)); }
+/* herramientas de la planta: cada una en su baldosa (cuadrado de esquinas apenas redondeadas, como la grilla del plano) */
+.herr-planta { padding: 5px 6px 6px; border-color: var(--hair, var(--edge)); }
+.herr-grupo-bot { gap: 4px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button {
+  border: 1px solid var(--field-edge); background: var(--field); border-radius: 7px; min-width: 52px; padding: 4px 6px 3px; }
+.herr-planta .herr-grupo-bot > button:not([aria-pressed="true"]):hover, .herr-planta .herr-grupo-bot > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); border-color: var(--accent); }
+.herr-planta .herr-grupo-bot > button[aria-pressed="true"], .herr-planta .herr-grupo-bot > .menu-mas > button[aria-pressed="true"] { border-color: var(--accent); }
+.herr-planta .ic-herr { stroke-width: 1.6; }
+.herr-planta.compacta .herr-grupo-bot > button, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button { min-width: 36px; }
+/* letras de las fórmulas en los botones (σ, ρ, φ…): IBM Plex Math, como en las ecuaciones */
+.letra-math { font-family: var(--math); font-style: italic; }
+
+/* los botones que abren un menú: un chevrón dibujado (el ▾ no está en IBM Plex y salía en otra letra) */
+.barra button[aria-haspopup="true"]::after, .herr-planta .menu-mas > button::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); }
+.herr-planta .menu-mas > button::after { position: absolute; right: 6px; top: 7px; margin: 0; }
+.herr-planta .menu-mas > button { position: relative; }
+
+/* botones de herramienta del 3D: baldosas cuadradas como las de la planta, con el ícono o la letra centrados */
+.bloque3d .tira button.mini { min-width: 30px; height: 28px; padding: 0 7px; border-radius: 7px; display: inline-grid; place-items: center; }
+.bloque3d .tira button.mini .letra-math { font-size: 15px; line-height: 1; }
+.ic-mini { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* los pasos de la etapa (panel izquierdo): cada uno en su píldora con borde */
+.subpasos { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.subpasos button { border: 1px solid var(--field-edge); background: var(--field); }
+.subpasos button[aria-pressed="true"] { border-color: var(--rolb); }
+/* que la barra de la planta con sus baldosas entre en una línea con los nombres en una pantalla común */
+.herr-grupo { padding: 0 4px; }
+.herr-grupo-bot { gap: 3px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button { min-width: 44px; padding: 4px 5px 3px; font-size: 10.5px; }
