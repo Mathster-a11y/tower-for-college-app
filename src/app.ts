@@ -326,7 +326,8 @@ let capasConExo = false;
 
 // ------------------------------------------------------------------ modo de cálculo: en vivo o con botón
 const zonaModo = h('span', { class: 'modo-calculo' });
-$('estado-calculo').before(zonaModo);
+// al final de la cabecera, a la derecha (el aviso de los controles va junto al nombre del proyecto)
+document.querySelector('.barra')!.append(zonaModo);
 function dibujarModoCalculo() {
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Modo de cálculo', 'data-globo': 'Modo de cálculo|«En vivo»: cada cambio recalcula todo y redibuja todas las vistas, como el Excel (ideal para presentar y para la sincronía con la planilla). «Con botón»: los cambios se guardan sin calcular; el cálculo, el 3D y los diagramas se actualizan con «Calcular» (o F9). Usa muchos menos recursos de la máquina.' });
   ([['vivo', 'En vivo'], ['boton', 'Con botón']] as const).forEach(([k, txt]) => {
@@ -382,6 +383,11 @@ function abrirVistaPlanilla() {
   return !!w;
 }
 function mensaje(t: string) { $('mensaje').textContent = t; }
+// el mensaje del pie va en un renglón (cortado con «…»): el texto completo, al pasar el mouse. Lo escriben muchas partes
+// de la app directamente, así que el globo se pone solo cada vez que cambia
+{ const m = $('mensaje'); new MutationObserver(() => { m.title = m.textContent ?? ''; }).observe(m, { childList: true, characterData: true, subtree: true }); }
+// el aviso de los controles junto al nombre del proyecto: si no entra entero, el texto completo en el globo
+{ const c = $('estado-calculo'); new MutationObserver(() => { c.title = c.textContent ?? ''; }).observe(c, { childList: true, characterData: true, subtree: true }); }
 
 function descargar(nombre: string, datos: BlobPart, tipo: string) {
   const url = URL.createObjectURL(new Blob([datos], { type: tipo }));

@@ -317,7 +317,10 @@ class Estado {
 export const estado = new Estado();
 
 export const COLORES: Record<string, string> = {
-  alma: '#FFFF00', 'alma der.': '#FFCC99', 'ala sup.': '#00FF00', 'ala inf.': '#00CCFF', columna: '#FF4040',
+  // los de la planilla de la cátedra, salvo dos que chocaban con la convención de la app (rojo tracción, azul
+  // compresión): la columna va en marrón (era rojo) y el ala inferior en verde azulado (era celeste). Solo en la app:
+  // las planillas tienen sus propios colores
+  alma: '#FFFF00', 'alma der.': '#FFCC99', 'ala sup.': '#00FF00', 'ala inf.': '#3FA796', columna: '#8C6D4F',
   tubo: '#B07CFF', perfil: '#5EC8B4', 'fuera del cálculo': '#B8B8B8', 'sin pieza': '#FFFFFF',
 };
 /** número en castellano con signo menos verdadero (−) y sin «−0» */

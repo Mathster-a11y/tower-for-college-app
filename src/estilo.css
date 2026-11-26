@@ -2295,3 +2295,32 @@ input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; 
 .herr-grupo { padding: 0 4px; }
 .herr-grupo-bot { gap: 3px; }
 .herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button { min-width: 44px; padding: 4px 5px 3px; font-size: 10.5px; }
+
+/* ---- revisión estética (propuestas 1, 2, 3 y 5) ---- */
+/* 1 · cabecera en un renglón: el aviso de los controles junto al nombre del proyecto */
+.barra .proyecto { max-width: 18ch; }
+.barra #estado-calculo { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.barra .seg { flex-wrap: nowrap; }
+/* 2 · encabezado de la etapa liviano: el color de la etapa en el número y en un filo, no en toda la franja */
+.banda { background: var(--panel); color: var(--ink); border-bottom: 1px solid var(--edge); box-shadow: inset 4px 0 0 var(--rolb); }
+.banda h2 { color: var(--ink); }
+.banda .chip { background: var(--rolb); color: #fff; }
+/* 3 · arriba de la planta, una franja menos: la explicación de cada paso queda en su globo */
+.pasos-det .pasos-ayuda { display: none; }
+.pasos-det { justify-content: flex-end; }
+/* 5 · el mensaje del pie en un renglón */
+.estado-linea #mensaje { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.estado-linea .espacio { flex: 0 0 8px; }
+
+/* 1 · la cabecera en un renglón cuando entra: el aviso siempre entero; lo que cede es el nombre del proyecto
+   (completo en el globo). En pantallas más angostas, dos renglones como antes */
+@media (min-width: 1400px) {
+  .barra { flex-wrap: nowrap; gap: 4px; }
+  .barra > * { flex-shrink: 0; }
+  .barra .grupo { gap: 4px; }
+  .barra button, .barra .boton { padding-left: 9px; padding-right: 9px; }
+  .barra .sep { margin: 0; }
+  .barra .proyecto { flex: 0 1 auto; min-width: 4ch; max-width: 22ch; }
+  .barra #estado-calculo { max-width: none; }
+  .barra .espacio { flex: 1 1 0; min-width: 0; }
+}
