@@ -10,6 +10,8 @@ export interface PedidoMedicion {
   q?: Float32Array; colision?: 'bgk' | 'trt';
   /** con contexto urbano: las celdas de la torre (la fuerza se mide solo sobre ella) */
   cuerpo?: Uint8Array;
+  /** zonas de amortiguación junto a la entrada y la salida (las mismas del túnel que se ve) */
+  esponja?: { entrada: number; salida: number };
   /** pasos totales y desde cuál se mide (se descarta el arranque) */
   pasos: number; desde: number;
 }
@@ -19,7 +21,7 @@ export type RespuestaMedicion =
 
 self.onmessage = (e: MessageEvent<PedidoMedicion>) => {
   const o = e.data;
-  const sim = new Lbm2D({ nx: o.nx, ny: o.ny, nu: o.nu, u0: o.u0, cs: o.cs, solido: o.solido, q: o.q, colision: o.colision, cuerpo: o.cuerpo });
+  const sim = new Lbm2D({ nx: o.nx, ny: o.ny, nu: o.nu, u0: o.u0, cs: o.cs, solido: o.solido, q: o.q, colision: o.colision, cuerpo: o.cuerpo, esponja: o.esponja });
   const Fx: number[] = [], Fy: number[] = [];
   let ultimo = 0;
   for (let k = 0; k < o.pasos && !sim.roto; k++) {

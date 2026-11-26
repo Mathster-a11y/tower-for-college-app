@@ -25,6 +25,13 @@ export interface OpcionesLbm {
   cs?: number;
   /** periódico también en x (sin entrada ni salida) */
   periodicoX?: boolean;
+  /**
+   * zonas de amortiguación (en celdas) junto a la entrada y la salida: ahí la distribución se va acercando al viento
+   * parejo que entra (densidad 1, u0), cada vez más cerca del borde. Absorben las ondas de presión del arranque y los
+   * remolinos que llegan a la salida, que si no rebotan en el borde y vuelven a entrar al canal (el dibujo parpadea, la
+   * estela se tuerce y, con el tiempo, la corrida se rompe). Sin esto, los bordes son los de siempre
+   */
+  esponja?: { entrada: number; salida: number };
   /** fuerza por unidad de masa (gx, gy), para canales */
   fuerza?: [number, number];
   /** celdas sólidas (1) */
@@ -76,6 +83,8 @@ export interface OpcionesLbm {
 export const LAMBDA_TRT = 3 / 16;
 /** piso de ω− en la colisión TRT (ver OpcionesLbm.omegaMenosMin) */
 export const OMEGA_MENOS_MIN = 1.5;
+/** amortiguación máxima por paso en el borde de entrada y en el de salida (ver OpcionesLbm.esponja) */
+export const SIGMA_ENTRADA = 0.04, SIGMA_SALIDA = 0.08;
 
 export class Lbm2D {
   readonly nx: number; readonly ny: number; readonly N: number;
@@ -102,6 +111,8 @@ export class Lbm2D {
   readonly exactas: boolean;
   readonly ommMin: number;
   readonly marco: boolean;
+  /** cuánto se acerca cada columna al viento parejo en cada paso (0 fuera de las zonas de amortiguación) */
+  private readonly sigmaCol: Float32Array | null;
   /** con «marco»: el viento impuesto en las orillas (solo se leen las celdas de la orilla) */
   readonly borde: { rho: Float32Array; ux: Float32Array; uy: Float32Array } | null;
 
@@ -113,6 +124,15 @@ export class Lbm2D {
     this.marco = !!o.marco;
     this.techoLibre = !!o.techoLibre;
     this.uEntrada = new Float32Array(this.ny).map((_, y) => this.u0 * (o.perfil ? o.perfil[y] ?? 1 : 1));
+    // amortiguación: crece como el cuadrado de la distancia al comienzo de la zona (sin escalón que refleje)
+    if (o.esponja && !o.periodicoX && !o.marco && (o.esponja.entrada > 0 || o.esponja.salida > 0)) {
+      const sc = new Float32Array(this.nx), le = Math.min(o.esponja.entrada, this.nx / 4), ls = Math.min(o.esponja.salida, this.nx / 3);
+      for (let x = 0; x < this.nx; x++) {
+        const a = le > 0 && x < le ? (le - x) / le : 0, b = ls > 0 && x > this.nx - 1 - ls ? (x - (this.nx - 1 - ls)) / ls : 0;
+        sc[x] = Math.max(SIGMA_ENTRADA * a * a, SIGMA_SALIDA * b * b);
+      }
+      this.sigmaCol = sc;
+    } else this.sigmaCol = null;
     this.borde = this.marco ? { rho: new Float32Array(this.N).fill(1), ux: new Float32Array(this.N).fill(this.u0 ?? 0), uy: new Float32Array(this.N) } : null;
     this.f = new Float32Array(9 * this.N); this.g = new Float32Array(9 * this.N);
     this.rho = new Float32Array(this.N).fill(1); this.ux = new Float32Array(this.N); this.uy = new Float32Array(this.N);
@@ -240,6 +260,19 @@ export class Lbm2D {
       f[c] = f0 + om * (e0 - f0);
       f[N + c] = f1 + om * (e1 - f1); f[2 * N + c] = f2 + om * (e2 - f2); f[3 * N + c] = f3 + om * (e3 - f3); f[4 * N + c] = f4 + om * (e4 - f4);
       f[5 * N + c] = f5 + om * (e5 - f5); f[6 * N + c] = f6 + om * (e6 - f6); f[7 * N + c] = f7 + om * (e7 - f7); f[8 * N + c] = f8 + om * (e8 - f8);
+    }
+    // --- zonas de amortiguación: cada celda se acerca al viento parejo de su fila
+    const sg = this.sigmaCol;
+    if (sg) for (let x = 0; x < nx; x++) {
+      const s = sg[x]; if (s <= 0) continue;
+      for (let y = 0; y < ny; y++) {
+        const c = y * nx + x; if (solido[c]) continue;
+        // hacia el viento parejo con la densidad de la celda: se frenan los remolinos sin imponer una presión (una
+        // presión impuesta crea ondas nuevas en el borde de la zona)
+        const ue = this.uEntrada[y], r = rho[c];
+        if (!(r > 0.2 && r < 5)) continue;
+        for (let i = 0; i < 9; i++) { const k = i * N + c; f[k] += s * (feq(i, r, ue, 0) - f[k]); }
+      }
     }
     // --- propagación (tirando del vecino de atrás), fila por fila como copias de memoria
     const perX = this.periodicoX;
