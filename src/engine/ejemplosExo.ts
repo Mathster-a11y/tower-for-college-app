@@ -45,6 +45,8 @@ export function ejemploHancock(): Proyecto {
   niveles.push({ nombre: 'PB', cota: 0, B: r2(ancha(0) * FT), L: r2(angosta(0) * FT) }, { nombre: 'Subsuelo', cota: -6 });
   const cortes = [0, 200, 400, 600, 800, 1000, 1100].map(z => r2(z * FT));
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'John Hancock Center (Chicago, 1969) · modelo aproximado',
     alumno: '',
@@ -92,6 +94,8 @@ export function ejemploHearst(): Proyecto {
   // diagrid: un rombo cada 8 pisos (dos triángulos de 4); el primero baja desde el piso 10 hasta PB por la base
   const cortes = [0, zPiso(10), zPiso(18), zPiso(26), zPiso(34), zPiso(42), h].map(r2);
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'Hearst Tower (Nueva York, 2006) · modelo aproximado',
     alumno: '',
@@ -136,6 +140,8 @@ export function ejemploOnterie(): Proyecto {
   for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea (pisos 59–60)' : `${2 * k - 1}º–${2 * k}º`, cota: r2(k * dz), pisos: 2, ...(k === n ? { B, L } : {}) });
   niveles.push({ nombre: 'PB', cota: 0, B, L }, { nombre: 'Subsuelo', cota: -5 });
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'Onterie Center (Chicago, 1986) · modelo aproximado',
     alumno: '',
@@ -173,6 +179,8 @@ export function ejemploBasicoExo(): Proyecto {
   niveles.push({ nombre: 'PB', cota: 0 }, { nombre: 'Subsuelo', cota: -3 });
   const t = (id: string, x: number): Muro => ({ id, dir: 'Y', x, y: 0, largo: 4, espesor: 0.25, llega: true, areaInf: 40, piezaA: id, pegadoA: '', piezaB: '', pegadoB: '' });
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'Torre chica con tubo en X (ejemplo de la guía)',
     alumno: '',
@@ -208,6 +216,8 @@ export function ejemploShanghai(): Proyecto {
   // juntas de zona: nueve zonas iguales (supuesto); los brazos van en el nivel de la app más cercano
   const juntas = Array.from({ length: 8 }, (_, j) => r2(Math.round(((j + 1) * h) / 9 / dz) * dz));
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'Shanghai Tower (Shanghái, 2015) · modelo aproximado',
     alumno: '',
