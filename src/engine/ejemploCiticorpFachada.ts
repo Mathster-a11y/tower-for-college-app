@@ -43,7 +43,10 @@ export function ejemploCiticorpFachada(): Proyecto {
   corona.nombre = 'Corona (techo a 45° hacia el sur)';
   // la losa de la azotea es la franja plana del norte (de la pendiente al borde)
   corona.silueta = [{ x: -m, y: +yTop.toFixed(3) }, { x: m, y: +yTop.toFixed(3) }, { x: m, y: m }, { x: -m, y: m }];
-  corona.B = lado; corona.L = +(m - yTop).toFixed(2);
+  // B y L de la corona: la piel media de su tramo (del techo del cajón a la azotea), no la losa de la azotea. En el sentido
+  // norte–sur la piel pasa de 41,95 m en el techo del cajón (la pendiente arranca a una crujía del borde sur) a la franja
+  // plana de unos 8 m arriba, por el techo a 45°: la piel media (la de media altura) mide el promedio de las dos
+  corona.B = lado; corona.L = +(((m - ys) + (m - yTop)) / 2).toFixed(2);
   const n56 = p.niveles.find(n => n.cota === z56)!; n56.B = lado; n56.L = lado;
   p.niveles[1].silueta = rectangulo(lado, lado);
   // el núcleo termina en el piso 56: la corona cuelga del exoesqueleto

@@ -79,6 +79,13 @@ function recortarPlanos(env: Envolvente, z: number, v0: Vertice[] | null): Verti
   return v;
 }
 
+/** el contorno de la piel a la cota z, con sus planos (null si no hay envolvente o la sacan entera a esa altura) */
+export function contornoEnvolventeEnZ(p: Proyecto, z: number): Vertice[] | null {
+  const env = p.envolvente;
+  if (!env || env.planta.length < 3) return null;
+  return recortarPlanos(env, z, formaEnvolvente(p, env, z));
+}
+
 /** el contorno de la piel a la cota z sin los planos de corte (para tomarlo como sección y seguir editándolo) */
 export function formaEnvolventeEn(p: Proyecto, z: number): Vertice[] | null {
   return p.envolvente ? formaEnvolvente(p, p.envolvente, z) : null;

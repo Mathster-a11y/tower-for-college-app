@@ -13,6 +13,7 @@
  */
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { comunLosas, tramoEn } from './carpinteria';
+import { contornoEnvolventeEnZ } from './envolvente';
 import { cajaSilueta, carpinteriaDeNivel, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
 export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
@@ -105,8 +106,16 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
       if (max > TOL) { carp.cotas.push(n.cota); carp.max = Math.max(carp.max, max); }
     }
     // la planilla toma el viento con B × L; si la losa propia de este nivel es otra, conviene igualarlas
-    if (pl.propia) {
-      const k = cajaSilueta(pl.silueta);
+    // (en un tramo «Envolvente» el viento ve la piel, no la losa: B × L tiene que ser la piel media del tramo del nivel,
+    //  la de media altura entre su cota y la del nivel de abajo; así una corona recortada en pendiente lleva su medida media)
+    const pielMedia = (() => {
+      if (!conEnv) return null;
+      const abajo = p.niveles[i + 1] && p.niveles[i + 1].cota >= -1e-6 ? p.niveles[i + 1].cota : n.cota;
+      const v = contornoEnvolventeEnZ(p, (n.cota + abajo) / 2);
+      return v ? cajaSilueta(v) : null;
+    })();
+    if (pl.propia || pielMedia) {
+      const k = pielMedia ?? cajaSilueta(pl.silueta);
       if (Math.abs(k.B - pl.B) > Math.max(0.1, 0.02 * pl.B) || Math.abs(k.L - pl.L) > Math.max(0.1, 0.02 * pl.L)) {
         const clave = `${pl.B}×${pl.L}|${k.B.toFixed(2)}×${k.L.toFixed(2)}`;
         bl.set(clave, [...(bl.get(clave) ?? []), n.cota]);
