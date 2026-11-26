@@ -67,3 +67,31 @@ describe('cuatro colores', () => {
     adj.forEach((vs, n) => vs.forEach(v => expect(col.get(v)).not.toBe(col.get(n))));
   });
 });
+
+describe('losas que apoyan en el exoesqueleto', () => {
+  it('la franja junto a la fachada va al exo y el resto a los muros; la suma da la losa', async () => {
+    const { ID_EXO } = await import('./areas');
+    const p = proyectoVacio();
+    p.niveles = [{ nombre: 'Azotea', cota: 3, B: 20, L: 20 }, { nombre: 'PB', cota: 0 }];
+    p.muros = [muro('M1', 0, 0)];
+    const sinExo = areasInfluencia(p, 0);
+    expect(sinExo.area.M1).toBeCloseTo(400, 6);
+    p.exo = { losas: { franja: 4 } } as unknown as NonNullable<typeof p.exo>;
+    const a = areasInfluencia(p, 0);
+    // franja de 4 m en un cuadrado de 20: 400 − 12² = 256 m² al exo, 144 m² al muro
+    expect(a.area[ID_EXO]).toBeCloseTo(256, 6);
+    expect(a.area.M1).toBeCloseTo(144, 6);
+    expect(a.ids).toContain(ID_EXO);
+  });
+  it('en el Gherkin el exo se lleva la corona de la planta circular', async () => {
+    const { ejemploGherkin } = await import('./ejemplosExo');
+    const { ID_EXO } = await import('./areas');
+    const p = ejemploGherkin();
+    const iPB = p.niveles.findIndex(n => Math.abs(n.cota) < 1e-6);
+    const a = areasInfluencia(p, iPB);
+    const exo = a.area[ID_EXO], resto = a.total - exo;
+    expect(exo).toBeGreaterThan(0.3 * a.total);
+    expect(resto).toBeGreaterThan(0.3 * a.total);
+    expect(Object.values(a.area).reduce((x, y) => x + y, 0)).toBeCloseTo(a.total, 0);
+  });
+});

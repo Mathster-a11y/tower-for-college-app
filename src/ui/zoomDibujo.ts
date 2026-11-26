@@ -79,6 +79,20 @@ function detalle(svg: SVGSVGElement, z: number) {
     puestos.push(new DOMRect(bb.x, bb.y + dy, bb.width, bb.height));
   }
 }
+/** esconde (hasta acercar) las letras de Bow que pisan a otra ya puesta; las que ya tienen su zoom mínimo no se tocan */
+export function despejarLetras(svg: SVGSVGElement) {
+  if (!svg.isConnected) return;
+  const letras = [...svg.querySelectorAll<SVGTextElement>('text.f-letra, text.rt-letra')].filter(t => !t.dataset.zoomMin);
+  const puestas: DOMRect[] = [];
+  const toca = (a: DOMRect, b: DOMRect) => a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
+  for (const t of letras) {
+    let bb: DOMRect;
+    try { bb = t.getBBox(); } catch { continue; }
+    if (!bb.width) continue;
+    if (puestas.some(p => toca(p, bb))) { t.dataset.zoomMin = '2.5'; continue; }
+    puestas.push(bb);
+  }
+}
 /** zoom de cada dibujo (por su nombre): se conserva cuando el centro se vuelve a dibujar */
 const recordado = new Map<string, { base: string; v: { x: number; y: number; w: number; h: number } }>();
 
@@ -95,6 +109,9 @@ export function hacerZoomable(svg: SVGSVGElement, barra?: HTMLElement, clave = '
   const previo = clave ? recordado.get(clave) : undefined;
   if (previo && previo.base === firma) v = { ...previo.v };
   svg.classList.add('zoomable');
+  // letras de Bow (a, b… z12) encimadas sin zoom: con muchos pisos los espacios y los lados quedan muy juntos y las
+  // letras se pisan. La primera queda; las que la tocan se esconden y aparecen al acercar (data-zoom-min)
+  requestAnimationFrame(() => despejarLetras(svg));
   const poner = () => {
     // no se sale del dibujo: siempre queda algo a la vista
     const z = base.w / v.w;

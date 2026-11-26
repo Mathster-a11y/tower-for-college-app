@@ -25,6 +25,7 @@ const PERMITIDAS: [string, string][] = [
   ['src/app.ts', 'd.innerHTML = html;'],                                                       // dialogo(): cada dato con esc()
   ['src/app.ts', "insertAdjacentHTML('beforeend', '<span class=\"plegar\""],                  // texto fijo
   ['src/ui/planta.ts', `bMasTr.innerHTML = '<span class="ic">⋯</span>`],                       // texto fijo
+  ['src/ui/planta.ts', `ic.classList.add('ic-herr'); ic.innerHTML = icono;`],                    // íconos fijos de ICONOS_HERR
   // Ecuaciones: símbolos con simbolo()/textoMat() (mat, v y esc), ecuaciones con conSimbolos/conNumeros (textoMat y
   // números), títulos y unidades con esc(); los nombres de piezas del proyecto solo entran por esas funciones
   ['src/ui/grafo.ts', 's.innerHTML = x ? simbolo(x.sim) : esc(id);'],

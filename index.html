@@ -34,18 +34,18 @@
   <header class="barra" role="toolbar" aria-label="Herramientas">
     <span class="marca">TORRE</span>
     <span class="proyecto" id="nombre-proyecto"></span>
+    <span class="chip-estado" id="estado-calculo">Calculado</span>
     <span class="sep"></span>
     <div class="grupo">
       <button type="button" id="b-torre-nueva" title="Proyecto nuevo, en blanco: pedís la cantidad de pisos y su altura; la losa y los muros se dibujan desde cero">+ Torre nueva</button>
       <div class="menu-cont">
-        <button type="button" id="b-ejemplos" aria-haspopup="true" aria-expanded="false">Ejemplos ▾</button>
+        <button type="button" id="b-ejemplos" aria-haspopup="true" aria-expanded="false">Ejemplos</button>
         <div class="menu" id="m-ejemplos" role="menu">
           <button type="button" id="b-nuevo" role="menuitem">Proyecto nuevo, en blanco<span class="pista">Pedís la cantidad de pisos y su altura; la losa y los muros se dibujan desde cero</span></button>
           <hr>
           <button type="button" id="b-ejemplo" role="menuitem">Ejemplo de la guía 2024<span class="pista">Neuquén · 20 pisos · planta 20 × 16 m · para Planilla y Guía (con CIRSOC, la deriva de un piso no verifica)</span></button>
           <button type="button" id="b-ejemplo-asim" role="menuitem">Ejemplo de la guía con rototraslación<span class="pista">Anexo: T5 aislado de 4,00 × 0,20 m · la planta rota · solo Planilla</span></button>
-          <button type="button" id="b-ejemplo-citicorp" role="menuitem">Citicorp Center (Nueva York, 1977)<span class="pista">59 pisos, 278,6 m, sobre cuatro supercolumnas a media cara, con su exoesqueleto de chevrones · medidas del plano</span></button>
-          <button type="button" id="b-ejemplo-citicorp-fachada" role="menuitem">Citicorp Center · forma y fachada<span class="pista">el mismo modelo con la plaza abierta, carpintería por piso, la corona como envolvente con su techo a 45° y su reticulado, y el exoesqueleto adentro de la piel</span></button>
+          <button type="button" id="b-ejemplo-citicorp-fachada" role="menuitem">Citicorp Center (Nueva York, 1977)<span class="pista">59 pisos, 278,6 m, sobre cuatro supercolumnas a media cara: la plaza abierta, carpintería por piso, la corona como envolvente con su techo a 45° y su reticulado, y el exoesqueleto adentro de la piel</span></button>
           <button type="button" id="b-ejemplo-chica" role="menuitem">Torre chica con tubo en X (paso a paso de la guía)<span class="pista">10 pisos de 3 m · dos tabiques · tubo en X de dos módulos: los números de la guía «La red de las matemáticas»</span></button>
           <button type="button" id="b-ejemplo-hancock" role="menuitem">John Hancock Center (Chicago, 1969)<span class="pista">100 pisos, 343,5 m · tubo arriostrado en X con las caras inclinadas (ficha D) · datos del estudio JHU</span></button>
           <button type="button" id="b-ejemplo-shanghai" role="menuitem">Shanghai Tower (Shanghái, 2015)<span class="pista">632 m · núcleo de hormigón con outriggers en las juntas de zona (ficha F) · planta supuesta</span></button>
@@ -58,7 +58,7 @@
         </div>
       </div>
       <div class="menu-cont">
-        <button type="button" id="b-mis" aria-haspopup="true" aria-expanded="false" title="Versiones del proyecto guardadas en este navegador">Mis proyectos ▾</button>
+        <button type="button" id="b-mis" aria-haspopup="true" aria-expanded="false" title="Versiones del proyecto guardadas en este navegador">Mis proyectos</button>
         <div class="menu menu-mis" id="m-mis" role="menu"></div>
       </div>
       <label class="boton" for="b-abrir" title="Proyecto (.json), planilla del curso, tabla de niveles y muros o líneas de AutoCAD (.xlsx, .csv)">Abrir / importar…<input type="file" id="b-abrir" accept=".xlsx,.json,.csv,.tsv,.txt" hidden /></label>
@@ -67,21 +67,23 @@
     <div class="grupo">
       <button type="button" class="glifo" id="b-deshacer" title="Deshacer (Ctrl+Z)" aria-label="Deshacer">↶</button>
       <button type="button" class="glifo" id="b-rehacer" title="Rehacer (Ctrl+Y)" aria-label="Rehacer">↷</button>
+      <button type="button" class="glifo" id="b-presentar" title="Modo presentación: pantalla completa con el dibujo de cada etapa; las flechas (o Av Pág / Re Pág del control remoto) pasan de etapa y Esc vuelve" aria-label="Modo presentación">⛶</button>
     </div>
     <span class="sep"></span>
     <div class="grupo">
       <div class="menu-cont">
-        <button type="button" id="b-mostrar" aria-haspopup="true" aria-expanded="false">Mostrar ▾</button>
+        <button type="button" id="b-mostrar" aria-haspopup="true" aria-expanded="false">Mostrar</button>
         <div class="menu" id="m-mostrar" role="menu">
           <button type="button" data-tema="" role="menuitem">Aspecto del sistema<span class="pista">Claro u oscuro, según la computadora</span></button>
           <button type="button" data-tema="light" role="menuitem">Clásico (claro)</button>
           <button type="button" data-tema="dark" role="menuitem">Tablero de dibujo (oscuro)</button>
           <hr />
+          <button type="button" id="b-presentar-menu" role="menuitem">Modo presentación<span class="pista">Pantalla completa con el dibujo de cada etapa; ← → o el control remoto pasan de etapa; Esc vuelve</span></button>
           <button type="button" id="b-recorrido" role="menuitem">Recorrido guiado<span class="pista">Qué hay en cada parte de la pantalla</span></button>
         </div>
       </div>
       <div class="menu-cont">
-        <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar ▾</button>
+        <button type="button" id="b-exportar-menu" aria-haspopup="true" aria-expanded="false">Exportar</button>
         <div class="menu" id="m-exportar" role="menu">
           <button type="button" id="b-vista-planilla" role="menuitem">Vista previa de la planilla ↗<span class="pista">En otra pestaña: la planilla que se exporta, con las fórmulas calculadas; se actualiza sola mientras editás</span></button>
           <button type="button" id="b-guardar" role="menuitem">Guardar proyecto (.json)<span class="pista">Para seguir en otra computadora</span></button>
@@ -95,6 +97,7 @@
           <button type="button" id="b-desglose" role="menuitem">Desglose por hoja (PDF)<span class="pista">Cálculo analítico paso por paso al lado del Excel, hoja por hoja</span></button>
           <button type="button" id="b-presentacion" role="menuitem">Presentación del trabajo (PowerPoint)<span class="pista">Para exponer: la carta C de portada, la lámina A, la estabilidad, la rigidez, las verificaciones, el exo y los videos del túnel, con notas para el que habla</span></button>
           <button type="button" id="b-desglose-pptx" role="menuitem">Desglose por hoja (PowerPoint)<span class="pista">Lo mismo en diapositivas (.pptx) para presentar</span></button>
+          <button type="button" id="b-modelo3d" role="menuitem">Modelo 3D para Rhino y SketchUp (.zip)<span class="pista">Lo que se ve en la axonometría (losas, muros, fachada, exo) en .obj (Rhino, Blender) y .dae (SketchUp), por capas y en metros, para hacer renders</span></button>
           <button type="button" id="b-carta-pdf" role="menuitem">Carta PDF<span class="pista">Solo la carta de la torre: axonometría, M N y Q, vuelco y ficha, de los dos vientos (8 hojas A4 apaisadas)</span></button>
           <button type="button" id="b-informe" role="menuitem">Informe para imprimir o PDF<span class="pista">Datos, cartas de los dos vientos, rototraslación y controles</span></button>
           <button type="button" id="b-sheets" role="menuitem">Sincronizar con Google Sheets…<span class="pista" id="b-sheets-pista">Editar el edificio desde la planilla o desde la app</span></button>
@@ -103,7 +106,6 @@
       <button type="button" class="primario" id="b-exportar">Escribir planilla .xlsx</button>
     </div>
     <span class="espacio"></span>
-    <span class="chip-estado" id="estado-calculo">Calculado</span>
   </header>
   <main class="app">
     <nav class="riel" id="riel" aria-label="Etapas del cálculo"></nav>
@@ -121,7 +123,7 @@
     </section>
     <aside class="derecha" aria-label="Axonometría y avance">
       <div class="bloque3d">
-        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)">📷</button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura">σ</button><button type="button" class="mini" id="b-p3d" aria-pressed="false" title="Presiones del viento: cada cara pintada con la presión del método elegido (barlovento empuja, sotavento y laterales succionan), la fuerza de cada nivel y los cuatro casos de carga del 102-25">p</button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura">J</button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
+        <div class="tira"><span class="nombre">Axonometría</span><span class="espacio"></span><button type="button" class="mini" id="b-foto3d" title="Guardar esta vista del 3D para el informe (Exportar → Informe)"><svg class="ic-mini" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8h3.5l2-3h6l2 3h3.5v11.5h-17z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button><button type="button" class="mini" id="b-t3d" aria-pressed="false" title="Tensiones: cada muro pintado piso por piso con su peor fibra (compresión cargado / tracción descargado), las cuentas de la etapa 07 en altura"><span class="letra-math">σ</span></button><button type="button" class="mini" id="b-p3d" aria-pressed="false" title="Presiones del viento: cada cara pintada con la presión del método elegido (barlovento empuja, sotavento y laterales succionan), la fuerza de cada nivel y los cuatro casos de carga del 102-25"><span class="letra-math">p</span></button><button type="button" class="mini" id="b-j3d" aria-pressed="false" title="ΣJ piso por piso: el momento de inercia de las piezas que toman el viento elegido, en altura"><span class="letra-math">J</span></button><button type="button" class="mini" id="b-encuadrar" title="Doble clic en el dibujo hace lo mismo">Encuadrar</button></div>
         <div class="vista3d" id="vista-3d"></div>
         <div class="capas" id="capas"></div>
       </div>

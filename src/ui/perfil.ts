@@ -98,7 +98,7 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
     svg.append(el('rect', { x: U(q.u), y: V(q.v), width: Math.max(1.5, q.w * k), height: Math.max(1.5, q.h * k), class: 'pf-perfil', ...(color(q.rol) ? { style: `fill:${color(q.rol)}` } : {}) }));
     // medida de cada rectángulo con su columna de la hoja, en una columna de rótulos a la derecha
     let y = V(q.v + q.h / 2) + 4;
-    while (usados.some(u => Math.abs(u - y) < 12)) y += 12;
+    while (usados.some(u => Math.abs(u - y) < 14)) y += 14;                 // 14 px: el alto de un renglón de 11 px
     usados.push(y);
     svg.append(el('line', { x1: U(q.u + q.w) + 2, x2: xr - 3, y1: V(q.v + q.h / 2), y2: y - 4, class: 'pf-guia' }));
     svg.append(el('text', { x: xr, y, class: 'd-eje' }, `${q.rol} ${fmt(q.w, 2)}×${fmt(q.h, 2)} · ${q.col}`));
@@ -108,7 +108,7 @@ export function dibujoPerfil(pz: PiezaEquivalente, f: FilaJ, r: FilaJRes, muros:
   if (ev !== null) {
     svg.append(el('line', { x1: U(u0) - 14, x2: U(u1) + 8, y1: V(ev), y2: V(ev), class: 'pf-eje' }));
     svg.append(el('text', { x: U(u0) - 16, y: V(ev) + 4, class: 'd-valor', 'text-anchor': 'end' }, 'eje'));
-    if (ejeV === null) svg.append(el('text', { x: U(u0) - 16, y: V(ev) + 16, class: 'd-eje', 'text-anchor': 'end' }, `AK ${fmt(ev, 2)}`));
+    if (ejeV === null) svg.append(el('text', { x: U(u0) - 16, y: V(ev) + 18, class: 'd-eje', 'text-anchor': 'end' }, `AK ${fmt(ev, 2)}`));
   }
   return svg;
 }

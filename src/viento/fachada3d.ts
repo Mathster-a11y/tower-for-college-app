@@ -94,10 +94,14 @@ export function zonasFachada(p: PromedioCp, d: Desplegada, a: number, qh: number
 }
 /** lo mismo con el pico de cada celda dado (por ejemplo, la envolvente de varias direcciones) */
 export function zonasDe(mas: (k: number) => number, menos: (k: number) => number, d: Desplegada, a: number, qh: number, area: number): FilaZona[] {
+  // la franja de esquina tiene por lo menos una celda de ancho: con una grilla gruesa (el procesador) la celda mide más
+  // que la franja del reglamento y la zona 5 quedaba vacía («—» en la tabla)
+  const dMin = Math.min(...d.paneles.flatMap(pn => pn.celdas.map(q => q.dEsquina)));
+  const aEf = Math.max(a, isFinite(dMin) ? dMin + 1e-9 : a);
   return ([4, 5] as const).map(zona => {
     let cpMas = -Infinity, cpMenos = Infinity;
     for (const pn of d.paneles) for (const q of pn.celdas) {
-      if ((q.dEsquina < a) !== (zona === 5)) continue;
+      if ((q.dEsquina < aEf) !== (zona === 5)) continue;
       const ma = mas(q.k), me = menos(q.k);
       if (isFinite(ma)) cpMas = Math.max(cpMas, ma);
       if (isFinite(me)) cpMenos = Math.min(cpMenos, me);

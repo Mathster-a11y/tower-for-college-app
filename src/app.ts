@@ -14,6 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
+import { montarPresentacion } from './ui/modoPresentacion';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
 import { hiloDeEtapa } from './ui/hilo';
 import { leerProyecto, textoErrores } from './engine/lector';
@@ -25,7 +26,7 @@ import plantilla2025URL from './assets/planilla_catedra_2025.xlsx';
 import { usarConfig, type Motor } from './engine/config';
 import { aPlanilla } from './engine/mapping';
 import { calcularPlanilla } from './engine/planilla';
-import { ejemploGuia, ejemploAsimetrico, ejemploCiticorp, proyectoVacio } from './engine/modelo';
+import { ejemploGuia, ejemploAsimetrico, proyectoVacio } from './engine/modelo';
 import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
 import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
@@ -96,7 +97,8 @@ function dibujarPanel() {
   p.replaceChildren();
   if (estado.calculo.error) p.append(h('p', { class: 'error' }, `Error en el cálculo: ${estado.calculo.error}`));
   // modo con botón: los resultados de las etapas son los del último cálculo
-  if (estado.pendiente && e.id !== 'diseno' && e.id !== 'ayuda') {
+  // (en vivo, mientras calcula en segundo plano, alcanza con el chip de arriba: el aviso movería el panel en cada cambio)
+  if (estado.pendiente && !estado.calculando && e.id !== 'diseno' && e.id !== 'ayuda') {
     const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
     b.addEventListener('click', () => estado.calcularAhora());
     p.append(h('div', { class: 'aviso-viejo panel-viejo' }, h('span', {}, `Resultados del último cálculo: ${estado.cambiosPendientes} cambio${estado.cambiosPendientes === 1 ? '' : 's'} sin calcular.`), b));
@@ -260,6 +262,17 @@ function dibujarCapas() {
 }
 function dibujarEstadoCalculo() {
   dibujarModoCalculo();
+  // en vivo, con el cálculo en segundo plano: los diagramas se atenúan (si tarda) hasta que llegan los resultados
+  document.body.classList.toggle('calculando', estado.calculando);
+  if (estado.calculando) {
+    const el = $('estado-calculo');
+    el.className = 'chip-estado pendiente calculando';
+    el.textContent = 'Calculando…';
+    el.setAttribute('data-globo', 'Calculando en segundo plano|Los últimos cambios se están calculando sin frenar la app: podés seguir editando. Mientras tanto, los resultados, el 3D y los diagramas son los del cálculo anterior; se actualizan solos al terminar.');
+    el.style.cursor = 'default';
+    el.onclick = null;
+    return;
+  }
   if (estado.pendiente) {
     const el = $('estado-calculo');
     el.className = 'chip-estado revisar';
@@ -313,7 +326,8 @@ let capasConExo = false;
 
 // ------------------------------------------------------------------ modo de cálculo: en vivo o con botón
 const zonaModo = h('span', { class: 'modo-calculo' });
-$('estado-calculo').before(zonaModo);
+// al final de la cabecera, a la derecha (el aviso de los controles va junto al nombre del proyecto)
+document.querySelector('.barra')!.append(zonaModo);
 function dibujarModoCalculo() {
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Modo de cálculo', 'data-globo': 'Modo de cálculo|«En vivo»: cada cambio recalcula todo y redibuja todas las vistas, como el Excel (ideal para presentar y para la sincronía con la planilla). «Con botón»: los cambios se guardan sin calcular; el cálculo, el 3D y los diagramas se actualizan con «Calcular» (o F9). Usa muchos menos recursos de la máquina.' });
   ([['vivo', 'En vivo'], ['boton', 'Con botón']] as const).forEach(([k, txt]) => {
@@ -344,7 +358,7 @@ document.body.classList.toggle('sin-tutorial', !tutorialPrendido());
 /** aviso sobre los diagramas del centro cuando quedaron del cálculo anterior */
 function marcarCentroViejo() {
   const dib = $('centro-dibujos');
-  if (dib.querySelector('.aviso-viejo')) return;
+  if (estado.calculando || dib.querySelector('.aviso-viejo')) return;
   const b = h('button', { type: 'button', class: 'chico primario' }, 'Calcular (F9)');
   b.addEventListener('click', () => estado.calcularAhora());
   dib.prepend(h('div', { class: 'aviso-viejo' }, h('span', {}, 'Diagramas del último cálculo: hay cambios sin calcular.'), b));
@@ -369,6 +383,11 @@ function abrirVistaPlanilla() {
   return !!w;
 }
 function mensaje(t: string) { $('mensaje').textContent = t; }
+// el mensaje del pie va en un renglón (cortado con «…»): el texto completo, al pasar el mouse. Lo escriben muchas partes
+// de la app directamente, así que el globo se pone solo cada vez que cambia
+{ const m = $('mensaje'); new MutationObserver(() => { m.title = m.textContent ?? ''; }).observe(m, { childList: true, characterData: true, subtree: true }); }
+// el aviso de los controles junto al nombre del proyecto: si no entra entero, el texto completo en el globo
+{ const c = $('estado-calculo'); new MutationObserver(() => { c.title = c.textContent ?? ''; }).observe(c, { childList: true, characterData: true, subtree: true }); }
 
 function descargar(nombre: string, datos: BlobPart, tipo: string) {
   const url = URL.createObjectURL(new Blob([datos], { type: tipo }));
@@ -606,7 +625,6 @@ window.addEventListener('error', e => { if (String(e.message ?? '').includes('Re
 window.addEventListener('unhandledrejection', e => fallo('Error inesperado', e.reason));
 
 $('b-ejemplo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGuia()); cerrarMenus(); mensaje('Cargado el ejemplo de la guía 2024 (Neuquén, 20 pisos). Es el de la cátedra, para Planilla y Guía: con CIRSOC la deriva de servicio de la azotea pasa 1/500 y el Resumen lo marca.'); });
-$('b-ejemplo-citicorp').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploCiticorp()); cerrarMenus(); mensaje('Cargado el Citicorp Center: núcleo, supercolumnas en la base abierta y el exoesqueleto de chevrones (ficha E) en la etapa 08 · Exoesqueleto.'); });
 $('b-ejemplo-citicorp-fachada').addEventListener('click', () => { plantillaAbierta = null; estado.capas.fachada = true; reemplazarConCopia(ejemploCiticorpFachada()); cerrarMenus(); mensaje('Cargado el Citicorp Center con su forma y su fachada: la plaza abierta, carpintería por piso hasta el cajón de la corona y, arriba, la envolvente con su techo a 45°. El exoesqueleto va adentro de la piel y la corona tiene su reticulado bajo la pendiente (etapa 08). Mirá la capa «Fachada» en el 3D y el alzado desplegado (Carpintería → Panelería). Abre con el método CIRSOC, que cuenta el exo (con Planilla o Guía el exo es un estudio aparte y los tabiques solos no alcanzan).'); });
 // torres de prueba: diez plantas variadas armadas con las piezas tipo (se usan para controlar la app)
 TORRES_PRUEBA.forEach((t, k) => {
@@ -755,6 +773,7 @@ $('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abri
 $('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme().catch(e => fallo('No se pudo armar el informe', e)); });
 $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf().catch(e => fallo('No se pudo armar la carta', e)); });
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
+$('b-modelo3d').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el modelo 3D…'); import('./ui/exportarModelo3d').then(m => m.exportarModelo3D()).then(t => mensaje(t)).catch(e => fallo('No se pudo exportar el modelo 3D', e)); });
 $('b-presentacion').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar la presentación')) return; mensaje('Armando la presentación…'); import('./ui/presentacion').then(m => m.descargarPresentacion()).then(n => mensaje(`Presentación del trabajo: ${n} láminas.`)).catch(e => fallo('No se pudo armar la presentación', e)); });
 $('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
@@ -850,6 +869,10 @@ document.addEventListener('keydown', ev => {
   const k = Number(ev.key);
   if (k >= 1 && k <= ETAPAS.length) { ev.preventDefault(); irA(ETAPAS[k - 1].id); }
 });
+// modo presentación: todas las etapas menos la ayuda, en el orden del riel
+const presentacion = montarPresentacion({ etapas: () => todas().filter(e => e.id !== 'ayuda'), actual: () => estado.etapa, irA, redibujar: () => dibujarTodo() });
+$('b-presentar').addEventListener('click', () => presentacion.alternar());
+$('b-presentar-menu').addEventListener('click', () => { cerrarMenus(); presentacion.alternar(); });
 $('b-exportar').addEventListener('click', () => { void exportar(); });
 $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void abrir(f); (e.target as HTMLInputElement).value = ''; });
 

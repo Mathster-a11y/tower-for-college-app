@@ -1,7 +1,7 @@
 /** Editor de la planta de PB en SVG: grilla, contorno, ejes, muros coloreados por su papel; arrastrar para mover. */
 import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/aberturas';
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
-import { avisar, confirmar, pedirTexto } from './tarjeta';
+import { avisar, confirmar, pedirTexto, pedirTextoLargo } from './tarjeta';
 import { estado, COLORES } from './estado';
 import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
@@ -10,7 +10,9 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
-import { aplicarPerfil, nivelBase, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { aplicarPerfil, nivelBase, perfilDesdeTabla, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { contornoAlViento as contornoViento, medidasAlViento, type CriterioAncho } from '../engine/silueta';
+import { adivinarModelo, aplicarModelo, leerOBJ, leerSTL, normalizarModelo } from '../engine/importar3d';
 import { montarCorte } from './corteTorre';
 import { abrirDesplegado } from './desplegado';
 import { conSeccion, envolventeDesdeLosas, seccionesEnvolvente } from '../engine/envolvente';
@@ -20,7 +22,7 @@ import { prepararSecciones } from '../engine/loft';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
-import { areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
+import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
 import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
@@ -32,7 +34,7 @@ import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacer
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
 import { agruparNodos, ancestros, borrarMuros, grupoCerrado, motivoNoEditable, muroFijo, desagruparVarios, hijosGrupo, subgrupos, dentroDe, grupoPorId, muroBloqueado, muroOculto, murosDe, nodoAlTocar } from '../engine/grupos';
-import { ajustarContorno, areaSilueta, cajaSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
+import { ajustarContorno, areaSilueta, cajaSilueta, caminoSilueta, leerDXF, plantaDeNivel, puntosSilueta, type Vertice } from '../engine/silueta';
 
 /** «rótulo <b>valor</b> unidad» con nodos de texto */
 function datoPieza(rotulo: string, valor: string, unidad: string): HTMLSpanElement {
@@ -47,6 +49,32 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, String(v)));
   if (txt !== undefined) e.textContent = txt;
   return e;
+};
+
+/** íconos de la barra de la planta (24 × 24, trazo como los del riel de etapas) */
+const ICONOS_HERR = {
+  // flecha de selección
+  mover: '<path d="M6 3.5v14l3.6-3.4 2.6 6 2.4-1-2.6-6H17z"/>',
+  // lazo: un trazo cerrado a mano alzada, punteado, con su cola
+  lazo: '<path d="M7.5 15.5C4 14.5 3 12 3.8 9.6 5 6 9.6 4.2 13.8 4.6c4.6.5 7 3 6.2 6-.8 3-5 4.8-9.6 4.6" stroke-dasharray="2.4 2.2"/><path d="M8.2 15.4c-1 1.4-.9 3.2.4 4.4"/>',
+  // losa en axonometría, con su espesor
+  losa: '<path d="M2.5 13.5 9 9.5h12.5L15 13.5z"/><path d="M2.5 13.5v2.5H15l6.5-4v-2.5M15 13.5v2.5"/>',
+  // carpintería: marco, montante y travesaño
+  carpinteria: '<rect x="4" y="3" width="16" height="18" rx=".5"/><path d="M12 3v18M4 9.5h16"/>',
+  // corte: la marca de corte de los planos (línea con las dos flechas de la vista)
+  corte: '<path d="M12 2.5v19" stroke-dasharray="3 2"/><path d="M12 4.5H6.5l2.5-2.5M12 19.5H6.5l2.5 2.5"/><rect x="14.5" y="6" width="6" height="12" rx=".5"/>',
+  // dibujar un muro: lápiz y el trazo
+  dibujar: '<path d="M14.5 4.5l5 5L9 20H4v-5z"/><path d="M12.5 6.5l5 5"/>',
+  // armar: dos muros que se juntan en una pieza (con el nudo)
+  armar: '<path d="M5 3.5v13.5h14"/><path d="M8.5 3.5v10h10.5" opacity=".55"/><circle cx="5" cy="17" r="1.6"/>',
+  // insertar una pieza tipo: el núcleo en C con el más
+  insertar: '<path d="M14 4H5v16h9"/><path d="M8 7.5V16.5"/><path d="M18 9v6M15 12h6"/>',
+  // colocar con números: mira con el punto
+  colocar: '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.2"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>',
+  // calar: el muro con el vano y su dintel
+  calar: '<path d="M2.5 7h19v10h-19z"/><path d="M9.5 17v-6.5h5V17"/>',
+  // ayudas: escuadra
+  ayudas: '<path d="M4 20V4l16 16z"/><path d="M8 16V13.5M8 16h2.5"/><path d="M4 8h2M4 12h2"/>',
 };
 
 export function montarPlanta(cont: HTMLElement) {
@@ -316,7 +344,7 @@ export function montarPlanta(cont: HTMLElement) {
   let calib: Punto[] = [];
   let inicio: Punto | null = null, cursor: Punto | null = null, iman = '';
   const barra = document.createElement('div');
-  barra.className = 'herr-planta seg chico';
+  barra.className = 'herr-planta';
   barra.setAttribute('role', 'group');
   barra.setAttribute('aria-label', 'Herramienta');
   const bMover = document.createElement('button'), bDibujar = document.createElement('button'), bArmar = document.createElement('button');
@@ -670,6 +698,59 @@ export function montarPlanta(cont: HTMLElement) {
     const hay = p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3);
     return [l(hay ? 'carpintería: dibujada a mano, independiente de las losas' : 'sin carpintería: el viento toma el borde de la losa')];
   }
+  /**
+   * importar un 3D (STL u OBJ) y cortarlo por piso: la planta de cada nivel sale del corte del modelo a su cota. Se
+   * confirman la unidad y el eje vertical (adivinados), los niveles (los de ahora o nuevos cada tantos metros), a dónde
+   * va la forma (losa y carpintería o solo carpintería) y B y L
+   */
+  function importar3D(): HTMLElement {
+    const l = document.createElement('label'); l.className = 'boton'; l.textContent = 'Importar un 3D (STL/OBJ)…';
+    l.title = 'Un modelo 3D de la torre (Rhino, SketchUp, Revit, Blender: STL u OBJ). Se corta a la altura de cada nivel y cada corte es la planta de ese piso.';
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stl,.obj'; inp.hidden = true; l.append(inp);
+    inp.addEventListener('change', async () => {
+      const f = inp.files?.[0]; inp.value = ''; if (!f) return;
+      let tris: Float32Array;
+      try { tris = /\.obj$/i.test(f.name) ? leerOBJ(await f.text()) : leerSTL(await f.arrayBuffer()); }
+      catch (e) { await avisar('error', 'No se pudo leer el 3D', e instanceof Error ? e.message : String(e)); return; }
+      const g = adivinarModelo(tris);
+      const d = document.createElement('dialog'); d.className = 'tarjeta';
+      const ins = document.createElement('span'); ins.className = 'insignia pregunta'; ins.textContent = '?'; ins.setAttribute('aria-hidden', 'true');
+      const cuerpo = document.createElement('div'); cuerpo.className = 'tarjeta-cuerpo'; d.append(ins, cuerpo);
+      const h2t = document.createElement('h2'); h2t.textContent = 'Cortar el 3D por piso';
+      const info = document.createElement('p');
+      const sel = (rot: string, ops: [string, string][], val: string) => { const s2 = document.createElement('select'); ops.forEach(([v, t]) => s2.append(new Option(t, v, false, v === val))); const lb = document.createElement('label'); lb.className = 'campo-linea importar-3d-campo'; lb.append(`${rot} `, s2); return { lb, s2 }; };
+      const un = sel('Unidad del archivo', [['m', 'metros'], ['cm', 'centímetros'], ['mm', 'milímetros']], g.unidad);
+      const ej = sel('Eje vertical', [['z', 'z (Rhino, la mayoría de los STL)'], ['y', 'y (SketchUp, Blender, muchos OBJ)']], g.eje);
+      const nv = sel('Niveles', [['actuales', 'cortar en los niveles de ahora'], ['nuevos', 'niveles nuevos desde PB, cada…']], estado.proyecto.niveles.filter(x => x.cota > 0).length > 1 ? 'actuales' : 'nuevos');
+      const hp = document.createElement('input'); hp.type = 'text'; hp.inputMode = 'decimal'; hp.value = '3,5'; hp.style.width = '64px'; hp.setAttribute('aria-label', 'Altura de cada piso (m)');
+      const cada = document.createElement('span'); cada.append(hp, ' m'); nv.lb.append(cada);
+      const verCada = () => { cada.hidden = nv.s2.value !== 'nuevos'; };
+      nv.s2.addEventListener('change', verCada); verCada();
+      const de = sel('La forma va a', [['ambas', 'la losa y la carpintería'], ['carpinteria', 'solo la carpintería (el vidrio)']], 'ambas');
+      const bl = sel('B y L de cada nivel', [['caja', 'su caja (el ancho)'], ['area', 'igual área (plantas curvas)'], ['', 'no tocarlos']], 'caja');
+      const medir = () => { const m = normalizarModelo(tris, un.s2.value as 'm', ej.s2.value as 'z'); info.textContent = `${f.name}: ${(tris.length / 9).toLocaleString('es-AR')} triángulos · ${m.ancho.toFixed(1).replace('.', ',')} × ${m.largo.toFixed(1).replace('.', ',')} m en planta y ${m.alto.toFixed(1).replace('.', ',')} m de alto. Si las medidas no dan, cambiá la unidad o el eje.`; return m; };
+      un.s2.addEventListener('change', medir); ej.s2.addEventListener('change', medir); medir();
+      const fila = document.createElement('div'); fila.className = 'tarjeta-botones';
+      const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'primario'; ok.textContent = 'Cortar e importar';
+      const no = document.createElement('button'); no.type = 'button'; no.textContent = 'Cancelar';
+      fila.append(ok, no);
+      const nota = document.createElement('p'); nota.className = 'nota-losa'; nota.textContent = 'El modelo se centra en planta (el centro de su caja va al centro de la planta) y su base va a PB. Cada nivel toma el corte del modelo apenas arriba de su piso. Se puede deshacer.';
+      cuerpo.append(h2t, info, un.lb, ej.lb, nv.lb, de.lb, bl.lb, nota, fila);
+      document.body.append(d); d.showModal();
+      no.addEventListener('click', () => { d.close(); d.remove(); });
+      d.addEventListener('cancel', () => d.remove());
+      ok.addEventListener('click', () => {
+        const m = medir();
+        const alt = parseFloat(hp.value.replace(',', '.'));
+        let inf: ReturnType<typeof aplicarModelo> | null = null;
+        estado.cambiar(pp => { inf = aplicarModelo(pp, m, { niveles: nv.s2.value as 'actuales' | 'nuevos', alturaPiso: Number.isFinite(alt) ? alt : 3.5, destino: de.s2.value as 'ambas' | 'carpinteria', bl: (bl.s2.value || null) as CriterioAncho | null }); });
+        d.close(); d.remove();
+        const r = inf as ReturnType<typeof aplicarModelo> | null;
+        if (r) mensaje(`3D cortado en ${r.cortados} niveles (${m.alto.toFixed(1).replace('.', ',')} m de alto)${r.sinCorte.length ? `; sin corte (arriba del modelo): ${r.sinCorte.slice(0, 4).join(', ')}${r.sinCorte.length > 4 ? '…' : ''}` : ''}${r.varias.length ? `; con varias piezas se tomó la más grande en ${r.varias.length} ${r.varias.length === 1 ? 'nivel' : 'niveles'}` : ''}${r.conHuecos.length ? `; los patios o huecos del corte no se pasan (${r.conHuecos.length} ${r.conHuecos.length === 1 ? 'nivel' : 'niveles'}): agregalos como huecos de losa` : ''}.`);
+      });
+    });
+    return l;
+  }
   function armarPanelSil() {
     const p = estado.proyecto, n = p.niveles[iNivel];
     if (!n) return;
@@ -780,7 +861,13 @@ export function montarPlanta(cont: HTMLElement) {
           ([['plana', 'Plana', `Paños planos: los lados curvos de la losa pasan a facetas rectas de hasta ${String(moduloFacetas(p)).replace('.', ',')} m (el módulo de la panelería)`], ['curva', 'Curva', 'Sigue los arcos y las curvas de la losa (vidrio curvo)']] as const).forEach(([f2, nom, ti]) => {
             const x = boton(nom, () => { if (f2 !== forma) ponerTramos(ts => { ts[k].forma = f2; }); }, ti); x.setAttribute('aria-pressed', String(f2 === forma)); sf.append(x);
           });
-          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf]));
+          // por el borde exterior: la piel cierra los entrantes angostos (pozos, balcones, terrazas) en vez de seguirlos
+          const en = document.createElement('input'); en.type = 'text'; en.inputMode = 'decimal'; en.className = 'campo-vertice'; en.value = t.entrantes ? String(t.entrantes).replace('.', ',') : '';
+          en.placeholder = '—'; en.setAttribute('aria-label', 'Cerrar entrantes de hasta estos metros de boca');
+          en.addEventListener('change', () => { const x = parseFloat(en.value.replace(',', '.')); ponerTramos(ts => { if (isFinite(x) && x > 0) ts[k].entrantes = x; else delete ts[k].entrantes; }); });
+          const lEn = lab('por fuera: cierra entrantes de hasta ', en, ' m');
+          lEn.title = 'Borde exterior: la piel no entra en los pozos, balcones ni terrazas cuya boca mide hasta estos metros (los cierra con un paño recto); los más anchos, como el brazo de una planta en L o en U, los sigue. Vacío: sigue todo el borde de la losa.';
+          fila.append(arriba, sm, ...(t.modo === 'sin' ? [] : [sf, lEn]));
           segue.append(fila);
         });
         const ult = tramos[tramos.length - 1], sig = nivelesFach.find(x => x.cota > ult.desde + 1e-6);
@@ -908,6 +995,28 @@ export function montarPlanta(cont: HTMLElement) {
         seccionEsquinas(Math.min(car?.a ?? pl.B, car?.b ?? pl.L), true));
       return;
     }
+    /**
+     * B y L que lee la planilla para el viento: la caja del contorno que ve el viento (la carpintería o la losa) o, en una
+     * planta curva, el rectángulo de igual área; en este nivel o en todos
+     */
+    const seccionAnchoViento = (): HTMLElement[] => {
+      const cont = contornoViento(p, iNivel).v, cj = medidasAlViento(cont, 'caja'), ar = medidasAlViento(cont, 'area');
+      const curva = cont.some(q => q.b || (q as { c1?: unknown }).c1) || cont.length >= 12;
+      const poner = (crit: CriterioAncho, todos: boolean) => estado.cambiar(pp => {
+        const idx = todos ? pp.niveles.map((_, i) => i).filter(i => pp.niveles[i].cota >= -1e-6) : [iNivel];
+        idx.forEach(i => { const m = medidasAlViento(contornoViento(pp, i).v, crit); pp.niveles[i].B = +m.B.toFixed(2); pp.niveles[i].L = +m.L.toFixed(2); });
+      });
+      const f2b = (x: number) => x.toFixed(2).replace('.', ',');
+      const out: HTMLElement[] = [h2(
+        boton('Usar la caja como B y L', () => poner('caja', false), `Pone en este nivel B × L = ${f2b(cj.B)} × ${f2b(cj.L)} m: la caja del contorno que ve el viento (el ancho que enfrenta el viento; en una planta redonda, el diámetro).`),
+        boton('Igual área como B y L', () => poner('area', false), `Pone en este nivel B × L = ${f2b(ar.B)} × ${f2b(ar.L)} m: un rectángulo con las proporciones de la caja y la misma área que la planta (en un círculo, un cuadrado de 0,886 D).`))];
+      out.push(h2(
+        boton('Caja en todos los niveles', () => poner('caja', true), 'B y L de cada nivel, de su caja (la de la carpintería si la tiene)'),
+        boton('Igual área en todos', () => poner('area', true), 'B y L de cada nivel, del rectángulo de igual área de su contorno')));
+      if (curva) out.push(Object.assign(document.createElement('p'), { className: 'nota-losa', textContent:
+        `Planta curva: la planilla calcula el viento como en una planta rectangular (Cp de barlovento y sotavento sobre el ancho B). Con la caja (${f2b(cj.B)} m), el ancho es el que de verdad enfrenta el viento y queda del lado seguro; con igual área (${f2b(ar.B)} m), se conserva el área de la losa y el viento baja un ${Math.round((1 - ar.B / cj.B) * 100)} %. Como referencia, el CIRSOC 102 da para secciones circulares coeficientes de fuerza mucho menores que para secciones cuadradas (del orden de 0,5 a 0,9 contra 1,3 a 2,0, según la esbeltez y la rugosidad): la forma redonda ayuda. Elegí uno y consultalo con la cátedra.` }));
+      return out;
+    };
     const delLoft = loftDeNivel(p, iNivel);
     const delPerfil = !delLoft && !!p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !n.manual;
     // piso por piso: una losa generada se suelta para editarla a mano; una suelta se vuelve a atar
@@ -916,7 +1025,30 @@ export function montarPlanta(cont: HTMLElement) {
       : n.manual && generable ? [boton('Volver a atar (que la genere el perfil o el loft)', () => estado.cambiar(pp => { delete pp.niveles[iNivel].manual; }), 'Se pierde lo editado a mano en este piso')] : [];
     const avisoPerfil = delPerfil ? [Object.assign(document.createElement('p'), { className: 'nota aviso-loft', textContent: 'Esta losa la genera el perfil de la torre (abajo, en «Perfil de la torre»): se recalcula sola. Cambiá la losa base o el perfil, o quitalo.' })] : [];
     const avisoLoft = delLoft ? [(() => { const x = document.createElement('p'); x.className = 'nota aviso-loft'; const { secciones } = nivelesDeLoft(p, delLoft); x.textContent = `Esta losa la genera el loft ${delLoft.id} (de ${p.niveles[secciones[secciones.length - 1]]?.nombre} a ${p.niveles[secciones[0]]?.nombre}): se recalcula sola con cada cambio, así que lo que edites acá se pierde. Cambiá las losas sección o quitá el loft.`; return x; })()] : [];
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
+    // nivel sin losa (cúpula, corona, remate): solo carpintería; no se dibuja la losa ni suma peso de losa
+    const lSin = document.createElement('label'); lSin.className = 'campo-linea';
+    const cSin = document.createElement('input'); cSin.type = 'checkbox'; cSin.checked = !!n.sinLosa;
+    cSin.addEventListener('change', () => estado.cambiar(pp => { if (cSin.checked) pp.niveles[iNivel].sinLosa = true; else delete pp.niveles[iNivel].sinLosa; }));
+    lSin.title = 'Una cúpula, una corona o un remate: el nivel tiene carpintería (el viento la ve) pero no losa. No se dibuja la losa y no suma su peso en CIRSOC, FEM, la Guía y los libros (la planilla de la cátedra no cambia).';
+    lSin.append(cSin, ' Este nivel no tiene losa (solo carpintería: cúpula, corona, remate)');
+    // formas por tramos del perfil: la losa de este piso pasa a ser la forma desde acá (o solo en este piso)
+    const usarForma: HTMLElement[] = [];
+    if (p.perfilTorre && iNivel < nivelBase(p, p.perfilTorre) && !delLoft) {
+      const tomar = (soloEste: boolean) => estado.cambiar(pp => {
+        const pf2 = pp.perfilTorre!, nv = pp.niveles[iNivel], arriba = soloEste && iNivel > 0 ? pp.niveles[iNivel - 1] : null;
+        // la de arriba, con la forma que tiene ahora (para que la excepción sea de un solo piso)
+        const silArriba = arriba ? plantaDeNivel(pp, iNivel - 1).silueta.map(q => ({ ...q })) : null;
+        const sil = plantaDeNivel(pp, iNivel).silueta.map(q => ({ ...q }));
+        const fs = (pf2.formas ?? []).filter(x => Math.abs(x.desde - nv.cota) > 1e-6 && (!arriba || Math.abs(x.desde - arriba.cota) > 1e-6 || !soloEste));
+        fs.push({ desde: nv.cota, silueta: sil });
+        if (arriba && silArriba && !(pf2.formas ?? []).some(x => Math.abs(x.desde - arriba.cota) < 1e-6)) fs.push({ desde: arriba.cota, silueta: silArriba });
+        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) };
+        delete nv.manual;
+      });
+      usarForma.push(h2(boton('Usar esta losa desde este piso', () => tomar(false), 'Desde este piso hacia arriba, el perfil escala, gira y corre esta planta en vez de la losa base (por ejemplo, el círculo sin pozos de un piso para arriba)'),
+        boton('Solo en este piso', () => tomar(true), 'Esta planta en este piso y, desde el de arriba, la que había: una excepción de un solo piso (por ejemplo, un piso entero entre pisos con pozos)')));
+    }
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), lSin, ...usarForma, ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
       linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
       linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
       ...estadoCarpLosas(),
@@ -925,8 +1057,10 @@ export function montarPlanta(cont: HTMLElement) {
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
       filaV,
       Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
-      dxf,
-      h2(boton('Usar la caja como B y L', () => estado.cambiar(() => { const nv = estado.proyecto.niveles[iNivel]; nv.B = +caja.B.toFixed(2); nv.L = +caja.L.toFixed(2); }), 'Pone en este nivel B y L iguales a la caja de la silueta (lo que lee la planilla para el viento).'),
+      dxf, importar3D(),
+      // B y L para el viento: la caja (el ancho que enfrenta el viento) o, en una planta curva, el rectángulo de igual área
+      ...seccionAnchoViento(),
+      h2(
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
         estado.cambiar(() => { estado.proyecto.niveles.forEach(nv => { nv.silueta = pl.silueta.map(q => JSON.parse(JSON.stringify(q))); }); });
@@ -943,6 +1077,7 @@ export function montarPlanta(cont: HTMLElement) {
    * el alzado agrega un punto; el punto elegido se ajusta con números.
    */
   function seccionPerfil(objetivo: 'losas' | 'envolvente' = 'losas'): HTMLElement {
+    const f2 = (x: number) => x.toFixed(2).replace('.', ',');
     const env = objetivo === 'envolvente';
     // el mismo editor para el perfil de las losas y para la forma de la envolvente: cambia de dónde lee y dónde escribe
     const leer = (pp: Proyecto): PerfilTorre | null => (env ? pp.envolvente?.perfil ?? null : pp.perfilTorre ?? null);
@@ -961,6 +1096,18 @@ export function montarPlanta(cont: HTMLElement) {
     const pls = document.createElement('div'); pls.className = 'galeria-perfiles';
     PERFILES.forEach(x => pls.append(boton(x.nombre, x.texto, () => { pfSel = ab.sel = null; poner(q => { q.puntos = structuredClone(x.p.puntos); q.suave = x.p.suave ?? false; q.giro = x.p.giro ?? 0; }); })));
     det.append(pls);
+    // la forma desde una tabla de alturas (cota y ancho o diámetro), pegada de Excel o medida sobre un corte
+    det.append(h2(boton('Pegar una tabla de alturas…', 'Cota y ancho (o diámetro) a cada altura, pegadas de Excel: la forma sale tal cual de la tabla', async () => {
+      const pp = estado.proyecto, ib = nivelBase(pp, leer(pp) ?? { puntos: [] }), z0 = pp.niveles[ib]?.cota ?? 0, z1 = pp.niveles[0]?.cota ?? 0;
+      const txt = await pedirTextoLargo('Forma desde una tabla de alturas',
+        `Pegá dos columnas: la cota (m, como en Niveles) y el ancho o el diámetro a esa altura (m). Con tres columnas, el ancho en x y en y; con cinco, además cuánto se corre (x, y). Se toman en proporción al ancho de la tabla en la losa base (${f2(z0)} m): la losa base da el tamaño y la tabla, la forma. Los títulos se saltean.`, '', 'Usar la tabla');
+      if (txt === null) return;
+      const r = perfilDesdeTabla(txt, z0, z1);
+      if (r.error) { await avisar('error', 'No se pudo leer la tabla', r.error); return; }
+      pfSel = ab.sel = null;
+      poner(q => { q.puntos = r.puntos; q.suave = false; });
+      mensaje(`Forma tomada de ${r.filas} filas${r.fuera ? ` (${r.fuera} fuera de la torre, de ${f2(z0)} a ${f2(z1)} m, no se usan)` : ''}: ${r.puntos.length} puntos, con tramos rectos entre ellos.`);
+    })));
     if (!pf) return det;
     // alzado: eje vertical = altura (0 abajo, 1 arriba), a los costados el ancho (factor 1 = la base)
     const W = 260, H = 230, mx = W / 2, y0 = H - 16, y1 = 14, K = 62;
@@ -1025,6 +1172,14 @@ export function montarPlanta(cont: HTMLElement) {
     sb.addEventListener('change', () => poner(z => { z.base = +sb.value; }));
     const lb = document.createElement('label'); lb.className = 'campo-esq'; lb.append('losa base ', sb);
     det.append(seg, lb, num('giro total', pf.giro ?? 0, x => poner(z => { z.giro = x; }), '°', 'de la base a la azotea, antihorario'));
+    if (!env) {
+      // con qué escribe el perfil B y L de cada losa (lo que lee la planilla para el viento)
+      const sc = document.createElement('select'); sc.setAttribute('aria-label', 'B y L de cada losa');
+      ([['caja', 'su caja (el ancho)'], ['area', 'igual área (plantas curvas)']] as const).forEach(([v, t]) => sc.append(new Option(t, v, false, (pf.blCriterio ?? 'caja') === v)));
+      sc.addEventListener('change', () => poner(z => { z.blCriterio = sc.value === 'area' ? 'area' : null; }));
+      const lc = document.createElement('label'); lc.className = 'campo-esq'; lc.title = 'Lo que lee la planilla para el viento en cada losa que genera el perfil'; lc.append('B y L de cada losa: ', sc);
+      det.append(lc);
+    }
     // el punto elegido
     if (pfSel !== null && pf.puntos[pfSel]) {
       const i = pfSel, x = pf.puntos[i], alt = zb + x.h * (zt - zb);
@@ -1039,6 +1194,16 @@ export function montarPlanta(cont: HTMLElement) {
     } else det.append(nota('Tocá un punto del alzado para ajustarlo con números; tocá en otro lado del alzado para agregar uno.'));
     const lofts = env ? 0 : (p.lofts ?? []).length;
     if (lofts) det.append(nota(`Hay ${lofts} ${lofts === 1 ? 'loft' : 'lofts'}: mandan sobre los niveles que generan.`));
+    // formas por tramos: desde un piso, el perfil sigue con otra planta
+    if (!env) {
+      const fs = [...(pf.formas ?? [])].sort((a, b) => a.desde - b.desde);
+      det.append(nota(fs.length ? 'Formas por tramos: desde cada cota, el perfil sigue escalando otra planta (la que se tomó de ese piso).' : 'Para cambiar la planta desde un piso (sin pozos arriba, otra forma en la corona), dibujá la losa de ese piso y tocá «Usar esta losa desde este piso» en la carta de la losa.'));
+      if (fs.length) {
+        const lista = document.createElement('div'); lista.className = 'fila-acciones';
+        fs.forEach(fo => { const nm = p.niveles.find(nv => Math.abs(nv.cota - fo.desde) < 1e-6)?.nombre ?? `${f2(fo.desde)} m`; lista.append(boton(`✕ desde ${nm}`, 'Sacar esta forma: desde ahí sigue la forma de abajo', () => poner(z => { z.formas = (z.formas ?? []).filter(x => Math.abs(x.desde - fo.desde) > 1e-6); }))); });
+        det.append(lista);
+      }
+    }
     if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
     void aplicarPerfil;
     return det;
@@ -1728,7 +1893,7 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
   const areasDe = (i: number): AreasInfluencia => {
-    const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta])]);
+    const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta]), p.exo?.losas, p.exo?.circular, p.exo?.cortes]);
     if (!areasCache || areasCache.clave !== clave) areasCache = { clave, a: areasInfluencia(p, i) };
     return areasCache.a;
   };
@@ -1737,7 +1902,8 @@ export function montarPlanta(cont: HTMLElement) {
    *  para que también se distingan impresos en blanco y negro; el quinto es de reserva */
   const PALETA_AREAS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1'];
   const RAYADOS = ['d45', 'h', 'd135', 'v', 'd45'] as const;
-  const claveArea = (m: Muro | undefined): { k: string; nombre: string } => {
+  const claveArea = (m: Muro | undefined, id?: string): { k: string; nombre: string } => {
+    if (id === ID_EXO) { const f = estado.proyecto.exo?.losas?.franja ?? 0; return { k: 'exo', nombre: `exoesqueleto (franja de ${String(f).replace('.', ',')} m)` }; }
     if (!m) return { k: '?', nombre: '?' };
     const cad = ancestros(estado.proyecto, m.gd);
     if (cad.length) { const g = cad[cad.length - 1]; return { k: `g:${g.id}`, nombre: g.nombre }; }
@@ -1749,7 +1915,7 @@ export function montarPlanta(cont: HTMLElement) {
   let coloresCache: { a: AreasInfluencia; firma: string; col: Map<string, number> } | null = null;
   const ordenClaves = (a: AreasInfluencia) => {
     const porId = new Map(estado.proyecto.muros.map(m => [m.id, m]));
-    const claves = a.ids.map(id => claveArea(porId.get(id)).k), firma = claves.join('|');
+    const claves = a.ids.map(id => claveArea(porId.get(id), id).k), firma = claves.join('|');
     if (coloresCache && coloresCache.a === a && coloresCache.firma === firma) return coloresCache.col;
     const col = cuatroColores(vecindades(a, o => claves[o]));
     coloresCache = { a, firma, col };
@@ -1762,14 +1928,16 @@ export function montarPlanta(cont: HTMLElement) {
     const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
     panelAreas.replaceChildren(mk('b', `Áreas de influencia · ${p.niveles[i]?.nombre ?? ''}`));
     const suma = a.ids.reduce((q, id) => q + a.area[id], 0);
-    panelAreas.append(mk('span', `losa ${f1(a.total)} m²${a.huecos ? ` (sin ${f1(a.huecos)} m² de huecos)` : ''} · ${a.ids.length} elementos`, 'nota-chica'));
+    panelAreas.append(mk('span', `losa ${f1(a.total)} m²${a.huecos ? ` (sin ${f1(a.huecos)} m² de huecos)` : ''} · ${a.ids.length} elementos${a.ids.includes(ID_EXO) ? `, con el exo: ${f1(a.area[ID_EXO])} m² (${Math.round((100 * a.area[ID_EXO]) / (a.total || 1))} %)` : ''}`, 'nota-chica'));
     // leyenda por grupo: color, área y peso de losa por piso
     const orden = ordenClaves(a), porClave = new Map<string, { nombre: string; area: number; n: number }>();
-    a.ids.forEach(id => { const c = claveArea(p.muros.find(o => o.id === id)); const e = porClave.get(c.k) ?? { nombre: c.nombre, area: 0, n: 0 }; e.area += a.area[id]; e.n++; porClave.set(c.k, e); });
+    a.ids.forEach(id => { const c = claveArea(p.muros.find(o => o.id === id), id); const e = porClave.get(c.k) ?? { nombre: c.nombre, area: 0, n: 0 }; e.area += a.area[id]; e.n++; porClave.set(c.k, e); });
     const ley = mk('div', '', 'areas-leyenda');
     [...porClave.entries()].sort((x, y) => (orden.get(x[0]) ?? 0) - (orden.get(y[0]) ?? 0)).forEach(([k, e]) => {
       const st = estiloArea(k, orden.get(k) ?? 0), sw = mk('i', '', `muestra r-${st.rayado}`); sw.style.setProperty('--c', st.color);
-      const fila2 = mk('div', '', 'areas-ley-fila'); fila2.append(sw, mk('span', `${e.nombre}${e.n > 1 ? ` (${e.n})` : ''}`), mk('span', `${f1(e.area)} m² · ${(e.area * 0.9).toFixed(1).replace('.', ',')} t/piso`, 'n'));
+      // el exo, con el peso y la sobrecarga de sus losas (los de su cálculo); los muros, con 0,9 t/m² (el «cargado» de la planilla)
+      const qL = k === 'exo' ? (p.exo?.losas?.qD ?? 0.45) + (p.exo?.losas?.qL ?? 0.25) : 0.9;
+      const fila2 = mk('div', '', 'areas-ley-fila'); fila2.append(sw, mk('span', `${e.nombre}${e.n > 1 ? ` (${e.n})` : ''}`), mk('span', `${f1(e.area)} m² · ${(e.area * qL).toFixed(1).replace('.', ',')} t/piso`, 'n'));
       ley.append(fila2);
     });
     panelAreas.append(ley);
@@ -1782,12 +1950,13 @@ export function montarPlanta(cont: HTMLElement) {
     const tabla = mk('table', '', 'areas-tabla');
     const fila = (c: string[], th = false) => { const tr = mk('tr'); c.forEach(t => tr.append(mk(th ? 'th' : 'td', t))); return tr; };
     tabla.append(fila(['Muro', 'Calculada', 'Cargada'], true));
-    [...a.ids].sort((x, y) => a.area[y] - a.area[x]).forEach(id => { const m = p.muros.find(o => o.id === id); tabla.append(fila([id, `${f1(a.area[id])} m²`, m ? `${f1(m.areaInf)} m²` : '—'])); });
+    [...a.ids].sort((x, y) => a.area[y] - a.area[x]).forEach(id => { const m = p.muros.find(o => o.id === id); tabla.append(fila([id === ID_EXO ? 'Exo' : id, `${f1(a.area[id])} m²`, m ? `${f1(m.areaInf)} m²` : id === ID_EXO ? 'etapa 08' : '—'])); });
     panelAreas.append(tabla);
+    if (a.ids.includes(ID_EXO)) panelAreas.append(mk('span', `Las losas apoyan en el exoesqueleto: la franja de ${String(p.exo?.losas?.franja ?? 0).replace('.', ',')} m junto a la fachada baja por el exo (es la carga de losas de su cálculo, en la etapa 08); el resto de la losa, por los muros. La franja se cambia en Exoesqueleto › losas.`, 'nota-chica'));
     if (Math.abs(suma - a.total) > 0.05) panelAreas.append(mk('span', `suma ${f1(suma)} m²`, 'nota-chica'));
     const copiar = mk('button', 'Copiar a «Área inf.» de los muros') as HTMLButtonElement; copiar.type = 'button';
     copiar.title = 'Escribe estas áreas en la columna «Área inf.» de cada muro (la usa la flexocompresión, por cada losa que el muro tiene arriba). Los muros que no están en esta planta no cambian.';
-    copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.length} muros.`); });
+    copiar.addEventListener('click', () => { estado.cambiar(() => { estado.proyecto.muros.forEach(m => { if (m.id in a.area) m.areaInf = a.area[m.id]; }); }); mensaje(`Áreas de influencia de ${p.niveles[i]?.nombre}: copiadas a ${a.ids.filter(id => id !== ID_EXO).length} muros${a.ids.includes(ID_EXO) ? ' (la franja del exo queda en su cálculo)' : ''}.`); });
     panelAreas.append(copiar, mk('span', 'Criterio: cada punto de la losa va al elemento más cercano (el borde queda a mitad de camino). Elegí la planta tipo arriba antes de copiar.', 'nota-chica'));
   }
   // grilla de discretización de 0,05 m: se ve y los puntos se ajustan a ella; apagada, el ajuste es de 0,01 m
@@ -1915,7 +2084,7 @@ export function montarPlanta(cont: HTMLElement) {
   estado.suscribirSeleccion(() => { col.refrescar(); refrescarTr(); });
   // menú «⋯» con las herramientas que se usan menos (para que la barra entre en la tablet)
   const mas = document.createElement('div'); mas.className = 'menu-mas';
-  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas ▾'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
+  const bMas = document.createElement('button'); bMas.type = 'button'; bMas.textContent = 'Ayudas'; bMas.title = 'Ayudas para dibujar: guías, cotas, grilla, calcar un plano, áreas de influencia y juntas entre muros'; bMas.setAttribute('aria-label', 'Ayudas para dibujar'); bMas.setAttribute('aria-haspopup', 'true');
   const listaMas = document.createElement('div'); listaMas.className = 'menu-mas-lista'; listaMas.hidden = true;
   const bJuntas = document.createElement('button'); bJuntas.type = 'button';
   const pintarJuntas = () => { bJuntas.textContent = estado.juntasLimpias ? 'Juntas: unidas ✓' : 'Juntas: muros separados'; bJuntas.setAttribute('aria-pressed', String(estado.juntasLimpias)); };
@@ -1929,15 +2098,28 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
   mas.append(bMas);
   cont.appendChild(listaMas);
-  // la barra en grupos con nombre: Forma (losa, carpintería, corte), Estructura (muros y piezas) y Ayudas
-  const rotuloGrupo = (t: string) => { const x = document.createElement('span'); x.className = 'grupo-rot'; x.textContent = t; x.setAttribute('aria-hidden', 'true'); return x; };
-  barra.append(bMover, bLazo, rotuloGrupo('Forma'), bSil, bCarp, rotuloGrupo('Estructura'), bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar, mas);
   // corte de la torre: la silueta se ajusta en un corte vertical, con el plano del proyecto calcado debajo
   const corte = montarCorte(cont, mensaje);
   const bCorte = document.createElement('button'); bCorte.type = 'button'; bCorte.textContent = 'Corte';
   bCorte.title = 'Corte vertical de la torre: arrastrá el borde de las losas para darle la silueta de los planos (alzado o corte calcado debajo)';
   bCorte.addEventListener('click', () => { ponerModo('mover'); corte.abrir(); });
-  barra.insertBefore(bCorte, bCarp.nextSibling);
+  // la barra en grupos con nombre arriba (Elegir, Forma, Estructura, Dibujo) y cada herramienta con su ícono
+  const grupoBarra = (nombre: string, ...bs: HTMLElement[]) => {
+    const g = document.createElement('div'); g.className = 'herr-grupo'; g.setAttribute('role', 'group'); g.setAttribute('aria-label', nombre);
+    const r = document.createElement('span'); r.className = 'herr-grupo-rot'; r.textContent = nombre; r.setAttribute('aria-hidden', 'true');
+    const f = document.createElement('div'); f.className = 'herr-grupo-bot'; f.append(...bs);
+    g.append(r, f); return g;
+  };
+  const conIcono = (b: HTMLElement, icono: string) => {
+    if (b.querySelector(':scope > svg.ic-herr')) return;
+    const t = document.createElement('span'); t.className = 'tx'; t.append(...Array.from(b.childNodes));
+    const ic = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); ic.setAttribute('viewBox', '0 0 24 24'); ic.setAttribute('aria-hidden', 'true'); ic.classList.add('ic-herr'); ic.innerHTML = icono;
+    b.append(ic, t);
+  };
+  [[bMover, ICONOS_HERR.mover], [bLazo, ICONOS_HERR.lazo], [bSil, ICONOS_HERR.losa], [bCarp, ICONOS_HERR.carpinteria], [bCorte, ICONOS_HERR.corte],
+    [bDibujar, ICONOS_HERR.dibujar], [bArmar, ICONOS_HERR.armar], [bIns, ICONOS_HERR.insertar], [bCalar, ICONOS_HERR.calar], [bMas, ICONOS_HERR.ayudas],
+    ...(col.botones[0] ? [[col.botones[0], ICONOS_HERR.colocar] as [HTMLElement, string]] : [])].forEach(([b, ic]) => conIcono(b as HTMLElement, ic as string));
+  barra.append(grupoBarra('Elegir', bMover, bLazo), grupoBarra('Forma', bSil, bCarp, bCorte), grupoBarra('Estructura', bDibujar, bArmar, bIns, ...col.botones.slice(0, 1), bCalar), grupoBarra('Dibujo', mas));
   // ---------------------------------------------------------------- tira de pasos: el recorrido de diseño de la torre
   // seis pasos en orden; cada uno abre su herramienta y dice qué sigue. Está hecho lo que ya tiene el proyecto (o lo que
   // se saltó a propósito); se puede plegar
@@ -2390,18 +2572,18 @@ export function montarPlanta(cont: HTMLElement) {
     const carSombra = carGenerada && tCar!.modo === 'continua' && !!p.envolvente && !esSecc;
     if (car) {
       const pc = puntosSilueta(car.v);
-      svg.appendChild(el('polygon', { points: pc.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
+      svg.appendChild(el('path', { d: caminoSilueta(car.v, X, Y), class: 'carpinteria' + (carSombra ? ' sombra-env' : '') }));
       const xs = pc.map(q => q.x), ys = pc.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
       svg.appendChild(el('rect', { x: X(x0), y: Y(y1), width: (x1 - x0) * escala, height: (y1 - y0) * escala, class: 'caja-carpinteria' }));
       const tx = el('text', { x: X(x0) + 4, y: Y(y1) - 6, class: 'etiqueta caja-txt' }, `carpintería: a máx ${car.a.toFixed(2).replace('.', ',')} × b máx ${car.b.toFixed(2).replace('.', ',')} m (B y L se cargan en Niveles)`);
       svg.appendChild(tx);
     }
-    const contorno = puntosSilueta(pl.silueta);
-    const pathC = el('polygon', { points: contorno.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'contorno' + (modo === 'silueta' && !editaCarp ? ' editando' : '') });
+    // con arcos y Béziers de verdad: la losa curva se ve suave a cualquier zoom (antes, tramos de 10°)
+    const pathC = el('path', { d: caminoSilueta(pl.silueta, X, Y), class: 'contorno' + (modo === 'silueta' && !editaCarp ? ' editando' : '') });
     svg.appendChild(pathC);
     if (modo === 'silueta') {
       const vEd = verticesEd();
-      const objetivo = editaCarp ? el('polygon', { points: puntosSilueta(vEd).map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' '), class: 'carpinteria editando' + (carSombra ? ' sombra-env' : '') }) : pathC;
+      const objetivo = editaCarp ? el('path', { d: caminoSilueta(vEd, X, Y), class: 'carpinteria editando' + (carSombra ? ' sombra-env' : '') }) : pathC;
       if (editaCarp) svg.appendChild(objetivo);
       // doble clic en un borde: vértice nuevo en el tramo más cercano
       objetivo.addEventListener('dblclick', ev => {
@@ -2446,7 +2628,7 @@ export function montarPlanta(cont: HTMLElement) {
       const ga = el('g', { class: 'areas-inf' });
       // relleno por grupo (color y rayado); una tira por fila y por grupo, para que sea liviano
       const orden = ordenClaves(a), porId = new Map(p.muros.map(m => [m.id, m]));
-      const claveDe = a.ids.map(id => claveArea(porId.get(id)).k);
+      const claveDe = a.ids.map(id => claveArea(porId.get(id), id).k);
       const defsA = el('defs');
       const usados = new Set<string>();
       const patron = (k: string) => {
@@ -2488,7 +2670,7 @@ export function montarPlanta(cont: HTMLElement) {
           for (const dd of [1.2, 2, 3]) cands.push([c.x, c.y + dd], [c.x, c.y - dd], [mu.x + ax / 2 + dd, mu.y], [mu.x - ax / 2 - dd, mu.y], [mu.x, mu.y + ay / 2 + dd * 0.7], [mu.x, mu.y - ay / 2 - dd * 0.7]);
         }
         const t = el('text', { x: X(c.x), y: Y(c.y) + 4, class: 'etiqueta areas-txt', 'text-anchor': 'middle' }, `${v.toFixed(1).replace('.', ',')} m²`);
-        t.appendChild(el('title', {}, `${id}: ${v.toFixed(2).replace('.', ',')} m² de losa`));
+        t.appendChild(el('title', {}, `${id === ID_EXO ? 'exoesqueleto' : id}: ${v.toFixed(2).replace('.', ',')} m² de losa`));
         t.dataset.cands = JSON.stringify(cands.map(([x, y]) => [X(x), Y(y) + 4]));
         ga.appendChild(t);
       });
@@ -3126,9 +3308,9 @@ export function montarPlanta(cont: HTMLElement) {
     if (!R.width) return;
     // la barra de herramientas puede ocupar dos líneas (pantalla angosta o táctil): el selector de planta, el chip de
     // avisos y las cartas del costado bajan para no taparla
-    // si la barra no entra en una línea, los nombres de los grupos se vuelven separadores finos
+    // si la barra no entra en una línea, las herramientas quedan solo con su ícono
     barra.classList.remove('compacta');
-    if (barra.getBoundingClientRect().height > 44) barra.classList.add('compacta');
+    if (barra.getBoundingClientRect().height > 80) barra.classList.add('compacta');   // dos renglones de grupos: solo íconos
     // la barra de herramientas va debajo de la tira de pasos
     { const pr = pasos.getBoundingClientRect(); barra.style.top = pr.height ? `${Math.round(pr.bottom - R.top + 4)}px` : ''; }
     {

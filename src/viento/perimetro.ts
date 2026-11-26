@@ -22,7 +22,7 @@ export interface Perimetro {
  * la celda de referencia de la presión en el túnel 2D: al costado (5 % del alto) y a mitad de camino entre la entrada
  * y la torre; cerca de la entrada la presión todavía está perturbada por la condición de entrada
  */
-export const celdaRef2D = (geo: Geometria2D) => Math.floor(geo.ny * 0.05) * geo.nx + Math.max(4, Math.round(geo.caja.x0 / 2));
+export const celdaRef2D = (geo: Geometria2D) => (geo.filaRef ?? Math.floor(geo.ny * 0.05)) * geo.nx + Math.max(4, Math.round(geo.caja.x0 / 2));
 
 /** punto más cercano de un segmento a un punto, y su fracción */
 function cercano(a: P, b: P, q: P): { t: number; d2: number; x: number; y: number } {

@@ -35,6 +35,9 @@ describe('varias direcciones', () => {
     expect(Number.isNaN(v.f[centro])).toBe(true);
     const al = (x: number, y: number) => Math.floor((y - gr.y0) / gr.paso) * gr.nx + Math.floor((x - gr.x0) / gr.paso);
     expect(v.f[al(16, 0)]).toBeCloseTo(1, 6);
+    // ningún punto de afuera de la torre queda sin dato (los que caen fuera del túnel girado son campo abierto)
+    const sinDato = [...v.f].filter(x => Number.isNaN(x)).length;
+    expect(sinDato).toBeLessThan(0.1 * v.f.length);
   });
   it('envolvente: cada celda de referencia toma el peor pico de las dos direcciones', () => {
     const g0 = geo(0), g1 = geo(90);

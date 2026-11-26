@@ -79,7 +79,7 @@ export const SIMULACION_TERMINOS: [string, string][] = [
   ['M celdas/s', 'Millones de celdas que la computadora actualiza por segundo: la velocidad del motor.'],
   ['Pasada', 'El tiempo que tarda el aire en recorrer una vez el ancho de la torre. Los remolinos aparecen a las 40 u 80 pasadas.'],
   ['Paso', 'Un salto y un choque de toda la grilla. Una pasada son cientos de pasos.'],
-  ['Paredes exactas / en escalera', 'Exactas: el rebote sabe dónde está la pared dentro de la celda (curvas lisas). En escalera: la pared es el borde de las celdas.'],
+  ['Paredes exactas / en escalera', 'Exactas: el rebote sabe dónde está la pared dentro de la celda (curvas lisas). En el túnel 3D, «exactas en planta y en altura» también sigue la piel inclinada o curva entre un piso y otro (donde la carpintería es continua); «solo en planta» deja un escalón en cada piso. En escalera: la pared es el borde de las celdas.'],
   ['Ráfagas', 'Cuánto se aparta la velocidad de su media en el tiempo: dónde el viento es más irregular.'],
   ['RANS y k-ε', 'Lo que usa OpenFOAM: en lugar de seguir cada remolino, resuelve el flujo medio y estima la turbulencia con dos números (k, la energía de los remolinos, y ε, cómo se disipan).'],
   ['Reynolds (Re)', 'Inercia contra viscosidad: V · B / ν. Ver el paso 8.'],

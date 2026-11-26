@@ -74,8 +74,11 @@ export interface DatosRotoPlano {
   papeles: Record<string, { A: string; B: string }>;
 }
 export type Paso = 1 | 2 | 3 | 4;
+/** qué rótulos llevan las piezas: nombre y valor, solo el valor o ninguno (para leer el dibujo limpio o presentarlo) */
+export type RotulosRoto = 'todos' | 'valores' | 'ninguno';
 
-export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number } = {}): SVGSVGElement {
+export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {}, opc: { hasta?: number; rotulos?: RotulosRoto } = {}): SVGSVGElement {
+  const conNombre = (opc.rotulos ?? 'todos') === 'todos', sinRotulos = opc.rotulos === 'ninguno';
   const id = `rt${nId++}`;
   const ancho = Math.max(420, tam.ancho ?? 640), alto = Math.max(420, tam.alto ?? 560);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: `grafico rototrasl paso-${paso}`, role: 'img',
@@ -110,9 +113,9 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
 
   // ---------------------------------------------------------------- planta
   const g = el('g');
-  // rótulos ya puestos (caja aproximada: 6,6 px por letra), para que los demás no se les encimen
+  // rótulos ya puestos (caja aproximada: 7,1 px por letra, la mono de 11,5 px), para que los demás no se les encimen
   const ocupados: { x0: number; x1: number; y: number }[] = [];
-  const caja = (x: number, texto: string, ancla: string) => { const w = texto.length * 6.6; return ancla === 'middle' ? [x - w / 2, x + w / 2] : ancla === 'end' ? [x - w, x] : [x, x + w]; };
+  const caja = (x: number, texto: string, ancla: string) => { const w = texto.length * 7.1; return ancla === 'middle' ? [x - w / 2, x + w / 2] : ancla === 'end' ? [x - w, x] : [x, x + w]; };
   const ocupar = (x: number, y: number, texto: string, ancla: string) => { const [x0, x1] = caja(x, texto, ancla); ocupados.push({ x0, x1, y }); };
   svg.append(g);
   // Sentido de giro (marco del viento): W actúa en el eje de simetría (t = 0) y el CR está en t = Xr.
@@ -154,7 +157,11 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   else if (!coinciden) { const tx = `eje de inercia · e = ${fmt(Math.abs(d.Xr))} m`; g.append(el('text', { x: xr + (derecha ? 4 : -4), y: Y(sTop) - 4, class: 'd-valor', 'text-anchor': derecha ? 'start' : 'end' }, tx)); ocupar(xr + (derecha ? 4 : -4), Y(sTop) - 4, tx, derecha ? 'start' : 'end'); }
   // centro de rigidez
   g.append(el('circle', { cx: xr, cy: Y(d.Yr), r: 5, class: 'rt-cr' }));
-  g.append(el('text', { x: xr + (d.Xr >= 0 ? -30 : 30), y: Y(d.Yr) + 4, 'data-ancla': `${xr} ${Y(d.Yr)}`, class: 'd-valor', 'text-anchor': d.Xr >= 0 ? 'end' : 'start' }, 'CR'));
+  // con el arco del giro (radio 24) alrededor, el nombre va debajo del arco: al costado lo tapan las flechas de las piezas
+  const conArco = paso >= 3 && gira;
+  const crX = conArco ? xr : xr + (d.Xr >= 0 ? -30 : 30), crY = conArco ? Y(d.Yr) + 24 + 15 : Y(d.Yr) + 4, crA = conArco ? 'middle' : d.Xr >= 0 ? 'end' : 'start';
+  g.append(el('text', { x: crX, y: crY, 'data-ancla': `${xr} ${Y(d.Yr)}`, class: 'd-valor', 'text-anchor': crA }, 'CR'));
+  ocupar(crX, crY, 'CR', crA);
   // excentricidad
   if (Math.abs(d.Xr) > 1e-3) {
     const ye = paso >= 2 ? Y(-d.S / 2) - 12 : Y(-d.S / 2) + 18;      // con flechas, adentro de la planta (afuera las pisa)
@@ -176,7 +183,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
   // rótulos sin superponerse: se corren hacia arriba si chocan
   const rotulo = (x0: number, y: number, texto: string, clase = 'd-valor', ancla = 'middle') => {
     // que no se salga del dibujo por los costados (ancho aproximado del texto: 6,6 px por letra)
-    const medio = ancla === 'middle' ? texto.length * 3.7 : 0;
+    const medio = ancla === 'middle' ? texto.length * 3.6 : 0;
     const x = ancla === 'middle' ? Math.min(ancho - 4 - medio, Math.max(4 + medio, x0)) : x0;
     const [a0, a1] = caja(x, texto, ancla);
     const choca = (q: number) => ocupados.some(o => o.x0 < a1 + 6 && a0 - 6 < o.x1 && Math.abs(o.y - q) < 12);
@@ -194,7 +201,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const x = X(p.pos), yc = Y(sCentro(p)), L = Math.max(10, (p.J / Jmax) * Lmax);
       g.append(el('line', { x1: x, x2: x, y1: Y(-d.S / 2), y2: Y(sBot), class: 'rt-accion' }));
       g.append(flecha(x, yc - L / 2, x, yc + L / 2, grosor(p.J), 'rt-J', tip(p)));
-      rotulo(x, yc - L / 2 - 6, `${p.nombre} · ${fmt(p.J, p.J < 0.1 ? 3 : 2)}`);
+      if (!sinRotulos) rotulo(x, yc - L / 2 - 6, conNombre ? `${p.nombre} · ${fmt(p.J, p.J < 0.1 ? 3 : 2)}` : fmt(p.J, p.J < 0.1 ? 3 : 2));
     });
     // Determinación gráfica como en la clase 5: los J se ordenan de izquierda a derecha y se ponen uno a
     // continuación del otro (polígono de los J). Los tabiques sobre la misma recta de acción (T1 y T3) van seguidos,
@@ -274,7 +281,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     });
     g.append(el('circle', { cx: O.x, cy: O.y, r: 3.5, class: 'rt-cr' }));
     g.append(el('text', { x: O.x + 6, y: O.y + 4, class: 'd-eje' }, 'O'));
-    g.append(el('text', { x: px - 10, y: PY(W0) + 22, class: 'd-eje' }, 'rayo Oa ∥ lado a'));
+    g.append(el('text', { x: px - 10, y: Math.max(PY(W0) + 22, ...rotIzq.map(q => q + 16)), class: 'd-eje' }, 'rayo Oa ∥ lado a'));   // debajo de las letras de las fuerzas
 
     // ---- funicular: el lado i está en el espacio i, paralelo al rayo Oi; el primero y el último van punteados
     const lados: [{ x: number; y: number }, { x: number; y: number }][] = [[E0, R]];
@@ -353,17 +360,19 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     // una fila ordenada de izquierda a derecha debajo de las flechas: cada recta de acción con un rótulo por pieza
     // («T1B  43,0 %»), corridos para que no se pisen y con una guía fina hasta su flecha
     const largoF = (p: ElementoPlano) => (medida(p) / Fmax) * Lmax * escala(grupos.get(p.pos.toFixed(2))!.length);
-    const etiquetas = [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).map(ps => {
-      const lineas = ps.map(p => ({ nombre: p.nombre, valor: valor(p) }));
-      const w = Math.max(...lineas.map(l => (l.nombre.length + l.valor.length + 2) * 6.6)) + 10;
+    const etiquetas = sinRotulos ? [] : [...grupos.values()].sort((a, b) => a[0].pos - b[0].pos).map(ps => {
+      // sin nombres, las piezas de una misma recta con el mismo valor van en un solo renglón
+      const lineas = conNombre ? ps.map(p => ({ nombre: p.nombre, valor: valor(p) })) : [...new Set(ps.map(valor))].map(v => ({ nombre: '', valor: v }));
+      const w = Math.max(...lineas.map(l => (l.nombre.length + l.valor.length + 2) * 7.1)) + 10;
       return { x: X(ps[0].pos), w, lineas, pie: base + Math.max(...ps.map(p => (desde.get(p) ?? 0) + largoF(p))) + 3 };
     });
     // el viento W va en la misma fila, en su lugar (eje de simetría)
-    { const tx = { nombre: 'W', valor: `${fmt(d.Q, 1)} t` }; const xW = X(0), iW = etiquetas.findIndex(e => e.x > xW);
-      etiquetas.splice(iW < 0 ? etiquetas.length : iW, 0, { x: xW, w: (tx.nombre.length + tx.valor.length + 2) * 6.6 + 10, lineas: [tx], pie: base + Lmax + 3 }); }
-    // dos filas si no entran en una (las pares arriba, las impares abajo)
+    if (!sinRotulos) { const tx = { nombre: 'W', valor: `${fmt(d.Q, 1)} t` }; const xW = X(0), iW = etiquetas.findIndex(e => e.x > xW);
+      etiquetas.splice(iW < 0 ? etiquetas.length : iW, 0, { x: xW, w: (tx.nombre.length + tx.valor.length + 2) * 7.1 + 10, lineas: [tx], pie: base + Lmax + 3 }); }
+    // las filas que hagan falta para que entren (alternadas: con dos, las pares arriba y las impares abajo)
     const anchoTotal = etiquetas.reduce((a, e) => a + e.w + 6, 0);
-    const filasEt = anchoTotal > ancho - 16 ? [etiquetas.filter((_, i) => i % 2 === 0), etiquetas.filter((_, i) => i % 2 === 1)] : [etiquetas];
+    const nFilas = Math.max(0, Math.min(etiquetas.length, Math.max(1, Math.ceil(anchoTotal / (ancho - 16)))));
+    const filasEt = Array.from({ length: nFilas }, (_, f) => etiquetas.filter((_, i) => i % nFilas === f));
     let yFila = base + Lmax + 26;
     filasEt.forEach(fila => {
       // grupos de rótulos que se tocan: se juntan y se centran en el promedio de sus flechas, sin salir del dibujo
@@ -390,8 +399,9 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
           g.append(el('path', { d: `M ${e.x} ${e.pie} L ${e.x} ${Math.max(e.pie, yFila - 18)} L ${cxE} ${yFila - 11}`, class: 'rt-guia' }));
           e.lineas.forEach((l, j) => {
             const t = el('text', { x: cxE, y: yFila + j * 13, class: 'd-valor rt-rotulo', 'text-anchor': 'middle' });
-            const n = el('tspan', { class: 'rt-rot-nombre' }, l.nombre), v = el('tspan', { dx: 6 }, l.valor);
-            t.append(n, v); g.append(t);
+            if (l.nombre) t.append(el('tspan', { class: 'rt-rot-nombre' }, l.nombre), el('tspan', { dx: 6 }, l.valor));
+            else t.append(l.valor);
+            g.append(t);
             ocupados.push({ x0: xx, x1: xx + e.w, y: yFila + j * 13 });
           });
           xx += e.w + GAP;
@@ -399,6 +409,19 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       });
       yFila += altoFila + 4;
     });
+    // con muchas filas, el dibujo se alarga para que entren
+    if (yFila - 4 > alto) svg.setAttribute('viewBox', `0 0 ${ancho} ${Math.ceil(yFila)}`);
+    // el momento de rotación primero: su rótulo queda fijo junto al arco y los de las piezas lo esquivan
+    if (paso >= 3 && gira) {
+      // arco de 270° desde abajo: horario pasa por la izquierda y termina a la derecha bajando; antihorario, al revés
+      const r = 24, c = { x: xr, y: Y(d.Yr) };
+      const fin = horario ? { x: c.x + r, y: c.y } : { x: c.x - r, y: c.y };
+      const arco = el('path', { d: `M ${c.x} ${c.y + r} A ${r} ${r} 0 1 ${horario ? 1 : 0} ${fin.x} ${fin.y}`, class: 'rt-Mt', 'marker-end': `url(#${id}-tinta)` });
+      arco.append(el('title', {}, `Mt = W · e = ${fmt(d.Q, 1)} · ${fmt(Math.abs(d.Xr))} = ${fmt(Math.abs(d.Mt), 1)} tm, sentido ${horario ? 'horario' : 'antihorario'}`));
+      g.append(arco);
+      // el rótulo, con los demás (que lo esquiven: antes pisaba el de la pieza perpendicular de arriba)
+      rotulo(c.x, c.y - r - 7, `Mt = ${fmt(Math.abs(d.Mt), 0)} tm`, 'd-valor', 'middle');   // arriba del arco, centrado
+    }
     // perpendiculares: solo rotación. La flecha va sobre el muro, a lo largo del muro, con el sentido en que el giro
     // lo empuja: con giro horario, los que están por encima del CR van hacia la derecha y los de abajo, a la izquierda.
     if (paso >= 3) d.perpendiculares.forEach(p => {
@@ -409,21 +432,12 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
       const yc = Y(p.pos) - 9;                                                // apenas por encima del muro, sin taparlo
       const x1 = X(tc) - (sentido * L) / 2, x2 = X(tc) + (sentido * L) / 2;
       g.append(flecha(x1, yc, x2, yc, w, 'rt-rot', tip(p, true) + `\nel giro lo empuja hacia la ${sentido > 0 ? 'derecha' : 'izquierda'}`));
-      rotulo(X(tc), yc - 8, `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
+      if (!sinRotulos) rotulo(X(tc), yc - 8, conNombre ? `${p.nombre} ${fmt(Math.abs(p.rot), 1)} t` : `${fmt(Math.abs(p.rot), 1)} t`, 'd-eje');
     });
     // viento y momento de rotación
     // W en el eje de simetría, en la franja de las flechas (es la fuerza que las piezas se reparten)
     const yW = base + Lmax;
     g.append(flecha(X(0), yW, X(0), yW - Math.min(Lmax, 46), 2.5, 'rt-W'));
-    if (paso >= 3 && gira) {
-      // arco de 270° desde abajo: horario pasa por la izquierda y termina a la derecha bajando; antihorario, al revés
-      const r = 24, c = { x: xr, y: Y(d.Yr) };
-      const fin = horario ? { x: c.x + r, y: c.y } : { x: c.x - r, y: c.y };
-      const arco = el('path', { d: `M ${c.x} ${c.y + r} A ${r} ${r} 0 1 ${horario ? 1 : 0} ${fin.x} ${fin.y}`, class: 'rt-Mt', 'marker-end': `url(#${id}-tinta)` });
-      arco.append(el('title', {}, `Mt = W · e = ${fmt(d.Q, 1)} · ${fmt(Math.abs(d.Xr))} = ${fmt(Math.abs(d.Mt), 1)} tm, sentido ${horario ? 'horario' : 'antihorario'}`));
-      g.append(arco);
-      g.append(el('text', { x: c.x + (horario ? -r - 6 : r + 6), y: c.y - r - 4, class: 'd-valor', 'text-anchor': horario ? 'end' : 'start' }, `Mt = ${fmt(Math.abs(d.Mt), 0)} tm`));
-    }
   }
   activarResaltado(svg);
   // paso a paso: el último par agregado queda marcado

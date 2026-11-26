@@ -65,8 +65,13 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, a: Attrs = {}, txt?: s
   if (txt !== undefined) e.textContent = txt;
   return e;
 };
-const txt = (g: SVGElement, x: number, y: number, t: string, clase = 'd-eje', ancla = 'start', extra: Attrs = {}) =>
-  g.append(el('text', { x: x.toFixed(1), y: y.toFixed(1), class: clase, 'text-anchor': ancla, ...extra }, t));
+/** el nombre del nivel para los rótulos de la carta: sin el uso entre paréntesis y cortado (el entero va en el título) */
+const nombreCorto = (n: string, max = 9) => { const c = n.replace(/\s*\(.*\)\s*$/, '').trim() || n; return c.length > max ? c.slice(0, max - 1).trimEnd() + '…' : c; };
+const txt = (g: SVGElement, x: number, y: number, t: string, clase = 'd-eje', ancla = 'start', extra: Attrs = {}) => {
+  const e = el('text', { x: x.toFixed(1), y: y.toFixed(1), class: clase, 'text-anchor': ancla, ...extra }, t);
+  g.append(e);
+  return e;
+};
 const linea = (g: SVGElement, x1: number, y1: number, x2: number, y2: number, clase: string) =>
   g.append(el('line', { x1: x1.toFixed(1), y1: y1.toFixed(1), x2: x2.toFixed(1), y2: y2.toFixed(1), class: clase }));
 const pts = (p: { x: number; y: number }[]) => p.map(q => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' ');
@@ -142,14 +147,17 @@ function escalaZ(d: DatosCarta, y0: number, y1: number) {
   return (z: number) => y0 + ((zMax - z) / (zMax - zMin || 1)) * (y1 - y0);
 }
 /** niveles a rotular sin que se pisen (cada ≥ 13 px), siempre azotea y PB */
-function nivelesRotulados(d: DatosCarta, Y: (z: number) => number, sep = 13): Set<NivelCarta> {
+function nivelesRotulados(d: DatosCarta, Y: (z: number) => number, sep = 15): Set<NivelCarta> {
   const out = new Set<NivelCarta>();
   let ult = -Infinity;
   const orden = [...d.niveles].sort((a, b) => b.z - a.z);
+  let ultN: NivelCarta | null = null;
   orden.forEach((n, i) => {
     const y = Y(n.z);
     const obligado = i === 0 || n === d.PB;
-    if (obligado || y - ult >= sep) { out.add(n); ult = y; }
+    // PB va siempre: si el de arriba quedó demasiado cerca, se saca ese (salvo que sea la azotea)
+    if (obligado && y - ult < sep && ultN && ultN !== orden[0]) out.delete(ultN);
+    if (obligado || y - ult >= sep) { out.add(n); ult = y; ultN = n; }
   });
   return out;
 }
@@ -209,13 +217,21 @@ function columna(g: SVGElement, d: DatosCarta, x0: number, x1: number, Y: (z: nu
   const k = (x1 - x0 - 34) / (ms[ms.length - 1] || max);
   const X = (v: number) => x0 + Math.abs(v) * k;
   txt(g, x0, 52, tit, 'ct-col-tit');
-  txt(g, x0, 64, unidad, 'd-eje');
+  txt(g, x0, 67, unidad, 'd-eje');
   // marcas del eje (abajo)
   const decM = ms.some(m => Math.abs(m - Math.round(m)) > 1e-9) ? 1 : 0;
   // si las marcas quedan muy juntas para su número, se rotulan solo el 0 y la última
   const anchoRot = Math.max(...ms.map(m => fmt(m, decM).length)) * 6.2 + 6;
   const juntas = ms.length > 2 && (X(ms[1]) - X(ms[0])) < anchoRot;
-  ms.forEach((m, i) => { linea(g, X(m), 70, X(m), yEje, 'ct-grilla'); if (!juntas || i === 0 || i === ms.length - 1) txt(g, X(m), yEje + 13, fmt(m, decM), 'd-eje', i === ms.length - 1 && juntas ? 'end' : 'middle'); });
+  // la última, si es larga, se apoya hacia adentro; y si así igual toca al 0, el 0 no se escribe (el eje ya arranca en 0)
+  const ult = ms[ms.length - 1], wUlt = fmt(ult, decM).length * 6.2;
+  const ultAdentro = juntas || X(ult) - wUlt / 2 < X(ms[ms.length - 2] ?? 0) + 10;
+  const sinCero = ultAdentro && X(ult) - wUlt < X(0) + 10;
+  ms.forEach((m, i) => {
+    linea(g, X(m), 70, X(m), yEje, 'ct-grilla');
+    if (i === 0 && sinCero) return;
+    if (!juntas || i === 0 || i === ms.length - 1) txt(g, X(m), yEje + 13, fmt(m, decM), 'd-eje', i === ms.length - 1 && ultAdentro ? 'end' : 'middle');
+  });
   linea(g, x0, 70, x0, yEje, 'ct-eje-col');
   if (forma === 'barras') ns.forEach(n => { if (Math.abs(val(n)) > 1e-9) g.append(el('rect', { x: x0, y: Y(n.z) - 2.5, width: Math.abs(val(n)) * k, height: 5, rx: 1.5, class: `ct-barra ${clase}` })); });
   else {
@@ -239,12 +255,12 @@ function laminaA(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   // grilla de niveles a todo lo ancho
   d.niveles.forEach(n => linea(g, 12, Y(n.z), ancho - 12, Y(n.z), n === d.PB ? 'ct-nivel pb' : 'ct-nivel'));
   // tabla de niveles: nivel, cota, h, D (columnas B, C, D de la hoja)
-  const xs = [16, 70, 116, 154];
+  const xs = [16, 88, 128, 166];
   ['nivel', 'cota', 'h', 'D'].forEach((t, i) => txt(g, xs[i] + (i ? 30 : 0), 64, t, 'ct-col-tit', i ? 'end' : 'start'));
   d.niveles.forEach(n => {
     if (!rot.has(n)) return;
     const y = Y(n.z) - 3;
-    txt(g, xs[0], y, n.nombre, n === d.PB ? 'd-valor' : 'ct-num');
+    txt(g, xs[0], y, nombreCorto(n.nombre, 8), n === d.PB ? 'd-valor' : 'ct-num').append(el('title', {}, n.nombre));
     txt(g, xs[1] + 30, y, `${n.z > 0 ? '+' : ''}${fmt(n.z)}`, 'ct-num', 'end');
     txt(g, xs[2] + 30, y, fmt(n.h), 'ct-num', 'end');
     txt(g, xs[3] + 30, y, fmt(n.D), 'ct-num', 'end');
@@ -337,7 +353,7 @@ function fichaB(g: SVGElement, d: DatosCarta, ancho: number, alto: number) {
   const Y = escalaZ(d, y0, y1);
   txt(g, xAl, 54, 'Alzado · el viento de izquierda a derecha', 'ct-col-tit');
   const rot = nivelesRotulados(d, Y, 15);
-  d.niveles.forEach(n => { if (rot.has(n)) txt(g, xAl, Y(n.z) + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num'); });
+  d.niveles.forEach(n => { if (rot.has(n)) txt(g, xAl, Y(n.z) + 3.5, `${nombreCorto(n.nombre)} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num').append(el('title', {}, n.nombre)); });
   const { xb, yTop, yPB } = alzado(g, d, xAl + 75, xVal - 110, Y, { presiones: true, deformada: true });
   cota(g, xb + 52, yPB, xb + 52, yTop, `h = ${fmt(d.zTop)} m`, 1);
   // datos
@@ -510,7 +526,7 @@ function axonometriaC(g: SVGElement, d: DatosCarta, ancho: number, alto: number)
     if (!rot.has(n) || n.z < 0 || Math.abs(Yfake(n.z) - yW) < 22) return;
     const q = P(-T / 2, -S / 2, n.z), xr = Math.min(q.x, bordeViento(n.z)) - 6;
     linea(g, q.x - 2, q.y, xr, q.y, 'ct-cota ct-guia-nivel');
-    txt(g, xr - 3, q.y + 3.5, `${n.nombre} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end');
+    txt(g, xr - 3, q.y + 3.5, `${nombreCorto(n.nombre)} ${n.z > 0 ? '+' : ''}${fmt(n.z)}`, n === d.PB ? 'd-valor' : 'ct-num', 'end').append(el('title', {}, n.nombre));
   });
   // leyenda de lectura
   const xl = ancho - 360;

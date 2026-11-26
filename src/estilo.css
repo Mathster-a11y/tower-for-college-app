@@ -230,6 +230,12 @@ details.tabla-valores summary { cursor: pointer; color: var(--accent); font-size
 .chip-estado.no-verifica { background: var(--mal-fill); color: var(--mal); }
 .chip-estado.revisar, .chip-estado.atención { background: var(--revisar-fill); color: var(--revisar); }
 .chip-estado.informativo, .chip-estado.pendiente { background: var(--header); color: var(--ink2); }
+/* cálculo en segundo plano: el chip late y los diagramas del centro se atenúan solo si tarda (sin parpadeo en los cortos) */
+.chip-estado.calculando { animation: latido-calculo 1.2s ease-in-out infinite; }
+@keyframes latido-calculo { 50% { opacity: .5; } }
+#centro-dibujos > * { transition: opacity .15s; }
+body.calculando #centro-dibujos > * { opacity: .6; transition: opacity .25s .35s; }
+@media (prefers-reduced-motion: reduce) { .chip-estado.calculando { animation: none; } }
 .estado { font-weight: 600; white-space: nowrap; }
 .estado.verifica { color: var(--ok); } .estado.no-verifica { color: var(--mal); } .estado.atención { color: var(--revisar); } .estado.informativo { color: var(--ink2); }
 p.estado { white-space: normal; margin: 0; }
@@ -870,7 +876,7 @@ text[data-par].ultimo { font-size: 15px; }
 .tabla-cmp .cmp-info { color: var(--dim); font-size: 11px; }
 .tabla-cmp tr.cmp-cambia td { background: color-mix(in srgb, #f5c400 18%, transparent); }
 .areas-panel { width: 240px; }
-.areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; }
+.areas-panel .areas-tabla { display: block; max-height: 150px; overflow: auto; flex-shrink: 0; }
 .areas-panel button { font-size: 12px; white-space: normal; }
 .planta .nodos-hover rect, .planta .nodos-hover polygon { stroke: var(--ink2); }
 .planta .iman-destino { fill: none; stroke: var(--elegido); stroke-width: 2; pointer-events: none; }
@@ -1153,8 +1159,10 @@ button.peligro { color: var(--mal); }
 .planta .hueco-losa.sel polygon { stroke: var(--accent); stroke-width: 2.2; }
 .planta .hueco-txt { font-size: 10px; fill: var(--ink2); }
 .planta .hueco-previa { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: 4 3; stroke-width: 1.2; }
-.areas-leyenda { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; max-height: 160px; overflow: auto; }
-.areas-ley-fila { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: center; font-size: 11.5px; }
+.areas-leyenda { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; max-height: 160px; overflow: auto; flex-shrink: 0; }
+.areas-ley-fila { display: grid; grid-template-columns: 16px 1fr; column-gap: 6px; align-items: center; font-size: 11.5px; }
+/* el área y el peso, debajo del nombre: con nombres largos (el exo) no se aprietan */
+.areas-ley-fila .n { grid-column: 2; }
 .areas-ley-fila .n { font-family: var(--mono, monospace); font-size: 11px; color: var(--ink2); }
 .areas-leyenda .muestra { width: 14px; height: 12px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
 .areas-leyenda .muestra.r-d135 { background-image: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 1.4px, transparent 1.4px 6px); }
@@ -1374,6 +1382,8 @@ svg [data-zoom-min] { display: none; }
   padding: 6px 10px; margin-bottom: 8px; border-radius: 8px; background: color-mix(in srgb, #f59e0b 16%, var(--field, #fff)); border: 1px solid #f59e0b; font-size: 13px; }
 .panel-viejo { margin: 0 0 10px; }
 .vista-vieja { position: relative; }
+/* en vivo, calculando en segundo plano: el 3D no avisa (se actualiza solo en un momento) */
+body.calculando .vista-vieja::after { display: none; }
 .vista-vieja::after { content: '3D del último cálculo · F9 para actualizar'; position: absolute; left: 8px; top: 8px; z-index: 5; padding: 3px 8px; border-radius: 6px;
   font-size: 12px; background: color-mix(in srgb, #f59e0b 22%, #fff); border: 1px solid #f59e0b; color: #1f2937; pointer-events: none; }
 /* barra superior con el modo de cálculo: el nombre del proyecto se acorta antes de que la barra pase a dos renglones */
@@ -1875,6 +1885,8 @@ canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 .corte-svg .manija { fill: var(--lienzo); stroke: var(--accent); stroke-width: 2; cursor: ew-resize; }
 .corte-svg .manija:hover { fill: var(--accent); }
 .corte-svg .calib { fill: var(--elegido, #e8a317); }
+.corte-svg .medida { stroke: var(--elegido, #e8a317); stroke-width: 2.5; fill: none; }
+.corte-svg .medida-linea { stroke: var(--elegido, #e8a317); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; }
 .corte-svg .nivel { font-size: 10px; fill: var(--ink2); }
 .corte-svg .rot { font-size: 12px; fill: var(--accent); paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
 
@@ -2099,6 +2111,10 @@ canvas.tunel2d.arrastrable:active { cursor: grabbing; }
 /* Túnel 3D: fachada desplegada y tabla por zona */
 .fachada-desplegada { display: block; max-width: 100%; margin: 4px 0; }
 .llave-sim.en-flujo { position: static; margin: 6px 0; min-width: 0; max-width: 100%; }
+/* túnel 2D: las llaves abajo del dibujo, una al lado de la otra si entran */
+.llaves-tunel { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: flex-start; }
+.llaves-tunel .llave-sim.en-flujo { flex: 1 1 260px; max-width: 420px; border: 1px solid var(--edge); }
+.llaves-tunel .llave-sim.llave-simbolos.en-flujo { max-width: 460px; }
 .tabla td.marca { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--elegido) 18%, transparent); }
 /* Túnel 3D: espectro de la fuerza lateral (dinámica) */
 .grafico-espectro { display: block; max-width: 100%; height: auto; }
@@ -2186,4 +2202,125 @@ body.sin-tutorial .ayuda-plegable, body.sin-tutorial .ayuda-boton, body.sin-tuto
 @media (pointer: coarse) {
   .pasos-plegar, .chip-avisos { min-height: 32px; min-width: 32px; }
   .indicacion-planta > button { min-height: 32px !important; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
+}
+
+/* tabla pegada en una tarjeta (perfil desde una tabla de alturas) */
+.tarjeta-texto { width: 100%; min-width: min(460px, 80vw); font: 12px/1.4 var(--mono); box-sizing: border-box; }
+/* ventana de importar un 3D: cada campo en su línea */
+.importar-3d-campo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+/* túnel 3D, dinámica: la explicación de las cuentas, plegada (es larga) */
+.como-se-calcula { margin-top: 6px; }
+.como-se-calcula > summary { cursor: pointer; font-size: 12.5px; color: var(--accent); }
+
+/* ---- modo presentación: solo el dibujo de la etapa, grande, con una barra para pasar de etapa ---- */
+.pres-barra { display: none; }
+body.presentando .barra, body.presentando .estado-linea, body.presentando .riel, body.presentando .lateral,
+body.presentando .divisor, body.presentando .derecha { display: none !important; }
+body.presentando .app { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+body.presentando .centro { grid-column: 1 / -1; }
+body.presentando .centro .tira { font-size: 16px; }
+body.presentando .centro-dibujos { padding-bottom: 64px; }
+body.presentando .pres-barra { display: flex; align-items: center; gap: 10px; position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 50;
+  padding: 6px 10px; border: 1px solid var(--edge); border-radius: 12px; background: color-mix(in srgb, var(--panel) 92%, transparent); box-shadow: 0 4px 18px rgb(0 0 0 / .18); opacity: .35; transition: opacity .2s; }
+body.presentando .pres-barra:hover, body.presentando .pres-barra:focus-within { opacity: 1; }
+.pres-barra button { font-size: 16px; min-width: 40px; }
+.pres-barra .pres-titulo { font: 600 16px var(--fuente); min-width: 16ch; text-align: center; white-space: nowrap; }
+@media print { .pres-barra { display: none !important; } }
+
+/* ---- barra de la planta: grupos con su nombre arriba y herramientas con ícono, con los botones de toda la app ---- */
+.herr-planta { display: flex; align-items: stretch; flex-wrap: wrap; row-gap: 4px; padding: 4px 4px 5px; border: 1px solid var(--field-edge); border-radius: 12px;
+  background: color-mix(in srgb, var(--field) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
+.herr-grupo { display: flex; flex-direction: column; gap: 2px; padding: 0 5px; }
+.herr-grupo + .herr-grupo { border-left: 1px solid var(--rule, var(--edge)); }
+.herr-grupo-rot { padding: 1px 0 0 6px; font: 600 9.5px/1.2 var(--fuente); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; }
+.herr-grupo-bot { display: flex; align-items: center; gap: 2px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 40px; min-width: 44px; padding: 3px 6px 2px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font-size: 11px; line-height: 1.15; box-shadow: none; }
+.herr-planta .herr-grupo-bot > button:not([aria-pressed="true"]):hover, .herr-planta .herr-grupo-bot > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); }
+.herr-planta .herr-grupo-bot > button[aria-pressed="true"], .herr-planta .herr-grupo-bot > .menu-mas > button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; box-shadow: none; }
+.herr-planta .ic-herr { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* si no entra en una línea: solo los íconos (el nombre sigue en el globo de cada botón) */
+.herr-planta.compacta .herr-grupo-bot > button .tx, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button .tx { display: none; }
+.herr-planta.compacta .herr-grupo-bot > button, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button { min-height: 32px; min-width: 34px; padding: 3px 6px; }
+@media (pointer: coarse) { .herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button { min-height: 36px; } }
+
+/* túnel 2D: la altura del corte al lado del dibujo (el alzado de la torre y un deslizador vertical) */
+.tunel-con-altura { display: flex; gap: 8px; align-items: flex-start; }
+.tunel-con-altura > .tunel-marco { flex: 1 1 auto; min-width: 0; }
+.tunel-altura { flex: 0 0 76px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); }
+.tunel-altura .altura-tit { font: 600 10px var(--fuente); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.tunel-altura .altura-cuerpo { display: flex; align-items: stretch; gap: 2px; }
+.tunel-altura .altura-rot { font: 11px/1.25 var(--mono); text-align: center; white-space: pre-line; color: var(--ink); }
+.alzado-corte .torre { fill: color-mix(in srgb, var(--ink) 8%, transparent); stroke: var(--ink2); stroke-width: 1; }
+.alzado-corte .piso { stroke: var(--ink2); stroke-width: .5; opacity: .45; }
+.alzado-corte .corte { stroke: var(--elegido); stroke-width: 3; stroke-linecap: round; }
+input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; margin: 0; accent-color: var(--elegido); touch-action: none; }
+@media (pointer: coarse) { input.altura-vertical { width: 32px; } .tunel-altura { flex-basis: 86px; } }
+
+/* ---- cada botón con su propio recuadro (sin palabras sueltas dentro de una cápsula común) ---- */
+.seg { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.seg > button, .seg > .menu-mas > button, .seg > .boton { border: 1px solid var(--field-edge); background: var(--field); }
+.seg > button[aria-pressed="true"], .seg > .menu-mas > button[aria-pressed="true"] { border-color: var(--accent); }
+.seg.pasos > button[aria-pressed="true"] { border-color: var(--rolb, var(--accent)); }
+/* herramientas de la planta: cada una en su baldosa (cuadrado de esquinas apenas redondeadas, como la grilla del plano) */
+.herr-planta { padding: 5px 6px 6px; border-color: var(--hair, var(--edge)); }
+.herr-grupo-bot { gap: 4px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button {
+  border: 1px solid var(--field-edge); background: var(--field); border-radius: 7px; min-width: 52px; padding: 4px 6px 3px; }
+.herr-planta .herr-grupo-bot > button:not([aria-pressed="true"]):hover, .herr-planta .herr-grupo-bot > .menu-mas > button:not([aria-pressed="true"]):hover { background: var(--tint); border-color: var(--accent); }
+.herr-planta .herr-grupo-bot > button[aria-pressed="true"], .herr-planta .herr-grupo-bot > .menu-mas > button[aria-pressed="true"] { border-color: var(--accent); }
+.herr-planta .ic-herr { stroke-width: 1.6; }
+.herr-planta.compacta .herr-grupo-bot > button, .herr-planta.compacta .herr-grupo-bot > .menu-mas > button { min-width: 36px; }
+/* letras de las fórmulas en los botones (σ, ρ, φ…): IBM Plex Math, como en las ecuaciones */
+.letra-math { font-family: var(--math); font-style: italic; }
+
+/* los botones que abren un menú: un chevrón dibujado (el ▾ no está en IBM Plex y salía en otra letra) */
+.barra button[aria-haspopup="true"]::after, .herr-planta .menu-mas > button::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); }
+.herr-planta .menu-mas > button::after { position: absolute; right: 6px; top: 7px; margin: 0; }
+.herr-planta .menu-mas > button { position: relative; }
+
+/* botones de herramienta del 3D: baldosas cuadradas como las de la planta, con el ícono o la letra centrados */
+.bloque3d .tira button.mini { min-width: 30px; height: 28px; padding: 0 7px; border-radius: 7px; display: inline-grid; place-items: center; }
+.bloque3d .tira button.mini .letra-math { font-size: 15px; line-height: 1; }
+.ic-mini { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* los pasos de la etapa (panel izquierdo): cada uno en su píldora con borde */
+.subpasos { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.subpasos button { border: 1px solid var(--field-edge); background: var(--field); }
+.subpasos button[aria-pressed="true"] { border-color: var(--rolb); }
+/* que la barra de la planta con sus baldosas entre en una línea con los nombres en una pantalla común */
+.herr-grupo { padding: 0 4px; }
+.herr-grupo-bot { gap: 3px; }
+.herr-planta .herr-grupo-bot > button, .herr-planta .herr-grupo-bot > .menu-mas > button { min-width: 44px; padding: 4px 5px 3px; font-size: 10.5px; }
+
+/* ---- revisión estética (propuestas 1, 2, 3 y 5) ---- */
+/* 1 · cabecera en un renglón: el aviso de los controles junto al nombre del proyecto */
+.barra .proyecto { max-width: 18ch; }
+.barra #estado-calculo { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.barra .seg { flex-wrap: nowrap; }
+/* 2 · encabezado de la etapa liviano: el color de la etapa en el número y en un filo, no en toda la franja */
+.banda { background: var(--panel); color: var(--ink); border-bottom: 1px solid var(--edge); box-shadow: inset 4px 0 0 var(--rolb); }
+.banda h2 { color: var(--ink); }
+.banda .chip { background: var(--rolb); color: #fff; }
+/* 3 · arriba de la planta, una franja menos: la explicación de cada paso queda en su globo */
+.pasos-det .pasos-ayuda { display: none; }
+.pasos-det { justify-content: flex-end; }
+/* 5 · el mensaje del pie en un renglón */
+.estado-linea #mensaje { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.estado-linea .espacio { flex: 0 0 8px; }
+
+/* 1 · la cabecera en un renglón cuando entra: el aviso siempre entero; lo que cede es el nombre del proyecto
+   (completo en el globo). En pantallas más angostas, dos renglones como antes */
+@media (min-width: 1400px) {
+  .barra { flex-wrap: nowrap; gap: 4px; }
+  .barra > * { flex-shrink: 0; }
+  .barra .grupo { gap: 4px; }
+  .barra button, .barra .boton { padding-left: 9px; padding-right: 9px; }
+  .barra .sep { margin: 0; }
+  .barra .proyecto { flex: 0 1 auto; min-width: 4ch; max-width: 22ch; }
+  .barra #estado-calculo { max-width: none; }
+  .barra .espacio { flex: 1 1 0; min-width: 0; }
 }

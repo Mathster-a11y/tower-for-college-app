@@ -20,7 +20,7 @@ const el = (tag: string, a: Record<string, string | number> = {}, txt?: string) 
 const f2 = (x: number) => x.toFixed(2).replace('.', ',');
 
 type Rango = 'este' | 'arriba' | 'abajo' | 'todos';
-type Modo = 'editar' | 'calibrar' | 'mover-calco' | 'plano';
+type Modo = 'editar' | 'calibrar' | 'mover-calco' | 'plano' | 'medir';
 
 /** niveles que genera el perfil o un loft (al editarlos a mano quedan sueltos) */
 function generados(p: Proyecto): Set<number> {
@@ -47,6 +47,8 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   let calib: { w: number; z: number }[] = [];
   /** puntos del plano de corte que se está dibujando */
   let plano: { w: number; z: number }[] = [];
+  /** medir sobre el calco: los toques en el borde de la torre del plano, con su lado (izquierdo o derecho) */
+  let medidas: { w: number; z: number; lado: 'min' | 'max' }[] = [];
   /** losas cambiadas mientras se arrastra (vista previa): índice → contorno */
   let previa: Map<number, Vertice[]> | null = null;
 
@@ -83,7 +85,8 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       const bm = boton('Mover el calco', 'Arrastrá el plano hasta que su piso y su eje coincidan con los de la torre', () => { modo = modo === 'mover-calco' ? 'editar' : 'mover-calco'; armar(); }); bm.setAttribute('aria-pressed', String(modo === 'mover-calco'));
       const op = document.createElement('input'); op.type = 'range'; op.min = '0.1'; op.max = '1'; op.step = '0.05'; op.value = String(estado.calcoCorte.opacidad); op.setAttribute('aria-label', 'Opacidad del calco');
       op.addEventListener('input', () => { if (estado.calcoCorte) { estado.calcoCorte.opacidad = +op.value; dibujar(); } });
-      ext.push(bc, bm, op, boton('Quitar el calco', '', () => { estado.calcoCorte = null; modo = 'editar'; armar(); }));
+      const bme = boton('Medir sobre el calco', 'Tocá el borde de la torre en el plano a varias alturas (de los dos lados): cada losa entre dos toques del mismo lado toma el borde que marca el plano', () => { modo = modo === 'medir' ? 'editar' : 'medir'; armar(); }); bme.setAttribute('aria-pressed', String(modo === 'medir'));
+      ext.push(bc, bm, bme, ...(medidas.length ? [boton(`Borrar los ${medidas.length} toques`, 'Saca las marcas de la medición (las losas ya cambiadas quedan; Ctrl+Z las vuelve)', () => { medidas = []; armar(); })] : []), op, boton('Quitar el calco', '', () => { estado.calcoCorte = null; modo = 'editar'; medidas = []; armar(); }));
     }
     // planos de corte: los de este corte, con su ángulo, qué sacan y quitar
     const pls = planosDe(estado.proyecto).filter(q => q.eje === eje);
@@ -106,6 +109,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   function armarPie() {
     pie.textContent = modo === 'plano' ? (plano.length ? 'Tocá el segundo punto del plano (por ejemplo, el otro extremo del techo inclinado del plano calcado).' : 'Plano de corte: tocá el primer punto de la recta (en el alzado calcado, una punta del techo inclinado). Se saca lo de arriba; después se puede cambiar.')
       : modo === 'calibrar' ? (calib.length ? 'Tocá el segundo punto del plano (de una medida que conozcas: el ancho de la torre, la altura de un piso…).' : 'Escala del calco: tocá el primer punto de una medida conocida del plano.')
+      : modo === 'medir' ? `Medir sobre el calco: tocá el borde de la torre en el plano, de un lado y del otro, a varias alturas (más toques donde la forma cambia). Cada losa entre dos toques del mismo lado toma el borde del plano; con un solo toque, la losa más cercana. ${medidas.length ? `${medidas.length} ${medidas.length === 1 ? 'toque' : 'toques'}.` : ''} Esc termina.`
       : modo === 'mover-calco' ? 'Arrastrá el plano hasta que su piso (cota 0) y su eje coincidan con los de la torre. Volvé a tocar «Mover el calco» para terminar.'
       : `Arrastrá los bordes de las losas (●) hasta que coincidan con el plano: cambia ${rango === 'este' ? 'solo ese piso' : rango === 'arriba' ? 'ese piso y los de arriba' : rango === 'abajo' ? 'ese piso y los de abajo' : 'todos los pisos'}. Rueda o pellizco para el zoom; arrastrá el fondo para correr la vista; Esc cierra.`;
   }
@@ -158,6 +162,12 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       for (const [lado, w] of [['min', w0], ['max', w1]] as const) svg.append(el('circle', { cx: W(w), cy: Z(x.n.cota), r: 6, class: 'manija', 'data-i': x.i, 'data-lado': lado }));
     });
     calib.forEach(q => svg.append(el('circle', { cx: W(q.w), cy: Z(q.z), r: 5, class: 'calib' })));
+    // los toques de la medición: una cruz en cada uno y la línea que los une por lado
+    for (const lado of ['min', 'max'] as const) {
+      const ms = medidas.filter(m => m.lado === lado).sort((a, b) => a.z - b.z);
+      if (ms.length > 1) svg.append(el('polyline', { points: ms.map(m => `${W(m.w).toFixed(1)},${Z(m.z).toFixed(1)}`).join(' '), class: 'medida-linea' }));
+      ms.forEach(m => svg.append(el('path', { d: `M${W(m.w) - 6},${Z(m.z)}h12M${W(m.w)},${Z(m.z) - 6}v12`, class: 'medida' })));
+    }
     // planos de corte de este corte: la recta de borde a borde de la vista, el lado que se saca sombreado, y sus manijas
     const ancho = svg.clientWidth || 800, alto = svg.clientHeight || 600;
     planosDe(p).filter(q => q.eje === eje).forEach(q => {
@@ -195,6 +205,7 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
       }
       return;
     }
+    if (modo === 'medir') { medir(q); return; }
     if (modo === 'plano') {
       plano.push(q); armarPie(); dibujar();
       if (plano.length === 2) {
@@ -224,6 +235,51 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
     else { const p0 = estado.proyecto; encuadrar(p0); arr = { tipo: 'vista', id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, c0: { w: (((svg.clientWidth || 800) / 2) - ox) / k, z: (oy - (svg.clientHeight || 600) / 2) / k } }; }
     try { svg.setPointerCapture(ev.pointerId); } catch { /* sintético */ }
   });
+  /**
+   * Un toque de la medición: se decide el lado (el de la losa más cercana en altura) y se vuelven a aplicar todos los
+   * toques: cada losa entre dos toques del mismo lado toma el borde interpolado entre ellos (con un solo toque, la
+   * losa más cercana a esa altura).
+   */
+  function medir(q: { w: number; z: number }) {
+    const p = estado.proyecto;
+    const filas = p.niveles.map((n, i) => ({ n, i, t: tramoCorte(plantaDeNivel(p, i).silueta, eje, c) })).filter(x => x.t && x.n.cota >= 0);
+    if (!filas.length) return;
+    const cerca = filas.reduce((a, b) => (Math.abs(b.n.cota - q.z) < Math.abs(a.n.cota - q.z) ? b : a));
+    const lado: 'min' | 'max' = q.w < (cerca.t![0] + cerca.t![1]) / 2 ? 'min' : 'max';
+    medidas.push({ w: Math.round(q.w * 100) / 100, z: q.z, lado });
+    const objetivos = new Map<number, { min?: number; max?: number }>();
+    for (const ld of ['min', 'max'] as const) {
+      const ms = medidas.filter(m => m.lado === ld).sort((a, b) => a.z - b.z);
+      if (!ms.length) continue;
+      if (ms.length === 1) {
+        const f = filas.reduce((a, b) => (Math.abs(b.n.cota - ms[0].z) < Math.abs(a.n.cota - ms[0].z) ? b : a));
+        objetivos.set(f.i, { ...objetivos.get(f.i), [ld]: ms[0].w });
+        continue;
+      }
+      filas.forEach(f => {
+        const z = f.n.cota; if (z < ms[0].z - 1e-6 || z > ms[ms.length - 1].z + 1e-6) return;
+        let j = 0; while (j + 2 < ms.length && ms[j + 1].z < z) j++;
+        const a = ms[j], b = ms[j + 1], t = b.z > a.z ? (z - a.z) / (b.z - a.z) : 0;
+        objetivos.set(f.i, { ...objetivos.get(f.i), [ld]: Math.round((a.w + (b.w - a.w) * t) * 100) / 100 });
+      });
+    }
+    const gen = generados(p);
+    let cambiadas = 0, sueltos = 0;
+    estado.cambiar(pp => objetivos.forEach((o, i) => {
+      let v: Vertice[] = plantaDeNivel(pp, i).silueta, cambio = false;
+      for (const ld of ['min', 'max'] as const) {
+        const w = o[ld]; if (w === undefined) continue;
+        const t = tramoCorte(v, eje, c); if (!t || Math.abs((ld === 'min' ? t[0] : t[1]) - w) < 0.005) continue;
+        const nv = moverBordeEnCorte(v, eje, c, ld, w); if (nv) { v = nv; cambio = true; }
+      }
+      const n = pp.niveles[i];
+      if (!cambio) return;
+      n.silueta = v; const cj = cajaSilueta(v); n.B = +cj.B.toFixed(2); n.L = +cj.L.toFixed(2); cambiadas++;
+      if (gen.has(i) && !n.manual) { n.manual = true; sueltos++; }
+    }));
+    mensaje(`Toque ${medidas.length} (${lado === 'min' ? 'lado izquierdo' : 'lado derecho'} a ${f2(q.z)} m): ${cambiadas ? `${cambiadas} ${cambiadas === 1 ? 'losa tomó' : 'losas tomaron'} el borde del plano${sueltos ? ` (${sueltos} quedaron sueltas del perfil o el loft)` : ''}` : 'ninguna losa cambió todavía (falta otro toque de ese lado)'}. Ctrl+Z deshace.`);
+    armar();
+  }
   /** niveles que cambia el arrastre del nivel i */
   const afectados = (p: Proyecto, i: number) => p.niveles.map((_, j) => j).filter(j => rango === 'todos' || j === i || (rango === 'arriba' && p.niveles[j].cota > p.niveles[i].cota) || (rango === 'abajo' && p.niveles[j].cota < p.niveles[i].cota && p.niveles[j].cota >= 0));
   svg.addEventListener('pointermove', ev => {

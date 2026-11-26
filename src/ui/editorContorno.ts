@@ -16,7 +16,7 @@ import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
 import type { Punto, Vertice } from '../engine/silueta';
-import { arcoComplementario, arcoConCentro, arcoConRadioMismoLado, geometriaArco, invertirArco, arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
+import { patronPolar, arcoComplementario, arcoConCentro, arcoConRadioMismoLado, geometriaArco, invertirArco, arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return isFinite(v) ? v : NaN; };
@@ -63,7 +63,9 @@ export function montarEditorContorno(api: ApiPlanta) {
     a.push(clonar(P)); P = q; sel = null; tramo = null; armar(); api.dibujar();
   };
   // valores de las herramientas
-  const her = { r: 0.3, d: 0.2, partes: 2, desf: 0.1, giro: 15, escala: 1.25, lados: 6, forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse' };
+  const her = { r: 0.3, d: 0.2, partes: 2, desf: 0.1, giro: 15, escala: 1.25, lados: 6, forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse',
+    /** patrón polar: copias, ancho sobre el borde, profundidad o vuelo, ángulo de la primera y forma */
+    polar: { n: 6, ancho: 4, prof: 3, angulo0: 0, forma: 'triangulo' as 'triangulo' | 'rectangulo' } };
   let arrastre: { tipo: 'vertice' | 'lado' | 'c1' | 'c2' | 'arco' | 'centro'; anillo: number; i: number; base: Perfil } | null = null;
   /**
    * otro contorno (no un muro): la losa o la carpintería de un nivel. Sin huecos; los arcos se guardan exactos
@@ -402,6 +404,20 @@ export function montarEditorContorno(api: ApiPlanta) {
         boton('Girar', 'Gira el contorno alrededor de su baricentro (positivo: antihorario)', () => aplicarAnillo(kSel, vs => girarAnillo(vs, her.giro, centroAnillo(kSel)), `Girado ${fmt(her.giro)}°.`), false, 'girar')),
       fila(campo('×', her.escala, x => { her.escala = x; }, 40, ''),
         boton('Escalar', 'Agranda o achica el contorno desde su baricentro', () => aplicarAnillo(kSel, vs => (her.escala > 0 ? escalarAnillo(vs, her.escala, centroAnillo(kSel)) : { error: 'El factor tiene que ser mayor que cero.' }), `Escalado × ${fmt(her.escala)}.`, false), false, 'escalar'))));
+    // patrón polar: un entrante o un saliente repetido alrededor del centro (pozos de luz, muescas, balcones)
+    {
+      const pz = her.polar;
+      const selP = mk('select'); ([['triangulo', 'en V (triángulo)'], ['rectangulo', 'en U (rectángulo)']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = pz.forma === v; selP.append(o); });
+      selP.addEventListener('change', () => { pz.forma = selP.value as typeof pz.forma; });
+      const polar = (tipo: 'entrante' | 'saliente') => aplicarAnillo(kSel, vs => patronPolar(vs, { ...pz, tipo }),
+        `${pz.n} ${tipo === 'entrante' ? (pz.n === 1 ? 'entrante' : 'entrantes') : (pz.n === 1 ? 'saliente' : 'salientes')} ${pz.forma === 'triangulo' ? 'en V' : 'en U'} de ${fmt(pz.ancho)} m, cada ${fmt(360 / Math.max(1, pz.n))}°.`, false);
+      det.append(grupo('Repetir en polar (pozos, muescas, balcones)',
+        fila(campo('copias', pz.n, x => { pz.n = Math.max(1, Math.round(x)); }, 34, ''), campo('ancho', pz.ancho, x => { pz.ancho = Math.abs(x); }), campo('hondo', pz.prof, x => { pz.prof = Math.abs(x); })),
+        fila(campo('primera a', pz.angulo0, x => { pz.angulo0 = x; }, 40, '°'), selP),
+        fila(boton('Entrantes', 'Corta el contorno: la misma muesca repetida alrededor del centro (los pozos de luz del Gherkin: 6 en V)', () => polar('entrante'), false, 'adentro'),
+          boton('Salientes', 'Agrega al contorno: el mismo saliente repetido alrededor del centro (balcones, aletas)', () => polar('saliente'), false, 'afuera')),
+        mk('p', 'Alrededor del centro del contorno, parejos. El ancho se mide sobre el borde y la profundidad (o el vuelo), en la dirección del radio. Si el contorno es un círculo, entre las copias quedan arcos exactos.', 'col-nota')));
+    }
     const selForma = mk('select'); ([['rect', 'Rectángulo'], ['circulo', 'Círculo'], ['poligono', 'Polígono regular'], ['elipse', 'Elipse']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; o.selected = her.forma === v; selForma.append(o); });
     selForma.addEventListener('change', () => { her.forma = selForma.value as typeof her.forma; armar(); });
     det.append(grupo('Reemplazar por una forma',

@@ -15,7 +15,8 @@ function volumen(buf: ArrayBuffer): { n: number; v: number } {
 
 describe('torre como superficie y en STL', () => {
   it('STL: un prisma cerrado por piso, con las normales hacia afuera', () => {
-    const r = volumen(stlTorre([{ cota: 0, silueta: cuadro(10) }, { cota: 3, silueta: cuadro(10) }, { cota: 6, silueta: [...cuadro(6)].reverse() }]));
+    // piso por piso (sin piel continua; la piel continua está en src/viento/alturaExacta.test.ts)
+    const r = volumen(stlTorre([{ cota: 0, silueta: cuadro(10) }, { cota: 3, silueta: cuadro(10) }, { cota: 6, silueta: [...cuadro(6)].reverse() }], { alturaExacta: false }));
     expect(r.n).toBe(24);                                              // 2 pisos × (8 laterales + 2 + 2 tapas)
     expect(r.v).toBeCloseTo(10 * 10 * 3 + 10 * 10 * 3, 3);            // el último nivel es la azotea: no suma volumen
   });

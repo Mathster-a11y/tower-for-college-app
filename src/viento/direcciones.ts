@@ -58,8 +58,10 @@ export function grillaAlrededor(pol: P[], paso = 1.5): GrillaPlanta {
 }
 /**
  * El factor del lugar (velocidad media / la del campo abierto a esa altura) y el de la ráfaga (GEM: la mayor entre la media y
- * (media + 3 desvíos) / 1,85) en cada
- * punto de la grilla; NaN donde cae adentro de un edificio o afuera del túnel.
+ * (media + 3 desvíos) / 1,85) en cada punto de la grilla; NaN donde cae adentro de un edificio. Donde cae afuera del
+ * túnel de esa dirección (con el túnel girado, la grilla de la vereda asoma por los costados o por delante de la entrada),
+ * el aire es el del campo abierto: factor 1. Antes quedaba NaN y el mapa del confort perdía esos puntos en todas las
+ * direcciones (solo se dibujaban los que caían adentro del túnel en todas).
  */
 export function veredaEnPlanta(g: Geometria3D, m: MediaPlano, uRef: number, gr: GrillaPlanta): { f: Float32Array; fRafaga: Float32Array } {
   const f = new Float32Array(gr.nx * gr.ny).fill(NaN), fr = new Float32Array(gr.nx * gr.ny).fill(NaN);
@@ -67,7 +69,7 @@ export function veredaEnPlanta(g: Geometria3D, m: MediaPlano, uRef: number, gr: 
   for (let j = 0; j < gr.ny; j++) for (let i = 0; i < gr.nx; i++) {
     const px = gr.x0 + (i + 0.5) * gr.paso, py = gr.y0 + (j + 0.5) * gr.paso;
     const x = Math.floor(ox + (px * co - py * si) * g.escala), y = Math.floor(oy + (px * si + py * co) * g.escala);
-    if (x < 2 || x >= g.nx - 2 || y < 0 || y >= g.ny) continue;
+    if (x < 2 || x >= g.nx - 2 || y < 0 || y >= g.ny) { f[j * gr.nx + i] = 1; fr[j * gr.nx + i] = 1; continue; }
     const k = y * g.nx + x, cel = m.z * g.nx * g.ny + k;
     if (g.solido[cel]) continue;
     const me = m.media(k), sg = m.sigma(k);

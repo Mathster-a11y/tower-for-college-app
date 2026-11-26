@@ -121,6 +121,12 @@ class Prisma {
   }
 }
 
+/** marca un objeto del 3D con su capa y su nombre (para exportar el modelo a Rhino o SketchUp por capas) */
+function capa(o: THREE.Object3D, nombreCapa: string, nombre: string) { o.traverse(x => { x.userData.capa = nombreCapa; if (!x.name) x.name = nombre; }); }
+/** el grupo del último 3D armado (lo que se ve en la axonometría), para exportarlo */
+let grupoVisible: THREE.Group | null = null;
+export const modelo3DVisible = () => grupoVisible;
+
 export interface Opciones3D {
   /** ¿mostrar la deformada? */
   deformada: () => boolean;
@@ -172,6 +178,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   sol.position.set(-60, 120, 80);
   escena.add(sol);
   const grupo = new THREE.Group();
+  grupoVisible = grupo;
   escena.add(grupo);
   let encuadre = '';
   let prismas: Prisma[] = [];
@@ -246,19 +253,21 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       : new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
     p.niveles.forEach((n, iN) => {
-      if (!estado.capas.losas) return;
-      const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 12);
+      if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
+      const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 5);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
-      prismas.push(new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN));
+      const losa = new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN);
+      capa(losa.malla, 'Losas', `Losa ${n.nombre}`);
+      prismas.push(losa);
     });
     // fachada: una superficie que une la carpintería (o, si no hay, la losa) de cada nivel de PB a la azotea; muestra
     // el perfil, los lofts y las curvas como una piel continua (sin la deformada: ahí se mueven las losas)
-    if (estado.capas.fachada && !roto) agregarFachada();
+    if (estado.capas.fachada && !roto) { const n0 = grupo.children.length; agregarFachada(); grupo.children.slice(n0).forEach(o => capa(o, 'Fachada', 'Fachada')); }
     // (con la capa «Fachada» apagada) la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: la misma
     // piel que la fachada (tramo por tramo: sin vidrio donde no hay carpintería, como la plaza del Citicorp, y bien unida
     // aunque el contorno cambie de forma, como una corona recortada), en vidrio liviano y sin la panelería
-    else if (estado.capas.losas && !def && !roto && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) agregarFachada(true);
+    else if (estado.capas.losas && !def && !roto && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) { const n0 = grupo.children.length; agregarFachada(true); grupo.children.slice(n0).forEach(o => capa(o, 'Fachada', 'Carpintería')); }
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const h = top - fondoCota;
@@ -277,6 +286,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     leyT.classList.toggle('arriba', !!roto);            // con la deformada, abajo a la izquierda va el recuadro del giro
     if (tens) leyT.innerHTML = `<b>Peor fibra de cada piso · viento ${estado.dir}</b><div class="escala"><span>−${fmt(tens.maxC, 0)}</span><i class="c"></i><span>0</span>${tens.maxT > 0 ? `<i class="t"></i><span>+${fmt(tens.maxT, 1)}</span>` : ''}</div><small>${roto ? 'sobre la deformada exagerada · ' : ''}kg/cm² · compresión con sobrecarga${tens.maxT > 0 ? ' · tracción sin sobrecarga' : ' · no hay tracción'} · gris: no toma este viento${tens.supera ? ' · <b>⚠ supera σbk</b>' : ''}</small>`;
     p.muros.forEach(m => {
+      // cada prisma del muro lleva su nombre (para exportar el modelo): con try/finally, también los que salen por «return»
+      const k0 = prismas.length;
+      try {
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const porPiso = tens?.porMuro.get(m.id);
       if (porPiso && porPiso.length) {
@@ -330,6 +342,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
           : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
         pols.forEach(pol => { const pr = new Prisma(pol, zsT, mat, tinta); pr.conBordes = def || cortes.length > 2; prismas.push(pr); });
       }
+      } finally { prismas.slice(k0).forEach(pr => capa(pr.malla, 'Muros', `Muro ${m.id}`)); }
     });
     if (espectro && roto) {
       // el mayor corrimiento real de la torre: el de la esquina más alejada del CR en la azotea
@@ -337,7 +350,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const blanco = new THREE.Color(0xffffff), verde = new THREE.Color(css('--deformada', '#1d9e75'));
       prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
     }
-    prismas.forEach(pr => { grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
+    // lo que no es losa es muro (para exportar el modelo por capas)
+    prismas.forEach(pr => { if (!pr.malla.userData.capa) capa(pr.malla, 'Muros', 'Muro'); grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
     // presiones del viento sobre las fachadas (simulador de viento, etapa V1): sin la deformada
     const pres = estado.capas.presiones && !roto ? capaPresiones() : null;
     leyP.hidden = !pres;
@@ -348,7 +362,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const dirV = estado.dir === 'A' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(1, 0, 0);
     const origen = estado.dir === 'A' ? new THREE.Vector3(0, top * 0.6, L / 2 + largo + 3) : new THREE.Vector3(-B / 2 - largo - 3, top * 0.6, 0);
     if (estado.capas.viento) grupo.add(new THREE.ArrowHelper(dirV, origen, largo, new THREE.Color(css('--carga', '#e07b00')).getHex(), 2.5, 1.6));
-    if (estado.proyecto.exo && estado.capas.exo && !roto) agregarExo();
+    if (estado.proyecto.exo && estado.capas.exo && !roto) { const n0 = grupo.children.length; agregarExo(); grupo.children.slice(n0).forEach(o => capa(o, 'Exoesqueleto', 'Barra')); }
     if (roto) agregarRoto(roto, B, L, top, fondoCota, cotas);
     if (roto && op.etiquetas && estado.roto3d.rotulos) agregarRotulos(roto, B, L, top, fondoCota);
     mover(fMax);

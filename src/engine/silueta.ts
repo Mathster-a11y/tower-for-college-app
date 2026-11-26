@@ -127,3 +127,98 @@ export function puntosAlViento(p: Proyecto, i: number, porArco = 12): { x: numbe
   const dx = p.niveles[i]?.dx ?? 0, dy = p.niveles[i]?.dy ?? 0;
   return puntosSilueta(contornoAlViento(p, i).v, porArco).map(q => ({ x: q.x + dx, y: q.y + dy }));
 }
+
+/**
+ * B y L para el viento de una planta (lo que lee la planilla): «caja», el rectángulo que la encierra (en una planta
+ * redonda, el diámetro: el ancho que enfrenta el viento); «area», un rectángulo con las mismas proporciones que la caja
+ * y la misma área que la planta (en un círculo, un cuadrado de lado 0,886 D: conserva el área y el peso de la losa)
+ */
+export type CriterioAncho = 'caja' | 'area';
+export function medidasAlViento(v: Vertice[], criterio: CriterioAncho): { B: number; L: number } {
+  const c = cajaSilueta(v);
+  if (criterio === 'caja' || !(c.B > 0 && c.L > 0)) return { B: c.B, L: c.L };
+  const k = Math.sqrt(areaSilueta(v) / (c.B * c.L));
+  return { B: c.B * k, L: c.L * k };
+}
+
+/**
+ * De una curva cerrada muestreada (muchos puntos) a un contorno con arcos: cada tramo que cabe en un arco de círculo (o
+ * en una recta) con menos de «tol» metros de error se vuelve un solo vértice con su comba (b = tan(θ/4)). Las esquinas
+ * (donde la curva quiebra más de 25°) quedan como vértices. Lo usa el loft: las losas del medio salen con curvas de
+ * verdad, no con un polígono de cien lados.
+ */
+export function ajustarArcos(p: Punto[], tol = 0.005): Vertice[] {
+  const n = p.length;
+  if (n < 4) return p.map(q => ({ x: q.x, y: q.y }));
+  const ang = (i: number) => {
+    const a = p[(i - 1 + n) % n], b = p[i], c = p[(i + 1) % n];
+    const u = Math.atan2(b.y - a.y, b.x - a.x), v = Math.atan2(c.y - b.y, c.x - b.x);
+    let d = Math.abs(v - u); if (d > Math.PI) d = 2 * Math.PI - d;
+    return d;
+  };
+  const esq = p.map((_, i) => i).filter(i => ang(i) > (25 * Math.PI) / 180);
+  const ini = esq.length ? esq[0] : 0;
+  const q = [...p.slice(ini), ...p.slice(0, ini), p[ini]];            // cerrada: el último es el primero
+  const esqueina = new Set(esq.map(i => (i - ini + n) % n));
+  // ¿los puntos i..j entran en una recta o en un arco (de menos de 170°)? devuelve la comba, o null
+  const ajuste = (i: number, j: number): number | null => {
+    const a = q[i], b = q[j], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+    if (L < 1e-9) return null;
+    let recta = true;
+    for (let k = i + 1; k < j && recta; k++) if (Math.abs((q[k].x - a.x) * dy - (q[k].y - a.y) * dx) / L > tol) recta = false;
+    if (recta) return 0;
+    const m = q[(i + j) >> 1];
+    // el círculo por a, m y b
+    const d = 2 * (a.x * (m.y - b.y) + m.x * (b.y - a.y) + b.x * (a.y - m.y));
+    if (Math.abs(d) < 1e-12) return null;
+    const a2 = a.x * a.x + a.y * a.y, m2 = m.x * m.x + m.y * m.y, b2 = b.x * b.x + b.y * b.y;
+    const ox = (a2 * (m.y - b.y) + m2 * (b.y - a.y) + b2 * (a.y - m.y)) / d, oy = (a2 * (b.x - m.x) + m2 * (a.x - b.x) + b2 * (m.x - a.x)) / d;
+    const r = Math.hypot(a.x - ox, a.y - oy);
+    for (let k = i + 1; k < j; k++) if (Math.abs(Math.hypot(q[k].x - ox, q[k].y - oy) - r) > tol) return null;
+    // el ángulo del arco: θ = 2·(π − el ángulo en m), con el signo del giro a → m → b
+    const u1x = a.x - m.x, u1y = a.y - m.y, u2x = b.x - m.x, u2y = b.y - m.y;
+    const phi = Math.acos(Math.max(-1, Math.min(1, (u1x * u2x + u1y * u2y) / (Math.hypot(u1x, u1y) * Math.hypot(u2x, u2y)))));
+    const th = 2 * (Math.PI - phi);
+    if (th > (170 * Math.PI) / 180) return null;
+    const giro = (m.x - a.x) * (b.y - m.y) - (m.y - a.y) * (b.x - m.x);
+    return Math.sign(giro) * Math.tan(th / 4);
+  };
+  const out: Vertice[] = [];
+  let i = 0;
+  while (i < n) {
+    let j = i + 1, b = 0;
+    for (let k = i + 2; k <= n; k++) {
+      if (esqueina.has(k - 1)) break;                                 // un arco no pasa por encima de una esquina
+      const r = ajuste(i, k);
+      if (r === null) break;
+      j = k; b = r;
+    }
+    out.push(Math.abs(b) > 1e-9 ? { x: q[i].x, y: q[i].y, b } : { x: q[i].x, y: q[i].y });
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * El contorno como camino de SVG con arcos y Béziers de verdad (no tramos de 10°): se ve suave a cualquier zoom.
+ * X e Y pasan de metros a la pantalla (misma escala en los dos ejes; la y de la pantalla, hacia abajo).
+ */
+export function caminoSilueta(v: Vertice[], X: (x: number) => number, Y: (y: number) => number): string {
+  if (v.length < 2) return '';
+  const k = Math.abs(X(1) - X(0)) || 1, f = (n: number) => n.toFixed(2);
+  const yAbajo = Y(1) < Y(0);                                            // la pantalla da vuelta la y
+  let d = `M${f(X(v[0].x))},${f(Y(v[0].y))}`;
+  v.forEach((a, i) => {
+    const b = v[(i + 1) % v.length];
+    if (a.c1 && a.c2) { d += `C${f(X(a.c1.x))},${f(Y(a.c1.y))} ${f(X(a.c2.x))},${f(Y(a.c2.y))} ${f(X(b.x))},${f(Y(b.y))}`; return; }
+    const bu = a.b ?? 0, c = Math.hypot(b.x - a.x, b.y - a.y);
+    if (Math.abs(bu) < 1e-9 || c < 1e-12) { d += `L${f(X(b.x))},${f(Y(b.y))}`; return; }
+    const th = 4 * Math.atan(bu), r = (c / (2 * Math.sin(Math.abs(th) / 2))) * k;
+    // antihorario en el mundo (th > 0) con la y de la pantalla hacia abajo se ve horario: en SVG eso es sweep = 0
+    // (el sweep 1 de SVG gira en el sentido de los ángulos de la pantalla, que con la y hacia abajo es el horario visto
+    // en el mundo… pero visto en la pantalla es antihorario). Comprobado contra puntosSilueta en la prueba de la planta
+    const sweep = (th > 0) === yAbajo ? 0 : 1, grande = Math.abs(th) > Math.PI ? 1 : 0;
+    d += `A${f(r)},${f(r)} 0 ${grande} ${sweep} ${f(X(b.x))},${f(Y(b.y))}`;
+  });
+  return d + 'Z';
+}

@@ -14,7 +14,7 @@ import { h, seccion, kpi, chip, colorEstado, formula, v, n, r, op, esc, type H, 
 import { panelAvisos, panelAyuda, panelMuros, panelNiveles, panelPiezas, panelProyecto, panelResultados, seccionViento, cantidadAvisos } from './paneles';
 import { graficoAltura, graficoRigidez, graficoTensiones, tablaValores, type Tam } from './diagramas';
 import { dibujoGuia, dibujoPresiones, dibujoPoligono } from './funicular';
-import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso } from './rototraslacion';
+import { dibujoRototraslacion, type DatosRotoPlano, type ElementoPlano, type Paso, type RotulosRoto } from './rototraslacion';
 import { rototraslacionAnimada } from './rotoAnimada';
 import { centroCorte } from './corte';
 import { centroPerfil, panelPerfil } from './perfilEditor';
@@ -53,6 +53,14 @@ export interface Etapa {
   estado(): EstadoChip;
   globo: string;
 }
+
+/** la deformada con el J de los tabiques no tiene sentido si casi no hay tabiques (una torre que toma el viento con el exo,
+ * como el Gherkin): la azotea se correría más que la altura de la torre */
+const deformadaAbsurda = (def: { dTop: number; puntos: { z: number }[] }) =>
+  !isFinite(def.dTop) || Math.abs(def.dTop) > Math.max(1, ...def.puntos.map(q => q.z));
+const textoSinRigidez = (exo: boolean) => exo
+  ? 'Los tabiques casi no tienen rigidez en esta dirección (ΣJ ≈ 0): el viento lo toma el exoesqueleto. La deformada de la torre, con el exo, está en la etapa 08.'
+  : 'Los tabiques casi no tienen rigidez en esta dirección (ΣJ ≈ 0): con ellos solos la deformada no tiene sentido. Sumá o alargá tabiques en este sentido.';
 
 // ------------------------------------------------------------------ datos comunes
 function datos() {
@@ -242,8 +250,9 @@ const viento: Etapa = {
     const a = anchos(tam);
     c.append(fila(
       graficoAltura({ titulo: `Presión del viento en altura · p = q·G·Cp`, eje: 'presión', unidad: 'kN/m²', decimales: 2, series: [
-        { nombre: 'barlovento (qz·G·Cp)', color: 'carga', tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pBarlo, nivel: x.nivel })) },
-        { nombre: 'sotavento (qh·G·Cp)', color: 'carga', punteada: true, tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pSota, nivel: x.nivel })) },
+        // la presión que empuja la cara la comprime (azul) y la succión la tracciona (rojo), como en toda la app
+        { nombre: 'barlovento, empuja (qz·G·Cp)', color: 'compresion', tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pBarlo, nivel: x.nivel })) },
+        { nombre: 'sotavento, succiona (qh·G·Cp)', color: 'traccion', punteada: true, tipo: 'linea', puntos: sobre.map(x => ({ z: x.z, x: x.pSota, nivel: x.nivel })) },
       ] }, a),
       graficoAltura({ titulo: `Fuerza del viento en cada nivel · W = ${fmt(d.W, 1)} t`, eje: 'fuerza Wi', unidad: 't', decimales: 2,
         series: [{ nombre: 'fuerza', color: 'carga', tipo: 'barras', puntos: d.alt.map(x => ({ z: x.z, x: x.F, nivel: x.nivel })) }],
@@ -375,7 +384,8 @@ const rigidezE: Etapa = {
     const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
     c.append(h('div', { class: 'kpis' },
       ...rs.map(x => kpi(`ΣJ viento ${x.dir}`, `${fmt(x.J, 1)} / ${fmt(x.minimos.h500, 1)}`, `m⁴ · ${x.J >= x.minimos.h500 ? 'verifica' : 'no verifica'}`, colorEstado(x.J >= x.minimos.h500))),
-      kpi('Azotea', `${fmt(def.dTop * 1000, 1)} mm`, `límite h/500 = ${fmt(def.limite * 1000, 1)} mm`, colorEstado(def.dTop <= def.limite)),
+      deformadaAbsurda(def) ? kpi('Azotea', '—', 'ΣJ ≈ 0: sin tabiques en este sentido', colorEstado(false))
+        : kpi('Azotea', `${fmt(def.dTop * 1000, 1)} mm`, `límite h/500 = ${fmt(def.limite * 1000, 1)} mm`, colorEstado(def.dTop <= def.limite)),
     ));
     const cu = seccion('Fórmulas').cuerpo; c.append(cu.parentElement!);
     cu.append(
@@ -409,7 +419,8 @@ const rigidezE: Etapa = {
     const piezasDir = d.asig.piezas.filter(x => x.dir === d.dir && x.filaHoja !== null);
     const Jp = (i: number) => (d.dir === 'A' ? d.R.jpar : d.R.jort).filas[i].AY;
     c.append(fila(
-      graficoAltura({ titulo: `Deformada · la azotea se corre ${fmt(def.dTop * 1000, 1)} mm (h/500 = ${fmt(def.limite * 1000, 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
+      deformadaAbsurda(def) ? h('p', { class: 'nota aviso' }, textoSinRigidez(!!d.p.exo))
+        : graficoAltura({ titulo: `Deformada · la azotea se corre ${fmt(def.dTop * 1000, 1)} mm (h/500 = ${fmt(def.limite * 1000, 1)} mm)`, eje: 'desplazamiento', unidad: 'mm', decimales: 1,
         series: [{ nombre: 'deformada', color: 'deformada', tipo: 'linea', puntos: def.puntos.map(x => ({ z: x.z, x: x.d * 1000, nivel: x.nivel })) }], referencias: [{ x: def.limite * 1000, texto: 'h/500' }] }, a),
       varia
         ? graficoAltura({ titulo: 'ΣJ en cada nivel (la planta cambia en altura)', eje: 'ΣJ', unidad: 'm⁴', decimales: 2, series: [{ nombre: 'ΣJ', color: 'acento', tipo: 'barras', puntos: Jniv.map(x => ({ z: x.z, x: x.J, nivel: x.nivel })) }] }, a)
@@ -471,6 +482,14 @@ const rototrasl: Etapa = {
       b2.addEventListener('click', () => { estado.sub.pasoRoto = String(i + 1); estado.avisarPanel(); });
       seg.append(b2);
     });
+    // rótulos de las piezas: nombre y valor, solo el valor o ninguno (se recuerda en este navegador; sirve para presentar)
+    const rotulos: RotulosRoto = (() => { try { const v = localStorage.getItem('torre3d.rotulosRoto'); return v === 'valores' || v === 'ninguno' ? v : 'todos'; } catch { return 'todos'; } })();
+    const segRot = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Rótulos de las piezas', 'data-globo': 'Rótulos de las piezas|Nombre y valor de cada pieza, solo el valor, o ningún rótulo (el dibujo limpio, para presentar). Pasando el mouse por una flecha se ve todo igual.' });
+    ([['todos', 'Nombre y valor'], ['valores', 'Solo valor'], ['ninguno', 'Sin rótulos']] as const).forEach(([v, t]) => {
+      const b2 = h('button', { type: 'button', 'aria-pressed': String(rotulos === v) }, t);
+      b2.addEventListener('click', () => { try { localStorage.setItem('torre3d.rotulosRoto', v); } catch { /* sin almacenamiento */ } estado.avisarPanel(); });
+      segRot.append(b2);
+    });
     const textos: Record<Paso, string> = {
       1: 'Eje de inercia por el polígono funicular, como en la clase 5, con la notación de Bow. El J de cada tabique es un vector sobre el tabique (más grueso y más largo cuanto mayor es J). Los espacios entre las rectas de acción llevan letras a, b, c…, y cada J se nombra por los dos espacios que separa (ab, bc…). A la derecha, los J se ponen uno a continuación del otro (polígono de los J) y desde el polo O salen los rayos Oa, Ob, Oc… Debajo de la planta, el lado c del funicular es paralelo al rayo Oc y queda en el espacio c: tienen la misma letra y el mismo color. El primer y el último lado (punteados) se prolongan hasta cortarse en R; por R pasa la resultante ΣJ, que sube por el eje de inercia hasta el centro de rigidez CR.',
       2: 'Traslación: el viento W actúa en el eje de simetría y cada tabique toma una parte proporcional a su J: Wj = W · Jj / ΣJ. La flecha está sobre la recta de acción del tabique; su grosor es su J y su largo, la fuerza.',
@@ -479,11 +498,11 @@ const rototrasl: Etapa = {
     };
     if (pasoN === 6) { centro3D(c, seg, dp); return; }
     if (pasoN === 5) {
-      c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, 'La losa es rígida: se corre (traslación) y gira alrededor del CR (rotación). Cada tabique toma una fuerza proporcional a su J por lo que se movió. Los movimientos están exagerados, pero la relación entre corrimiento y giro es la del cálculo.'));
-      c.append(rototraslacionAnimada(dp, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 110)) }).el);
+      c.append(h('div', { class: 'fila-acciones' }, seg, segRot), h('p', { class: 'nota' }, 'La losa es rígida: se corre (traslación) y gira alrededor del CR (rotación). Cada tabique toma una fuerza proporcional a su J por lo que se movió. Los movimientos están exagerados, pero la relación entre corrimiento y giro es la del cálculo.'));
+      c.append(rototraslacionAnimada(dp, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 110)) }, rotulos).el);
       return;
     }
-    c.append(h('div', { class: 'fila-acciones' }, seg), h('p', { class: 'nota' }, textos[paso]));
+    c.append(h('div', { class: 'fila-acciones' }, seg, segRot), h('p', { class: 'nota' }, textos[paso]));
     // paso a paso de la funicular de los J: cada clic agrega un rayo y su lado (con la misma letra y color)
     const nPares = new Set(dp.paralelos.map(x => x.pos.toFixed(2))).size + 1;
     const hasta = estado.sub.funiHasta ? Math.min(nPares, Math.max(1, Number(estado.sub.funiHasta))) : undefined;
@@ -498,7 +517,7 @@ const rototrasl: Etapa = {
         bt('Todo', 'Ver la construcción completa', () => ir(undefined), hasta === undefined),
         h('span', { class: 'nota' }, hasta === undefined ? 'Pasá el mouse (o tocá) un rayo o un lado: se resaltan los dos.' : `Rayo O${L(hasta - 1)} y lado ${L(hasta - 1)} (${hasta} de ${nPares})${hasta === nPares ? ': el primer y el último lado se cortan en R' : ''}`)));
     }
-    const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) }, { hasta: paso === 1 ? hasta : undefined });
+    const svg = dibujoRototraslacion(dp, paso, { ancho: Math.min(tam.ancho ?? 640, 1000), alto: Math.max(460, Math.min(700, (tam.alto ?? 560) - 70)) }, { hasta: paso === 1 ? hasta : undefined, rotulos });
     c.append(svg);
     const ley = h('div', { class: 'leyenda' });
     const mu = (col: string, t: string) => { const sp = h('span', {}); const i = h('i', {}); i.style.setProperty('--c', col); sp.append(i, t); return sp; };
@@ -529,6 +548,7 @@ export function datosRoto3D(): Rototraslacion3D | null {
     // CR y giro de cada nivel: si un muro no llega arriba, los pisos de arriba giran sin él
     const k0 = dp.SJa2 > 1e-12 ? (dp.Xr * dp.SJ) / dp.SJa2 : 0;
     const cr0 = d.dir === 'A' ? { x: dp.Xr, y: dp.Yr } : { x: dp.Yr, y: -dp.Xr };
+    if (deformadaAbsurda(def)) return null;
     const r = rototraslacion3D(def, d.dir, dp.Xr, dp.Yr, dp.SJ, dp.SJa2, torsionPorNivel(d.p, d.asig.piezas, d.dir, { cr: cr0, k: k0 }));
     return r.niveles.length && isFinite(r.dTop) ? r : null;
   } catch { return null; }

@@ -66,11 +66,12 @@ export function casoOpenFOAM(c: CasoOpenFOAM): Map<string, string | ArrayBuffer>
   const nx = Math.max(10, Math.round((dom.x1 - dom.x0) / celda)), ny = Math.max(6, Math.round((dom.y1 - dom.y0) / celda)), nz = Math.max(6, Math.round(dom.z1 / celda));
   const f = new Map<string, string | ArrayBuffer>();
   // ---------------------------------------------------------------------------------------------- geometría (STL)
+  // la torre con la piel continua donde la fachada sigue de un piso al otro (como el túnel 3D)
   f.set('constant/triSurface/torre.stl', stlTorre(niv));
   for (const e of vec) {
     // un prisma por tramo: de «desde» a «hasta» con su contorno (stlTorre arma un prisma por par de niveles)
     const ks: NivelPlanta[] = [...e.tramos.map(t => ({ cota: t.desde, silueta: t.v })), { cota: e.tramos[e.tramos.length - 1].hasta, silueta: e.tramos[e.tramos.length - 1].v }];
-    f.set(`constant/triSurface/vecino_${e.id}.stl`, stlTorre(ks));
+    f.set(`constant/triSurface/vecino_${e.id}.stl`, stlTorre(ks, { alturaExacta: false }));
   }
   const superficies = ['torre', ...vec.map(e => `vecino_${e.id}`)];
   // ---------------------------------------------------------------------------------------------- blockMesh

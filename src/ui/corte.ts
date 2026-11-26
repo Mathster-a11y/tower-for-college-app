@@ -38,10 +38,25 @@ export function centroCorte(c: H, tam: Tam) {
 
   // niveles
   const zPB = niveles.reduce((z, n) => (n.cota >= 0 && n.cota < z ? n.cota : z), Infinity);
+  // con muchos pisos los rótulos no entran todos: se escriben la azotea, PB, la fundación y los que quedan a 13 px o más
+  // del último escrito (las líneas de todos los niveles se dibujan igual; el nombre de cada uno, al pasar el mouse)
+  const clave = (n: { cota: number }) => Math.abs(n.cota - zPB) < 1e-6 || n.cota === zFund || n.cota === zTop;
+  const escritos: number[] = [];
+  niveles.filter(clave).forEach(n => escritos.push(Y(n.cota)));
+  const lejos = (y: number) => escritos.every(e => Math.abs(e - y) >= 13);
+  // dos niveles clave muy juntos (PB y un subsuelo poco profundo): el de abajo se corre hacia abajo
+  const yTexto = new Map<object, number>();
+  let ultClave = -Infinity;
+  niveles.filter(clave).sort((a, b) => b.cota - a.cota).forEach(n => { const yt = Math.max(Y(n.cota) + 4, ultClave + 13); yTexto.set(n, yt); ultClave = yt; });
   niveles.forEach(n => {
     const y = Y(n.cota), pb = Math.abs(n.cota - zPB) < 1e-6;
-    svg.append(el('line', { x1: izq - 8, x2: ancho - der, y1: y, y2: y, class: `corte-nivel${pb ? ' pb' : ''}${n.cota === zFund ? ' fund' : ''}` }));
-    svg.append(el('text', { x: izq - 12, y: y + 4, class: 'd-eje', 'text-anchor': 'end' }, `${n.nombre} · ${fmt(n.cota, 2)} m`));
+    const linea = el('line', { x1: izq - 8, x2: ancho - der, y1: y, y2: y, class: `corte-nivel${pb ? ' pb' : ''}${n.cota === zFund ? ' fund' : ''}` });
+    linea.append(el('title', {}, `${n.nombre} · ${fmt(n.cota, 2)} m`));
+    svg.append(linea);
+    const escribir = clave(n) || lejos(y);
+    if (!escribir) return;
+    if (!clave(n)) escritos.push(y);
+    svg.append(el('text', { x: izq - 12, y: yTexto.get(n) ?? y + 4, class: 'd-eje', 'text-anchor': 'end' }, `${n.nombre} · ${fmt(n.cota, 2)} m`));
   });
   // cotas a las que se puede pegar una punta
   const cotas = niveles.map(n => n.cota);

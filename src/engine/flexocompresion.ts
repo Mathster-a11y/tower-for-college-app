@@ -16,7 +16,7 @@
  */
 import type { PiezaEquivalente } from './mapping';
 import type { ResultadoCorregido } from './correcciones';
-import { areaMuro, dInterior, factorPesoEspesor, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
+import { areaMuro, dInterior, factorPesoEspesor, losasDeNivel, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { propiedades } from './perfil';
 import { propsPoligonos, seccionDebil } from './aberturas';
 
@@ -185,7 +185,7 @@ export function datosAlturaDe(p: Proyecto): DatosAltura {
   const iPB = niv.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
   const zPB = iPB >= 0 ? niv[iPB].cota : 0;
   const sobre = niv.filter(n => n.cota > zPB + 1e-6);
-  return { zPB, zTop: niv[0]?.cota ?? 0, zFund: niv[niv.length - 1]?.cota ?? 0, cotasSobrePB: sobre.map(n => n.cota), pisosSobrePB: sobre.map(n => Math.max(1, Math.round(n.pisos ?? 1))) };
+  return { zPB, zTop: niv[0]?.cota ?? 0, zFund: niv[niv.length - 1]?.cota ?? 0, cotasSobrePB: sobre.map(n => n.cota), pisosSobrePB: sobre.map(n => losasDeNivel(n)) };
 }
 
 /**

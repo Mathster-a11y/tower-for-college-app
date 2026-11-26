@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 //      node tools/pasada_entrega.cjs carpeta_de_salida
 const fs = require('fs'), path = require('path');
 const S = process.argv[2] || 'pasada'; fs.mkdirSync(S, { recursive: true });
-const EJ = ['b-ejemplo', 'b-ejemplo-asim', 'b-ejemplo-citicorp', 'b-ejemplo-chica', 'b-ejemplo-hancock', 'b-ejemplo-shanghai', 'b-ejemplo-hearst', 'b-ejemplo-gherkin', 'b-ejemplo-onterie', 'b-ejemplo-34'];
+const EJ = ['b-ejemplo', 'b-ejemplo-asim', 'b-ejemplo-citicorp-fachada', 'b-ejemplo-chica', 'b-ejemplo-hancock', 'b-ejemplo-shanghai', 'b-ejemplo-hearst', 'b-ejemplo-gherkin', 'b-ejemplo-onterie', 'b-ejemplo-34'];
 const ETAPAS = ['Diseño', 'Viento', 'Fuerzas', 'Estabilidad', 'Rigidez', 'Rototrasl', 'Flexión', 'Exoesqueleto', 'Carta', 'Resumen'];
 const METODOS = ['Planilla', 'Guía', 'CIRSOC', 'FEM'];
 const EXPORT = ['b-exportar', 'b-libros-zip', 'b-presentacion', 'b-tabla', 'b-guardar'];

@@ -70,7 +70,8 @@ export interface GraficoAltura {
 
 export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   // margen izquierdo según el nombre de nivel más largo (los muy largos se acortan con «…»; el nombre entero va en el título)
-  const corto = (n: string) => (n.length > 14 ? n.slice(0, 13).trimEnd() + '…' : n);
+  // «39° (comedores)» → «39°»: el uso entre paréntesis se saca antes de cortar con «…»
+  const corto = (n0: string) => { const n = n0.length > 14 ? n0.replace(/\s*\(.*\)\s*$/, '').trim() || n0 : n0; return n.length > 14 ? n.slice(0, 13).trimEnd() + '…' : n; };
   const largoNom = Math.max(4, ...g.series.flatMap(s => s.puntos.map(p => corto(String(p.nivel ?? '')).length)));
   const ancho = Math.max(300, tam.ancho ?? 400), alto = Math.max(240, tam.alto ?? 340), mi = Math.min(120, Math.max(56, 14 + largoNom * 6.7)), md = 18, ms = 14, mb = 42;
   const fig = document.createElement('figure');
@@ -97,18 +98,31 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
   const X = (x: number) => mi + ((x - x0) / (x1 - x0 || 1)) * (ancho - mi - md);
   const Z = (z: number) => ms + ((zMax - z) / (zMax - zMin || 1)) * (alto - ms - mb);
   const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, class: 'grafico', role: 'img', 'aria-label': g.titulo });
+  // lo ya escrito (números del eje, valores de las puntas): los valores de las curvas no se les encima
+  const valoresPuestos: { x0: number; x1: number; y: number }[] = [];
+  // las notas de altura (W a hw…) se escriben arriba de su línea, sobre la derecha: los valores no se les encima
+  (g.alturas ?? []).forEach(a => { const xe = ancho - md - 2; valoresPuestos.push({ x0: xe - a.texto.length * 6.6, x1: xe, y: Z(a.z) - 5 }); });
   // grilla y ejes (recesivos)
   tx.forEach(v => {
     svg.append(el('line', { x1: X(v), x2: X(v), y1: ms, y2: alto - mb, class: v === 0 ? 'd-cero' : 'd-grilla' }));
     // la última marca se apoya hacia adentro para que su número no se salga del dibujo
     const ancla = X(v) > ancho - md - 24 ? 'end' : 'middle';
     svg.append(el('text', { x: ancla === 'end' ? Math.min(X(v) + 4, ancho - 2) : X(v), y: alto - mb + 15, class: 'd-eje', 'text-anchor': ancla }, fmt(v, decimales(tx))));
+    { const t = fmt(v, decimales(tx)), w = t.length * 6.6, xe = ancla === 'end' ? Math.min(X(v) + 4, ancho - 2) : X(v); valoresPuestos.push({ x0: ancla === 'end' ? xe - w : xe - w / 2, x1: ancla === 'end' ? xe : xe + w / 2, y: alto - mb + 15 }); }
   });
   svg.append(el('text', { x: (mi + ancho - md) / 2, y: alto - 6, class: 'd-eje', 'text-anchor': 'middle' }, `${g.eje} (${g.unidad})`));
   // niveles: rótulos en el eje vertical (no más de ~10)
   const niveles = [...new Map(todos.map(p => [p.z, p.nivel])).entries()].sort((a, b) => b[0] - a[0]);
   const cada = Math.max(1, Math.ceil(niveles.length / 10));
-  niveles.forEach(([z, n], i) => { if (i % cada === 0 || i === niveles.length - 1) { const t = el('text', { x: mi - 6, y: Math.min(Z(z) + 4, alto - mb - 2), class: 'd-eje', 'text-anchor': 'end' }, corto(n)); if (corto(n) !== n) t.append(el('title', {}, n)); svg.append(t); } });   // el más bajo no baja hasta las marcas del eje
+  // (el más bajo no baja hasta las marcas del eje; uno que quedaría pegado al anterior no se escribe)
+  let yUlt = -Infinity;
+  niveles.forEach(([z, n], i) => {
+    if (!(i % cada === 0 || i === niveles.length - 1)) return;
+    const y = Math.min(Z(z) + 4, alto - mb - 2);
+    if (y - yUlt < 11) return;
+    yUlt = y;
+    const t = el('text', { x: mi - 6, y, class: 'd-eje', 'text-anchor': 'end' }, corto(n)); if (corto(n) !== n) t.append(el('title', {}, n)); svg.append(t);
+  });
   if (!g.categorias && zMin < 0) svg.append(el('line', { x1: mi, x2: ancho - md, y1: Z(0), y2: Z(0), class: 'd-pb' }));
   // series
   const dec = g.decimales ?? 2;
@@ -159,7 +173,12 @@ export function graficoAltura(g: GraficoAltura, tam: Tam = {}): HTMLElement {
       const X0 = X(ext.x), Y0 = Z(ext.z);
       const cand: [number, number, 'start' | 'end'][] = [[X0 + 8, yv, 'start'], [X0 + 8, Y0 - 8, 'start'], [X0 + 8, Y0 + 16, 'start'], [X0 - 8, Y0 - 8, 'end'], [X0 - 8, Y0 + 16, 'end'], [X0 - 4, Y0 - 22, 'end'], [X0 - 4, Y0 - 34, 'end'], [X0 + 4, Y0 - 22, 'start']];
       if (aIzq) cand.unshift([X0 - 8, yv, 'end']);
-      const [xv, yv2, ancla] = cand.find(([x, y, a]) => { const x0 = a === 'start' ? x : x - anchoT; return x0 > mi && x0 + anchoT < ancho - 2 && y < alto - mb && y - 11 > 0 && !cruza(x0, y - 11, x0 + anchoT, y + 2); }) ?? cand[0];   // sin bajar a la fila de las marcas del eje
+      // tampoco encima del valor de otra serie (dos curvas con el extremo en el mismo piso)
+      const pisa = (x0: number, y: number) => valoresPuestos.some(b => x0 < b.x1 + 4 && x0 + anchoT > b.x0 - 4 && y > b.y - 13 && y - 11 < b.y + 2);
+      const ok = ([x, y, a]: [number, number, 'start' | 'end']) => { const x0 = a === 'start' ? x : x - anchoT; return x0 > mi && x0 + anchoT < ancho - 2 && y < alto - mb && y - 11 > 0 && !cruza(x0, y - 11, x0 + anchoT, y + 2) && !pisa(x0, y); };
+      const [xv, yv2, ancla] = cand.find(ok) ?? cand.find(([x, y, a]) => !pisa(a === 'start' ? x : x - anchoT, y)) ?? cand[0];   // sin bajar a la fila de las marcas del eje
+      const xi = ancla === 'start' ? xv : xv - anchoT;
+      valoresPuestos.push({ x0: xi, x1: xi + anchoT, y: yv2 });
       svg.append(el('text', { x: xv, y: yv2, class: 'd-valor', 'text-anchor': ancla }, texto));
     }
   });
@@ -366,6 +385,7 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       r.append(el('title', {}, `${m.id} (${m.papel})`)); svg.append(r);
     });
     svg.append(el('circle', { cx: X(0), cy: yC, r: 3, class: 'd-pieza-g' })); }
+  const rotulosMuro: { id: string; x: number; w: number; fila: number }[] = [];
   tramos.forEach(({ m, lejos, cerca }) => {
     (['desc', 'carg'] as const).forEach(k => {
       const [a, b] = m[k].map(x => x / 10);
@@ -405,7 +425,14 @@ export function graficoTensiones(v: import('../engine/flexocompresion').VerifPie
       const tx = lado === 'start' ? xp + 7 : lado === 'end' ? xp - 7 : Math.min(ancho - 2 - anchoT / 2, Math.max(2 + anchoT / 2, xp));
       svg.append(el('text', { x: tx, y: Y(m.cargReves / 10) + (lado === 'middle' ? -9 : 4), class: 'd-eje', 'text-anchor': lado }, 'viento al revés'));
     }
-    svg.append(el('text', { x: X((lejos + cerca) / 2), y: Y(s0) - 4, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
+    // el nombre del muro abajo: uno solo por muro (un muro partido tiene varios tramos) y en otra fila si toca a otro
+    const xm = X((lejos + cerca) / 2), w = m.id.length * 6.8 + 6;
+    if (!rotulosMuro.some(r => r.id === m.id && Math.abs(r.x - xm) < w)) {
+      let fila = 0;
+      while (rotulosMuro.some(r => r.fila === fila && Math.abs(r.x - xm) < (r.w + w) / 2)) fila++;
+      rotulosMuro.push({ id: m.id, x: xm, w, fila });
+      svg.append(el('text', { x: xm, y: Y(s0) - 4 - 12 * fila, class: 'd-eje', 'text-anchor': 'middle' }, m.id));
+    }
   });
   fig.append(svg);
   return fig;

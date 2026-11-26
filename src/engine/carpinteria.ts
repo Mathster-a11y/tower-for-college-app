@@ -20,7 +20,12 @@ import { plantaDeNivel, puntosSilueta, type Punto, type Vertice } from './siluet
 export type ModoCarpinteria = 'sin' | 'losa' | 'continua';
 /** «plana»: los lados curvos de la losa pasan a facetas rectas (un paño plano por faceta); «curva» (o vacío): sigue la curva */
 export type FormaCarpinteria = 'plana' | 'curva';
-export interface TramoCarpinteria { desde: number; modo: ModoCarpinteria; retiro?: number | null; forma?: FormaCarpinteria | null }
+export interface TramoCarpinteria {
+  desde: number; modo: ModoCarpinteria; retiro?: number | null; forma?: FormaCarpinteria | null;
+  /** por el borde exterior: la piel cierra en línea recta los entrantes de la losa (pozos, balcones, terrazas) cuya boca
+   *  mide hasta estos metros; los más anchos (una planta en L o en U) los sigue (vacío o 0 = sigue todo el borde) */
+  entrantes?: number | null;
+}
 export const esPlana = (t: TramoCarpinteria | null | undefined) => t?.forma === 'plana';
 export const NOMBRE_MODO: Record<ModoCarpinteria, string> = { sin: 'Sin carpintería', losa: 'Por piso (de losa a losa)', continua: 'Envolvente (sigue la superficie)' };
 
@@ -78,6 +83,40 @@ function puntosEnLado(v: Vertice[], i: number, n: number): Punto[] {
   }
   return out;
 }
+/**
+ * El borde exterior de un contorno: cada entrante (lo que queda entre dos vértices seguidos de la envolvente convexa)
+ * cuya boca mide hasta «boca» m se cierra con un lado recto; los más anchos se siguen. Si no cerró ninguno, devuelve el
+ * contorno tal cual (con sus arcos); si cerró alguno, los arcos quedan pasados a puntos cada 3°.
+ */
+export function cerrarEntrantes(v: Vertice[], boca: number): Vertice[] {
+  if (!(boca > 0) || v.length < 3) return v;
+  let q = puntosSilueta(v, 3);
+  if (q.length > 3 && Math.hypot(q[0].x - q[q.length - 1].x, q[0].y - q[q.length - 1].y) < 1e-9) q = q.slice(0, -1);
+  if (area(q) < 0) q = [...q].reverse();
+  const n = q.length;
+  // envolvente convexa por índices (cadena monótona, con los puntos alineados sobre sus lados: así la boca de un pozo
+  // en medio de un lado recto es la del pozo y no todo el lado); en un polígono simple van en el mismo orden
+  const idx = q.map((_, i) => i).sort((a, b) => q[a].x - q[b].x || q[a].y - q[b].y);
+  const cruz = (o: number, a: number, b: number) => (q[a].x - q[o].x) * (q[b].y - q[o].y) - (q[a].y - q[o].y) * (q[b].x - q[o].x);
+  const lo: number[] = [], hi: number[] = [];
+  for (const i of idx) { while (lo.length >= 2 && cruz(lo[lo.length - 2], lo[lo.length - 1], i) < -1e-9) lo.pop(); lo.push(i); }
+  for (let k = idx.length - 1; k >= 0; k--) { const i = idx[k]; while (hi.length >= 2 && cruz(hi[hi.length - 2], hi[hi.length - 1], i) < -1e-9) hi.pop(); hi.push(i); }
+  const casco = [...new Set([...lo.slice(0, -1), ...hi.slice(0, -1)])];
+  // se recorre el casco en el orden del contorno
+  const ini = casco.indexOf(Math.min(...casco));
+  const orden = [...casco.slice(ini), ...casco.slice(0, ini)];
+  if (orden.some((c, k) => k > 0 && c < orden[k - 1])) return v;          // no es un polígono simple: se deja como está
+  const out: Punto[] = []; let cerro = false;
+  orden.forEach((a, k) => {
+    const b = orden[(k + 1) % orden.length], salto = (b - a + n) % n;
+    out.push(q[a]);
+    if (salto <= 1) return;
+    if (Math.hypot(q[b].x - q[a].x, q[b].y - q[a].y) <= boca + 1e-9) { cerro = true; return; }
+    for (let j = 1; j < salto; j++) out.push(q[(a + j) % n]);
+  });
+  return cerro ? out.map(r => ({ x: +r.x.toFixed(4), y: +r.y.toFixed(4) })) : v;
+}
+
 /** cuántas facetas lleva cada lado (1 en los rectos): las que hagan falta para que ninguna pase de «modulo» m */
 export const facetasDe = (v: Vertice[], modulo: number) => v.map((q, i) => (curvo(q) ? Math.max(2, Math.ceil(largoLado(v, i) / modulo - 1e-6)) : 1));
 /** el contorno con los lados curvos pasados a facetas rectas (polígono: cada faceta es un paño plano en el 3D) */
@@ -126,6 +165,7 @@ export function aplicarCarpinteriaTramos(p: Proyecto): { niveles: number; aproxi
     }
     let bases: Vertice[][] = [sil.get(i)!];
     if (t.modo === 'losa' && arriba) bases = comunLosas(sil.get(i)!, sil.get(arriba.i)!).piezas;
+    if (t.entrantes && t.entrantes > 0) bases = bases.map(b => cerrarEntrantes(b, t.entrantes!));
     const vs = bases.map(b => (d > 0 ? desfasarAnillo(b, -d) : b)).filter(v => !('error' in v) && (v as Vertice[]).length >= 3) as Vertice[][];
     if (!vs.length) { if (bases.length) aprox.push(nv.cota); return; }
     hecho.set(i, vs.map(v => v.map(q => ({ ...q }))));

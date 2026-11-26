@@ -262,3 +262,91 @@ export function polar15(desde: Punto, q: Punto, paso = 15): Punto {
   const t = Math.round(Math.atan2(dy, dx) / ((paso * Math.PI) / 180)) * ((paso * Math.PI) / 180);
   return { x: r4(desde.x + L * Math.cos(t)), y: r4(desde.y + L * Math.sin(t)) };
 }
+
+// ------------------------------------------------------------------ patrón polar
+export interface OpcionesPolar {
+  /** cuántas copias alrededor del centro */
+  n: number;
+  /** ancho de cada una sobre el borde (m, la cuerda) */
+  ancho: number;
+  /** profundidad del entrante o vuelo del saliente (m, en la dirección del radio) */
+  prof: number;
+  /** triángulo (en V, con la punta en el radio) o rectángulo (en U) */
+  forma: 'triangulo' | 'rectangulo';
+  /** entrante (un pozo de luz, una muesca) o saliente (un balcón, una aleta) */
+  tipo: 'entrante' | 'saliente';
+  /** ángulo de la primera copia (°, antihorario desde +x) */
+  angulo0: number;
+}
+/**
+ * Patrón polar: un entrante o un saliente repetido n veces alrededor del centro del contorno, parejos (como los pozos de
+ * luz del Gherkin o los balcones de una torre redonda). El contorno tiene que verse entero desde su centro (un círculo,
+ * un polígono, una elipse, casi cualquier planta de torre). Si es un círculo, los tramos entre copias quedan como arcos
+ * exactos; si no, las curvas pasan a tramos rectos finos.
+ */
+export function patronPolar(vs: Anillo, op: OpcionesPolar): Anillo | { error: string } {
+  const n = Math.round(op.n);
+  if (!(n >= 1 && n <= 72)) return { error: 'La cantidad de copias tiene que ir de 1 a 72.' };
+  if (!(op.ancho > 0) || !(op.prof > 0)) return { error: 'El ancho y la profundidad (o el vuelo) tienen que ser mayores que cero.' };
+  let ps = polilinea(vs, 2, 48);
+  if (ps.length < 3) return { error: 'El contorno necesita por lo menos tres vértices.' };
+  let A = 0, cx = 0, cy = 0;
+  ps.forEach((a, i) => { const b = ps[(i + 1) % ps.length], cr = a.x * b.y - b.x * a.y; A += cr / 2; cx += ((a.x + b.x) * cr) / 6; cy += ((a.y + b.y) * cr) / 6; });
+  if (Math.abs(A) < 1e-9) return { error: 'El contorno no tiene área.' };
+  cx /= A; cy /= A;
+  if (A < 0) ps = [...ps].reverse();
+  // ¿se ve entero desde el centro? (los ángulos crecen siempre)
+  const ang = (p: Punto) => Math.atan2(p.y - cy, p.x - cx);
+  let giro = 0;
+  for (let i = 0; i < ps.length; i++) {
+    let d = ang(ps[(i + 1) % ps.length]) - ang(ps[i]);
+    if (d <= -Math.PI) d += 2 * Math.PI; else if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -1e-9) return { error: 'El contorno tiene que verse entero desde su centro (sin entrantes que se den vuelta) para repetir en polar.' };
+    giro += d;
+  }
+  if (Math.abs(giro - 2 * Math.PI) > 1e-6) return { error: 'El contorno tiene que rodear su centro.' };
+  // el borde en la dirección θ: dónde corta el rayo desde el centro
+  const borde = (t: number): Punto => {
+    const ux = Math.cos(t), uy = Math.sin(t);
+    let mejor: Punto | null = null, dm = Infinity;
+    for (let i = 0; i < ps.length; i++) {
+      const a = ps[i], b = ps[(i + 1) % ps.length], ex = b.x - a.x, ey = b.y - a.y, den = ux * ey - uy * ex;
+      if (Math.abs(den) < 1e-14) continue;
+      const s = ((a.x - cx) * ey - (a.y - cy) * ex) / den, u = ((a.x - cx) * uy - (a.y - cy) * ux) / den;
+      if (s > 0 && u >= -1e-9 && u <= 1 + 1e-9 && s < dm) { dm = s; mejor = { x: cx + ux * s, y: cy + uy * s }; }
+    }
+    return mejor ?? { x: cx, y: cy };
+  };
+  const radio = (t: number) => { const q = borde(t); return Math.hypot(q.x - cx, q.y - cy); };
+  const g = Math.PI / 180, dos = 2 * Math.PI, norm = (t: number) => ((t % dos) + dos) % dos;
+  // los ángulos de las copias, crecientes (sin volver a 0: la siguiente de la última es la primera más una vuelta)
+  const fi = Array.from({ length: n }, (_, k) => (op.angulo0 + (360 * k) / n) * g);
+  // medio ángulo de cada copia: el que deja los dos puntos del borde a la distancia «ancho» (bisección; en un círculo es la cuerda)
+  const de = fi.map(f => {
+    const cuerda = (d: number) => { const p = borde(f - d), q = borde(f + d); return Math.hypot(p.x - q.x, p.y - q.y); };
+    if (cuerda(Math.PI / 2 - 1e-6) < op.ancho) return NaN;
+    let lo = 0, hi = Math.PI / 2 - 1e-6;
+    for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (cuerda(m) < op.ancho) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  });
+  if (de.some(x => !Number.isFinite(x))) return { error: 'El ancho es más grande que la planta.' };
+  if (de.some((d, k) => 2 * d >= dos / n - 1e-6 || (op.tipo === 'entrante' && op.prof >= radio(fi[k]) - 1e-3))) return { error: op.tipo === 'entrante' ? 'Las copias se pisan o el entrante llega al centro: probá con menos copias, menos ancho o menos profundidad.' : 'Las copias se pisan: probá con menos copias o menos ancho.' };
+  const circular = ps.every(q => Math.abs(Math.hypot(q.x - cx, q.y - cy) / radio(0) - 1) < 1e-3);
+  const R = radio(0), s = op.tipo === 'entrante' ? -1 : 1;
+  const out: VerticePerfil[] = [];
+  for (let k = 0; k < n; k++) {
+    const f = fi[k], d = de[k], u = { x: Math.cos(f), y: Math.sin(f) };
+    const a = borde(f - d), b = borde(f + d);
+    // la copia: del borde en f − δ hacia adentro (o afuera) y de vuelta al borde en f + δ
+    out.push({ x: a.x, y: a.y });
+    if (op.forma === 'triangulo') { const r = radio(f) + s * op.prof; out.push({ x: cx + u.x * r, y: cy + u.y * r }); }
+    else out.push({ x: a.x + s * u.x * op.prof, y: a.y + s * u.y * op.prof }, { x: b.x + s * u.x * op.prof, y: b.y + s * u.y * op.prof });
+    // hasta la copia siguiente: un arco exacto (círculo) o el contorno original entre las dos
+    const t0 = f + d, t1 = (k + 1 < n ? fi[k + 1] : fi[0] + dos) - de[(k + 1) % n];
+    const span = t1 - t0;
+    if (circular) { out.push({ x: cx + R * Math.cos(t0), y: cy + R * Math.sin(t0), b: Math.tan(span / 4) }); continue; }
+    out.push({ x: b.x, y: b.y });
+    ps.map(q => ({ q, t: norm(ang(q) - t0) })).filter(x => x.t > 1e-9 && x.t < span - 1e-9).sort((x, y) => x.t - y.t).forEach(x => out.push({ x: x.q.x, y: x.q.y }));
+  }
+  return out.map(limpio);
+}

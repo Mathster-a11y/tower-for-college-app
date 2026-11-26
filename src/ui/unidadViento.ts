@@ -9,7 +9,7 @@
  * Como el flujo del túnel no cambia de forma con la velocidad (mismo Reynolds de la red), multiplicar es correcto: si
  * el aire que llega va a 40 km/h, donde la simulación dice 1,2 va a 48 km/h.
  */
-import { elegirEspectroVel, espectroVel, type EspectroVel } from './campoSuave';
+import { elegirEspectroVel, espectroVel, ESPECTROS_VEL, type EspectroVel } from './campoSuave';
 import { Kz } from '../engine/cargas/cirsoc102';
 import { fmt } from './estado';
 import { h } from './comp';
@@ -85,10 +85,20 @@ export function controlUnidadViento(z: number, alCambiar: () => void): HTMLEleme
     inp.addEventListener('change', () => { const v = +inp.value; if (v > 0) { unidadViento.kmh = v; guardarUnidadViento(); alCambiar(); } });
     caja.append(h('label', { class: 'campo' }, h('span', {}, 'km/h'), inp));
   }
-  // el espectro de la velocidad: el térmico de la app o el arcoíris de los programas comerciales
-  const esp = sel([['termico', 'térmico: violeta a amarillo (el de la app)'], ['arcoiris', 'arcoíris: azul a rojo (como los programas comerciales)']], espectroVel, x => { elegirEspectroVel(x as EspectroVel); });
-  caja.append(h('label', { class: 'campo' }, h('span', {}, 'Colores de la velocidad'), esp));
-  if (espectroVel === 'arcoiris') caja.append(h('p', { class: 'nota chica' }, 'Con el arcoíris, el azul es aire lento y el rojo aire rápido: no son compresión y tracción como en el resto de la app. Las presiones (Cp) siguen con azul que empuja y rojo que succiona.'));
   caja.append(h('p', { class: 'nota chica' }, `La simulación mide todo en «veces el viento que llega» al túnel; acá se pasa a ${unidadViento.unidad === 'veces' ? 'esa misma escala (1 = igual que el viento que llega, 1,2 = 20 % más rápido)' : `${unidadViento.unidad === 'ms' ? 'm/s' : 'km/h'} con ${textoReferencia(z)}`}. Un 20 % más rápido es lo mismo con cualquier viento: cambia el número, no el dibujo.`));
   return caja;
+}
+
+/**
+ * Los colores de la velocidad (térmico, arcoíris o grises), para la sección «Colores» de los dos túneles. La presión no
+ * se elige: azul empuja (comprime) y rojo succiona (tracciona), como en toda la app.
+ */
+export function controlEspectroVel(alCambiar: () => void): HTMLElement[] {
+  const s = document.createElement('select');
+  for (const [v, t] of ESPECTROS_VEL) s.append(new Option(t, v, false, v === espectroVel));
+  s.addEventListener('change', () => { elegirEspectroVel(s.value as EspectroVel); alCambiar(); });
+  const out: HTMLElement[] = [h('label', { class: 'campo' }, h('span', {}, 'Colores de la velocidad'), s)];
+  if (espectroVel === 'arcoiris') out.push(h('p', { class: 'nota chica' }, 'Con el arcoíris, el azul es aire lento y el rojo aire rápido: no son compresión y tracción como en el resto de la app.'));
+  out.push(h('p', { class: 'nota chica' }, 'La presión (Cp) no cambia de colores: azul la que empuja (comprime) y rojo la que succiona (tracciona), como en toda la app. Lo que sí se elige es hasta qué valor llega cada escala.'));
+  return out;
 }

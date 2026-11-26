@@ -5,7 +5,7 @@
  */
 export type Fidelidad = 'basica' | 'intermedia' | 'alta' | 'maxima';
 export interface Opciones2D { res: string; paredes: 'exactas' | 'escalera'; canal: 'ancho' | 'angosto' }
-export interface Opciones3D { motor: 'placa' | 'procesador'; tam: string; paredes: 'exactas' | 'escalera' }
+export interface Opciones3D { motor: 'placa' | 'procesador'; tam: string; paredes: 'exactas' | 'planta' | 'escalera' }
 
 export const FIDELIDAD: Record<Fidelidad, { nombre: string; para: string; d2: Opciones2D; d3: Opciones3D }> = {
   basica: { nombre: 'básica', para: 'cualquier computadora, también sin placa de video: para ver cómo se mueve el aire',

@@ -13,7 +13,7 @@
  * Unidades: m, t, t/m², kg/cm² (tensiones de salida), cm² (armaduras); presiones del viento en N/m² → t/m² (/10 000,
  * como la planilla).
  */
-import { areaMuro, dInterior, entraEnCalculo, factorPesoEspesor, rectangulos, tipoDe, type Proyecto } from '../modelo';
+import { areaMuro, dInterior, entraEnCalculo, factorPesoEspesor, losasDeNivel, rectangulos, tipoDe, type Proyecto } from '../modelo';
 import { propiedades } from '../perfil';
 import { propsPoligonos, seccionDebil } from '../aberturas';
 import { DIVISORES } from '../planilla';
@@ -58,7 +58,7 @@ const r6 = (x: number) => Math.round(x * 1e6) / 1e6;
 export function datosGuia(p: Proyecto, piezas: PiezaEquivalente[]): DatosGuia {
   const avisos: string[] = [];
   let B = 0, L = 0;
-  const niveles = p.niveles.map(n => { B = n.B ?? B; L = n.L ?? L; return { nombre: n.nombre, cota: n.cota, B, L, pisos: Math.max(1, Math.round(n.pisos ?? 1)) }; });
+  const niveles = p.niveles.map(n => { B = n.B ?? B; L = n.L ?? L; return { nombre: n.nombre, cota: n.cota, B, L, pisos: losasDeNivel(n) }; });
   const zFund = p.niveles[p.niveles.length - 1]?.cota ?? 0, zTop = p.niveles[0]?.cota ?? 0;
   const conPieza = piezas.filter(pz => pz.filaHoja !== null);
   const piezaDe = (id: string, dir: 'A' | 'B') => conPieza.find(pz => pz.dir === dir && pz.muros.includes(id))?.nombre ?? null;

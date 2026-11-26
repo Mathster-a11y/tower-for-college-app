@@ -21,6 +21,8 @@ const hexARgb = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3,
 export const ARCOIRIS: [number, string][] = [
   [0, '#1f2a8a'], [0.15, '#2f6fd6'], [0.32, '#2fb7d8'], [0.48, '#3fbf6a'], [0.62, '#c8d43a'], [0.74, '#f6c531'], [0.87, '#f07a24'], [1, '#c8261f'],
 ];
+/** grises (para imprimir en blanco y negro): de gris muy oscuro (quieto) a casi blanco (lo más rápido) */
+export const GRISES: [number, string][] = [[0, '#1c1c1c'], [0.5, '#7a7a7a'], [1, '#f4f4f4']];
 const armarLut = (paradas: [number, string][]) => {
   const t = new Uint8ClampedArray(256 * 3), st = paradas.map(([p, c]) => [p, ...hexARgb(c)] as number[]);
   for (let i = 0; i < 256; i++) {
@@ -34,18 +36,25 @@ const armarLut = (paradas: [number, string][]) => {
 /** tabla de 256 colores del espectro térmico (r, g, b seguidos) */
 export const LUT_TERMICO = armarLut(TERMICO);
 export const LUT_ARCOIRIS = armarLut(ARCOIRIS);
+export const LUT_GRISES = armarLut(GRISES);
 
 /** el espectro de la velocidad elegido (se recuerda en el navegador) */
-export type EspectroVel = 'termico' | 'arcoiris';
+export type EspectroVel = 'termico' | 'arcoiris' | 'grises';
 const CLAVE_ESPECTRO = 'torre3d.espectroVelocidad';
-export let espectroVel: EspectroVel = (() => { try { return localStorage.getItem(CLAVE_ESPECTRO) === 'arcoiris' ? 'arcoiris' : 'termico'; } catch { return 'termico'; } })();
+export let espectroVel: EspectroVel = (() => { try { const v = localStorage.getItem(CLAVE_ESPECTRO); return v === 'arcoiris' || v === 'grises' ? v : 'termico'; } catch { return 'termico'; } })();
+/** los espectros de la velocidad que se pueden elegir, con su descripción */
+export const ESPECTROS_VEL: [EspectroVel, string][] = [
+  ['termico', 'térmico: violeta oscuro (quieto) a amarillo claro (rápido), el de la app'],
+  ['arcoiris', 'arcoíris: azul (quieto) a rojo (rápido), como los programas comerciales'],
+  ['grises', 'grises: oscuro (quieto) a claro (rápido), para imprimir en blanco y negro'],
+];
 export function elegirEspectroVel(e: EspectroVel) { espectroVel = e; try { localStorage.setItem(CLAVE_ESPECTRO, e); } catch { /* sin almacenamiento */ } }
 /** la tabla de colores de la velocidad que está en uso */
-export const lutVelocidad = () => (espectroVel === 'arcoiris' ? LUT_ARCOIRIS : LUT_TERMICO);
+export const lutVelocidad = () => (espectroVel === 'arcoiris' ? LUT_ARCOIRIS : espectroVel === 'grises' ? LUT_GRISES : LUT_TERMICO);
 /** los colores del espectro de la velocidad en uso, para la llave */
-export const coloresTermico = () => (espectroVel === 'arcoiris' ? ARCOIRIS : TERMICO).map(([, c]) => c);
+export const coloresTermico = () => (espectroVel === 'arcoiris' ? ARCOIRIS : espectroVel === 'grises' ? GRISES : TERMICO).map(([, c]) => c);
 /** el espectro en palabras, para las notas */
-export const textoEspectro = () => (espectroVel === 'arcoiris' ? 'el arcoíris, de azul oscuro (quieto) a celeste, verde, amarillo, naranja y rojo' : 'el espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro');
+export const textoEspectro = () => (espectroVel === 'arcoiris' ? 'el arcoíris, de azul oscuro (quieto) a celeste, verde, amarillo, naranja y rojo' : espectroVel === 'grises' ? 'grises, de gris oscuro (quieto) a casi blanco' : 'el espectro térmico, de violeta muy oscuro (quieto) a naranja y amarillo claro');
 /** aclaración para las llaves de la velocidad cuando el arcoíris está elegido */
 export const avisoArcoiris = () => (espectroVel === 'arcoiris' ? ' · el rojo es rápido, no tracción' : '');
 
@@ -86,6 +95,29 @@ export function pintarSuave(px: Uint8ClampedArray, v: Vista, nx: number, ny: num
   }
 }
 
+/**
+ * Extiende el campo del aire unas celdas hacia adentro de lo sólido: cada celda sólida pegada al aire toma el promedio
+ * de sus vecinas de aire (y pasa a contar en el pintado). Sirve cuando encima se dibuja el contorno exacto de la torre:
+ * las celdas sólidas que asoman afuera del contorno (la escalera de la grilla) ya no se pintan con el color de la torre
+ * o en blanco, sino con el aire de al lado, y el borde se ve liso. Cambia S y peso (los dos del mismo largo nx·ny).
+ */
+export function extenderAlSolido(S: Float32Array, peso: Uint8Array, nx: number, ny: number, pasadas = 2) {
+  for (let p = 0; p < pasadas; p++) {
+    const nuevos: number[] = [], valores: number[] = [];
+    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+      const q = y * nx + x;
+      if (peso[q]) continue;
+      let s = 0, n = 0;
+      if (x > 0 && peso[q - 1]) { s += S[q - 1]; n++; }
+      if (x < nx - 1 && peso[q + 1]) { s += S[q + 1]; n++; }
+      if (y > 0 && peso[q - nx]) { s += S[q - nx]; n++; }
+      if (y < ny - 1 && peso[q + nx]) { s += S[q + nx]; n++; }
+      if (n) { nuevos.push(q); valores.push(s / n); }
+    }
+    nuevos.forEach((q, k) => { S[q] = valores[k]; peso[q] = 1; });
+  }
+}
+
 /** colores de cada vista (los mismos en el túnel y en la ventana de detalle) */
 export function colorTermico(t: number, px: Uint8ClampedArray, k: number) {
   const i = 3 * Math.max(0, Math.min(255, Math.round(t * 255))), L = lutVelocidad();
@@ -109,7 +141,7 @@ export type ModoFlechas = 'no' | 'fijas' | 'proporcionales';
  * fondo ya es la velocidad), las fijas van en tinta: solo dicen la dirección.
  */
 /** grosor: factor del trazo y de la punta (con más flechas, más finas, para que no se empasten) */
-export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: ModoFlechas, muestra: (X: number, Y: number) => [number, number] | null, paso: number, tinta: string, borde: string, colorear = true, grosor = 1) {
+export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: ModoFlechas, muestra: (X: number, Y: number) => [number, number] | null, paso: number, tinta: string, borde: string, colorear = true, grosor = 1, tope = 1.6) {
   if (modo === 'no') return;
   g.save();
   g.lineCap = 'round'; g.lineJoin = 'round';
@@ -119,13 +151,13 @@ export function dibujarFlechas(g: CanvasRenderingContext2D, v: Vista, modo: Modo
     if (!m) continue;
     const s = Math.hypot(m[0], m[1]);
     if (s < 1e-4) continue;
-    const L = modo === 'fijas' ? paso * 0.72 : Math.min(paso * 1.25, (paso * s) / 1.6);
+    const L = modo === 'fijas' ? paso * 0.72 : Math.min(paso * 1.25, (paso * s) / tope);
     if (L < 2) continue;
     const ux = m[0] / s, uy = -m[1] / s;                               // en pantalla, y hacia abajo
     const x0 = fx - (ux * L) / 2, y0 = fy - (uy * L) / 2, x1 = fx + (ux * L) / 2, y1 = fy + (uy * L) / 2;
     const cab = Math.min(6 * grosor, Math.max(3 * grosor, L * 0.32)), ax = -ux * cab, ay = -uy * cab, nx = -uy * cab * 0.6, ny = ux * cab * 0.6;
     let color = tinta;
-    if (modo === 'fijas' && colorear) { colorTermico(Math.min(1, s / 1.6), px, 0); color = `rgb(${px[0]},${px[1]},${px[2]})`; }
+    if (modo === 'fijas' && colorear) { colorTermico(Math.min(1, s / tope), px, 0); color = `rgb(${px[0]},${px[1]},${px[2]})`; }
     const trazo = () => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.moveTo(x1 + ax + nx, y1 + ay + ny); g.lineTo(x1, y1); g.lineTo(x1 + ax - nx, y1 + ay - ny); g.stroke(); };
     // trazo fino (con un borde claro para que se lea sobre cualquier color)
     g.strokeStyle = borde; g.lineWidth = 2.6 * grosor; g.globalAlpha = 0.7; trazo();

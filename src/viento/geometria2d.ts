@@ -46,6 +46,14 @@ export interface Geometria2D {
   nTorre: number;
   /** con contexto: las celdas sólidas de la torre (para medir la fuerza solo sobre ella) */
   cuerpo?: Uint8Array;
+  /**
+   * corte vertical (alzado): la torre de costado sobre el suelo. y es la altura (la fila 0 es el suelo, sólido), el
+   * viento entra con el perfil de cada fila (fracción de u0) y arriba hay un techo deslizante. «escala» sigue siendo
+   * celdas por metro; D es la altura de la torre en celdas (la medida de referencia del corte)
+   */
+  alzado?: { H: number; perfil: Float32Array; filaSuelo: number };
+  /** fila de la celda de referencia de la presión (si no, cerca del borde de abajo) */
+  filaRef?: number;
 }
 
 // las 9 direcciones de D2Q9 (las mismas que lbm2d)
@@ -173,4 +181,84 @@ export function geometria2D(o: OpcionesGeometria): Geometria2D {
     }
   }
   return { nx, ny, solido, escala, anchoM, D, celdasTorre, caja, contornos, q: distanciasPared(nx, ny, solido, contornos), nTorre, cuerpo };
+}
+
+export interface NivelAlzado {
+  /** altura sobre PB (m) */
+  z: number;
+  /** la planta de ese nivel (m, en planta del proyecto) */
+  pol: P[];
+}
+/**
+ * Corte vertical (alzado) de la torre: el plano vertical en el sentido del viento que pasa por la torre (corrido
+ * «desplaz» del centro, en fracción del ancho transversal: 0 el medio, ±0,5 los bordes). De cada nivel se toma dónde
+ * esa línea entra y sale de la planta (la cara de barlovento y la de sotavento) y la piel va recta de un nivel al
+ * siguiente. Los tramos sin planta en la línea (una planta baja libre en ese lugar, un patio) quedan abiertos.
+ * La red: el suelo en la fila 0 (sólido), la torre de H celdas de alto («celdasH»), 1,5 H de aire delante, 5 H detrás
+ * y 4 H de alto en total (con 2,2 H el aire se apretaba arriba de la torre y corría al doble); el viento entra con «perfil(z)» (fracción del de la azotea, z en m sobre PB).
+ */
+export function geometriaAlzado(o: { niveles: NivelAlzado[]; dir: 'A' | 'B'; angulo?: number; desplaz?: number; celdasH?: number; perfil: (z: number) => number }): Geometria2D {
+  const th = ((o.dir === 'A' ? -90 : 0) - (o.angulo ?? 0)) * (Math.PI / 180), co = Math.cos(th), si = Math.sin(th);
+  const rot = (q: P): P => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co });
+  const ns = o.niveles.filter(n => n.pol.length >= 3).map(n => ({ z: n.z, pol: n.pol.map(rot) })).sort((a, b) => a.z - b.z);
+  if (ns.length < 2) throw new Error('Hacen falta al menos dos niveles con planta para el corte vertical.');
+  // la línea del corte: a lo largo del viento (x), en y = centro + desplaz · ancho (del ancho de todos los niveles)
+  const ys = ns.flatMap(n => n.pol.map(q => q.y)), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const yc = (y0 + y1) / 2 + Math.max(-0.49, Math.min(0.49, o.desplaz ?? 0)) * (y1 - y0);
+  // de cada nivel: dónde entra y dónde sale la línea (los cortes con el contorno, del primero al último)
+  const tramo = (pol: P[]): [number, number] | null => {
+    const xs: number[] = [];
+    for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+      const a = pol[j], b = pol[i];
+      if ((a.y > yc) !== (b.y > yc)) xs.push(a.x + ((b.x - a.x) * (yc - a.y)) / (b.y - a.y));
+    }
+    return xs.length >= 2 ? [Math.min(...xs), Math.max(...xs)] : null;
+  };
+  const filas = ns.map(n => ({ z: n.z, t: tramo(n.pol) }));
+  const H = ns[ns.length - 1].z - ns[0].z;
+  if (!(H > 0)) throw new Error('La torre no tiene altura sobre PB.');
+  const xsT = filas.flatMap(f => (f.t ? f.t : [])), xMin = Math.min(...xsT), xMax = Math.max(...xsT);
+  const Hc = Math.max(24, Math.round(o.celdasH ?? 60)), escala = Hc / H;
+  const prof = (xMax - xMin) * escala;
+  const nx = Math.round(1.5 * Hc + prof + 5 * Hc), ny = Math.round(4 * Hc) + 1;
+  const ox = 1.5 * Hc, suelo = 1;                                      // la fila 0 es el suelo; la torre arranca en y = 1
+  const aRed = (x: number, z: number): P => ({ x: ox + (x - xMin) * escala, y: suelo + (z - ns[0].z) * escala });
+  // los contornos: cada racha de niveles seguidos con tramo es un polígono (cara de barlovento subiendo, sotavento
+  // bajando); la base se mete media celda en el suelo para que no quede una rendija
+  const contornos: P[][] = [];
+  let racha: { z: number; t: [number, number] }[] = [];
+  const cerrar = () => {
+    if (racha.length >= 2) {
+      const sube = racha.map(f => aRed(f.t[0], f.z)), baja = [...racha].reverse().map(f => aRed(f.t[1], f.z));
+      if (Math.abs(racha[0].z - ns[0].z) < 1e-6) { sube[0] = { ...sube[0], y: suelo - 0.5 }; baja[baja.length - 1] = { ...baja[baja.length - 1], y: suelo - 0.5 }; }
+      contornos.push([...sube, ...baja]);
+    }
+    racha = [];
+  };
+  for (const f of filas) { if (f.t) racha.push({ z: f.z, t: f.t }); else cerrar(); }
+  cerrar();
+  if (!contornos.length) throw new Error('El corte no pasa por la torre: probá más cerca del medio.');
+  const solido = new Uint8Array(nx * ny);
+  for (let x = 0; x < nx; x++) solido[x] = 1;                         // el suelo
+  const cuerpo = new Uint8Array(nx * ny);
+  let celdasTorre = 0;
+  const caja = { x0: nx, x1: 0, y0: ny, y1: 0 };
+  for (const p of contornos) {
+    const bx0 = Math.max(0, Math.floor(Math.min(...p.map(q => q.x)))), bx1 = Math.min(nx - 1, Math.ceil(Math.max(...p.map(q => q.x))));
+    const by0 = Math.max(1, Math.floor(Math.min(...p.map(q => q.y)))), by1 = Math.min(ny - 1, Math.ceil(Math.max(...p.map(q => q.y))));
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+      if (!dentro(p, x + 0.5, y + 0.5)) continue;
+      const c = y * nx + x;
+      if (!cuerpo[c]) { celdasTorre++; caja.x0 = Math.min(caja.x0, x); caja.x1 = Math.max(caja.x1, x); caja.y0 = Math.min(caja.y0, y); caja.y1 = Math.max(caja.y1, y); }
+      solido[c] = 1; cuerpo[c] = 1;
+    }
+  }
+  // el perfil de entrada, fila por fila (la del suelo no cuenta)
+  const perfil = new Float32Array(ny);
+  for (let y = 1; y < ny; y++) perfil[y] = o.perfil((y - suelo + 0.5) / escala);
+  // las paredes exactas: con el contorno de la torre y la línea del suelo (sin vuelta arriba-abajo)
+  const lineaSuelo: P[] = [{ x: -1, y: -1 }, { x: nx + 1, y: -1 }, { x: nx + 1, y: suelo }, { x: -1, y: suelo }];
+  const q = distanciasPared(nx, ny, solido, [...contornos, lineaSuelo], { y: false });
+  return { nx, ny, solido, escala, anchoM: H, D: Hc, celdasTorre, caja, contornos, q, nTorre: contornos.length, cuerpo,
+    alzado: { H, perfil, filaSuelo: 0 }, filaRef: Math.min(ny - 2, Math.round(suelo + 1.2 * Hc)) };
 }

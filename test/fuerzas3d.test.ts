@@ -29,6 +29,20 @@ describe('fuerzas del túnel 3D', () => {
     expect(r.pisos.reduce((s, p) => s + p.Fx.media, 0)).toBeCloseTo(r.base.Vx.media, 6);
     expect(r.base.Mx.media / r.base.Vx.media).toBeGreaterThan(13); expect(r.base.Mx.media / r.base.Vx.media).toBeLessThan(17);
   });
+  it('celdas más altas que los pisos: ningún piso queda en cero y la suma no cambia (el valle del Gherkin)', () => {
+    // una grilla gruesa: cada celda es un poco más alta que un piso (en el Gherkin, 4,28 m contra 4,15 m: algún piso quedaba sin celdas)
+    const gg = geometria3D({ niveles: [{ cota: 0, silueta: cuadrado(10, 10) }, ...niveles], dir: 'A', nx: 48, ny: 24, nz: 9 });
+    const cc = celdasDeCara(gg), alto = 1 / gg.escala;
+    const ps = Array.from({ length: Math.floor(30 / (0.8 * alto)) }, (_, k) => ({ nombre: `${k + 1}`, z: (k + 1) * 0.8 * alto }));
+    expect(alto).toBeGreaterThan(ps[1].z - ps[0].z);
+    const F = new Float32Array(gg.nx * gg.ny * gg.nz * 4).fill(1);
+    cc.forEach(c => { if (c.cara === 'barlovento') F[c.celda * 4 + 3] = 1 + 0.8 * 3 * 0.5 * uH * uH; });
+    const f = new Fuerzas3D(cc, gg, ps, uH, qhG);
+    f.sumar(F, 1, 0);
+    const r = f.resumen(), interiores = r.pisos.slice(1, -1).map(p => p.Fx.media);
+    expect(Math.min(...interiores)).toBeGreaterThan(0.6 * Math.max(...interiores));
+    expect(r.pisos.reduce((s, p) => s + p.Fx.media, 0)).toBeCloseTo(r.base.Vx.media, 6);
+  });
   it('succión de un solo lado: fuerza lateral hacia ese lado y torsor si está corrida', () => {
     const f = new Fuerzas3D(caras, g, pisos, uH, qhG);
     // succión en la cara lateral cuya normal mira a +y: la tira hacia +y

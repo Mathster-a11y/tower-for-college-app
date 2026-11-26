@@ -14,7 +14,7 @@
  */
 import type { Proyecto } from './modelo';
 import { desfasarAnillo, escalarAnillo, girarAnillo } from './contorno';
-import { cajaSilueta, plantaDeNivel, puntosSilueta, type Vertice } from './silueta';
+import { cajaSilueta, medidasAlViento, plantaDeNivel, puntosSilueta, type Vertice } from './silueta';
 
 export interface PuntoPerfil { h: number; fx: number; fy?: number | null; dx?: number | null; dy?: number | null }
 export interface PerfilTorre {
@@ -27,7 +27,17 @@ export interface PerfilTorre {
   giro?: number | null;
   /** escribir B y L de la caja en cada losa (vacío = sí) */
   bl?: boolean | null;
+  /** con qué se escriben B y L: la caja de la losa (vacío) o un rectángulo de igual área (plantas curvas) */
+  blCriterio?: 'caja' | 'area' | null;
+  /**
+   * formas por tramos: desde la cota «desde» hacia arriba (hasta la forma siguiente), el perfil escala, gira y corre esta
+   * planta en vez de la losa base. La silueta está como queda en su cota (el perfil la sigue cambiando de ahí para arriba
+   * en la misma proporción). Sirve para un cambio de planta en altura (los pozos de luz del Gherkin del 2º al 30º y el
+   * círculo entero arriba) y, con dos formas seguidas, para la excepción de un solo piso
+   */
+  formas?: FormaTramo[] | null;
 }
+export interface FormaTramo { desde: number; silueta: Vertice[] }
 
 export const PERFILES: { id: string; nombre: string; texto: string; p: Omit<PerfilTorre, 'base'> }[] = [
   { id: 'recta', nombre: 'Recta', texto: 'La misma planta en toda la altura.', p: { puntos: [{ h: 0, fx: 1 }, { h: 1, fx: 1 }] } },
@@ -111,13 +121,21 @@ export function aplicarPerfil(p: Proyecto): number {
   const base = nb.silueta as Vertice[], z0 = nb.cota, z1 = p.niveles[0].cota;
   if (z1 <= z0 + 1e-6) return 0;
   let n = 0;
+  // formas por tramos (las de arriba de la base), de abajo hacia arriba
+  const formas = [...(pf.formas ?? [])].filter(f => f.desde > z0 + 1e-6 && f.silueta?.length >= 3).sort((a, b) => a.desde - b.desde);
   p.niveles.forEach((nv, i) => {
     if (i >= ib || nv.manual) return;                          // solo los de arriba de la base, y no los editados a mano
     const h = (nv.cota - z0) / (z1 - z0), v = valorPerfil(pf, h);
     if (!(v.fx > 0.02 && v.fy > 0.02)) return;
-    const s = transformarPlanta(base, v.fx, v.fy, v.dx, v.dy, v.giro);
+    // la forma que rige en esta cota: la última que empieza en ella o más abajo; el perfil la cambia desde su cota
+    const fo = [...formas].reverse().find(f => f.desde <= nv.cota + 1e-6);
+    let s: Vertice[];
+    if (fo) {
+      const v0 = valorPerfil(pf, (fo.desde - z0) / (z1 - z0));
+      s = transformarPlanta(fo.silueta, v.fx / v0.fx, v.fy / v0.fy, v.dx - v0.dx, v.dy - v0.dy, v.giro - v0.giro);
+    } else s = transformarPlanta(base, v.fx, v.fy, v.dx, v.dy, v.giro);
     nv.silueta = s;
-    if (pf.bl ?? true) { const c = cajaSilueta(s); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); }
+    if (pf.bl ?? true) { const c = medidasAlViento(s, pf.blCriterio ?? 'caja'); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); }
     n++;
   });
   return n;
@@ -137,4 +155,46 @@ export function aplicarCarpinteria(p: Proyecto): number {
     n++;
   });
   return n;
+}
+
+/**
+ * Perfil desde una tabla de alturas (pegada de Excel o de un texto): cada fila, la cota (m sobre PB) y el ancho (o el
+ * diámetro) a esa altura; con tres columnas, el ancho en x y en y; con cinco, además el corrimiento x e y (m, torre
+ * inclinada). Separadas por tabulador, punto y coma o espacios; la coma decimal vale. Las filas que no son números (los
+ * títulos) se saltean. Los anchos se toman en proporción al de la cota de la losa base (interpolado en la tabla), así que
+ * la losa base da el tamaño y la tabla, la forma. Tramos rectos entre filas (con muchas filas sigue la curva tal cual).
+ */
+export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { puntos: PuntoPerfil[]; filas: number; fuera: number; error?: string } {
+  const filas: number[][] = [];
+  for (const linea of texto.split(/\r?\n/)) {
+    const t = linea.trim();
+    if (!t) continue;
+    const celdas = (t.includes('\t') ? t.split('\t') : t.includes(';') ? t.split(';') : t.split(/\s+/)).map(c => c.trim()).filter(c => c !== '');
+    const nums = celdas.map(c => Number(c.replace(/\s/g, '').replace(',', '.')));
+    if (nums.length < 2 || nums.some(x => !Number.isFinite(x))) continue;     // títulos o filas raras
+    filas.push(nums);
+  }
+  if (filas.length < 2) return { puntos: [], filas: filas.length, fuera: 0, error: 'Hacen falta por lo menos dos filas con cota y ancho.' };
+  if (!(zTop > zBase)) return { puntos: [], filas: filas.length, fuera: 0, error: 'La losa base tiene que estar debajo de la azotea.' };
+  filas.sort((a, b) => a[0] - b[0]);
+  if (filas.some(f => !(f[1] > 0) || (f.length >= 3 && !(f[2] > 0)))) return { puntos: [], filas: filas.length, fuera: 0, error: 'Los anchos tienen que ser mayores que cero.' };
+  // el valor de una columna a la cota z (interpolado; fuera de la tabla, el del extremo)
+  const en = (col: number, z: number) => {
+    const v = (f: number[]) => (col < f.length ? f[col] : col === 2 ? f[1] : 0);
+    if (z <= filas[0][0]) return v(filas[0]);
+    if (z >= filas[filas.length - 1][0]) return v(filas[filas.length - 1]);
+    const k = filas.findIndex(f => f[0] >= z), a = filas[k - 1], b = filas[k], t = (z - a[0]) / (b[0] - a[0]);
+    return v(a) + (v(b) - v(a)) * t;
+  };
+  const ax0 = en(1, zBase), ay0 = en(2, zBase), dx0 = en(3, zBase), dy0 = en(4, zBase);
+  const dentro = filas.filter(f => f[0] >= zBase - 1e-6 && f[0] <= zTop + 1e-6);
+  const fuera = filas.length - dentro.length;
+  // la base y la azotea siempre (interpoladas si la tabla no tiene esas cotas justas)
+  const cotas = [...new Set([zBase, ...dentro.map(f => f[0]), zTop])].sort((a, b) => a - b);
+  const r4 = (x: number) => +x.toFixed(4);
+  const puntos: PuntoPerfil[] = cotas.map(z => {
+    const fx = en(1, z) / ax0, fy = en(2, z) / ay0, dx = en(3, z) - dx0, dy = en(4, z) - dy0;
+    return { h: r4((z - zBase) / (zTop - zBase)), fx: r4(fx), ...(Math.abs(fy - fx) > 1e-6 ? { fy: r4(fy) } : {}), ...(Math.abs(dx) > 1e-6 ? { dx: r4(dx) } : {}), ...(Math.abs(dy) > 1e-6 ? { dy: r4(dy) } : {}) };
+  });
+  return { puntos, filas: filas.length, fuera };
 }

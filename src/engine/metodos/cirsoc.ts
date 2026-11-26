@@ -12,7 +12,7 @@
  */
 import type { PlanillaDatos } from '../planilla';
 import { EXPOSICIONES, KN_POR_T, type Viento102 } from '../cargas/cirsoc102';
-import { tipoDe, type Proyecto, type Muro } from '../modelo';
+import { losasDeNivel, tipoDe, type Proyecto, type Muro } from '../modelo';
 import { sueloCirsoc } from '../fundaciones';
 import type { PiezaEquivalente } from '../mapping';
 import type { RotoGuia } from '../correcciones';
@@ -170,7 +170,7 @@ export function vuelco102(p: Proyecto, w: Viento102): { Mv: number; Me: number; 
   const D = datos101De(p).D;
   let B = 0, L = 0, G = 0;
   // cada nivel carga como los pisos reales que junta (como en FEM y la Guía)
-  p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; G += D * B * L * Math.max(1, Math.round(n.pisos ?? 1)); });
+  p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; G += D * B * L * losasDeNivel(n); });
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0), zFund = p.niveles[p.niveles.length - 1]?.cota ?? zPB;
   const brazo = zPB - zFund;
   const Mv = w.A.MPB + (w.A.QPB + Math.max(0, w.A.WPB)) * brazo;

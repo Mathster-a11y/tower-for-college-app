@@ -1,21 +1,15 @@
 import { envolverPiezas } from '../engine/grupos';
-import { exoConViento } from '../engine/exoReglamento';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
-import { aPlanilla, type Asignacion } from '../engine/mapping';
-import { calcularPlanilla, type PlanillaRes } from '../engine/planilla';
-import { calcularCorregido, type ResultadoCorregido } from '../engine/correcciones';
-import { controles, type Control } from '../engine/verificaciones';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
-import { config, usarConfig } from '../engine/config';
+import { config } from '../engine/config';
+import type { Control } from '../engine/verificaciones';
 import { leerProyecto, textoErrores } from '../engine/lector';
-import { viento102, type Viento102 } from '../engine/cargas/cirsoc102';
-import { calcularFem, type ResultadoMetodoFem } from '../engine/metodos/fem';
-import { compararMetodos, type Comparacion } from '../engine/metodos/combinado';
-import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201 } from '../engine/metodos/cirsoc';
 import { CONFIG_POR_DEFECTO, configDe, configMotor, VERSION_FORMULAS, type ConfigCalculo } from '../engine/metodos/tipos';
 import { Historial } from './historial';
 import { Guardado } from './guardado';
+import { CalculoFondo } from './calculoFondo';
+import type { RespuestaCalculo } from '../engine/calculoEnFondo';
 import { aplicarLofts } from '../engine/loft';
 import { aplicarPerfil } from '../engine/perfil_torre';
 import { aplicarCarpinteriaTramos } from '../engine/carpinteria';
@@ -35,68 +29,10 @@ function configViejaDelNavegador(): ConfigCalculo {
   } catch { return { ...CONFIG_POR_DEFECTO }; }
 }
 
-/**
- * Resultado de calcular un proyecto con su método. Las vistas leen «valores» (los del método elegido) y no deciden
- * por su cuenta entre la planilla y la guía; «res» y «corr» quedan para comparar los dos.
- */
-export interface Calculo {
-  asig: Asignacion; res: PlanillaRes; corr: ResultadoCorregido; controles: Control[];
-  /** configuración con la que se calculó (método, versión de la planilla, armado) */
-  config: ConfigCalculo;
-  /** los valores del método: la planilla tal cual (Planilla virgen), la guía, o el CIRSOC (planilla con el viento del 102-25) */
-  valores: PlanillaRes;
-  /** método CIRSOC: viento del 102-25, cálculo con ese viento y verificación del 201 de cada pieza */
-  cirsoc?: { viento: Viento102; corr: ResultadoCorregido; verif: VerifPieza201[]; /** el exo en el cálculo (con el viento del 102-25) */ exo?: Record<'A' | 'B', import('../engine/exoReglamento').ExoDireccion> | null };
-  /** método FEM: modelo, modos, casos de carga resueltos y reparto (cirsoc lleva el viento con las frecuencias del modelo) */
-  fem?: ResultadoMetodoFem;
-  /** método Combinado: los cuatro métodos con la misma torre, comparados (las etapas muestran la Planilla virgen) */
-  combinado?: Comparacion;
-  /** el último cálculo falló: los resultados que quedan son los del último cálculo bueno (de la revisión «revision») */
-  error?: string;
-  /** revisión del proyecto con la que se calcularon estos resultados (ver Estado.revision) */
-  revision: number;
-}
-
+export type { Calculo } from '../engine/calculoProyecto';
+export { calcularProyecto } from '../engine/calculoProyecto';
+import { calcularProyecto, type Calculo } from '../engine/calculoProyecto';
 const CLAVE = 'torre3d.proyecto.v1';
-
-/**
- * todo el cálculo de un proyecto (planilla, corregido y controles), con la configuración guardada EN el proyecto
- * (no la del navegador). No cambia la configuración global: sirve también para calcular otra versión (comparar).
- */
-export function calcularProyecto(proyecto: Proyecto): Calculo {
-  const c = configDe(proyecto);
-  return usarConfig(configMotor(c), () => calcularConConfig(proyecto, c));
-}
-function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
-  if (c.metodo === 'combinado') {
-    const base = calcularConConfig(proyecto, { ...c, metodo: 'planilla' });
-    return { ...base, config: c, combinado: compararMetodos(proyecto, calcularProyecto) };
-  }
-  const asig = aPlanilla(proyecto);
-  const res = calcularPlanilla(asig.datos);
-  const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
-  const filaPB = asig.filaNivel[iPB] ?? 50;
-  const corr = calcularCorregido(asig.datos, filaPB, { proyecto, piezas: asig.piezas });
-  if (c.metodo === 'cirsoc' || c.metodo === 'fem') {
-    // método CIRSOC: el motor de la planilla con el viento del 102-25, el reparto de la guía y el hormigón del 201.
-    // método FEM: lo mismo, pero la frecuencia sale del análisis modal y el reparto de los casos de carga, del modelo.
-    const fem = c.metodo === 'fem' ? calcularFem(proyecto, c.teoria) : undefined;
-    const w = fem?.viento ?? viento102(proyecto);
-    const corrC = calcularCorregido(datosCirsoc(asig.datos, w), filaPB, { proyecto, piezas: asig.piezas });
-    // con exoesqueleto: los tabiques toman solo su parte del viento (y la deriva es la de la torre con el exo)
-    const SJ = { A: corrC.rotoA?.SJ ?? 0, B: corrC.rotoB?.SJ ?? 0 };
-    const ex = exoConViento(proyecto, corrC.guia, asig.piezas, asig.filaNivel, w, SJ);
-    const fM = (d: 'A' | 'B') => ex?.[d].fM ?? 1, fV = (d: 'A' | 'B') => ex?.[d].fV ?? 1;
-    const esf = (d: 'A' | 'B') => (fem ? (n: string) => fem.esfuerzos(d, n)?.map(x => ({ M: x.M * fM(d), V: x.V * fV(d) })) ?? null : undefined);
-    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A')),
-      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'))];
-    const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel, ex);
-    return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif, exo: ex }, fem,
-      controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, SJ, fem?.deriva, ex ?? undefined) };
-  }
-  return { asig, res, corr, controles: controles(proyecto, asig.datos, res, corr, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel), revision: 0,
-    config: c, valores: c.metodo === 'guia' ? corr.guia : res };
-}
 type Oyente = () => void;
 
 /** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
@@ -220,9 +156,15 @@ class Estado {
    * «Calcular» (o F9). Se recuerda en el navegador.
    */
   modo: 'vivo' | 'boton' = (() => { try { return localStorage.getItem(CLAVE_MODO) === 'boton' ? 'boton' : 'vivo'; } catch { return 'vivo'; } })();
-  /** en el modo con botón: hay cambios que todavía no se calcularon (y cuántos) */
+  /** hay cambios que todavía no se calcularon (y cuántos): en el modo con botón, hasta que se apriete «Calcular»; en
+   *  vivo, mientras se calculan en segundo plano (entonces «calculando» también es verdadero) */
   pendiente = false;
   cambiosPendientes = 0;
+  /** en vivo: el cálculo de los últimos cambios está andando en segundo plano; lo que se ve es del cálculo anterior */
+  calculando = false;
+  /** revisión del último cálculo que se aplicó (bueno o con error): lo que llegue de antes se descarta */
+  private revCalculada = -1;
+  private fondo = new CalculoFondo(r => this.llegoCalculo(r), () => this.calcularAhora());
   cambiarModo(m: 'vivo' | 'boton') {
     this.modo = m;
     try { localStorage.setItem(CLAVE_MODO, m); } catch { /* sin almacenamiento */ }
@@ -231,7 +173,9 @@ class Estado {
   }
   /** calcula con los datos actuales y redibuja todo (botón «Calcular», F9, cambio de motor o de método) */
   calcularAhora() {
+    this.fondo.cancelarSiguiente();
     this.recalcular();
+    this.calculando = false;
     this.pendiente = false;
     this.cambiosPendientes = 0;
     this.oyentes.forEach(o => o());
@@ -242,18 +186,45 @@ class Estado {
     // la configuración global del motor queda igual a la del proyecto activo: las funciones que la leen por defecto
     // (vistas, exportar a Sheets, dibujos) usan siempre la del proyecto, nunca una preferencia del navegador
     Object.assign(config, configMotor(this.config));
+    this.revCalculada = this.revision;
     try {
       this.calculo = { ...calcularProyecto(this.proyecto), revision: this.revision };
-      if (controlesExtra.length) {
-        const extra: Control[] = [];
-        for (const f of controlesExtra) { try { extra.push(...f()); } catch { /* un control extra que falla no tumba el cálculo */ } }
-        if (extra.length) this.calculo = { ...this.calculo, controles: [...this.calculo.controles, ...extra] };
-      }
+      this.sumarControlesExtra();
     } catch (e) {
-      // se conservan los resultados del último cálculo bueno (con su revisión) para que las vistas no se rompan,
-      // pero quedan marcados: no son vigentes y no se exportan
-      this.calculo = { ...(this.calculo ?? {}), error: e instanceof Error ? e.message : String(e), revision: this.calculo?.revision ?? -1 } as Calculo;
+      this.marcarError(e instanceof Error ? e.message : String(e));
     }
+  }
+  /** los controles del exoesqueleto (y otros módulos de la interfaz) se suman en este hilo, con el cálculo ya puesto */
+  private sumarControlesExtra() {
+    if (!controlesExtra.length || !this.calculo) return;
+    const extra: Control[] = [];
+    for (const f of controlesExtra) { try { extra.push(...f()); } catch { /* un control extra que falla no tumba el cálculo */ } }
+    if (extra.length) this.calculo = { ...this.calculo, controles: [...this.calculo.controles, ...extra] };
+  }
+  /** se conservan los resultados del último cálculo bueno (con su revisión) para que las vistas no se rompan, pero
+   *  quedan marcados: no son vigentes y no se exportan */
+  private marcarError(msj: string) {
+    this.calculo = { ...(this.calculo ?? {}), error: msj, revision: this.calculo?.revision ?? -1 } as Calculo;
+  }
+  /** en vivo: manda los cambios a calcular en segundo plano; mientras tanto la interfaz sigue con el cálculo anterior */
+  private calcularEnFondo() {
+    Object.assign(config, configMotor(this.config));
+    if (!this.pendiente) this.cambiosPendientes = 0;
+    this.pendiente = true;
+    this.calculando = true;
+    this.cambiosPendientes++;
+    this.fondo.pedir({ revision: this.revision, proyecto: JSON.stringify(this.proyecto) });
+  }
+  private llegoCalculo(r: RespuestaCalculo) {
+    // ya se aplicó algo igual o más nuevo (por ejemplo, «Calcular» o una exportación calcularon en el momento)
+    if (r.revision <= this.revCalculada) return;
+    this.revCalculada = r.revision;
+    Object.assign(config, configMotor(this.config));
+    if ('error' in r) this.marcarError(r.error);
+    else this.calculo = r.calculo;   // ya trae los controles extra (los del exo se calculan en el worker)
+    // si llegó el de la última revisión, quedó al día; si no, se muestra este (más nuevo que el anterior) y sigue el otro
+    if (r.revision === this.revision) { this.calculando = false; this.pendiente = false; this.cambiosPendientes = 0; }
+    this.oyentes.forEach(o => o());
   }
   /** cambia el proyecto, recalcula, guarda en el navegador y avisa a las vistas */
   cambiar(f?: (p: Proyecto) => void) {
@@ -288,7 +259,15 @@ class Estado {
   }
   /** @param cambio cambiaron los datos del proyecto (cambiar de viento o de vista no cuenta como cambio pendiente) */
   private actualizar(cambio = true) {
-    if (this.modo === 'vivo') { this.recalcular(); this.pendiente = false; this.cambiosPendientes = 0; }
+    if (this.modo === 'vivo') {
+      // con un cálculo ya a la vista, los cambios se calculan en segundo plano (la interfaz no se congela); el primero,
+      // y si el navegador no tiene workers, en el momento
+      // (si cambió el método, en el momento: las vistas del método nuevo necesitan sus resultados)
+      if (this.fondo.disponible && this.calculo?.config && !this.calculo.error && JSON.stringify(this.calculo.config) === JSON.stringify(this.config)) {
+        // nada cambió y lo que se ve está al día: no hace falta calcular
+        if (cambio || this.calculando || this.calculo.revision !== this.revision) this.calcularEnFondo();
+      } else { this.recalcular(); this.calculando = false; this.pendiente = false; this.cambiosPendientes = 0; }
+    }
     else if (cambio) { this.pendiente = true; this.cambiosPendientes++; }
     this.guardar();
     this.oyentes.forEach(o => o());
@@ -338,7 +317,10 @@ class Estado {
 export const estado = new Estado();
 
 export const COLORES: Record<string, string> = {
-  alma: '#FFFF00', 'alma der.': '#FFCC99', 'ala sup.': '#00FF00', 'ala inf.': '#00CCFF', columna: '#FF4040',
+  // los de la planilla de la cátedra, salvo dos que chocaban con la convención de la app (rojo tracción, azul
+  // compresión): la columna va en marrón (era rojo) y el ala inferior en verde azulado (era celeste). Solo en la app:
+  // las planillas tienen sus propios colores
+  alma: '#FFFF00', 'alma der.': '#FFCC99', 'ala sup.': '#00FF00', 'ala inf.': '#3FA796', columna: '#8C6D4F',
   tubo: '#B07CFF', perfil: '#5EC8B4', 'fuera del cálculo': '#B8B8B8', 'sin pieza': '#FFFFFF',
 };
 /** número en castellano con signo menos verdadero (−) y sin «−0» */
