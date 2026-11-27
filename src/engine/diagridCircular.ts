@@ -13,13 +13,20 @@ export interface BarraCircular { a: P3; b: P3; clase: 'diagonal' | 'anillo'; ani
 export interface DiagridCircular { anillos: { z: number; R: number; th: number[] }[]; barras: BarraCircular[]; n: number }
 
 /** radio de la fachada en la altura z (m), de la silueta de los niveles (el mayor alcance desde el centro) */
-export function radioEn(p: Proyecto, z: number): number {
+export function radioEn(p: Proyecto, z: number): number { return radiosFachada(p)(z); }
+/**
+ * el radio de la fachada en función de z, con la tabla de los niveles armada una sola vez: para muchas consultas sobre
+ * el mismo proyecto (cada anillo y cada barra del diagrid) en lugar de recorrer todos los niveles en cada una
+ */
+export function radiosFachada(p: Proyecto): (z: number) => number {
   const niv = p.niveles.map((n, i) => ({ z: n.cota, r: Math.max(...plantaDeNivel(p, i).silueta.map(q => Math.hypot(q.x, q.y))) }))
     .filter(q => q.z >= 0).sort((a, b) => a.z - b.z);
-  if (!niv.length) return 0;
-  if (z <= niv[0].z) return niv[0].r;
-  for (let k = 1; k < niv.length; k++) if (z <= niv[k].z) { const a = niv[k - 1], b = niv[k]; return a.r + ((b.r - a.r) * (z - a.z)) / (b.z - a.z || 1); }
-  return niv[niv.length - 1].r;
+  return (z: number) => {
+    if (!niv.length) return 0;
+    if (z <= niv[0].z) return niv[0].r;
+    for (let k = 1; k < niv.length; k++) if (z <= niv[k].z) { const a = niv[k - 1], b = niv[k]; return a.r + ((b.r - a.r) * (z - a.z)) / (b.z - a.z || 1); }
+    return niv[niv.length - 1].r;
+  };
 }
 
 export function diagridCircular(p: Proyecto): DiagridCircular | null {
@@ -31,7 +38,8 @@ export function diagridCircular(p: Proyecto): DiagridCircular | null {
   const zs: number[] = [];
   cortes.forEach((z, k) => { zs.push(z); if (k + 1 < cortes.length) zs.push((z + cortes[k + 1]) / 2); });
   const paso = (2 * Math.PI) / n;
-  const anillos = zs.map((z, r) => ({ z, R: radioEn(p, z) + (def.separacion ?? 0), th: Array.from({ length: n }, (_, i) => (i + (r % 2) * 0.5) * paso) }));
+  const radio = radiosFachada(p);
+  const anillos = zs.map((z, r) => ({ z, R: radio(z) + (def.separacion ?? 0), th: Array.from({ length: n }, (_, i) => (i + (r % 2) * 0.5) * paso) }));
   const punto = (r: number, th: number): P3 => ({ x: anillos[r].R * Math.cos(th), y: anillos[r].R * Math.sin(th), z: anillos[r].z });
   const barras: BarraCircular[] = [];
   anillos.forEach((an, r) => an.th.forEach((th, i) => {

@@ -17,7 +17,7 @@ import { prepararSecciones } from '../engine/loft';
 import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
 import { nivelesOutrigger } from '../engine/exo';
-import { diagridCircular, radioEn, type DiagridCircular } from '../engine/diagridCircular';
+import { diagridCircular, radiosFachada, type DiagridCircular } from '../engine/diagridCircular';
 import { fibrasDireccion, peorFibraPorMuro } from '../engine/fibras';
 import { prismasCalados, solidosEnAltura } from '../engine/aberturas';
 import { TENSION_ADM } from '../engine/verificaciones';
@@ -400,12 +400,13 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const Mexo = (z: number) => (d ? interp(d.r.Msin.map((m, k) => m - d.r.Mtab[k]), d.r.zs, z) : 0);
     // peso que baja por el diagrid: la franja de losa de cada piso que apoya en él, de arriba hasta z
     const franja = def.losas?.franja ?? 0, q = (def.losas?.qD ?? 0.7) + 0.5 * (def.losas?.qL ?? 0.2);
-    const pesos = estado.proyecto.niveles.filter(n => n.cota > 0).map(n => { const R = radioEn(estado.proyecto, n.cota); return { z: n.cota, P: franja > 0 ? Math.PI * (R * R - Math.max(0, R - franja) ** 2) * q : 0 }; });
+    const radioEn = radiosFachada(estado.proyecto);
+    const pesos = estado.proyecto.niveles.filter(n => n.cota > 0).map(n => { const R = radioEn(n.cota); return { z: n.cota, P: franja > 0 ? Math.PI * (R * R - Math.max(0, R - franja) ** 2) * q : 0 }; });
     const G = (z: number) => pesos.filter(x => x.z > z + 1e-6).reduce((a, x) => a + x.P, 0);
     const nMax = { v: 1e-9 };
     const esf = dc.barras.map(b => {
       if (b.clase !== 'diagonal') return 0;
-      const zm = (b.a.z + b.b.z) / 2, R = radioEn(estado.proyecto, zm) || 1, L = Math.hypot(b.b.x - b.a.x, b.b.y - b.a.y, b.b.z - b.a.z), sen = Math.abs(b.b.z - b.a.z) / (L || 1);
+      const zm = (b.a.z + b.b.z) / 2, R = radioEn(zm) || 1, L = Math.hypot(b.b.x - b.a.x, b.b.y - b.a.y, b.b.z - b.a.z), sen = Math.abs(b.b.z - b.a.z) / (L || 1);
       // viento A hacia +y: del lado y < 0 tracciona; viento B hacia +x: del lado x < 0
       const s = estado.dir === 'A' ? -Math.sin(b.th) : -Math.cos(b.th);
       const N = ((Mexo(zm) * s) / (dc.n * R) - G(zm) / (2 * dc.n)) / (sen || 1);

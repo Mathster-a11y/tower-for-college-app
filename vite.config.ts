@@ -60,7 +60,10 @@ export default defineConfig(({ mode }) => ({
   plugins: mode === 'unico' ? [respaldoColorMix(), viteSingleFile()] : [respaldoColorMix(), precacheSW()],
   build: mode === 'unico'
     ? { outDir: 'dist-unico', assetsInlineLimit: 100_000_000, chunkSizeWarningLimit: 4000, rollupOptions: { output: { format: 'iife' as const } }, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] }
-    : { chunkSizeWarningLimit: 1000, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'] },
+    // three.js (el motor del 3D) va en un archivo aparte: no cambia de una versión de la app a la otra, así que el navegador
+    // lo guarda y al publicar un cambio solo se baja de nuevo el código de la app
+    : { chunkSizeWarningLimit: 1000, target: ['es2019', 'chrome80', 'safari13'], cssTarget: ['chrome80', 'safari13'],
+      rollupOptions: { output: { manualChunks: (id: string) => (/[\\/]node_modules[\\/]three[\\/]/.test(id) ? 'three' : undefined) } } },
   // los libros Excel se recalculan enteros con el evaluador: algunas pruebas tardan más de los 5 s por defecto
   test: { environment: 'node', testTimeout: 30_000 },
 }) as never);

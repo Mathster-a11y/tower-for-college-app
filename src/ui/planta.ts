@@ -23,6 +23,7 @@ import { prepararSecciones } from '../engine/loft';
 import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from '../engine/loft';
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
+import { distanciaAlCentro } from '../engine/distanciaCentro';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
@@ -1913,6 +1914,22 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.className = 'calco-panel areas-panel';
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
+  // «Distancia al centro» (Ayudas): la pieza del muro elegido (en el viento elegido), su baricentro G, el centro O de la
+  // losa del nivel, las componentes Δx y Δy y la distancia polar r con el ángulo θ (desde +x, antihorario)
+  let verDist = false;
+  const bDist = document.createElement('button');
+  bDist.type = 'button'; bDist.textContent = 'Distancia al centro';
+  bDist.title = 'Elegí un muro: mide la distancia del baricentro de su pieza (la del viento elegido) al centro de la losa, con Δx, Δy, r y el ángulo θ';
+  bDist.setAttribute('aria-pressed', 'false');
+  bDist.addEventListener('click', () => {
+    verDist = !verDist; bDist.setAttribute('aria-pressed', String(verDist));
+    if (verDist && !estado.seleccion) mensaje('Distancia al centro: tocá un muro de la pieza que querés medir.');
+    dibujar();
+  });
+  const panelDist = document.createElement('div');
+  panelDist.className = 'calco-panel dist-panel';
+  panelDist.hidden = true;
+  dock.appendChild(panelDist);
   const areasDe = (i: number): AreasInfluencia => {
     const p = estado.proyecto, clave = JSON.stringify([i, p.niveles, p.muros.map(m => [m.id, m.x, m.y, m.dir, m.largo, m.espesor, m.ladoY, m.tipo, m.zDesde, m.zHasta]), p.exo?.losas, p.exo?.circular, p.exo?.cortes]);
     if (!areasCache || areasCache.clave !== clave) areasCache = { clave, a: areasInfluencia(p, i) };
@@ -2113,7 +2130,7 @@ export function montarPlanta(cont: HTMLElement) {
   bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
   pintarJuntas();
   // «Ayudas»: guías, cotas y grilla (antes en la barra) y lo que se usa menos
-  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bJuntas);
+  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bDist, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
@@ -3074,12 +3091,71 @@ export function montarPlanta(cont: HTMLElement) {
       const fm = estado.fantasma;
       (tipoDe(fm) === 'tubo-circ' ? [{ x: fm.x, y: fm.y, ax: fm.largo, ay: fm.largo }] : rectangulos(fm)).forEach(r => svg.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: r.ax * escala, height: r.ay * escala, class: 'fantasma' })));
     }
+    dibujarDistancia(X, Y, iN);
     if (verAreas) acomodarAreas();
     manijasSil.forEach(m => svg.appendChild(m));
     if (arrastreNodo && destinoIman && cursor) {
       svg.appendChild(el('circle', { cx: ox + destinoIman.x * escala, cy: oy - destinoIman.y * escala, r: 6, class: 'iman-destino' }));
       svg.appendChild(el('text', { x: ox + cursor.x * escala + 10, y: oy - cursor.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
     }
+  }
+  /** «Distancia al centro»: el dibujo sobre la planta y la carta con los números */
+  function dibujarDistancia(X: (x: number) => number, Y: (y: number) => number, iN: number) {
+    const d = verDist && estado.seleccion ? distanciaAlCentro(estado.proyecto, estado.seleccion, estado.dir, iN) : null;
+    panelDist.hidden = !verDist;
+    if (!verDist) return;
+    const f2 = (v: number) => v.toFixed(2).replace('.', ','), con = (v: number) => (v > 0 ? '+' : v < 0 ? '−' : '') + f2(Math.abs(v));
+    const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+    const cerrar = mk('button', 'Cerrar'); (cerrar as HTMLButtonElement).type = 'button';
+    cerrar.addEventListener('click', () => { verDist = false; bDist.setAttribute('aria-pressed', 'false'); dibujar(); });
+    if (!d) { panelDist.replaceChildren(mk('b', 'Distancia al centro'), mk('span', 'Tocá un muro: se mide su pieza en el viento elegido.', 'nota-chica'), cerrar); return; }
+    const fila = (cls: string, txt: string) => { const r = mk('div', '', 'dist-fila'); r.append(mk('i', '', `dist-muestra ${cls}`), mk('span', txt)); return r; };
+    panelDist.replaceChildren(
+      mk('b', `Distancia al centro · ${d.pieza} (viento ${estado.dir})`),
+      mk('span', `${d.sinPieza ? 'muro sin pieza en este viento' : `pieza de ${d.muros.length} ${d.muros.length === 1 ? 'muro' : 'muros'}`}`, 'nota-chica'),
+      mk('span', `Baricentro G: x = ${con(d.G.x)} · y = ${con(d.G.y)} m`),
+      mk('span', `Centro O (de la losa): x = ${con(d.O.x)} · y = ${con(d.O.y)} m`),
+      fila('dx', `Δx = ${con(d.dx)} m`), fila('dy', `Δy = ${con(d.dy)} m`), fila('r', `r = ${f2(d.r)} m · θ = ${d.theta.toFixed(1).replace('.', ',')}°`),
+      mk('span', 'θ desde el eje +x, antihorario. Tocá otro muro para medir su pieza.', 'nota-chica'), cerrar);
+    const g = el('g', { class: 'dist-centro' }), { G, O } = d;
+    const lin = (x1: number, y1: number, x2: number, y2: number, cls: string) => g.appendChild(el('line', { x1: X(x1), y1: Y(y1), x2: X(x2), y2: Y(y2), class: cls }));
+    // la pieza resaltada
+    const ids = new Set(d.muros);
+    svg.querySelectorAll<SVGGElement>('g.muro').forEach(m => { if (ids.has(m.dataset.muro ?? '')) m.classList.add('dist-pieza'); });
+    // Δx (horizontal, de G a la vertical de O), Δy (vertical, hasta O) y r (de O a G) con el arco de θ
+    lin(G.x, G.y, O.x, G.y, 'dist-dx'); lin(O.x, G.y, O.x, O.y, 'dist-dy');
+    const ra = Math.min(2.4, Math.max(0.6, d.r * 0.3));
+    lin(O.x, O.y, O.x + ra * 1.4, O.y, 'dist-base');
+    lin(O.x, O.y, G.x, G.y, 'dist-r');
+    if (d.r > 1e-6) {
+      const t = (d.theta * Math.PI) / 180, R = ra * escala, x0 = X(O.x + ra), y0 = Y(O.y), x1 = X(O.x + ra * Math.cos(t)), y1 = Y(O.y + ra * Math.sin(t));
+      g.appendChild(el('path', { d: `M${x0},${y0} A${R},${R} 0 ${d.theta > 180 ? 1 : 0} 0 ${x1},${y1}`, class: 'dist-arco' }));
+    }
+    g.appendChild(el('circle', { cx: X(O.x), cy: Y(O.y), r: 4.5, class: 'dist-o' }));
+    g.appendChild(el('circle', { cx: X(G.x), cy: Y(G.y), r: 6, class: 'dist-g' }));
+    g.appendChild(el('path', { d: `M${X(G.x) - 6},${Y(G.y)}h12M${X(G.x)},${Y(G.y) - 6}v12`, class: 'dist-g-cruz' }));
+    const txt = (x: number, y: number, s_: string, cls: string, anchor = 'middle') => g.appendChild(el('text', { x, y, class: `dist-txt ${cls}`, 'text-anchor': anchor }, s_));
+    const arriba = G.y >= O.y ? -8 : 16, derecha = G.x <= O.x, pxDy = Math.abs(d.dy) * escala;
+    if (Math.abs(d.dx) > 1e-3) txt((X(G.x) + X(O.x)) / 2, Y(G.y) + arriba, `Δx = ${con(d.dx)} m`, 'dx');
+    // Δy junto a su línea, del lado de G (adentro del triángulo: una carta del costado no lo tapa); si la línea es corta,
+    // del otro lado de la esquina, para no pisar a Δx
+    if (Math.abs(d.dy) > 1e-3) {
+      if (pxDy >= 40) txt(X(O.x) + (derecha ? -8 : 8), (Y(G.y) + Y(O.y)) / 2 + (G.y >= O.y ? -14 : 14), `Δy = ${con(d.dy)} m`, 'dy', derecha ? 'end' : 'start');
+      else txt(X(O.x) + (derecha ? 8 : -8), Y(G.y) + (G.y >= O.y ? -8 : 16), `Δy = ${con(d.dy)} m`, 'dy', derecha ? 'start' : 'end');
+    }
+    // r, al costado de su línea, del lado contrario a la esquina de Δx y Δy
+    {
+      const sx = X(G.x) - X(O.x), sy = Y(G.y) - Y(O.y), L = Math.hypot(sx, sy) || 1;
+      let nx = -sy / L, ny = sx / L;
+      const cx = X(O.x) - (X(O.x) + X(G.x)) / 2, cy = Y(G.y) - (Y(O.y) + Y(G.y)) / 2;
+      if (nx * cx + ny * cy > 0) { nx = -nx; ny = -ny; }
+      txt((X(G.x) + X(O.x)) / 2 + nx * 16, (Y(G.y) + Y(O.y)) / 2 + ny * 16 + 4, `r = ${f2(d.r)} m`, 'r', nx < -0.3 ? 'end' : nx > 0.3 ? 'start' : 'middle');
+    }
+    // θ afuera del arco, en la mitad del ángulo
+    if (d.r > 1e-6) { const tm = (d.theta * Math.PI) / 360, c = Math.cos(tm); txt(X(O.x + ra * 1.3 * c), Y(O.y + ra * 1.3 * Math.sin(tm)), `θ = ${d.theta.toFixed(1).replace('.', ',')}°`, 'r', c < -0.2 ? 'end' : c > 0.2 ? 'start' : 'middle'); }
+    txt(X(G.x) + (derecha ? -10 : 10), Y(G.y) - 10, `G ${d.pieza}`, 'g', derecha ? 'end' : 'start');
+    txt(X(O.x) - 8, Y(O.y) + 16, 'O', 'r', 'end');
+    svg.appendChild(g);
   }
   /** rótulos de las áreas: el primer lugar libre (sin pisar textos ni muros) entre los candidatos */
   function acomodarAreas() {
@@ -3436,7 +3512,9 @@ export function montarPlanta(cont: HTMLElement) {
   new ResizeObserver(pedirAcomodar).observe(cont);
   // (la barra de herramientas y la tira de pasos cambian de alto solas: dos renglones, la tira abierta o plegada)
   { const ro = new ResizeObserver(pedirAcomodar); ro.observe(barra); ro.observe(pasos); }
-  new MutationObserver(pedirAcomodar).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  // (sin contar la clase «compacta» de la barra: acomodar la saca y la pone para medir, y si contara se llamaría a sí
+  // misma en cada cuadro, para siempre)
+  new MutationObserver(ms => { if (ms.some(m => !(m.target === barra && m.attributeName === 'class'))) pedirAcomodar(); }).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
