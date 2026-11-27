@@ -109,32 +109,31 @@
    "id": "S",
    "x": -3.56,
    "y": -4.44,
-   "lado": 0.75,
+   "lado": 0.7,
    "giro": 38.0,
    "plantas": "p1 p5 p6 (p7: esquina de un pozo)",
    "nota": "columna interior del lado del hall"
   },
   {
    "id": "D",
-   "x": -4.84,
-   "y": 2.77,
-   "lado": 0.8,
-   "giro": 60.0,
+   "x": -4.56,
+   "y": 2.64,
+   "lado": 0.7,
+   "giro": 0.0,
    "plantas": "p1 p5 p6",
-   "nota": "nudo: ahí llegan el banco A, la escalera y el muro W; en el plano es un nudo de unos 1,5 m"
+   "nota": "nudo: en el cruce de A_ext, A_inf y W (antes estaba en el centro de la mancha del nudo, corrido 0,3 m); alineada con el banco A"
   },
   {
    "id": "P",
    "x": -9.32,
    "y": 3.39,
-   "a": 0.6,
-   "b": 0.35,
    "giro": 56.0,
    "plantas": "p1 p5 p6",
-   "nota": "poste chico en la esquina del ascensor C"
+   "nota": "poste chico en la esquina del ascensor C",
+   "lado": 0.7
   }
  ],
- "_columnas_nota": "En los planos miden 0,65 a 0,75 m (las del anillo, unos 0,70 m) y están giradas con su radio. Para la app el usuario propone 0,50 × 0,50.",
+ "_columnas_nota": "Todas de 0,70 × 0,70 m (pedido del usuario; en los planos miden 0,65 a 0,75 m).",
  "muros": [
   {
    "id": "A_ext",
@@ -320,32 +319,6 @@
    ],
    "plantas": "p1 p5 p6",
    "nota": "de R95 hacia R109"
-  }
- ],
- "fragmentos_dudosos": [
-  {
-   "id": "F1",
-   "de": [
-    -6.34,
-    -1.73
-   ],
-   "a": [
-    -3.52,
-    -0.31
-   ],
-   "nota": "trozo del bloque de servicios que coincide en las tres plantas; el resto del bloque cambia (ascensores bajos abajo, baños arriba)"
-  },
-  {
-   "id": "F2",
-   "de": [
-    -6.15,
-    -5.43
-   ],
-   "a": [
-    -3.43,
-    -4.24
-   ],
-   "nota": "de S hacia el sudoeste; coincide en parte"
   },
   {
    "id": "A2_inf",
@@ -358,9 +331,10 @@
     5.63
    ],
    "plantas": "p1 p5 p6",
-   "nota": "abajo del ascensor A′: en las láminas es un trazo débil; el pozo lo cierra el muro B_sup"
+   "nota": "piso del ascensor A′ (dudoso en las láminas; se mantiene por pedido del usuario)"
   }
  ],
+ "fragmentos_dudosos": [],
  "no_estructural": [
   {
    "id": "montante",
@@ -389,5 +363,31 @@
   "anillo_y_muros": "Iguales en p1, p5 y p6 (desde las oficinas bajas hasta cerca del 33º). Del 34º al 38º no hay planos. En el 39º (p7) no está ninguna columna del anillo.",
   "39": "Solo coinciden con p6 los dos pozos que arrancan en S (unos 3,3 × 3,6 m, girados unos 20°) y algunos tramos de tabique; D no coincide del todo.",
   "40": "Ninguna pieza del núcleo: la losa (unos 18,5 m) apoya en el diagrid."
- }
+ },
+ "descartados": [
+  {
+   "id": "F1",
+   "de": [
+    -6.34,
+    -1.73
+   ],
+   "a": [
+    -3.52,
+    -0.31
+   ],
+   "nota": "trozo del bloque de servicios que coincide en las tres plantas; el resto del bloque cambia (ascensores bajos abajo, baños arriba) (descartado por el usuario)"
+  },
+  {
+   "id": "F2",
+   "de": [
+    -6.15,
+    -5.43
+   ],
+   "a": [
+    -3.43,
+    -4.24
+   ],
+   "nota": "de S hacia el sudoeste; coincide en parte (descartado por el usuario)"
+  }
+ ]
 }
