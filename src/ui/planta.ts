@@ -2417,14 +2417,18 @@ export function montarPlanta(cont: HTMLElement) {
         cj.append(mk('span', 'Encuentros con otros muros', 'prec-sub'));
         js.forEach(j => {
           const otro = j.a === m.id ? j.b : j.a, clave = claveJunta(j.a, j.b), [primero] = clave.split('|');
-          const fila = mk('div', '', 'prec-fila prec-junta');
-          fila.append(mk('span', `${j.tipo} con ${otro}${Math.abs(j.angulo - 90) > 0.5 ? ` · ${j.angulo.toFixed(0)}°` : ''}`));
-          if (j.tipo === 'T') { fila.append(mk('span', j.a === m.id ? 'este llega y se corta' : 'pasa este', 'prec-nota')); cj.append(fila); return; }
+          // un renglón por encuentro: qué es, con quién y en qué ángulo, en palabras; abajo, quién pasa (a lo ancho)
+          const fila = mk('div', '', 'prec-junta');
+          const ang = Math.abs(j.angulo - 90) > 0.5 ? `, a ${j.angulo.toFixed(0)}°` : ' (a escuadra)';
+          const que = j.tipo === 'L' ? 'Esquina (L)' : j.tipo === 'X' ? 'Cruce (X)' : 'Encuentro en T';
+          fila.append(mk('span', `${que} con ${otro}${ang}`, 'prec-junta-tit'));
+          if (j.tipo === 'T') { fila.append(mk('span', j.a === m.id ? `${m.id} llega y se corta contra la cara de ${otro}.` : `${m.id} pasa entero; ${otro} llega y se corta contra su cara.`, 'prec-nota')); cj.append(fila); return; }
           const sel = mk('select');
           // por defecto, como las hojas J: pasa el ala (perpendicular al viento elegido); en otro ángulo, el más grueso
           const ea = ejeDeMuro(m), eb = ejeDeMuro(p.muros.find(o => o.id === otro)!);
           const auto = ea && eb ? quienPasa(ea, eb, estado.dir, j.tipo === 'L') : null;
-          const ops: [string, string][] = [['', `como las hojas J: ${auto ? `pasa ${auto.id}` : 'inglete'} (viento ${estado.dir})`], ...(j.tipo === 'L' ? [['inglete', 'inglete'] as [string, string]] : []), [m.id === primero ? 'pasaA' : 'pasaB', `pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `pasa ${otro}`]];
+          sel.title = `Automático: como en las hojas J del viento ${estado.dir} (pasa el muro perpendicular al viento; en otro ángulo, el más grueso)`;
+          const ops: [string, string][] = [['', `${auto ? `Pasa ${auto.id}` : 'Inglete'} (automático)`], ...(j.tipo === 'L' ? [['inglete', 'Inglete'] as [string, string]] : []), [m.id === primero ? 'pasaA' : 'pasaB', `Pasa ${m.id}`], [m.id === primero ? 'pasaB' : 'pasaA', `Pasa ${otro}`]];
           ops.forEach(([v, t]) => { const o = mk('option', t); o.value = v; sel.append(o); });
           sel.value = p.juntas?.[clave] ?? '';
           sel.addEventListener('change', () => { clavePrec = ''; estado.cambiar(pp => { pp.juntas = { ...(pp.juntas ?? {}) }; if (sel.value) pp.juntas[clave] = sel.value as 'inglete' | 'pasaA' | 'pasaB'; else delete pp.juntas[clave]; if (!Object.keys(pp.juntas).length) delete pp.juntas; }); mensaje(`Junta ${m.id}–${otro}: ${sel.selectedOptions[0]?.textContent}.`); });

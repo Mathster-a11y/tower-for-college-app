@@ -2423,3 +2423,9 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .sec-fila { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .sec-fila.total { font-weight: 600; border-top: 1px solid var(--rule); padding-top: 2px; }
 .sec-fila.aviso { color: var(--warn); }
+
+/* encuentros con otros muros (carta de medidas): el título del encuentro en su renglón y la elección a lo ancho */
+.prec-panel .prec-junta { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; border-top: 1px solid var(--hair); }
+.prec-panel .prec-junta-tit { font-size: 12px; font-weight: 600; color: var(--ink); }
+.prec-panel .prec-junta select { width: 100%; min-width: 0; font-size: 12px; }
+.prec-panel .prec-junta .prec-nota { font-size: 11.5px; }
