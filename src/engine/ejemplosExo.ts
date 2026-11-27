@@ -7,6 +7,7 @@
  * (se dice en el nombre del nivel). Las cotas de los módulos del exo (exo.cortes) caen siempre en un nivel.
  */
 import type { Muro, Nivel, Proyecto } from './modelo';
+import { nucleoGherkin } from './nucleoGherkin';
 
 const FT = 0.3048;
 const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -319,10 +320,10 @@ export function ejemploGherkin(): Proyecto {
     // 333 pilotes de 750 mm y unos 27 m, con 117 000 t de capacidad: en la app, una platea con la tensión equivalente
     fundacion: { b1: 52, a1: 52, sigmaAdm: 4.3 },
     hormigon: 'H40',
-    // núcleo: un tubo circular de hormigón de 22 m de diámetro y 25 cm de pared, de la fundación a la última losa (el
-    // piso 40, debajo de la cúpula), que toma viento junto con el diagrid. 22 m y no los 24 m de la obra: la losa del 40
-    // mide 22,85 m, así el tubo queda dentro de la piel hasta arriba
-    muros: [{ id: 'N1', dir: 'Y', x: 0, y: 0, largo: 22, espesor: 0.25, tipo: 'tubo-circ', llega: true, areaInf: 450, piezaA: 'Núcleo', pegadoA: '', piezaB: 'Núcleo B', pegadoB: '', zHasta: hTop }],
+    // núcleo relevado en las plantas de Foster (docs/gherkin-nucleo): muros de 25 cm y columnas de 0,70 m; todo hasta la
+    // losa del 38º y las cuatro columnas centrales (D y S) hasta la del 39º. La losa del 40º apoya en el diagrid
+    // (W2, el muro corto que va de la columna de 95° hacia la de 109°, de 35 cm: con 25 cm pedía más del 4 % de acero)
+    muros: nucleoGherkin({ z38: zPiso(38), z39: zPiso(39), espesorDe: { W2: 0.35 } }),
     exo: {
       tipo: 'A', separacion: 0, modulo: 4, cortes, anchoVariable: true, pasoH: 9.65, circular: { nudos: 18, hasta: hTop },
       columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.5, e: 0.06 }, viga: { b: 0.3, e: 0.016 },
@@ -337,7 +338,8 @@ export function ejemploGherkin(): Proyecto {
         'Diagrid: 18 nudos por anillo, anillos cada dos pisos (8,3 m) y cada anillo girado 10° respecto del de abajo: 20 anillos × 18 = los 360 nudos publicados (Engineering Timelines). Rombos de 4 pisos de alto y 20° de ancho, como en el corte, las plantas (18 nudos en la planta baja de Foster) y la foto de la entrada (la X de la base a unos 8,3 m, la punta de la «A» a 16,6 m). Las «A» prefabricadas de dos pisos y los anillos horizontales a tracción (7116 kN en el piso 2): Harvard Design Magazine, Archinomy.',
         'Cálculo: las fichas de la etapa 08 son caras planas, así que el diagrid circular se calcula como un tubo cuadrado de la misma área (lado 0,886 D), con nudos cada 9,65 m en la cara; el viento sobre el cuadrado es mayor que sobre el cilindro (del lado seguro). El 3D y la planta dibujan el diagrid circular real; el color de sus barras es el esfuerzo del tubo circular con el momento que toma el exo (rojo tracción, azul compresión) más el peso de las losas.',
         'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38 (Archinomy). La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,50 m × 60 mm hasta el piso 13, 0,45 × 50 mm hasta el 25, 0,40 × 30 mm hasta el 33 y 0,30 × 20 mm arriba. Anillos: cajón de 0,30 m × 16 mm (supuesto).',
-        'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. En las plantas del folleto (CBRE, 2024) mide casi la mitad del diámetro del piso; New Steel Construction da 24 m. Acá es un tubo de hormigón de 22 m de diámetro y 25 cm de pared hasta la última losa (el piso 40, a 166 m; con 24 m se saldría de esa losa, que mide 22,85 m): toma viento junto con el diagrid, así la torre se mueve menos y las diagonales trabajan menos (en la obra, el viento lo toma solo el diagrid).',
+        'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. Relevado en las plantas de Foster: se superpusieron las de oficinas bajas, medias y altas, alineadas por sus columnas (coinciden con 2 a 5 cm), y quedó lo que se repite en todas. Un anillo de 16 columnas a 12,3 m del centro, giradas con su radio; cuatro columnas centrales (D, en el nudo de los ascensores, y S, del lado del hall); y, de cada lado, el banco de 3 ascensores, un ascensor suelto, la escalera, un ascensor chico y dos muros hacia el anillo. Lo que cambia de planta a planta (baños, ascensores bajos, locales) no entra. Datos e imágenes en docs/gherkin-nucleo.',
+        'Núcleo en la app: muros de 25 cm (W2, el corto junto a la columna de 95°, de 35 cm: con 25 cm pedía más del 4 % de acero) y columnas de 0,70 × 0,70 m de hormigón (en la obra son de acero). Todo llega a la losa del 38º; solo D y S siguen hasta la del 39º (en la planta del restaurante el anillo ya no está) y el 40º apoya en el diagrid. Los muros de cada mitad forman una pieza que toma viento junto con el diagrid (en la obra lo toma solo el diagrid); las columnas llevan solo carga vertical. Las losas pasan enteras por el medio del núcleo.',
         'Losas: compuestas de 160 mm sobre chapa Ribdeck 80, con vigas radiales cada 10° del núcleo a la fachada y una viga radial que ata cada nudo al núcleo; sin columnas interiores (New Steel Construction). El diagrid lleva una franja de 7 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga.',
         'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá la losa termina en seis triángulos abiertos a la fachada (son su contorno, no huecos): cada uno va de un nudo del diagrid al siguiente (20°) con la punta al 63 % del radio, y giran 5° por piso con las espirales, así que sus vértices caen sobre las diagonales (plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
         'Áreas útiles del folleto (CBRE, 2024): piso 16, 19 558 ft² (1817 m²); 22, 17 878; 30, 12 226 ft² (1136 m²). Ascensores en tres tramos (medio, alto y expreso al restaurante), con transferencia en los pisos 21 y 22; 2,75 m de piso a cielorraso.',

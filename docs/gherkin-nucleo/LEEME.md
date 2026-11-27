@@ -48,6 +48,11 @@ lo que no es estructural y hasta qué altura llega cada cosa. Coordenadas en met
   centrales (D y S) siguen hasta la losa del 39º (+161,85 m). Ver `progreso_6_corte.jpg`.
 - Las columnas D giran unos 35° (horario en la mitad izquierda), como las marcó el usuario sobre el trazado v3.
 
-## Pendiente
+## En la app
 
-- Pasarlo al ejemplo `ejemploGherkin`, en lugar del tubo de Ø 22 m (con el pedido explícito del usuario).
+`src/engine/nucleoGherkin.ts` arma los muros y las columnas con estos datos (como perfiles, en espejo) y
+`ejemploGherkin` los usa en lugar del tubo de Ø 22 m. Los muros de cada mitad forman una pieza por viento («Núcleo O» y
+«Núcleo E») y toman viento junto con el diagrid; las columnas llevan solo carga vertical. W2 va de 35 cm: con 25 cm
+pedía más del 4 % de acero. Con el método CIRSOC no queda nada en «no verifica» (la flexocompresión de los núcleos queda
+en «atención», como con el tubo). Pruebas en `src/engine/nucleoGherkin.test.ts`. Capturas: `progreso_7_app_plantas.jpg`
+(20º, 38º, 39º y 40º) y `progreso_8_app_3d.jpg`.
