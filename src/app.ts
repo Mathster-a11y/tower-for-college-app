@@ -45,7 +45,7 @@ import metaFiguras from './assets/figuras/figuras.json';
 // los PNG de los dibujos rediseñados (tools/figuras), por nombre
 const urlFiguras = import.meta.glob('./assets/figuras/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
-import { precargarLetras } from './ui/tipografia';
+import { AVISO_LETRA_PPTX, precargarLetras } from './ui/tipografia';
 
 // los canvas (túneles, llaves de color) dibujan con Plex Sans: pedirla antes del primer cuadro
 void precargarLetras();
@@ -785,8 +785,8 @@ $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultado
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
 $('b-pynite').addEventListener('click', () => { cerrarMenus(); import('./ui/exportarPynite').then(m => mensaje(m.exportarPynite())).catch(e => fallo('No se pudo armar el contraste con Pynite', e)); });
 $('b-modelo3d').addEventListener('click', () => { cerrarMenus(); mensaje('Armando el modelo 3D…'); import('./ui/exportarModelo3d').then(m => m.exportarModelo3D()).then(t => mensaje(t)).catch(e => fallo('No se pudo exportar el modelo 3D', e)); });
-$('b-presentacion').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar la presentación')) return; mensaje('Armando la presentación…'); import('./ui/presentacion').then(m => m.descargarPresentacion()).then(n => mensaje(`Presentación del trabajo: ${n} láminas.`)).catch(e => fallo('No se pudo armar la presentación', e)); });
-$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas.`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
+$('b-presentacion').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar la presentación')) return; mensaje('Armando la presentación…'); import('./ui/presentacion').then(m => m.descargarPresentacion()).then(n => mensaje(`Presentación del trabajo: ${n} láminas. ${AVISO_LETRA_PPTX}`)).catch(e => fallo('No se pudo armar la presentación', e)); });
+$('b-desglose-pptx').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el PowerPoint')) return; mensaje('Armando el PowerPoint…'); descargarPPTX().then(n => mensaje(`Desglose en PowerPoint: ${n} diapositivas. ${AVISO_LETRA_PPTX}`)).catch(e => fallo('No se pudo armar el PowerPoint', e)); });
 $('b-recorrido').addEventListener('click', () => { cerrarMenus(); recorrido(0); });
 recorridoSiEsPrimeraVez();
 $('b-lamina').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la lámina')) return; imprimirLaminas().catch(e => fallo('No se pudo armar la lámina', e)); });

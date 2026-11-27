@@ -12,8 +12,14 @@
 export const FAMILIA_UI = '"IBM Plex Sans", "IBM Plex Math", sans-serif';
 export const FAMILIA_MONO = '"JetBrains Mono", "IBM Plex Math", monospace';
 export const FAMILIA_MATH = '"IBM Plex Math", "IBM Plex Sans", serif';
-/** el nombre para PowerPoint (no admite una lista: si falta en la computadora que lo abre, PowerPoint pone otra) */
+/** el nombre para PowerPoint y Excel (no admiten una lista: si falta en la computadora que lo abre, ponen otra) */
 export const FUENTE_PPTX = 'IBM Plex Sans';
+export const FUENTE_EXCEL = 'IBM Plex Sans';
+/** la nota de los «Léame» y del mensaje al bajar un PowerPoint: dónde conseguir las letras */
+export const NOTA_LETRAS = 'Letra: IBM Plex Sans, elegida porque distingue siempre I, l y 1 (y 0 de O). Si la computadora no la tiene, el programa muestra otra en su lugar; se baja gratis (licencia libre OFL) de fonts.google.com/specimen/IBM+Plex+Sans e IBM Plex Math de fonts.google.com/specimen/IBM+Plex+Math.';
+
+/** el aviso corto al bajar un PowerPoint */
+export const AVISO_LETRA_PPTX = 'Usa IBM Plex Sans: si PowerPoint muestra otra letra, instalala gratis desde fonts.google.com.';
 
 /** la letra de un canvas: `letraLienzo(11, 600)` → «600 11px "IBM Plex Sans", …» */
 export const letraLienzo = (px: number, peso: 400 | 600 | 700 = 400, mono = false) => `${peso === 400 ? '' : `${peso} `}${px}px ${mono ? FAMILIA_MONO : FAMILIA_UI}`;

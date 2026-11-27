@@ -17,10 +17,20 @@ describe('tipografía (guía: tres familias, nombradas en un solo lugar)', () =>
     expect(letraLienzo(11, 600)).toBe(`600 11px ${FAMILIA_UI}`);
     expect(letraLienzo(12)).toBe(`12px ${FAMILIA_UI}`);
   });
-  it('ningún texto de la interfaz usa una letra del sistema (system-ui, Arial, Calibri: I y l iguales)', () => {
-    const malos = archivos('src/ui').filter(f => !f.endsWith('tipografia.ts'))
+  it('ningún texto de la interfaz usa una letra del sistema (system-ui, Arial, Calibri: I y l iguales; tampoco los Excel que arma la app)', () => {
+    const malos = [...archivos('src/ui'), ...archivos('src/xlsx')].filter(f => !f.endsWith('tipografia.ts'))
       .flatMap(f => readFileSync(f, 'utf8').split('\n').map((l, i) => [f, i + 1, l] as const))
       .filter(([, , l]) => /system-ui|'Arial'|"Arial"|Calibri|Helvetica|Segoe UI/.test(l) && !/^\s*(\/\/|\*)/.test(l));
     expect(malos.map(([f, n]) => `${f}:${n}`)).toEqual([]);
+  });
+  it('los libros de Excel de la app: Plex Sans y la nota de la letra al final del Léame', async () => {
+    const { LibroK } = await import('../xlsx/kit/libro');
+    const JSZip = (await import('jszip')).default;
+    const L = new LibroK(); const le = L.hoja('Léame', [3, 110]); le.put(2, 1, 'Título', 'titulo');
+    const zip = await JSZip.loadAsync(await L.xlsx()); await L.xlsx(); // dos veces: la nota no se repite
+    const st = await zip.file('xl/styles.xml')!.async('string'), h1 = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    expect(st).toContain('<name val="IBM Plex Sans"/>'); expect(st).not.toContain('Arial');
+    expect(h1).toContain('fonts.google.com'); expect(h1).toContain('r="B3"');
+    expect([...le.celdas.values()].filter(c => String(c.v).startsWith('Letra:')).length).toBe(1);
   });
 });
