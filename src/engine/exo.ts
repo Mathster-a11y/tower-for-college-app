@@ -18,8 +18,9 @@
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
 import type { RotoRes } from './planilla';
+import { cargasMalla, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L' | 'M';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
@@ -27,6 +28,7 @@ export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
   F: { nombre: 'Núcleo con outriggers', texto: 'Brazos reticulados de un piso de alto que salen del núcleo de tabiques hacia las columnas del perímetro (con un cinturón, todas las de la cara): cuando el núcleo se flexiona, las columnas lo frenan con un par de fuerzas (Taipei 101, Shanghai Tower).' },
   E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
+  M: { nombre: 'Malla sobre la fachada', texto: 'La malla sigue la fachada real de cada nivel (cilindro, elipse, polígono, torre que se angosta o se corre): diagrid o columnas con cruces, calculada entera con el viento de cada lado.' },
   L: { nombre: 'Libre (barra por barra)', texto: 'Sin dibujo armado: cada columna, diagonal y viga se dibuja a mano entre nudos de la cara (en «Diseño 3D»). Sirve sola o como una zona entre otras.' },
 };
 
@@ -140,6 +142,10 @@ export interface ExoDef {
    * equivalentes (las de las fichas): esto no cambia ningún número.
    */
   circular?: { nudos: number; /** el diagrid se dibuja hasta esta cota; arriba, la carpintería (una cúpula de vidrio) */ hasta?: number };
+  /** ficha M: la malla sobre la fachada (patrón, nudos por anillo, esquinas, giro y tope) */
+  malla?: MallaDef;
+  /** (lo arma el cálculo, no se guarda) ficha M: la malla en el espacio y el viento con que se proyecta */
+  mallaGeo?: MallaGeo; mallaDir?: 'A' | 'B';
 }
 export interface ZonaExo { desde: number; tipo: TipoExo; modulo?: number | null; vanos?: number | null }
 /** las zonas de la torre con sus niveles (índices de zs): sin zonas, una sola con la ficha */
@@ -186,6 +192,7 @@ export function paraLado(def: ExoDef, t: number): ExoDef {
 }
 /** el exo para las caras del viento dir: las barras a mano de solo el otro viento quedan afuera (con su número) */
 export function paraViento(def: ExoDef, dir?: 'A' | 'B' | null): ExoDef {
+  if (dir && def.mallaGeo && def.mallaDir !== dir) def = { ...def, mallaDir: dir };
   if (!dir || !def.nuevas?.some(n => n.dir)) return def;
   return { ...def, nuevas: def.nuevas.map(n => (n.dir && n.dir !== dir ? { ...n, fuera: true } : n)) };
 }
@@ -218,11 +225,15 @@ export interface Barra {
   nucleo?: boolean;
   /** ficha F: barra de un brazo (reticulado del outrigger) */
   brazo?: boolean;
+  /** ficha M: la barra real de la malla (largo, posición y factor de la fuerza: N = N'·escala) */
+  escala?: number; L3?: number; p3?: BarraReal['p3'];
 }
 export interface Cara {
   nombre: string; nudos: Nudo[]; barras: Barra[]; baseArticulada?: boolean;
   /** cargas verticales en los nudos (t, hacia abajo): lo que bajan las losas en cada piso */
   cargasNudo?: { nudo: number; P: number }[];
+  /** ficha M: la cara es la malla entera proyectada en el plano del viento */
+  malla?: { geo: MallaGeo; dir: 'A' | 'B' };
 }
 
 /**
@@ -263,6 +274,8 @@ export function nivelesOutrigger(def: ExoDef, zs: number[]): number[] {
   return [...new Set(pedidos.filter(k => k >= 1 && k <= n))].sort((a, b) => a - b);
 }
 export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'cara', anchos?: number[], corr?: number[], op: { /** ficha F: sin los brazos (todavía no conectados) */ sinBrazos?: boolean; /** ficha F: ancho de la cara perpendicular (la del cinturón) */ anchoPerp?: number } = {}): Cara {
+  // ficha M: la malla entera, proyectada en el plano del viento (sin la malla en el espacio, una cara vacía)
+  if (def.tipo === 'M') return def.mallaGeo ? proyectarMalla(def.mallaGeo, def, def.mallaDir ?? 'A', zs, propsSeccion, (clase, z) => seccionEn(def, clase, z), nombre) : { nombre, nudos: [], barras: [] };
   const n = zs.length - 1;
   /**
    * centro de la cara en el nivel k: en una torre inclinada o corrida (Diseño → Perfil) cada nivel se corre respecto
@@ -559,6 +572,8 @@ function arriostrar(barras: Barra[], nudos: Nudo[], zs: number[], nudoEn: (s: nu
  */
 export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], losa?: CargaLosa, pesoSoloBrazos = false): Cara {
   const n = zs.length - 1, peso = def.pesoPropio !== false;
+  // ficha M: el peso de las barras reales y la franja de losa, como cargas en los nudos (el viento llega por las losas)
+  if (cara.malla) return { ...cara, cargasNudo: cargasMalla(cara.malla.geo, zs, { gamma: gammaExo(def), peso: peso && !pesoSoloBrazos, area: (c, z) => propsSeccion(seccionEn(def, c, z)).A, q: losa?.q, franja: losa?.franja, extra: losa?.extra }) };
   const cargasNudo = losa && losa.q > 0 && losa.franja > 0 ? cargasDeLosa(cara, zs, losa) : undefined;
   // viento por metro de altura en cada piso (t/m, de toda la torre): W_k / D_k
   const D = (k: number) => ((k < n ? zs[k + 1] : zs[k]) - zs[k - 1]) / (k < n ? 2 : 2);
@@ -828,6 +843,8 @@ export interface EsfuerzoBarra {
   relA: boolean; relB: boolean; sec: Seccion;
   /** ficha F: barra del núcleo (no es del exo) */
   nucleo?: boolean;
+  /** ficha M: la barra en el espacio (x, y, z), para dibujarla sobre la fachada */
+  p3?: BarraReal['p3'];
   /** cargas repartidas en locales (t/m): p axial, q perpendicular, en a y en b */
   pa: number; pb: number; qa: number; qb: number;
 }
@@ -932,10 +949,11 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
   };
   return {
     cara, K: c.K, F: Fc,
+    // (ficha M: la fuerza de la barra real es N'·L/L₂ y se verifica con su largo real)
     recuperar: u => fuerzasLocales(u).map(({ b, A, B, r, f }) => ({
-      id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: r.L,
-      N: -f[0], Q: f[1], Ma: -f[2], Mb: f[5], Nb: f[3], Qb: -f[4],
-      relA: b.relA, relB: b.relB, sec: b.sec, fraccion: b.fraccion, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb, ...(b.nucleo ? { nucleo: true } : {}),
+      id: b.id, clase: b.clase, a: { s: A.s, z: A.z }, b: { s: B.s, z: B.z }, L: b.L3 ?? r.L,
+      N: -f[0] * (b.escala ?? 1), Q: f[1], Ma: -f[2], Mb: f[5], Nb: f[3] * (b.escala ?? 1), Qb: -f[4],
+      relA: b.relA, relB: b.relB, sec: b.sec, fraccion: b.fraccion, pa: r.pa, pb: r.pb, qa: r.qa, qb: r.qb, ...(b.nucleo ? { nucleo: true } : {}), ...(b.p3 ? { p3: b.p3 } : {}),
     })),
     reacciones: u => {
       const out = new Map<number, { s: number; V: number; H: number }>();
@@ -1125,7 +1143,7 @@ export const CATALOGO_HORMIGON: Seccion[] = Array.from({ length: 18 }, (_, i) =>
 const catalogo = (def: ExoDef) => (def.material === 'hormigon' ? CATALOGO_HORMIGON : CATALOGO_TUBOS);
 
 /** lo que necesita calcularExo para un viento */
-export interface EntradaExo { /** viento de estas caras (para las barras de un solo viento) */ dir?: 'A' | 'B'; zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[] }
+export interface EntradaExo { /** viento de estas caras (para las barras de un solo viento) */ dir?: 'A' | 'B'; zs: number[]; W: number[]; EJ: (z: number) => number; ancho: number; tCaras: number[]; Eh: number; h: number; /** ancho de la cara en cada cota de zs (caras que siguen la planta) */ anchos?: number[]; /** corrimiento del centro de la cara en cada cota (torre inclinada) */ corr?: number[]; /** ancho de la cara perpendicular en cada cota (ficha F: la del cinturón) */ anchosPerp?: number[]; /** ficha M: la malla en el espacio */ malla?: MallaGeo }
 
 /** peso del acero de las cuatro caras (t): Σ A·L·7,85 t/m³, con las caras de los dos vientos */
 /**
@@ -1141,7 +1159,17 @@ export function pesoCinturon(def: ExoDef, en: EntradaExo): number {
     return s + (2 * P * Av + np * Math.hypot(h, P / np) * Ad) * gammaExo(def);
   }, 0);
 }
+/** el exo con la malla de la entrada (ficha M) y el viento de la entrada */
+export const conMalla = (def: ExoDef, en: { malla?: MallaGeo; dir?: 'A' | 'B' }): ExoDef => (def.tipo === 'M' && en.malla ? { ...def, mallaGeo: en.malla, mallaDir: en.dir ?? def.mallaDir } : def);
+/** sección de una clase de barra al pie z (las secciones por tramos de altura); los anillos de la malla son vigas */
+export function seccionEn(def: ExoDef, clase: ClaseBarra | 'anillo', z: number): Seccion {
+  const c: ClaseBarra = clase === 'anillo' ? 'viga' : clase;
+  const t = (def.tramos ?? []).filter(x => x.clase === c && x.desde <= z + 1e-6).sort((x, y) => y.desde - x.desde)[0];
+  return t ? t.sec : c === 'columna' ? def.columna : c === 'diagonal' ? def.diagonal : def.viga;
+}
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
+  // ficha M: la malla es una sola para los dos vientos (con sus anillos)
+  if (def.tipo === 'M') { const g = entradas.find(e => e.malla)?.malla; return g ? pesoMalla(g, gammaExo(def), (c, z) => propsSeccion(seccionEn(def, c, z)).A) : 0; }
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
   return entradas.reduce((s, en, i) => s + (i === 0 ? pesoCinturon(def, en) : 0) + en.tCaras.reduce((s2, t) => {
     const c = armarCara(paraLado(paraViento(def, en.dir), t), en.ancho, en.zs, 'cara', en.anchos, en.corr, { anchoPerp: en.anchosPerp?.[0] });
@@ -1179,13 +1207,13 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
     const falla = { columna: false, diagonal: false, viga: false };
     let flecha = false;
     entradas.forEach(en => {
-      const r = calcularExo(paraViento(def, en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
+      const r = calcularExo(paraViento(conMalla(def, en), en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
       r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
     // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
-      entradas.forEach(en => cirsoc301(def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir, corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
+      entradas.forEach(en => cirsoc301(conMalla(def, en), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir, corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
     if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
     (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
@@ -1227,7 +1255,7 @@ export function barridoModulo(base: ExoDef, entradas: EntradaExo[], modulos?: nu
   return ms.map(m => {
     const def: ExoDef = { ...base, modulo: m, cortes: undefined, barras: undefined, nuevas: undefined };
     const r = dimensionarExo(def, entradas);
-    const flecha = Math.max(...entradas.map(en => { const c = calcularExo(r.def, en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp }); return c.u[c.u.length - 1] / (en.h / (base.limiteH ?? 500)); }));
+    const flecha = Math.max(...entradas.map(en => { const c = calcularExo(paraViento(conMalla(r.def, en), en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp }); return c.u[c.u.length - 1] / (en.h / (base.limiteH ?? 500)); }));
     return { modulo: m, angulos: entradas.map(en => anguloDiagonal(def, en.ancho, m * hp)), peso: r.peso, verifica: r.verifica, motivo: r.motivo, def: r.def, flecha };
   });
 }

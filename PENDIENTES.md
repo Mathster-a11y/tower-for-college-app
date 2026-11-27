@@ -10,7 +10,7 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 
 **En curso**
 - (nada en curso en `alternativa`)
-- (nada en curso en `claude/ejemplos-cirsoc`; la CI con la revisión de punteros espera a que el usuario tenga la computadora)
+- `claude/ejemplos-cirsoc` (27/11, pedido del usuario en esta sesión; es del área del exo): ficha M «Malla sobre la fachada»: el exo sobre la fachada real de cada nivel (cilindros, elipses, polígonos, torres que se angostan o giran), calculado por proyección de la malla 3D en el plano del viento con los mismos tabiques + exo + CIRSOC 301. Archivos nuevos (`src/engine/exoMalla.ts`) y cambios chicos en `exo.ts`, `exoDeCalculo.ts`, `ui/exo.ts` y `ui/vista3d.ts`. La CI espera a que el usuario tenga la computadora.
 
 **Hecho hace poco en `alternativa`** (27/11): Ayudas → «Distancia al centro» (baricentro de la pieza del viento elegido al centro de la losa: Δx, Δy, r y θ antihorario desde +x).  el núcleo del Gherkin relevado en las plantas de Foster (anillo de 16 columnas, 4 centrales y los muros que se repiten; todo al 38º, D y S al 39º), en lugar del tubo de Ø 22 m; datos e imágenes en `docs/gherkin-nucleo/`. (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel

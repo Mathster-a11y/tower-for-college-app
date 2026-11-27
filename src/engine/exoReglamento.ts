@@ -12,7 +12,8 @@ import type { PiezaEquivalente } from './mapping';
 import type { Viento102 } from './cargas/cirsoc102';
 import { datosAltura, moduloHormigon, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
-import { calcularExo, paraViento, type ResultadoExo } from './exo';
+import { calcularExo, conMalla, paraViento, type ResultadoExo } from './exo';
+import { mallaDe } from './exoMalla';
 
 export interface ExoDireccion {
   r: ResultadoExo;
@@ -53,7 +54,9 @@ export function exoConViento(p: Proyecto, valores: PlanillaRes, piezas: PiezaEqu
     const corr = c.some(x => Math.abs(x) > 1e-9) ? c : undefined;
     const anchosPerp = def.tipo === 'F' ? zs.map(() => (A ? pl.B : pl.L) + 2 * def.separacion) : ts?.map(x => 2 * x);
     // (las barras dibujadas a mano para un solo viento van solo en sus caras)
-    const r = calcularExo(paraViento(exoConLosasJuntas(p, def, dir), dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
+    // ficha M: la malla sobre la fachada real, una sola «cara»
+    const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined;
+    const r = calcularExo(paraViento(conMalla(exoConLosasJuntas(p, def, dir), { malla, dir }), dir), zs, W, EJ, ancho, malla ? [0] : [-t, t], E, anchos, corr, { anchosPerp });
     // la base de los tabiques: con interacción tabique-exo el corte puede repartirse distinto que el momento
     const fM = Math.abs(r.Msin[0]) > 1e-9 ? Math.abs(r.Mtab[0] / r.Msin[0]) : 1;
     const fV = Math.abs(r.Vsin[0]) > 1e-9 ? Math.abs(r.Vtab[0] / r.Vsin[0]) : 1;

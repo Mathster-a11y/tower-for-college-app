@@ -5,10 +5,11 @@
  * Cada objeto recuerda lo que ya calculó: la etapa, el riel, el avance, los controles y el informe piden lo mismo
  * varias veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez.
  */
-import { armarCara, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
+import { armarCara, conMalla, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
+import { mallaDe } from './exoMalla';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
 import type { Viento102 } from './cargas/cirsoc102';
@@ -98,10 +99,12 @@ export class ExoDeCalculo {
       // J de los tabiques que toman viento en cada piso; si arriba no hay ninguno (núcleo solo de gravedad), es 0: el exo toma todo
       const EJ = (z: number) => E * (Jniv.find(q => q.z >= z - 1e-6)?.J ?? rg.J);
       const { ancho, t, anchos, ts, corr, tc, anchosPerp } = this.anchosCara(dir, def, zs);
+      // ficha M: la malla sobre la fachada real es una sola «cara» (la malla entera, proyectada en el plano del viento)
+      const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined, tCaras = malla ? [0] : [-t, t];
       // (con las losas de los pisos que junta un nivel, como la corona del Citicorp: también las carga el exo)
-      const r = hecho ?? calcularExo(paraViento(exoConLosasJuntas(p, def, dir), dir), zs, W, EJ, ancho, [-t, t], E, anchos, corr, { anchosPerp });
+      const r = hecho ?? calcularExo(paraViento(conMalla(exoConLosasJuntas(p, def, dir), { malla, dir }), dir), zs, W, EJ, ancho, tCaras, E, anchos, corr, { anchosPerp });
       const h0 = zs[zs.length - 1] - zPB;
-      return { r, def, dir, ancho, tCaras: [-t, t], niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { dir, zs, W, EJ, ancho, tCaras: [-t, t], Eh: E, h: h0, anchos, corr, anchosPerp } };
+      return { r, def, dir, ancho, tCaras, niveles: sobre.map(x => x.nivel), h: h0, Eh: E, anchos, ts, corr, tc, entrada: { dir, zs, W, EJ, ancho, tCaras, Eh: E, h: h0, anchos, corr, anchosPerp, malla } };
     } catch (err) { this.ultimoError = err instanceof Error ? err.message : String(err); return null; }
   }
 
@@ -139,7 +142,8 @@ export class ExoDeCalculo {
       const zs = [zPB, ...alt.filter(x => x.z > zPB + 1e-6).sort((a, b) => a.z - b.z).map(x => x.z)];
       if (zs.length < 3) return null;
       const g = this.anchosCara(dir, def, zs);
-      return { zs, ...g, tCaras: [-g.t, g.t], cara: armarCara(paraViento(def, dir), g.ancho, zs, 'cara', g.anchos, g.corr, { anchoPerp: g.anchosPerp?.[0] }) };
+      const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined;
+      return { zs, ...g, tCaras: malla ? [0] : [-g.t, g.t], malla, cara: armarCara(paraViento(conMalla(def, { malla, dir }), dir), g.ancho, zs, 'cara', g.anchos, g.corr, { anchoPerp: g.anchosPerp?.[0] }) };
     } catch { return null; }
   }
 
@@ -150,7 +154,7 @@ export class ExoDeCalculo {
       // vientos oblicuos (quartering): las columnas de esquina con los dos vientos a la vez
       const otro = this.datos(d.dir === 'A' ? 'B' : 'A', d.def)?.entrada;
       const combos = reglamento ? [...COMBOS_101_25, ...COMBOS_OBLICUOS_101_25] : [...COMBOS_CURSO, ...COMBOS_OBLICUOS_CURSO];
-      return cirsoc301(exoConLosasJuntas(this.p, d.def, d.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, dir: d.dir, corr: en.corr, anchosPerp: en.anchosPerp });
+      return cirsoc301(conMalla(exoConLosasJuntas(this.p, d.def, d.dir), en), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { combos, costura: d.def.sinCostura ? false : true, otro, dir: d.dir, corr: en.corr, anchosPerp: en.anchosPerp });
     });
   }
 
@@ -170,7 +174,7 @@ export class ExoDeCalculo {
       sobre.forEach((z, i) => { if (Math.abs(z - zPB - q.z) < Math.abs(sobre[k] - zPB - q.z)) k = i; });
       W[k] += q.F;
     }
-    const r = calcularExo(paraViento(exoConLosasJuntas(this.p, def, dir), dir), en.zs, W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
+    const r = calcularExo(paraViento(conMalla(exoConLosasJuntas(this.p, def, dir), en), dir), en.zs, W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
     return [{ z: 0, d: 0 }, ...r.zs.slice(1).map((z, i) => ({ z: z - zPB, d: r.u[i] }))];
   }
 
