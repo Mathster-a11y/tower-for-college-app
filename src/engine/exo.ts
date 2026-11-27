@@ -852,7 +852,21 @@ export function cerosDeM(e: EsfuerzoBarra, n = 60): number[] {
   return out;
 }
 
-export function condensarCara(cara: Cara, E: number, nPisos: number): CaraCondensada {
+/**
+ * La rigidez de una cara condensada a los pisos depende solo de su geometría (nudos, barras, secciones, apoyos), no de
+ * sus cargas: la verificación pide la misma cara con varias combinaciones (peso, sobrecarga, viento de cada lado), así
+ * que se arma y se condensa una sola vez. Guarda las últimas; nadie modifica lo guardado (se lee y se copia).
+ */
+interface RigidezCara { mapa: Map<number, [number, number, number]>; N: number; Kg: Mat; fijos: number[]; esc: number[]; c: Condensada }
+const memoRigidez = new Map<string, RigidezCara>();
+function rigidezCara(cara: Cara, E: number, nPisos: number, locales: BarraLocal[]): RigidezCara {
+  let clave: string | null = null;
+  try {
+    clave = JSON.stringify([E, nPisos, !!cara.baseArticulada, cara.nudos.map(q => [q.id, q.s, q.z, q.piso, q.nucleo ? 1 : 0]),
+      cara.barras.map(b => [b.a, b.b, b.A, b.I, b.relA ? 1 : 0, b.relB ? 1 : 0])]);
+  } catch { clave = null; }
+  const hay = clave ? memoRigidez.get(clave) : undefined;
+  if (hay && clave) { memoRigidez.delete(clave); memoRigidez.set(clave, hay); return hay; }
   // numeración: gdl 0..n-1 = u de los pisos 1..n (master); después w y φ de cada nudo que no está en la base
   // (con la base articulada, el giro de los nudos de la base también queda libre)
   const master = Array.from({ length: nPisos }, (_, i) => i);
@@ -863,27 +877,37 @@ export function condensarCara(cara: Cara, E: number, nPisos: number): CaraConden
     else if (q.piso < 0) { mapa.set(q.id, [k, k + 1, k + 2]); k += 3; }      // entre pisos: u propio (no lo toca la losa)
     else { mapa.set(q.id, [q.piso - 1, k, k + 1]); k += 2; }
   });
-  const N = k, Kg = ceros(N, N), Fg = new Array<number>(N).fill(0);
-  const datos = cara.barras.map(b => {
-    const A = cara.nudos[b.a], B = cara.nudos[b.b];
-    const r = barraLocal(E, b, A.s, A.z, B.s, B.z);
-    const g = [...mapa.get(b.a)!, ...mapa.get(b.b)!];
-    for (let i = 0; i < 6; i++) {
-      if (g[i] < 0) continue;
-      for (let j = 0; j < 6; j++) if (g[j] >= 0) Kg[g[i]][g[j]] += r.K[i][j];
-      Fg[g[i]] += r.T.reduce((sm, f, p) => sm + f[i] * r.P[p], 0);     // Tᵀ·P
-    }
-    return { b, A, B, r, g };
+  const N = k, Kg = ceros(N, N);
+  cara.barras.forEach((b, ib) => {
+    const r = locales[ib], g = [...mapa.get(b.a)!, ...mapa.get(b.b)!];
+    for (let i = 0; i < 6; i++) { if (g[i] < 0) continue; for (let j = 0; j < 6; j++) if (g[j] >= 0) Kg[g[i]][g[j]] += r.K[i][j]; }
   });
-  // lo que bajan las losas: fuerza vertical hacia abajo en el gdl w del nudo
-  (cara.cargasNudo ?? []).forEach(c => { const g = mapa.get(c.nudo); if (g && g[1] >= 0) Fg[g[1]] -= c.P; });
   // giros sin rigidez (nudos donde todas las barras llegan articuladas): se fijan (no cambia nada)
   // (con las articulaciones condensadas, ese giro puede quedar con un resto de redondeo: se compara con la rigidez típica)
   const maxDiag = Kg.reduce((m, f, i) => (i >= nPisos ? Math.max(m, Math.abs(f[i])) : m), 0);
-  const umbral = Math.max(1e-12, maxDiag * 1e-11);
-  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < umbral && Kg[i].every((v, j) => j === i || Math.abs(v) < umbral)) { Kg[i].fill(0); Kg.forEach(f => { f[i] = 0; }); Kg[i][i] = 1; Fg[i] = 0; }
+  const umbral = Math.max(1e-12, maxDiag * 1e-11), fijos: number[] = [];
+  for (let i = nPisos; i < N; i++) if (Math.abs(Kg[i][i]) < umbral && Kg[i].every((v, j) => j === i || Math.abs(v) < umbral)) { Kg[i].fill(0); Kg.forEach(f => { f[i] = 0; }); Kg[i][i] = 1; fijos.push(i); }
   const esc = Array.from({ length: N - nPisos }, (_, i) => nPisos + i);
-  const c = condensar(Kg, master, esc);
+  const r: RigidezCara = { mapa, N, Kg, fijos, esc, c: condensar(Kg, master, esc) };
+  if (clave) { memoRigidez.set(clave, r); if (memoRigidez.size > 8) memoRigidez.delete(memoRigidez.keys().next().value!); }
+  return r;
+}
+
+export function condensarCara(cara: Cara, E: number, nPisos: number): CaraCondensada {
+  const master = Array.from({ length: nPisos }, (_, i) => i);
+  // cada barra en locales (su rigidez y sus cargas); la rigidez de la cara entera sale de la memoria si ya se armó
+  const locales = cara.barras.map(b => { const A = cara.nudos[b.a], B = cara.nudos[b.b]; return barraLocal(E, b, A.s, A.z, B.s, B.z); });
+  const { mapa, N, Kg, fijos, esc, c } = rigidezCara(cara, E, nPisos, locales);
+  const Fg = new Array<number>(N).fill(0);
+  const datos = cara.barras.map((b, ib) => {
+    const A = cara.nudos[b.a], B = cara.nudos[b.b], r = locales[ib];
+    const g = [...mapa.get(b.a)!, ...mapa.get(b.b)!];
+    for (let i = 0; i < 6; i++) if (g[i] >= 0) Fg[g[i]] += r.T.reduce((sm, f, p) => sm + f[i] * r.P[p], 0);     // Tᵀ·P
+    return { b, A, B, r, g };
+  });
+  // lo que bajan las losas: fuerza vertical hacia abajo en el gdl w del nudo
+  (cara.cargasNudo ?? []).forEach(cg => { const g = mapa.get(cg.nudo); if (g && g[1] >= 0) Fg[g[1]] -= cg.P; });
+  fijos.forEach(i => { Fg[i] = 0; });
   const Fs = esc.map(i => [Fg[i]]);
   const KssFs = c.nEsc ? c.resolverSs(Fs).map(f => f[0]) : [];
   const Fc = master.map(i => Fg[i] - esc.reduce((sm, j, p) => sm + Kg[i][j] * KssFs[p], 0));
@@ -1057,8 +1081,15 @@ function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: n
     if (F) { const ut = resolver(Kt.map(f => f.map(v => v / tCaras.length)), W.map(w => [w])).map(f => f[0]); Jeq = Math.max(0, Jeq - uRef[n - 1] / ut[n - 1]); }
     return { nombre: c.cara.nombre, t, esfuerzos: c.recuperar(u), reacciones: c.reacciones(u), Jeq, ancho: anchoCara };
   });
-  const controles = controlesExo(res, def);
-  return { zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res, controles };
+  return conControles({ zs, u, uSin, Ftab, Fexo, Vtab: ct.V, Mtab: ct.M, Vsin: cs.V, Msin: cs.M, fraccionExo: cs.M[0] ? 1 - ct.M[0] / cs.M[0] : 0, Vexo0: cs.V[0] - ct.V[0], caras: res }, def);
+}
+/**
+ * los controles del curso (σ ≤ σadm y pandeo, 21 puntos por barra) se calculan la primera vez que alguien los pide:
+ * con el método CIRSOC se verifica con el 301 y estos no se usan en cada combinación de cargas
+ */
+function conControles(r: Omit<ResultadoExo, 'controles'>, def: ExoDef): ResultadoExo {
+  let ctl: ControlBarra[] | null = null;
+  return Object.defineProperty(r, 'controles', { get: () => (ctl ??= controlesExo(r.caras, def)), enumerable: true, configurable: true }) as ResultadoExo;
 }
 
 /** control del curso de cada barra: σ = |N|/A + |M|/W ≤ σadm a lo largo de la barra y pandeo (N < Ncr/1,7, λ ≤ 200) */
@@ -1333,10 +1364,17 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
   const qL = def.losas?.qL ?? LOSA_QL;
   const rL = losas && qL > 0 ? calcularExo({ ...def, pesoPropio: false }, zs, W.map(() => 0), EJ, ancho, tCaras, Eh, anchos, op.corr, { qLosa: qL, anchosPerp }) : null;
   const out: Cirsoc301Barra[] = [];
+  // las barras de D y de L de cada cara, por id (buscarlas una por una en la lista era cuadrático)
+  const porId = (r: ResultadoExo | null) => r?.caras.map(c => new Map(c.esfuerzos.map(e => [e.id, e]))) ?? [];
+  const mD = porId(rD), mL = porId(rL);
+  // N y M de una barra en los 21 puntos (cada combinación y cada signo del viento los reusa)
+  const muestras = (e: EsfuerzoBarra) => Array.from({ length: 21 }, (_, i) => esfuerzosEn(e, i / 20));
+  const cero21 = Array.from({ length: 21 }, () => ({ N: 0, M: 0 }));
   rW.caras.forEach((c, ic) => c.esfuerzos.forEach(eW => {
     if (eW.nucleo) return;
     // (una barra que no está en el caso D, como los brazos que se conectan al final, no tiene esfuerzos de D)
-    const eD = rD.caras[ic].esfuerzos.find(x => x.id === eW.id) ?? { ...eW, N: 0, Q: 0, Ma: 0, Mb: 0, Nb: 0, Qb: 0, pa: 0, pb: 0, qa: 0, qb: 0 }, eL = rL?.caras[ic].esfuerzos.find(x => x.id === eW.id);
+    const eD = mD[ic]?.get(eW.id) ?? { ...eW, N: 0, Q: 0, Ma: 0, Mb: 0, Nb: 0, Qb: 0, pa: 0, pb: 0, qa: 0, qb: 0 }, eL = mL[ic]?.get(eW.id);
+    const sW = muestras(eW), sD = muestras(eD), sL = eL ? muestras(eL) : cero21;
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
     const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
     const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f, S = p.W * f;
@@ -1362,7 +1400,7 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
       if (cb.otro && !otro) continue;
       let Pc = 0, Pt = 0, Mu = 0, MuC = 0, MuT = 0;
       for (let i = 0; i <= 20; i++) {
-        const fw = esfuerzosEn(eW, i / 20), fd = esfuerzosEn(eD, i / 20), fl = eL && cb.L ? esfuerzosEn(eL, i / 20) : { N: 0, M: 0 }, cL = cb.L ?? 0;
+        const fw = sW[i], fd = sD[i], fl = eL && cb.L ? sL[i] : cero21[i], cL = cb.L ?? 0;
         // la parte del viento perpendicular suma con el mismo signo (la peor esquina); la flexión de la otra cara se suma
         // (flexión en los dos planos de un tubo cuadrado, del lado seguro)
         const Nw = sg * fw.N, extraN = cb.otro && otro ? cb.otro * otro.N * (Nw >= 0 ? 1 : -1) : 0;
