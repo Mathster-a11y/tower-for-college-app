@@ -3502,7 +3502,9 @@ export function montarPlanta(cont: HTMLElement) {
   new ResizeObserver(pedirAcomodar).observe(cont);
   // (la barra de herramientas y la tira de pasos cambian de alto solas: dos renglones, la tira abierta o plegada)
   { const ro = new ResizeObserver(pedirAcomodar); ro.observe(barra); ro.observe(pasos); }
-  new MutationObserver(pedirAcomodar).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  // (sin contar la clase «compacta» de la barra: acomodar la saca y la pone para medir, y si contara se llamaría a sí
+  // misma en cada cuadro, para siempre)
+  new MutationObserver(ms => { if (ms.some(m => !(m.target === barra && m.attributeName === 'class'))) pedirAcomodar(); }).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {
       ev.preventDefault();
