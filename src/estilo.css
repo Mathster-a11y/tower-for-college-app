@@ -2324,3 +2324,16 @@ input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; 
   .barra #estado-calculo { max-width: none; }
   .barra .espacio { flex: 1 1 0; min-width: 0; }
 }
+
+/* tabla de alturas → perfil: el texto pegado y, al lado, el alzado que sale */
+dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: none; }
+.tabla-perfil-lado { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: start; margin: 8px 0; }
+.tabla-perfil-lado textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 300px; resize: vertical; font: 12.5px/1.45 var(--mono); tab-size: 12; }
+.alzado-tabla { width: 220px; height: 300px; border: 1px solid var(--edge); border-radius: 8px; background: var(--lienzo); }
+.alzado-tabla .torre { fill: color-mix(in srgb, var(--ink) 10%, transparent); stroke: var(--ink); stroke-width: 1.2; }
+.alzado-tabla .punto { fill: var(--elegido); }
+.alzado-tabla .suelo { stroke: var(--ink2); stroke-width: 1; }
+.alzado-tabla .rot { font: 10px var(--mono); fill: var(--ink2); }
+.tabla-perfil-avisos { margin: 2px 0 6px; padding-left: 18px; color: var(--revisar); font-size: 12px; }
+.tarjeta .nota-chica.error { color: var(--mal); }
+@media (max-width: 640px) { .tabla-perfil-lado { grid-template-columns: 1fr; } .alzado-tabla { justify-self: center; } }

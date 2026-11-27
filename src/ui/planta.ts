@@ -10,7 +10,8 @@ import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, muro
 import { carpinteriaDeNivel } from '../engine/silueta';
 import { esquinasEnNiveles, psiRedondeo } from '../engine/esquinas';
 import { bandasFachada, calcularPaneleria, moduloFacetas, NOMBRE_MODO, tramoEn, tramosCarpinteria, type ModoCarpinteria, type TramoCarpinteria } from '../engine/carpinteria';
-import { aplicarPerfil, nivelBase, perfilDesdeTabla, PERFILES, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { aplicarPerfil, nivelBase, PERFILES, tablaDesdePerfil, valorPerfil, type PerfilTorre } from '../engine/perfil_torre';
+import { pedirTablaPerfil } from './tablaPerfil';
 import { contornoAlViento as contornoViento, medidasAlViento, type CriterioAncho } from '../engine/silueta';
 import { adivinarModelo, aplicarModelo, leerOBJ, leerSTL, normalizarModelo } from '../engine/importar3d';
 import { montarCorte } from './corteTorre';
@@ -1097,17 +1098,26 @@ export function montarPlanta(cont: HTMLElement) {
     PERFILES.forEach(x => pls.append(boton(x.nombre, x.texto, () => { pfSel = ab.sel = null; poner(q => { q.puntos = structuredClone(x.p.puntos); q.suave = x.p.suave ?? false; q.giro = x.p.giro ?? 0; }); })));
     det.append(pls);
     // la forma desde una tabla de alturas (cota y ancho o diámetro), pegada de Excel o medida sobre un corte
-    det.append(h2(boton('Pegar una tabla de alturas…', 'Cota y ancho (o diámetro) a cada altura, pegadas de Excel: la forma sale tal cual de la tabla', async () => {
-      const pp = estado.proyecto, ib = nivelBase(pp, leer(pp) ?? { puntos: [] }), z0 = pp.niveles[ib]?.cota ?? 0, z1 = pp.niveles[0]?.cota ?? 0;
-      const txt = await pedirTextoLargo('Forma desde una tabla de alturas',
-        `Pegá dos columnas: la cota (m, como en Niveles) y el ancho o el diámetro a esa altura (m). Con tres columnas, el ancho en x y en y; con cinco, además cuánto se corre (x, y). Se toman en proporción al ancho de la tabla en la losa base (${f2(z0)} m): la losa base da el tamaño y la tabla, la forma. Los títulos se saltean.`, '', 'Usar la tabla');
-      if (txt === null) return;
-      const r = perfilDesdeTabla(txt, z0, z1);
-      if (r.error) { await avisar('error', 'No se pudo leer la tabla', r.error); return; }
+    // la forma desde una tabla de alturas (cota y ancho o diámetro), pegada de Excel o medida sobre un corte; y al revés,
+    // el perfil como tabla para llevarlo a Excel, revisarlo y volver a pegarlo
+    const zonaTabla = () => { const pp = estado.proyecto, q = leer(pp) ?? { puntos: [] }, ib = nivelBase(pp, q); return { pp, q, ib, z0: pp.niveles[ib]?.cota ?? 0, z1: pp.niveles[0]?.cota ?? 0 }; };
+    const bTabla = boton('Pegar una tabla de alturas…', 'Cota y ancho (o diámetro) a cada altura, pegadas de Excel: se ve el alzado antes de usarla', async () => {
+      const { pp, ib, z0, z1 } = zonaTabla();
+      const r = await pedirTablaPerfil({ zBase: z0, zTop: z1, anchoBase: (env && pp.envolvente ? cajaSilueta(pp.envolvente.planta).B : cajaSilueta(plantaDeNivel(pp, ib).silueta).B) || 20 });
+      if (!r) return;
       pfSel = ab.sel = null;
-      poner(q => { q.puntos = r.puntos; q.suave = false; });
-      mensaje(`Forma tomada de ${r.filas} filas${r.fuera ? ` (${r.fuera} fuera de la torre, de ${f2(z0)} a ${f2(z1)} m, no se usan)` : ''}: ${r.puntos.length} puntos, con tramos rectos entre ellos.`);
-    })));
+      poner(q => { q.puntos = r.puntos; q.suave = r.suave; });
+      mensaje(`Forma tomada de la tabla: ${r.puntos.length} puntos, con ${r.suave ? 'una curva suave' : 'tramos rectos'} entre ellos.`);
+    });
+    const bCopiar = boton('Copiar como tabla', 'El perfil como tabla (cota, ancho en x y en y, corrimiento) de cada losa, para pegar en Excel', async () => {
+      const { pp, q } = zonaTabla();
+      if (!leer(pp)) { mensaje('Todavía no hay un perfil: elegí uno o pegá una tabla.'); return; }
+      const tabla = tablaDesdePerfil(pp, q);
+      try { await navigator.clipboard.writeText(tabla); mensaje('Perfil copiado como tabla: pegalo en Excel (una fila por losa).'); }
+      catch { await pedirTextoLargo('El perfil como tabla', 'No se pudo copiar solo: seleccioná el texto y copialo (Ctrl+C).', tabla, 'Listo'); }
+    });
+    // la tabla inversa sale de las losas (la envolvente tiene su propia planta base)
+    det.append(h2(bTabla, ...(pf && !env ? [bCopiar] : [])));
     if (!pf) return det;
     // alzado: eje vertical = altura (0 abajo, 1 arriba), a los costados el ancho (factor 1 = la base)
     const W = 260, H = 230, mx = W / 2, y0 = H - 16, y1 = 14, K = 62;

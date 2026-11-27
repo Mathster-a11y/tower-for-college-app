@@ -140,3 +140,28 @@ describe('diseñar una torre de perfil complejo sin código (el Gherkin)', () =>
     expect(peor).toBeLessThan(0.04);
   });
 });
+
+describe('tabla de alturas: avisos y camino inverso', () => {
+  it('avisa las filas salteadas, las cotas repetidas y las que quedan fuera de la torre', async () => {
+    const r = perfilDesdeTabla('cota\tancho\n0\t20\n5\tveinte\n5\t18\n5\t16\n10\t10\n30\t5', 0, 10);
+    expect(r.error).toBeUndefined();
+    expect(r.avisos.some(a => a.startsWith('Fila 3'))).toBe(true);           // «veinte»
+    expect(r.avisos.some(a => a.includes('dos veces'))).toBe(true);          // la cota 5
+    expect(r.avisos.some(a => a.includes('fuera de la torre'))).toBe(true);  // la de 30 m
+    expect(valorPerfil({ puntos: r.puntos }, 0.5).fx).toBeCloseTo(16 / 20, 6);   // queda la última fila de la cota 5
+    expect(r.avisos.some(a => a.startsWith('Fila 1'))).toBe(false);          // el título no se avisa
+  });
+  it('del perfil a la tabla y de vuelta da el mismo perfil en cada losa', async () => {
+    const { tablaDesdePerfil, aplicarPerfil: ap } = await import('./perfil_torre');
+    const p = torreDeUsuario(); ap(p);
+    const tabla = tablaDesdePerfil(p, p.perfilTorre!);
+    expect(tabla.split('\n')[0]).toContain('cota');
+    const r = perfilDesdeTabla(tabla, 0, p.niveles[0].cota);
+    expect(r.error).toBeUndefined();
+    const zt = p.niveles[0].cota;
+    p.niveles.filter(n => n.cota >= 0).forEach(n => {
+      const h = n.cota / zt, a = valorPerfil(p.perfilTorre!, h), b = valorPerfil({ puntos: r.puntos }, h);
+      expect(b.fx).toBeCloseTo(a.fx, 3); expect(b.fy).toBeCloseTo(a.fy, 3);
+    });
+  });
+});
