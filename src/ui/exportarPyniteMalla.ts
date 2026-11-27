@@ -63,6 +63,7 @@ for v in ('A', 'B'):
     print(f"  {'z (m)':>8s}{'app':>10s}{'Pynite':>10s}{'diferencia':>12s}")
     zs = DATOS['zs']
     for k in sorted(set([round(i * (len(zs) - 1) / 8) for i in range(1, 9)])):
+        if py['u' + v][k] is None: continue   # un nivel sin nudos ni tabiques (sin losa)
         a, p = app['u' + v][k] * 1000, py['u' + v][k] * 1000
         dif = (p - a) / a * 100 if a else 0.0
         peor = max(peor, abs(dif))

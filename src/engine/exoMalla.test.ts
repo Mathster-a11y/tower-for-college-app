@@ -378,4 +378,20 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     const ang = (m: number) => f.find(x => x.modulo === m && x.nudos === 12)!.angulo;
     expect(ang(8)).toBeGreaterThan(ang(4)); expect(ang(4)).toBeGreaterThan(ang(2));
   });
+  it('la cúpula de vidrio (niveles sin losa): no se ata la malla ni se carga losa ahí, y la deriva arriba sale pareja', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), d = ex.datos('A', p.exo!)!;
+    const g = d.entrada.malla!, zs = d.entrada.zs, u = d.r.u;
+    const sinLosa = zs.map(z => !!p.niveles.find(n => Math.abs(n.cota - z) < 1e-6)?.sinLosa);
+    zs.forEach((_, k) => { if (sinLosa[k] && !g.anillos.includes(k)) expect(g.nudos.some(q => q.k === k)).toBe(false); });
+    zs.forEach((_, k) => { if (sinLosa[k]) expect(g.perimetro[k]).toBe(0); });
+    // el viento total no cambia (solo se pasa a los niveles con nudos)
+    const W0 = d.entrada.W.reduce((a, b) => a + b, 0);
+    expect(W0).toBeGreaterThan(0);
+    zs.slice(1).forEach((_, i) => { if (!g.nudos.some(q => q.k === i + 1) && !(d.entrada.EJ(zs[i + 1]) > 0)) expect(d.entrada.W[i]).toBe(0); });
+    // de 160 m para arriba, ningún piso con más de 1,5 veces la deriva media
+    const media = u[u.length - 1] / (zs[zs.length - 1] - zs[0]);
+    u.forEach((x, i) => { if (zs[i + 1] > 160) expect((x - u[i - 1]) / (zs[i + 1] - zs[i])).toBeLessThan(1.5 * media); });
+  });
 });

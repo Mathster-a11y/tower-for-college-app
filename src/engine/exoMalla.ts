@@ -55,6 +55,8 @@ export interface MallaDef {
 }
 /** tope de nudos por anillo: con más, el cálculo se vuelve lento y las barras más cortas que un piso */
 export const NUDOS_MAX = 96;
+/** separación mínima entre los nudos de un anillo (m): en una cúpula que se cierra, los de arriba llevan menos nudos */
+export const SEPARACION_MIN = 1;
 export const MALLA_POR_DEFECTO: MallaDef = { patron: 'diagrid', nudos: 16, esquinas: true };
 export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string }> = {
   diagrid: { nombre: 'Diagrid', texto: 'Rombos de diagonales sobre la fachada, sin columnas: cada anillo corrido medio paso respecto del de abajo (30 St Mary Axe).' },
@@ -229,7 +231,9 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const medio = m.patron === 'diagrid' ? r % 2 === 1 : m.patron === 'hexagrid' ? Math.floor((r + 1) / 2) % 2 === 1 : false;
     // densidad variable: de N en la base a «nudos arriba» en el último anillo
     const fz = anillos.length > 1 ? (zs[k] - zs[anillos[0]]) / Math.max(1e-6, zs[anillos[anillos.length - 1]] - zs[anillos[0]]) : 0;
-    const Nr = m.nudosArriba ? Math.min(NUDOS_MAX, Math.max(3, Math.round(N + (m.nudosArriba - N) * fz))) : N;
+    const Nd = m.nudosArriba ? Math.min(NUDOS_MAX, Math.max(3, Math.round(N + (m.nudosArriba - N) * fz))) : N;
+    // un anillo muy chico (la lente de una cúpula): no más nudos que uno por metro de vuelta
+    const Nr = Math.max(3, Math.min(Nd, Math.floor(P / SEPARACION_MIN)));
     const ids: number[] = [];
     nudosEnContorno(q, Nr, m.esquinas !== false, medio, origen).forEach(({ pos, trib }) => {
       const pt = enPosicion(q, acum, P, pos);
@@ -269,6 +273,8 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
       });
     }
   });
+  // los niveles sin losa (la cúpula de vidrio del Gherkin): no hay losa que atar ni franja de losa que cargar
+  const conLosa = zs.map(z => !p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6)?.sinLosa);
   // las losas atadas en cada piso: cada barra que cruza pisos entre anillos se parte en ellos (el nudo, sobre la barra recta)
   const partidas = m.arriostrada === false ? barras : barras.flatMap(b => {
     const A = nudos[b.a], B = nudos[b.b];
@@ -276,6 +282,7 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const [lo, hi] = A.k < B.k ? [b.a, b.b] : [b.b, b.a], L0 = nudos[lo], L1 = nudos[hi];
     const out: BarraMalla[] = []; let prev = lo;
     for (let k = L0.k + 1; k < L1.k; k++) {
+      if (!conLosa[k]) continue;
       const f = (zs[k] - L0.z) / (L1.z - L0.z || 1);
       const id = nudos.length;
       nudos.push({ x: L0.x + (L1.x - L0.x) * f, y: L0.y + (L1.y - L0.y) * f, z: zs[k], k, anillo: -1, t: L0.t + ((((L1.t - L0.t + 0.5) % 1) + 1) % 1 - 0.5) * f, trib: 0 });
@@ -288,7 +295,7 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
   const porPiso = new Map<number, number[]>();
   nudos.forEach((q, i) => { if (q.anillo < 0) porPiso.set(q.k, [...(porPiso.get(q.k) ?? []), i]); });
   porPiso.forEach((ids, k) => { const P = perimetroPol(corrido(contornos[k].fachada, def.separacion ?? 0)); ids.forEach(i => { nudos[i].trib = P / ids.length; }); });
-  const perimetro = contornos.map(c => perimetroPol(c.losa));
+  const perimetro = contornos.map((c, k) => (conLosa[k] ? perimetroPol(c.losa) : 0));
   return { nudos, barras: partidas, anillos, perimetro, cx, cy, ...(quitadas.length ? { quitadas } : {}) };
 }
 
@@ -563,4 +570,26 @@ export function tramosParejos(g: MallaGeo, zs: number[], n: number, patron: Patr
   }))].filter(z => z > z0 + 1e-6 && z < z1 - 1e-6).sort((a, b) => a - b);
   const clases: ClaseBarra[] = patron === 'columnas' ? ['columna', 'diagonal', 'viga'] : ['diagonal', 'viga'];
   return clases.flatMap(clase => cortes.map(desde => ({ clase, desde, sec: { ...secDe(clase, desde) } })));
+}
+
+/**
+ * El viento de los niveles donde la malla no tiene nudos ni hay tabiques (un nivel sin losa entre dos anillos, como la
+ * cúpula de vidrio del Gherkin): no hay losa que lo lleve a un solo punto, así que la piel lo pasa a los niveles con
+ * nudos de abajo y de arriba, por la distancia. W[i] es el viento del nivel zs[i + 1].
+ */
+export function vientoANudos(g: MallaGeo, zs: number[], W: number[], conTabiques: (z: number) => boolean): number[] {
+  const conNudos = new Set(g.nudos.map(q => q.k));
+  const firme = (k: number) => k === 0 || conNudos.has(k) || conTabiques(zs[k]);
+  const out = [...W];
+  for (let k = 1; k < zs.length; k++) {
+    if (firme(k) || !out[k - 1]) continue;
+    let ab = k - 1; while (ab > 0 && !firme(ab)) ab--;
+    let ar = k + 1; while (ar < zs.length && !firme(ar)) ar++;
+    const w = out[k - 1]; out[k - 1] = 0;
+    if (ar >= zs.length) { if (ab > 0) out[ab - 1] += w; continue; }
+    const t = (zs[k] - zs[ab]) / (zs[ar] - zs[ab]);
+    if (ab > 0) out[ab - 1] += w * (1 - t);
+    out[ar - 1] += w * t;
+  }
+  return out;
 }

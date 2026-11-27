@@ -1066,6 +1066,9 @@ function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: n
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
   const K = Kt.map((f, i) => f.map((v, j) => (F ? 0 : v) + caras.reduce((s, c) => s + c.c.K[i][j], 0)));
+  // ficha M: un nivel sin nudos de la malla ni tabiques (sin losa, entre dos anillos) sigue a los de al lado con una
+  // ménsula muy blanda (J = 10⁻⁴ m⁴), sin carga: su corrimiento sale interpolado y no cambia nada más
+  if (def.tipo === 'M' && K.some((f, i) => !(f[i] > 0))) { const Kp = rigidezTabiques(zs, () => Eh * 1e-4); K.forEach((f, i) => f.forEach((_, j) => { f[j] += Kp[i][j]; })); }
   const u = resolver(K, P.map(w => [w])).map(f => f[0]);
   // sin exo: si arriba no hay tabiques que tomen viento (núcleo solo de gravedad) la ménsula no existe → sin número
   let uSin: number[];

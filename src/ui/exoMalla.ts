@@ -285,9 +285,10 @@ function derivaPorPiso(u: number[], zs: number[], g: import('../engine/exoMalla'
   const svg = sv('svg', { viewBox: `0 0 ${S} ${Hh}`, class: 'malla-svg malla-deriva', role: 'img', 'aria-label': `Deriva de cada piso con el viento ${dir}` }) as SVGSVGElement;
   svg.append(sv('line', { x1: X(0), y1: Y(z0), x2: X(0), y2: Y(z1), class: 'malla-eje' }), sv('line', { x1: X(0), y1: Y(z0), x2: S - m.d, y2: Y(z0), class: 'malla-eje' }));
   svg.append(sv('line', { x1: X(media).toFixed(1), y1: Y(z0), x2: X(media).toFixed(1), y2: Y(z1), class: 'malla-media' }));
-  const pts = der.map((v, i) => `${X(v).toFixed(1)},${Y(zs[i + 1]).toFixed(1)}`);
-  svg.append(sv('polyline', { points: [`${X(der[0] ?? 0).toFixed(1)},${Y(z0).toFixed(1)}`, ...pts].join(' '), class: 'malla-deriva-linea' }));
-  der.forEach((v, i) => { if (flojos.has(zs[i + 1])) svg.append(sv('circle', { cx: X(v).toFixed(1), cy: Y(zs[i + 1]).toFixed(1), r: 4, class: 'malla-flojo' }, )); });
+  // en escalones: la deriva es de cada entrepiso (un valor de una losa a la siguiente)
+  const pts = der.flatMap((v, i) => [`${X(v).toFixed(1)},${Y(zs[i]).toFixed(1)}`, `${X(v).toFixed(1)},${Y(zs[i + 1]).toFixed(1)}`]);
+  svg.append(sv('polyline', { points: pts.join(' '), class: 'malla-deriva-linea' }));
+  der.forEach((v, i) => { if (flojos.has(zs[i + 1])) svg.append(sv('circle', { cx: X(v).toFixed(1), cy: Y((zs[i] + zs[i + 1]) / 2).toFixed(1), r: 4, class: 'malla-flojo' })); });
   svg.append(sv('text', { x: m.i, y: Hh - 8, class: 'malla-rot' }, `deriva de cada piso (mm/m), viento ${dir}`));
   svg.append(sv('text', { x: X(media) + 3, y: Y(z0) - 4, class: 'malla-rot' }, `media ${fmt(media, 2)}`));
   svg.append(sv('text', { x: 2, y: Y(z1) + 4, class: 'malla-rot' }, `${fmt(z1, 0)} m`), sv('text', { x: 2, y: Y(z0), class: 'malla-rot' }, `${fmt(z0, 0)} m`));

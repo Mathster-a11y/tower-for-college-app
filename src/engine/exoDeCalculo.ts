@@ -9,7 +9,7 @@ import { armarCara, conMalla, gammaExo, pesoExo, propsSeccion, seccionEn, type C
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
-import { giroMalla, indiceBarraMalla, mallaDe, nombresMalla, MALLA_POR_DEFECTO, PATRONES_MALLA } from './exoMalla';
+import { giroMalla, indiceBarraMalla, mallaDe, vientoANudos, nombresMalla, MALLA_POR_DEFECTO, PATRONES_MALLA } from './exoMalla';
 import type { MallaHoja } from '../xlsx/hojasG';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
@@ -110,6 +110,8 @@ export class ExoDeCalculo {
       const { ancho, t, anchos, ts, corr, tc, anchosPerp } = this.anchosCara(dir, def, zs);
       // ficha M: la malla sobre la fachada real es una sola «cara» (la malla entera, proyectada en el plano del viento)
       const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined, tCaras = malla ? [0] : [-t, t];
+      // (ficha M: el viento de un nivel sin nudos ni tabiques va a los niveles con nudos de al lado)
+      if (malla) W.splice(0, W.length, ...vientoANudos(malla, zs, W, z => EJ(z) > 0));
       if (malla) {
         // arriba del tope de la malla, los pisos sin tabiques que tomen viento quedarían sueltos (corrimientos de kilómetros)
         const zTop = zs[malla.anillos[malla.anillos.length - 1]], sueltos = zs.slice(1).filter(z => z > zTop + 1e-6 && !(EJ(z) > 0));

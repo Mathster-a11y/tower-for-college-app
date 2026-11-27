@@ -41,7 +41,9 @@ reticulado espacial, en la rototraslación); los anillos se verifican con el CIR
 diagonales, como zuncho); hoja «G · Malla» del Excel (igual en LibreOffice); «Dimensionar» ajusta cada tramo de
 sección en altura (arreglo que vale para todas las fichas: el Gherkin con la ficha A no llegaba nunca) y salta tubos;
 «Qué malla conviene» (módulo × nudos, rigidez por tonelada); hexagrid; nudos por anillo arriba; sacar barras a mano;
-deriva de cada piso al lado de la malla; contraste con Pynite (.py, tools/motor_fem/pynite_malla.py). Toca exo.ts
+deriva de cada piso al lado de la malla; contraste con Pynite (.py, tools/motor_fem/pynite_malla.py). Niveles sin losa
+(la cúpula de vidrio): la malla no se ata ni se carga losa ahí y su viento pasa a los niveles con nudos; nudos de un anillo
+a 1 m como mínimo (la lente); la deriva de cada piso en escalones. Toca exo.ts
 (dimensionarExo, anillos301, torsionConTubo), app.ts, estilo.css, ui/exo.ts y proyectoTablas.ts con cambios chicos.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)

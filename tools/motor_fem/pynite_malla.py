@@ -66,6 +66,8 @@ def modelo(d, dirv, torsor=False):
     # (con ménsula, el centro gira con ella; sin, queda trabado: los brazos están articulados)
     for k in range(1, len(zs)):
         if J[k - 1] > 0 or (k < len(zs) - 1 and J[k] > 0): m.def_support(f'C{k}', False, False, True, False, False, True)
+        # un nivel sin nudos de la malla ni tabiques (sin losa: la app le pasa su viento a los de al lado) no tiene nada
+        elif not porPiso.get(k): m.def_support(f'C{k}', True, True, True, True, True, True)
     W = d['W' + dirv]
     for k in range(1, len(zs)):
         if not W[k - 1]: continue
@@ -87,7 +89,8 @@ def resolver(d):
     out = {'motor': 'Pynite · reticulado espacial', 'z': d['zs']}
     for dirv in ('A', 'B'):
         m = modelo(d, dirv)
-        out['u' + dirv] = [0.0] + [(m.nodes[f'C{k}'].DY[c] if dirv == 'A' else m.nodes[f'C{k}'].DX[c]) for k in range(1, len(d['zs']))]
+        hay = lambda k: any(n[3] == k for n in d['nudos']) or d['J' + dirv][k - 1] > 0
+        out['u' + dirv] = [0.0] + [((m.nodes[f'C{k}'].DY[c] if dirv == 'A' else m.nodes[f'C{k}'].DX[c]) if hay(k) else None) for k in range(1, len(d['zs']))]
         # N de cada barra (+ tracción): el promedio de los dos extremos
         out['N' + dirv] = [0.5 * (m.members[f'B{j}'].axial(0, c) + m.members[f'B{j}'].axial(m.members[f'B{j}'].L(), c)) * -1 for j in range(len(d['barras']))]
     # el giro de los pisos con el torsor (en los anillos: la app lo calcula con la malla articulada de anillo a anillo)
