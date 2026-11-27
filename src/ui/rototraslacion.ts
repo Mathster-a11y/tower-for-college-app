@@ -303,7 +303,7 @@ export function dibujoRototraslacion(d: DatosRotoPlano, paso: Paso, tam: Tam = {
     verts.forEach(v => g.append(el('circle', { cx: v.x, cy: v.y, r: 2.6, class: 'rt-vertice' })));
     const todo = visible(m);
     if (todo) {
-      // resultante: de R sube por el eje de inercia hasta el CR (como la recta azul de la clase)
+      // resultante: de R sube por el eje de inercia hasta el CR (en la clase, una recta azul; acá en el color del eje: el azul es compresión)
       g.append(el('line', { x1: R.x, x2: R.x, y1: R.y, y2: Y(d.Yr), class: 'rt-resultante' }));
       g.append(flecha(R.x, R.y - 34, R.x, R.y - 3, 3, 'rt-J', `ΣJ = ${fmt(W0, 3)} m⁴`));
       g.append(el('circle', { cx: R.x, cy: R.y, r: 4, class: 'rt-cr' }));

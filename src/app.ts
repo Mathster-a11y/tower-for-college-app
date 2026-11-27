@@ -15,6 +15,7 @@ import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } fro
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
 import { montarPresentacion } from './ui/modoPresentacion';
+import { ponerPredecir, predecirActivo, tarjetaPredecir } from './ui/predecir';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
 import { hiloDeEtapa } from './ui/hilo';
 import { leerProyecto, textoErrores } from './engine/lector';
@@ -212,6 +213,11 @@ function dibujarCentro() {
   ultimoTam = `${tam.ancho}x${tam.alto}`;
   const y = lienzo.scrollTop;
   dib.replaceChildren();
+  // modo práctica: antes del dibujo, la pregunta; contestada, la comparación arriba del dibujo
+  if (predecirActivo()) {
+    const t = tarjetaPredecir(e.id, () => dibujarCentro());
+    if (t) { dib.append(t.el); if (t.pregunta) return; }
+  }
   try { e.centro(dib, tam); } catch (err) { console.error(err); dib.append(h('p', { class: 'error' }, `No se pudo dibujar: ${String(err)}`)); }
   // las explicaciones largas del centro, detrás de un botón «?»
   plegarExplicaciones(dib);
@@ -811,6 +817,8 @@ function armarMis() {
       try {
         const html = tablaComparacion(comparar(p, estado.proyecto), v.nombre, 'Actual');
         dialogo(`<h2>Comparar con «${esc(v.nombre)}»</h2><p class="nota">Valores según el método Guía. ✓ verifica, ✗ no verifica; en amarillo, los controles que cambian de estado.</p><div class="cmp-caja">${html}</div>`, [['Cerrar', () => $<HTMLDialogElement>('dialogo').close(), true]]);
+        // arriba de la tabla, las dos versiones lado a lado: planta y lo que toma cada pieza
+        void import('./ui/compararVista').then(m => { $<HTMLDialogElement>('dialogo').querySelector('.cmp-caja')?.before(m.vistaComparacion(p, estado.proyecto, v.nombre, 'Actual')); }).catch(e => fallo('No se pudo dibujar la comparación', e));
       } catch (e) { fallo('No se pudo comparar', e); }
     });
     const borrar = h('button', { type: 'button', class: 'glifo', title: `Borrar «${v.nombre}»`, 'aria-label': `Borrar ${v.nombre}` }, '✕');
@@ -874,6 +882,9 @@ document.addEventListener('keydown', ev => {
 const presentacion = montarPresentacion({ etapas: () => todas().filter(e => e.id !== 'ayuda'), actual: () => estado.etapa, irA, redibujar: () => dibujarTodo() });
 $('b-presentar').addEventListener('click', () => presentacion.alternar());
 $('b-presentar-menu').addEventListener('click', () => { cerrarMenus(); presentacion.alternar(); });
+// modo práctica «Predecí antes de ver»
+{ const b = $('b-predecir'), pintar = () => { b.setAttribute('aria-pressed', String(predecirActivo())); b.firstChild!.textContent = predecirActivo() ? 'Predecí antes de ver: prendido' : 'Predecí antes de ver'; };
+  pintar(); b.addEventListener('click', () => { cerrarMenus(); ponerPredecir(!predecirActivo()); pintar(); mensaje(predecirActivo() ? 'Modo práctica: en Fuerzas, Rigidez y Rototraslación, la app te pide una estimación antes de mostrar el resultado.' : 'Modo práctica apagado.'); dibujarCentro(); }); }
 $('b-exportar').addEventListener('click', () => { void exportar(); });
 $<HTMLInputElement>('b-abrir').addEventListener('change', e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void abrir(f); (e.target as HTMLInputElement).value = ''; });
 

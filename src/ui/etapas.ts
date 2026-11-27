@@ -76,6 +76,21 @@ function datos() {
   return { p, asig, res, corr, controles, dir, iPB, filaPB, R, alt, W, Mv, hw: W > 0 ? Mv / W : NaN };
 }
 /**
+ * Las respuestas de «Predecí antes de ver» (predecir.ts), con los mismos números que dibujan las etapas: el momento en
+ * la base (Fuerzas), cuánto se corre la azotea (Rigidez) y qué parte del corte toma cada pieza (Rototraslación).
+ */
+export function respuestasPredecir(): { dir: 'A' | 'B'; W: number; hw: number; Mv: number; dTop: number; limite: number; sinRigidez: boolean; piezas: { nombre: string; pct: number }[] } | null {
+  try {
+    const d = datos();
+    const rg = rigidez(d.R, d.p.hormigon || 'H30').find(x => x.dir === d.dir)!;
+    const E = moduloHormigon(d.p.hormigon || 'H30'), Jniv = rigidezPorNivel(d.p, d.asig.piezas, d.dir, rg.J);
+    const def = deformada(d.alt, d.W, E, rg.J, z => Jniv.find(q => Math.abs(q.z - z) < 1e-6)?.J || rg.J);
+    const dp = datosRotoPlano(d);
+    const piezas = dp.paralelos.map(e => ({ nombre: e.nombre, pct: dp.Q > 0 ? (e.total / dp.Q) * 100 : 0 }));
+    return { dir: d.dir, W: d.W, hw: d.hw, Mv: d.Mv, dTop: def.dTop, limite: def.limite, sinRigidez: deformadaAbsurda(def), piezas };
+  } catch { return null; }
+}
+/**
  * J de la planta completa, siempre a la vista en Diseño: ΣJ de cada viento (el de la hoja y el de la sección real)
  * contra el J mínimo de la flecha h/500, y cuánto cambió con la última modificación de la planta.
  */
