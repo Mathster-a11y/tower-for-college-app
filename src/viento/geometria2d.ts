@@ -188,6 +188,12 @@ export interface NivelAlzado {
   z: number;
   /** la planta de ese nivel (m, en planta del proyecto) */
   pol: P[];
+  /**
+   * piso abierto (carpintería «sin», como la plaza del Citicorp): sus muros y columnas en planta. El corte no toma la
+   * losa sino cada pieza que cruza la línea, como una barra vertical sólida de este nivel al de arriba, con aire entre
+   * ellas; la piel de la torre arranca en el primer nivel cerrado
+   */
+  piezas?: P[][];
 }
 /**
  * Corte vertical (alzado) de la torre: el plano vertical en el sentido del viento que pasa por la torre (corrido
@@ -200,7 +206,7 @@ export interface NivelAlzado {
 export function geometriaAlzado(o: { niveles: NivelAlzado[]; dir: 'A' | 'B'; angulo?: number; desplaz?: number; celdasH?: number; perfil: (z: number) => number }): Geometria2D {
   const th = ((o.dir === 'A' ? -90 : 0) - (o.angulo ?? 0)) * (Math.PI / 180), co = Math.cos(th), si = Math.sin(th);
   const rot = (q: P): P => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co });
-  const ns = o.niveles.filter(n => n.pol.length >= 3).map(n => ({ z: n.z, pol: n.pol.map(rot) })).sort((a, b) => a.z - b.z);
+  const ns = o.niveles.filter(n => n.pol.length >= 3).map(n => ({ z: n.z, pol: n.pol.map(rot), piezas: n.piezas?.filter(q => q.length >= 3).map(q => q.map(rot)) })).sort((a, b) => a.z - b.z);
   if (ns.length < 2) throw new Error('Hacen falta al menos dos niveles con planta para el corte vertical.');
   // la línea del corte: a lo largo del viento (x), en y = centro + desplaz · ancho (del ancho de todos los niveles)
   const ys = ns.flatMap(n => n.pol.map(q => q.y)), y0 = Math.min(...ys), y1 = Math.max(...ys);
@@ -214,10 +220,12 @@ export function geometriaAlzado(o: { niveles: NivelAlzado[]; dir: 'A' | 'B'; ang
     }
     return xs.length >= 2 ? [Math.min(...xs), Math.max(...xs)] : null;
   };
-  const filas = ns.map(n => ({ z: n.z, t: tramo(n.pol) }));
+  // un piso abierto no tiene piel: cada pieza que cruza la línea es su propio tramo, de ese nivel al de arriba
+  const filas = ns.map(n => ({ z: n.z, t: n.piezas?.length ? null : tramo(n.pol) }));
+  const barras = ns.flatMap((n, k) => (n.piezas?.length && k < ns.length - 1 ? n.piezas.map(tramo).filter((t): t is [number, number] => !!t).map(t => ({ t, z0: n.z, z1: ns[k + 1].z })) : []));
   const H = ns[ns.length - 1].z - ns[0].z;
   if (!(H > 0)) throw new Error('La torre no tiene altura sobre PB.');
-  const xsT = filas.flatMap(f => (f.t ? f.t : [])), xMin = Math.min(...xsT), xMax = Math.max(...xsT);
+  const xsT = [...filas.flatMap(f => (f.t ? f.t : [])), ...barras.flatMap(b => b.t)], xMin = Math.min(...xsT), xMax = Math.max(...xsT);
   const Hc = Math.max(24, Math.round(o.celdasH ?? 60)), escala = Hc / H;
   const prof = (xMax - xMin) * escala;
   const nx = Math.round(1.5 * Hc + prof + 5 * Hc), ny = Math.round(4 * Hc) + 1;
@@ -237,6 +245,14 @@ export function geometriaAlzado(o: { niveles: NivelAlzado[]; dir: 'A' | 'B'; ang
   };
   for (const f of filas) { if (f.t) racha.push({ z: f.z, t: f.t }); else cerrar(); }
   cerrar();
+  // las piezas de los pisos abiertos: rectángulos verticales (las del suelo, metidas media celda en él). Un muro más
+  // fino que una celda (60 cm con celdas de metros) se engruesa a 1,2 celdas, como en el túnel en planta: si no, la
+  // grilla no lo ve
+  for (const b of barras) {
+    const a0 = aRed(b.t[0], b.z0), c0 = aRed(b.t[1], b.z1), xm = (a0.x + c0.x) / 2, w = Math.max(c0.x - a0.x, 1.2);
+    const a = { x: xm - w / 2, y: a0.y }, c = { x: xm + w / 2, y: c0.y }, yb = Math.abs(b.z0 - ns[0].z) < 1e-6 ? suelo - 0.5 : a.y;
+    contornos.push([{ x: a.x, y: yb }, { x: c.x, y: yb }, { x: c.x, y: c.y }, { x: a.x, y: c.y }]);
+  }
   if (!contornos.length) throw new Error('El corte no pasa por la torre: probá más cerca del medio.');
   const solido = new Uint8Array(nx * ny);
   for (let x = 0; x < nx; x++) solido[x] = 1;                         // el suelo

@@ -10,7 +10,7 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 
 **En curso**
 - (nada en curso en `alternativa`)
-- `claude/ejemplos-cirsoc` (27/11): túneles con pisos abiertos (la plaza del Citicorp sobre las supercolumnas): 2D en planta, corte vertical y 3D con lo construido, no la losa (`docs/prompt_tunel_pisos_abiertos.md`). La CI con la revisión de punteros espera a que el usuario tenga la computadora.
+- (nada en curso en `claude/ejemplos-cirsoc`; la CI con la revisión de punteros espera a que el usuario tenga la computadora)
 
 **Hecho hace poco en `alternativa`** (27/11): planta → «Extender o recortar hasta…» (un muro hasta el eje de otro: T, o esquina si el otro tampoco llega); aviso al abrir cuando el ejemplo guardado en el navegador quedó de una versión anterior. Ayudas → «Distancia al centro» (baricentro de la pieza del viento elegido al centro de la losa: Δx, Δy, r y θ antihorario desde +x).  el núcleo del Gherkin relevado en las plantas de Foster (anillo de 16 columnas, 4 centrales y los muros que se repiten; todo al 38º, D y S al 39º), en lugar del tubo de Ø 22 m; datos e imágenes en `docs/gherkin-nucleo/`. (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
@@ -45,6 +45,13 @@ deriva de cada piso al lado de la malla; contraste con Pynite (.py, tools/motor_
 (la cúpula de vidrio): la malla no se ata ni se carga losa ahí y su viento pasa a los niveles con nudos; nudos de un anillo
 a 1 m como mínimo (la lente); la deriva de cada piso en escalones. Toca exo.ts
 (dimensionarExo, anillos301, torsionConTubo), app.ts, estilo.css, ui/exo.ts y proyectoTablas.ts con cambios chicos.
+Túneles con pisos abiertos (27/11, terminado; `docs/prompt_tunel_pisos_abiertos.md`): un nivel con carpintería «sin» y
+sin carpintería propia (la plaza del Citicorp) se simula con sus muros y columnas, no con la losa, con la misma regla
+y el mismo texto en los tres túneles (`src/engine/pisoAbierto.ts`): en el 2D en planta, con la planta «como está
+dibujada» (como «solo los muros», al menos 40 celdas por ancho, sin ochavas); en el corte vertical, cada pieza que
+cruza la línea es una barra hasta el nivel de arriba (engrosada a 1,2 celdas, al menos 120 celdas de alto) y la piel
+arranca en el cajón del 8º–9º; en el 3D ya era así (ahora con la nota y una prueba de la geometría). Falta verlo
+corriendo en un navegador con WebGPU.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.

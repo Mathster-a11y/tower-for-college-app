@@ -16,6 +16,7 @@ import { descargarCSV } from './csv';
 import { abrirGrabacion, cuadroDe, empaquetar, Grabadora, type GrabacionAbierta } from '../viento/grabacion';
 import { contornoAlViento, puntosAlViento } from '../engine/silueta';
 import { poligonosMuros } from '../engine/murosPlanta';
+import { piezasPisoAbierto, TEXTO_PISO_ABIERTO } from '../engine/pisoAbierto';
 import { chaflanar, geometria2D, geometriaAlzado, type Geometria2D } from '../viento/geometria2d';
 import { datos102De, Kz } from '../engine/cargas/cirsoc102';
 import { medir, velocidadCritica, type Mediciones } from '../viento/mediciones';
@@ -154,6 +155,12 @@ function claveCorrida(): string {
  * Un tabique de 20 cm es más fino que una celda del túnel (≈ 0,5 m): la grilla no lo vería. Los que no llegan se engruesan hasta 1,2 celdas (al arrastre de una placa casi no le importa su espesor); «engrosado» dice hasta cuánto
  */
 let engrosado = 0;
+/** el corte actual es un piso abierto que se simula con sus muros (la planta «como está dibujada»: ver iniciar) */
+let abierto = false;
+/** corte vertical: los niveles que entran como pisos abiertos */
+let abiertosAlzado: string[] = [];
+/** con pisos abiertos, el corte vertical usa al menos estas celdas de alto (las columnas son finas: más lento) */
+const CELDAS_ALZADO_ABIERTO = 120;
 /** celdas por ancho, como mínimo, con «solo los muros» */
 const D_MUROS = 40;
 function murosDelNivel(i: number, D: number): { x: number; y: number }[][] {
@@ -171,6 +178,7 @@ function iniciar() {
   if (grab) grab = null;
   corrida?.worker.terminate();
   corrida = null;
+  abierto = false; abiertosAlzado = [];
   if (cfg.corte === 'alzado') { iniciarAlzado(); return; }
   const ne = nivelElegido();
   if (!ne) return;
@@ -181,18 +189,21 @@ function iniciar() {
     const xs = pol.map(q => q.x), ys = pol.map(q => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     pol = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   }
+  // un piso abierto (carpintería «sin», sin carpintería propia: la plaza del Citicorp) con la planta «como está
+  // dibujada»: el viento ve sus muros y columnas, no la losa; como «solo los muros». Sin muros, sigue la silueta
+  abierto = cfg.forma === 'dibujada' && !!piezasPisoAbierto(estado.proyecto, ne.i);
   // solo los muros: al menos 40 celdas por ancho (los tabiques son finos; más lento)
-  const D = cfg.forma === 'muros' ? Math.max(RES[cfg.res].D, D_MUROS) : RES[cfg.res].D;
+  const D = cfg.forma === 'muros' || abierto ? Math.max(RES[cfg.res].D, D_MUROS) : RES[cfg.res].D;
   // contexto urbano: los vecinos que llegan a la altura del corte (a mitad del piso, sobre PB)
   const ctx = cfg.contexto ? vecinosEnCorte(edificiosVecinos(), alturaCorte(ne.i)) : [];
   // con vecinos el aire se acelera en las calles: el túnel lento siempre (con el normal se rompe con facilidad)
   U0 = cfg.lento || ctx.length ? 0.06 : 0.1;
   // ochava: un porcentaje del ancho transversal al viento (se mide antes de ochavar)
   const g0 = geometria2D({ poligonos: [pol], dir: estado.dir, angulo: cfg.angulo, D });
-  if (cfg.ochava > 0 && cfg.forma !== 'muros') pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
+  if (cfg.ochava > 0 && cfg.forma !== 'muros' && !abierto) pol = chaflanar(pol, (cfg.ochava / 100) * g0.anchoM);
   // solo los muros: cada muro del nivel es un obstáculo (sin la fachada: una PB libre o la estructura en obra)
   engrosado = 0;
-  const pols = cfg.forma === 'muros' ? murosDelNivel(ne.i, D) : [pol];
+  const pols = cfg.forma === 'muros' || abierto ? murosDelNivel(ne.i, D) : [pol];
   if (!pols.length) { mensajeTunel(`En ${ne.n.nombre} no hay muros: elegí otro corte o la planta dibujada.`); return; }
   const geo = geometria2D({ poligonos: pols, dir: estado.dir, angulo: cfg.angulo, D, largo: 16, alto: cfg.canal === 'ancho' ? 12 : 7, entrada: 4, segunda: cfg.segunda === 'no' ? null : { donde: cfg.segunda, distancia: cfg.distancia }, contexto: ctx });
   arrancar(geo, ne.n.nombre, ne.n.cota);
@@ -206,12 +217,14 @@ function iniciar() {
  */
 function iniciarAlzado() {
   const p = estado.proyecto, iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1), zPB = p.niveles[iPB]?.cota ?? 0;
-  const niveles = p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB - 1e-6).map(x => ({ z: x.n.cota - zPB, pol: puntosAlViento(p, x.i) }));
+  // un piso abierto (carpintería «sin»: la plaza del Citicorp) entra con sus muros y columnas, no con la losa
+  const niveles = p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= zPB - 1e-6).map(x => { const pz = piezasPisoAbierto(p, x.i)?.pols; return { z: x.n.cota - zPB, pol: puntosAlViento(p, x.i), ...(pz ? { piezas: pz } : {}) }; });
+  abiertosAlzado = niveles.filter(x => x.piezas).map(x => p.niveles.find(n => Math.abs(n.cota - zPB - x.z) < 1e-6)?.nombre ?? '');
   const H = Math.max(0, ...niveles.map(x => x.z)), exp = datos102De(p).exposicion;
   // el viento de cada altura en fracción del de la azotea (con z ≥ 5 m, como el reglamento); arriba, hasta 1,3 veces
   const perfil = (z: number) => (H > 0 ? Math.min(1.3, Math.sqrt(Kz(Math.max(5, z), exp) / Kz(Math.max(5, H), exp))) : 1);
   let geo: Geometria2D;
-  try { geo = geometriaAlzado({ niveles, dir: estado.dir, angulo: cfg.angulo, desplaz: cfg.desplaz, celdasH: 3 * RES[cfg.res].D, perfil }); }
+  try { geo = geometriaAlzado({ niveles, dir: estado.dir, angulo: cfg.angulo, desplaz: cfg.desplaz, celdasH: abiertosAlzado.length ? Math.max(3 * RES[cfg.res].D, CELDAS_ALZADO_ABIERTO) : 3 * RES[cfg.res].D, perfil }); }
   catch (e) { mensajeTunel(e instanceof Error ? e.message : String(e)); return; }
   // arriba el aire llega a 1,3 veces el de la azotea: la entrada algo más lenta que en planta para que no se rompa
   U0 = cfg.lento ? 0.05 : 0.07;
@@ -1244,6 +1257,9 @@ export function centroTunel(c: H, tam: Tam) {
   const reRed = (U0 * cr.geo.D) / cr.nu, reReal = ((vientoDisenoEn(zCorte()) ?? 40) * cr.geo.anchoM) / 1.5e-5;
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
+    ...(cfg.forma === 'vivas' && !cr.geo.alzado && (() => { const ne = nivelElegido(); return !!ne && !!piezasPisoAbierto(estado.proyecto, ne.i); })() ? [h('p', { class: 'nota' }, 'Este corte es un piso abierto (carpintería «sin»): «su caja, con esquinas vivas» lo simula como si la losa fuera un bloque lleno, solo para comparar. Con «como está dibujada», el viento ve sus muros y columnas.')] : []),
+    ...(cr.geo.alzado && abiertosAlzado.length ? [h('p', { class: 'nota' }, `${TEXTO_PISO_ABIERTO} En el corte: ${abiertosAlzado.join(', ')}. Cada muro o columna que cruza la línea del corte es una barra hasta el nivel de arriba, con aire entre ellas; si la línea no cruza ninguna, ese piso queda todo aire. Los muros más finos que una celda se engruesan a 1,2 celdas, y el corte usa al menos ${CELDAS_ALZADO_ABIERTO} celdas de alto: es más lento.`)] : []),
+    ...(abierto && !cr.geo.alzado ? [h('p', { class: 'nota' }, `${TEXTO_PISO_ABIERTO}${cfg.ochava ? ' Las ochavas no se aplican: no hay fachada que ochavar.' : ''}${engrosado ? ` Los muros más finos que ${fmt(engrosado * 100, 0)} cm se simulan de ${fmt(engrosado * 100, 0)} cm (una celda mide ${fmt(engrosado / 1.2, 2)} m).` : ''} Usa al menos ${D_MUROS} celdas por ancho: es más lento.`)] : []),
     ...(cfg.forma === 'muros' ? [h('p', { class: 'nota' }, `Solo los muros: cada muro del corte es un obstáculo y el aire pasa entre ellos (una planta baja libre o la estructura en obra).${engrosado ? ` Los muros más finos que ${fmt(engrosado * 100, 0)} cm se simulan de ${fmt(engrosado * 100, 0)} cm: una celda del túnel mide ${fmt(engrosado / 1.2, 2)} m y la grilla no vería un tabique más fino. Por eso este modo usa al menos ${D_MUROS} celdas por ancho y es unas 4 veces más lento.` : ''}`)] : []),
     ...(() => {
       if (cr.geo.alzado) return [];
