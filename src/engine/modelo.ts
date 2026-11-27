@@ -312,6 +312,12 @@ export interface Proyecto {
   huecosLosa?: HuecoLosa[];
   /** encuentros entre muros: qué pasa en cada junta («A|B» → inglete, pasa A o pasa B); vacío = el convenio por defecto */
   juntas?: Record<string, 'inglete' | 'pasaA' | 'pasaB'>;
+  /**
+   * cómo entran al cálculo los encuentros entre muros: «diseño» (vacío) = la sección del dibujo, con los encuentros
+   * resueltos a tope (A) o a inglete (B), sin contar dos veces lo que se pisa; «escuadra» (D) = cada muro como un
+   * rectángulo a escuadra que no toca a ningún otro elemento (columnas enteras), y la cuña que queda, espacio muerto
+   */
+  encuentrosCalculo?: 'escuadra' | null;
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
   /**

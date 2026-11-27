@@ -24,7 +24,9 @@ import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { distanciaAlCentro } from '../engine/distanciaCentro';
-import { seccionReal, unionHuellas } from '../engine/seccionPieza';
+import { jEnDireccion, propiedadesSeccion, seccionReal, unionHuellas } from '../engine/seccionPieza';
+import { aTope, criterioDelProyecto, esColumna, rectsEscuadra } from '../engine/escuadra';
+import { diferencia } from '../engine/poligonos';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
@@ -2780,9 +2782,21 @@ export function montarPlanta(cont: HTMLElement) {
     if (modo === 'calar' && calQue === 'losa' && losaIni && cursorLosa) svg.appendChild(el('polygon', { points: rectHueco(losaIni, cursorLosa).map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'hueco-previa' }));
     // juntas entre los muros de este nivel: se dibujan unidos (debajo, el contorno de todos; arriba, el relleno sin borde)
     const msNivel = p.muros.filter(m => !muroOculto(p, m) && presenteEn(m, zN, zFund, zTop));
-    const juntasN = estado.juntasLimpias ? detectarJuntas(msNivel) : [];
+    // (las columnas no forman encuentros: pasan enteras y los muros terminan contra su cara)
+    const juntasN = estado.juntasLimpias ? detectarJuntas(msNivel.filter(m => !esColumna(m))) : [];
     // quién pasa: el de las hojas J para el viento elegido (el ala, perpendicular al viento), salvo que se elija otro
     const limpias = estado.juntasLimpias ? huellasLimpias(msNivel, juntasN, p.juntas ?? {}, estado.dir) : new Map<string, { x: number; y: number }[][]>();
+    // lo que todavía se pisa (puntas corridas, muros que atraviesan columnas): resuelto como en el cálculo (A): las
+    // columnas enteras y cada muro contra la cara del que pasa; se dibujan así los muros que cambian
+    if (estado.juntasLimpias) {
+      const res = aTope(msNivel, p.juntas ?? {}, estado.dir);
+      msNivel.forEach(m => {
+        const r = res.rects.get(m.id);
+        if (!r || esColumna(m)) return;
+        const a = r.reduce((q, pg) => q + Math.abs(pg.reduce((s2, u, i) => { const v = pg[(i + 1) % pg.length]; return s2 + u.x * v.y - v.x * u.y; }, 0)) / 2, 0);
+        if (limpias.has(m.id) || Math.abs(a - areaMuro(m)) > 1e-5) limpias.set(m.id, r);
+      });
+    }
     const ptsPg = (pg: { x: number; y: number }[]) => pg.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ');
     if (limpias.size) {
       const gc = el('g', { class: 'juntas-contorno' });
@@ -2793,7 +2807,8 @@ export function montarPlanta(cont: HTMLElement) {
     const papeles = estado.calculo.asig?.papeles ?? {};
     const yaRotuladas = new Set<string>();
     const enMulti = (m: Muro) => estado.multi.m.includes(m.id) || estado.multi.g.some(g => dentroDe(p, m, g));
-    p.muros.forEach(m => {
+    // lo que no está en este nivel (atenuado) va debajo de lo que sí está, para no velarlo
+    [...p.muros].sort((a, b) => Number(presenteEn(a, zN, zFund, zTop)) - Number(presenteEn(b, zN, zFund, zTop))).forEach(m => {
       if (muroOculto(p, m)) return;
       const papel = papeles[m.id]?.[estado.dir] ?? 'sin pieza';
       const { ax: dx, ay: dy } = huella(m);
@@ -3139,7 +3154,15 @@ export function montarPlanta(cont: HTMLElement) {
       return;
     }
     const ms = pz.muros.map(id => p.muros.find(m => m.id === id)!).filter(Boolean);
-    const sr = seccionReal(ms), suma = ms.reduce((q, m) => q + areaMuro(m), 0);
+    criterioDelProyecto(p);
+    const sr = seccionReal(ms), suma = ms.reduce((q, m) => q + areaMuro(m), 0), D = p.encuentrosCalculo === 'escuadra';
+    // criterio de los encuentros en el cálculo (del proyecto): el diseño (A o B) o muros a escuadra (D)
+    const criterio = mk('label', '', 'sec-criterio'), selC = mk('select');
+    ([['', 'Encuentros como en el dibujo (A o B)'], ['escuadra', 'Muros a escuadra, sin tocarse (D)']] as const).forEach(([v, t]) => { const o = mk('option', t); o.value = v; selC.append(o); });
+    selC.value = D ? 'escuadra' : '';
+    selC.title = 'Cómo entran al cálculo los encuentros entre muros. A o B: la sección del dibujo (el que llega termina contra la cara del que pasa, o a inglete), sin contar dos veces lo que se pisa. D: cada muro como un rectángulo a escuadra que no toca a ningún otro elemento (las columnas pasan enteras); la cuña que queda es espacio muerto. D es más conservador.';
+    selC.addEventListener('change', () => { estado.cambiar(pp => { pp.encuentrosCalculo = selC.value === 'escuadra' ? 'escuadra' : null; }); mensaje(selC.value ? 'Cálculo con muros a escuadra (D): ningún elemento toca a otro; lo que queda entre ellos es espacio muerto.' : 'Cálculo con los encuentros del dibujo (A o B).'); });
+    criterio.append(mk('span', 'En el cálculo:'), selC);
     // medidas reales de cada muro: un muro recto (también en diagonal) con su largo de punta a punta y su espesor
     const tabla = mk('table', '', 'sec-tabla');
     const cab = mk('tr'); ['muro', 'largo', 'espesor', 'área'].forEach(t => cab.append(mk('th', t))); tabla.append(cab);
@@ -3158,23 +3181,38 @@ export function montarPlanta(cont: HTMLElement) {
       mk('span', `${ms.length} ${ms.length === 1 ? 'muro' : 'muros'}: las medidas con que entra cada uno`, 'nota-chica'),
       tabla,
       fila('suma de los muros', `${f3(suma)} m²`),
-      ...(sr ? [fila('se pisan (no se cuenta dos veces)', `− ${f3(sr.superpuesta)} m²`, 'aviso')] : []),
+      ...(sr ? [fila(D ? 'queda fuera (espacio muerto y columnas)' : 'se pisan (no se cuenta dos veces)', `− ${f3(sr.superpuesta)} m²`, 'aviso')] : []),
       fila('área que entra al cálculo', `${f3(pz.area)} m²`, 'total'),
       fila(`baricentro (${dir === 'A' ? 'x' : 'y'})`, `${f3(pz.posicion)} m`),
       fila(`J real, viento ${dir}`, `${f3(Jreal)} m⁴`, 'total'),
       ...(pz.Jhoja !== undefined ? [fila('J de la hoja J', `${f3(pz.Jhoja)} m⁴`)] : []),
-      mk('span', `En la hoja J va con ${hoja}.${sr ? ' Los muros rayados se pisan: alargá o acortá cada uno hasta la cara del otro para que el dibujo coincida con lo que se calcula.' : ' Ningún muro se pisa: la sección es la suma de los muros.'}`, 'nota-chica'),
-      cerrar);
+      mk('span', `En la hoja J va con ${hoja}.${D ? ' Con muros a escuadra (D), lo gris rayado es espacio muerto: se dibuja pero no se calcula.' : sr && sr.superposiciones.length ? ' Lo rayado en naranja es donde los muros se pisan: se cuenta una sola vez.' : ''}`, 'nota-chica'),
+      criterio, cerrar);
     // dibujo: el contorno de la sección real y, rayado, lo que se pisa
     const g = el('g', { class: 'sec-calculo' });
     const d = (pols: [number, number][][][]) => pols.map(pg => pg.map(r => 'M' + r.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('L') + 'Z').join('')).join('');
+    if (!svg.querySelector('#sec-muerto')) {
+      const defs = el('defs'), pt = el('pattern', { id: 'sec-muerto', patternUnits: 'userSpaceOnUse', width: 7, height: 7, patternTransform: 'rotate(45)' });
+      pt.appendChild(el('rect', { width: 7, height: 7, class: 'sec-muerto-fondo' })); pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 7, class: 'sec-muerto-linea' }));
+      defs.appendChild(pt); svg.appendChild(defs);
+    }
     if (!svg.querySelector('#sec-rayado')) {
       const defs = el('defs'), pt = el('pattern', { id: 'sec-rayado', patternUnits: 'userSpaceOnUse', width: 6, height: 6, patternTransform: 'rotate(45)' });
       pt.appendChild(el('rect', { width: 6, height: 6, class: 'sec-rayado-fondo' })); pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 6, class: 'sec-rayado-linea' }));
       defs.appendChild(pt); svg.appendChild(defs);
     }
-    g.appendChild(el('path', { d: d(unionHuellas(ms)), class: 'sec-contorno', 'fill-rule': 'evenodd' }));
-    if (sr) g.appendChild(el('path', { d: d(sr.superposiciones), class: 'sec-superpuesta' }));
+    if (D) {
+      // muros a escuadra: el espacio muerto (lo dibujado que no entra) gris rayado y cada rectángulo de cálculo
+      const rect = (pg: { x: number; y: number }[]) => [pg.map(q => [q.x, q.y] as [number, number])];
+      const calc = ms.flatMap(m => (rectsEscuadra(m) ?? []).map(rect));
+      const todo = unionHuellas(ms);
+      const muerto = calc.length ? diferencia(todo, ...calc) ?? [] : todo;
+      g.appendChild(el('path', { d: d(muerto), class: 'sec-muerto', 'fill-rule': 'evenodd' }));
+      calc.forEach(c => g.appendChild(el('path', { d: d([c]), class: 'sec-rect' })));
+    } else {
+      g.appendChild(el('path', { d: d(unionHuellas(ms)), class: 'sec-contorno', 'fill-rule': 'evenodd' }));
+      if (sr) g.appendChild(el('path', { d: d(sr.superposiciones), class: 'sec-superpuesta' }));
+    }
     svg.appendChild(g);
   }
   /** «Distancia al centro»: el dibujo sobre la planta y la carta con los números */
@@ -3359,6 +3397,51 @@ export function montarPlanta(cont: HTMLElement) {
     trazo.push(q); pedirDibujo();
   }, true);
   svg.addEventListener('pointermove', ev => { if (modo === 'silueta' && trazo) { trazoCursor = puntoTrazo(ev); pedirDibujo(); } });
+  // burbuja: con el mouse quieto 3 s sobre un muro, el área y el J de su pieza (la del viento elegido) en cuatro
+  // direcciones del viento, con la sección con que entra al cálculo
+  {
+    const burbuja = document.createElement('div'); burbuja.className = 'burbuja-j'; burbuja.hidden = true; burbuja.setAttribute('role', 'tooltip');
+    cont.appendChild(burbuja);
+    let reloj = 0, sobre = '', ultimo = { x: 0, y: 0 };
+    const ocultar = () => { clearTimeout(reloj); reloj = 0; burbuja.hidden = true; };
+    const mostrar = (id: string) => {
+      const p = estado.proyecto, m = p.muros.find(x => x.id === id);
+      if (!m) return;
+      criterioDelProyecto(p);
+      const nombre = estado.dir === 'A' ? m.piezaA : m.piezaB;
+      const ms = nombre ? p.muros.filter(x => (estado.dir === 'A' ? x.piezaA : x.piezaB) === nombre && x.llega) : [m];
+      const s = propiedadesSeccion(ms);
+      if (!s) return;
+      const f3 = (v: number) => v.toFixed(3).replace('.', ','), f2 = (v: number) => v.toFixed(2).replace('.', ',');
+      const filas: [string, number][] = [['viento A ↑', Math.PI / 2], ['viento B →', 0], ['oblicuo ↗ 45°', Math.PI / 4], ['oblicuo ↖ 135°', (3 * Math.PI) / 4]];
+      const d = ms.some(x => rectsEscuadra(x)) ? ' · muros a escuadra (D)' : '';
+      burbuja.replaceChildren();
+      const t = document.createElement('b'); t.textContent = nombre ? `Pieza ${nombre} (viento ${estado.dir})` : `${m.id} (sin pieza en el viento ${estado.dir})`;
+      const a = document.createElement('div'); a.className = 'fila'; const al = document.createElement('span'); al.textContent = 'área'; a.append(al); const av = document.createElement('span'); av.className = 'n'; av.textContent = `${f3(s.A)} m²`; a.append(av);
+      burbuja.append(t, a);
+      filas.forEach(([n, ang]) => { const r = document.createElement('div'); r.className = 'fila'; const l = document.createElement('span'); l.textContent = `J ${n}`; const v = document.createElement('span'); v.className = 'n'; v.textContent = `${f2(jEnDireccion(s, ang))} m⁴`; r.append(l, v); burbuja.append(r); });
+      const nota = document.createElement('span'); nota.className = 'nota'; nota.textContent = `${ms.length} ${ms.length === 1 ? 'muro' : 'muros'}, con la sección con que entra al cálculo${d}`; burbuja.append(nota);
+      burbuja.hidden = false;
+      const R = cont.getBoundingClientRect(), w = burbuja.offsetWidth, h = burbuja.offsetHeight;
+      burbuja.style.left = `${Math.min(R.width - w - 6, Math.max(6, ultimo.x - R.left + 14))}px`;
+      burbuja.style.top = `${Math.min(R.height - h - 6, Math.max(6, ultimo.y - R.top + 14))}px`;
+    };
+    svg.addEventListener('pointermove', ev => {
+      if (ev.pointerType === 'touch') return;
+      // el muro bajo el cursor (por la posición: un resaltado dibujado encima no lo tapa)
+      const id = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => e.closest?.('[data-muro]')).find(Boolean)?.getAttribute('data-muro') ?? '';
+      // un movimiento chico sobre el mismo muro no reinicia la espera
+      if (id === sobre && Math.hypot(ev.clientX - ultimo.x, ev.clientY - ultimo.y) < 4) return;
+      ultimo = { x: ev.clientX, y: ev.clientY };
+      if (id !== sobre || !burbuja.hidden) { ocultar(); sobre = id; }
+      clearTimeout(reloj);
+      if (id && !ev.buttons) reloj = window.setTimeout(() => mostrar(id), 3000);
+    });
+    svg.addEventListener('pointerleave', () => { ocultar(); sobre = ''; });
+    svg.addEventListener('pointerdown', ocultar);
+    svg.addEventListener('wheel', ocultar, { passive: true });
+  }
+
   document.addEventListener('keydown', ev => {
     if (modo !== 'silueta' || !trazo || (ev.target as HTMLElement).closest?.('input, textarea, select')) return;
     if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); void cerrarTrazo(); }

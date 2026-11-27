@@ -21,6 +21,7 @@ import { areaMuro, dInterior, entraEnCalculo, NOMBRE_CLASE, rectangulos, tipoDe,
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
 import { detectarJuntas, huellasLimpias, propiedadesPoligonos } from './juntas';
 import { seccionReal } from './seccionPieza';
+import { criterioDelProyecto } from './escuadra';
 import { propsPoligonos, seccionDebil } from './aberturas';
 
 export type Direccion = 'A' | 'B';
@@ -621,6 +622,8 @@ function asignarFilas(piezas: PiezaEquivalente[], paralelos: boolean, avisos: st
 
 // ------------------------------------------------------------------ todo
 export function aPlanilla(p: Proyecto): Asignacion {
+  // criterio de los encuentros en el cálculo (D: muros a escuadra, sin tocarse; si no, la sección del diseño)
+  criterioDelProyecto(p);
   const avisos: string[] = [];
   const niveles = p.niveles;
   const iPB = (() => { let k = -1; niveles.forEach((n, i) => { if (n.cota >= 0) k = i; }); return k; })();
