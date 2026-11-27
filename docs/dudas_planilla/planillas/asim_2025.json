@@ -1,0 +1,138 @@
+{
+ "piezas": [
+  {
+   "nombre": "T1",
+   "dir": "A",
+   "fila": 1,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 0.2,
+    "C": 4.5
+   }
+  },
+  {
+   "nombre": "T2",
+   "dir": "A",
+   "fila": 2,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 0.2,
+    "C": 4.5
+   }
+  },
+  {
+   "nombre": "T3",
+   "dir": "A",
+   "fila": 3,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 0.2,
+    "C": 4.5
+   }
+  },
+  {
+   "nombre": "T4",
+   "dir": "A",
+   "fila": 4,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 0.2,
+    "C": 4.5
+   }
+  },
+  {
+   "nombre": "T5",
+   "dir": "A",
+   "fila": 5,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 0.2,
+    "C": 4
+   }
+  },
+  {
+   "nombre": "T6",
+   "dir": "A",
+   "fila": 0,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 5,
+    "X": 0.2,
+    "Z": 0.2,
+    "AB": 3.6,
+    "AH": 5,
+    "AI": 0.2
+   }
+  },
+  {
+   "nombre": "T1B",
+   "dir": "B",
+   "fila": 1,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 4.5,
+    "C": 0.2
+   }
+  },
+  {
+   "nombre": "T2B",
+   "dir": "B",
+   "fila": 2,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 4.5,
+    "C": 0.2
+   }
+  },
+  {
+   "nombre": "T3B",
+   "dir": "B",
+   "fila": 3,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 4.5,
+    "C": 0.2
+   }
+  },
+  {
+   "nombre": "T4B",
+   "dir": "B",
+   "fila": 4,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 4.5,
+    "C": 0.2
+   }
+  },
+  {
+   "nombre": "T5B",
+   "dir": "B",
+   "fila": 5,
+   "molde": "simétrico",
+   "tipoFila": {
+    "B": 4,
+    "C": 0.2
+   }
+  },
+  {
+   "nombre": "T6B",
+   "dir": "B",
+   "fila": 0,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 4,
+    "X": 0.2,
+    "Z": 0.2,
+    "AB": 4.8,
+    "AE": 0.2,
+    "AF": 4.8
+   }
+  }
+ ],
+ "avisos": [
+  "La planilla tiene 3 subsuelos fijos; el que falta se carga con altura 0 y sin superficie.",
+  "T6: Va en la fila de la pieza 1, donde «Flex comp PB paralelos» lee el módulo simétrico (Q): la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo asimétrico (AN) (columna «Guía»).",
+  "T6B: Nota: el alma M9 llega hasta la cara exterior del ala (0,2 m); en la hoja J va con su largo libre, 4,8 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T6B: Nota: el alma M10 llega hasta la cara exterior del ala (0,2 m); en la hoja J va con su largo libre, 4,8 m, y ese tramo se suma al ala, para que el J sea el del dibujo."
+ ]
+}

@@ -1,0 +1,814 @@
+{
+ "piezas": [
+  {
+   "nombre": "T1",
+   "dir": "A",
+   "fila": 2,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 5.39,
+    "X": 0.2,
+    "Z": 0.4892,
+    "AB": 4.3,
+    "AE": 0.35,
+    "AF": 5.1,
+    "AH": 2.697,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T2",
+   "dir": "A",
+   "fila": 9,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 2.645,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 1.71,
+    "AH": 2.645,
+    "AI": 0.2
+   }
+  },
+  {
+   "nombre": "T3",
+   "dir": "A",
+   "fila": 0,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 6.155,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 10.35,
+    "AE": 0.2,
+    "AF": 1.91,
+    "AH": 2.655,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T4",
+   "dir": "A",
+   "fila": 3,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 5.39,
+    "X": 0.2,
+    "Z": 0.4892,
+    "AB": 4.3,
+    "AE": 0.35,
+    "AF": 5.1,
+    "AH": 2.697,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T5",
+   "dir": "A",
+   "fila": 10,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 2.645,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 1.71,
+    "AH": 2.645,
+    "AI": 0.2
+   }
+  },
+  {
+   "nombre": "T6",
+   "dir": "A",
+   "fila": 1,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 6.155,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 10.35,
+    "AE": 0.2,
+    "AF": 1.91,
+    "AH": 2.655,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T7",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T8",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T9",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T10",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T11",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T12",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T13",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T14",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T15",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T16",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T17",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T18",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T19",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T20",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T21",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T22",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T23",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T24",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T25",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T26",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T27",
+   "dir": "A",
+   "fila": 4,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T28",
+   "dir": "A",
+   "fila": 5,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T29",
+   "dir": "A",
+   "fila": 6,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T30",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T31",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T32",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T33",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T34",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T35",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T36",
+   "dir": "A",
+   "fila": 11,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T37",
+   "dir": "A",
+   "fila": 12,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T38",
+   "dir": "A",
+   "fila": 13,
+   "molde": "pórtico",
+   "tipoFila": {
+    "AO": 0.5,
+    "AP": 0.5,
+    "AQ": 4.1,
+    "AT": 0.5,
+    "AU": 0.5
+   }
+  },
+  {
+   "nombre": "T39",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T40",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T41",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T42",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T43",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T44",
+   "dir": "A",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T1B",
+   "dir": "B",
+   "fila": 0,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 6.76,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 1.997,
+    "AE": 0.4,
+    "AF": 2.345,
+    "AH": 5.45,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T2B",
+   "dir": "B",
+   "fila": 1,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 2.26,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 2.295,
+    "AE": 0.2,
+    "AF": 2.295
+   }
+  },
+  {
+   "nombre": "T3B",
+   "dir": "B",
+   "fila": 2,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 11.3602,
+    "X": 0.35,
+    "Z": 0.5266,
+    "AB": 2.1055,
+    "AE": 0.485,
+    "AF": 3.1255,
+    "AH": 2.4366,
+    "AI": 0.2
+   }
+  },
+  {
+   "nombre": "T4B",
+   "dir": "B",
+   "fila": 3,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 6.76,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 1.997,
+    "AE": 0.4,
+    "AF": 2.345,
+    "AH": 5.45,
+    "AI": 0.35
+   }
+  },
+  {
+   "nombre": "T5B",
+   "dir": "B",
+   "fila": 4,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 2.26,
+    "X": 0.35,
+    "Z": 0.35,
+    "AB": 2.295,
+    "AE": 0.2,
+    "AF": 2.295
+   }
+  },
+  {
+   "nombre": "T6B",
+   "dir": "B",
+   "fila": 5,
+   "molde": "asimétrico",
+   "tipoFila": {
+    "W": 11.3602,
+    "X": 0.35,
+    "Z": 0.5266,
+    "AB": 2.1055,
+    "AE": 0.485,
+    "AF": 3.1255,
+    "AH": 2.4366,
+    "AI": 0.2
+   }
+  },
+  {
+   "nombre": "T7B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T8B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T9B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T10B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T11B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T12B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T13B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T14B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T15B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T16B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T17B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T18B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T19B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T20B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T21B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T22B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T23B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T24B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T25B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T26B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T27B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T28B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T29B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T30B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T31B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T32B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T33B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T34B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T35B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T36B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T37B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T38B",
+   "dir": "B",
+   "fila": null,
+   "molde": "pórtico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T39B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T40B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T41B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T42B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T43B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  },
+  {
+   "nombre": "T44B",
+   "dir": "B",
+   "fila": null,
+   "molde": "simétrico",
+   "tipoFila": {}
+  }
+ ],
+ "avisos": [
+  "La planilla tiene 3 subsuelos fijos; los 2 que faltan se cargan con altura 0 y sin superficie.",
+  "T1: Más de dos almas: el molde de la hoja admite dos (M3 y M1). M5 se sumó a M1 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T1: Nota: el ala M6 no dice a qué alma se pega: se tomó M1.",
+  "T1: El alma derecha M3 no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.",
+  "T1: La simplificación al molde cambia el J: hoja 17,9296 m⁴ contra 34,9751 m⁴ de la sección real (−49 %).",
+  "T1: Va en la fila de la pieza 3, donde «Flex comp PB paralelos» lee el módulo simétrico (Q): la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo asimétrico (AN) (columna «Guía»).",
+  "T2: Planilla 2025: va en la fila 16 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B14), pero «Flex comp PB paralelos» fila 13 lee el área y el módulo de la fila 21: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T2: Fila de la pieza 10: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).",
+  "T3: Nota: M12, M13 están en el medio del alma; se suman al ala superior del molde (se puede cambiar a «fuera» o «ala inf.»). Mirá la diferencia de J.",
+  "T3: El alma derecha M15 no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.",
+  "T3: La simplificación al molde cambia el J: hoja 118,138 m⁴ contra 102,8737 m⁴ de la sección real (+15 %).",
+  "T3: Va en la fila de la pieza 1, donde «Flex comp PB paralelos» lee el módulo simétrico (Q): la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo asimétrico (AN) (columna «Guía»).",
+  "T4: Más de dos almas: el molde de la hoja admite dos (M18 y M16). M20 se sumó a M16 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T4: Nota: el ala M21 no dice a qué alma se pega: se tomó M16.",
+  "T4: El alma derecha M18 no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.",
+  "T4: La simplificación al molde cambia el J: hoja 17,9296 m⁴ contra 34,9751 m⁴ de la sección real (−49 %).",
+  "T4: Va en la fila de la pieza 4, donde «Flex comp PB paralelos» lee el módulo simétrico (Q): la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo asimétrico (AN) (columna «Guía»).",
+  "T5: Planilla 2025: va en la fila 17 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B15), pero «Flex comp PB paralelos» fila 14 lee el área y el módulo de la fila 22: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T5: Fila de la pieza 11: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).",
+  "T6: Nota: M27, M28 están en el medio del alma; se suman al ala superior del molde (se puede cambiar a «fuera» o «ala inf.»). Mirá la diferencia de J.",
+  "T6: El alma derecha M30 no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.",
+  "T6: La simplificación al molde cambia el J: hoja 118,138 m⁴ contra 102,8737 m⁴ de la sección real (+15 %).",
+  "T6: Va en la fila de la pieza 2, donde «Flex comp PB paralelos» lee el módulo simétrico (Q): la flexocompresión de la planilla no vale para esta pieza; la app la calcula con el módulo asimétrico (AN) (columna «Guía»).",
+  "T29: Planilla 2025: va en la fila 10 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B11), pero «Flex comp PB paralelos» fila 10 lee el área y el módulo de la fila 14: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T36: Planilla 2025: va en la fila 18 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B16), pero «Flex comp PB paralelos» fila 15 lee el área y el módulo de la fila 23: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T36: Fila de la pieza 12: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).",
+  "T37: Planilla 2025: va en la fila 19 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B17), pero «Flex comp PB paralelos» fila 16 lee el área y el módulo de la fila 24: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T37: Fila de la pieza 13: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).",
+  "T38: Planilla 2025: va en la fila 20 de «J Tabiques paralelos» (la que lee «Rototrasl. cara mayor»!B18), pero «Flex comp PB paralelos» fila 17 lee el área y el módulo de la fila 25: la flexocompresión de la planilla no corresponde a esta pieza.",
+  "T38: Fila de la pieza 14: en «Flex comp PB paralelos» (D13:D20) el volumen es 0,01 fijo, así que la planilla no suma el peso propio de esta pieza; la app lo suma (columna «Guía»).",
+  "T1B: Más de dos almas: el molde de la hoja admite dos (M2 y M4). M6 se sumó a M4 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T1B: Nota: el alma M2 llega hasta la cara exterior del ala (0,7 m); en la hoja J va con su largo libre, 1,997 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T1B: Nota: el alma M4 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,345 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T2B: Nota: el alma M8 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,295 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T2B: Nota: el alma M9 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,295 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T3B: Más de dos almas: el molde de la hoja admite dos (M11 y M14). M12 se sumó a M11, M13 se sumó a M14 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T3B: Nota: el alma M14 llega hasta la cara exterior del ala (0,5495 m); en la hoja J va con su largo libre, 2,1055 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T3B: Nota: el alma M11 llega hasta la cara exterior del ala (0,3495 m); en la hoja J va con su largo libre, 3,1255 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T3B: La simplificación al molde cambia el J: hoja 6,9463 m⁴ contra 6,5766 m⁴ de la sección real (+6 %).",
+  "T4B: Más de dos almas: el molde de la hoja admite dos (M17 y M19). M21 se sumó a M19 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T4B: Nota: el alma M17 llega hasta la cara exterior del ala (0,7 m); en la hoja J va con su largo libre, 1,997 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T4B: Nota: el alma M19 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,345 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T5B: Nota: el alma M23 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,295 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T5B: Nota: el alma M24 llega hasta la cara exterior del ala (0,35 m); en la hoja J va con su largo libre, 2,295 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T6B: Más de dos almas: el molde de la hoja admite dos (M26 y M29). M27 se sumó a M26, M28 se sumó a M29 (espesor equivalente, misma área): ningún muro queda fuera. Mirá la diferencia de J.",
+  "T6B: Nota: el alma M29 llega hasta la cara exterior del ala (0,5495 m); en la hoja J va con su largo libre, 2,1055 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T6B: Nota: el alma M26 llega hasta la cara exterior del ala (0,3495 m); en la hoja J va con su largo libre, 3,1255 m, y ese tramo se suma al ala, para que el J sea el del dibujo.",
+  "T6B: La simplificación al molde cambia el J: hoja 6,9463 m⁴ contra 6,5766 m⁴ de la sección real (+6 %).",
+  "T27B: El pórtico M51–M52 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "T28B: El pórtico M53–M54 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "T29B: El pórtico M55–M56 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "T36B: El pórtico M67–M68 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "T37B: El pórtico M69–M70 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "T38B: El pórtico M71–M72 trabaja en su plano: en este viento no toma carga (sí en el otro).",
+  "Viento A: 32 piezas quedan fuera del molde (elegido a mano: T7, T8, T9, T10, T11, T12…). No toman viento; sí la carga de su área de influencia.",
+  "Viento B: 32 piezas quedan fuera del molde (elegido a mano: T7B, T8B, T9B, T10B, T11B, T12B…). No toman viento; sí la carga de su área de influencia."
+ ]
+}
