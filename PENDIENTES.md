@@ -26,6 +26,16 @@ Timoshenko por tipo de pieza); licencias de terceros en Ayuda; comparar dos vers
 ver»; rototraslación sin rojo ni azul fuera de tracción y compresión; tipografía de la guía (Plex Sans, JetBrains Mono
 y Plex Math nombradas solo en `src/ui/tipografia.ts`; canvas, PowerPoint y Excel de la app en Plex, con la nota de la
 letra en cada «Léame»). Tocó `src/app.ts`, `src/estilo.css` y `src/ui/planta.ts` con cambios chicos.
+Exo, ficha M «Malla sobre la fachada» (pedido del usuario, del área del exo): la malla sigue la fachada real de cada
+nivel (cilindros, elipses, polígonos, torres que se angostan o se corren), diagrid o columnas con cruces, con las losas
+atadas en cada piso; se calcula por proyección en el plano de cada viento con tabiques + exo, CIRSOC 301, dimensionado y
+peso de siempre (igual al reticulado espacial con losa rígida; con plantas asimétricas, menos del 1 %). Vista «Malla en
+3D» en la etapa 08 y la malla real en el 3D. Archivos nuevos `src/engine/exoMalla.ts` y `src/ui/exoMalla.ts`; cambios
+localizados en `exo.ts`, `exoDeCalculo.ts`, `exoReglamento.ts`, `ui/exo.ts` y `ui/vista3d.ts`. Falta: la rigidez del tubo a
+la torsión en la rototraslación (hoy la toman los tabiques solos, del lado seguro).
+Chequeo de la ficha M (27/11, al unir con `main`): una malla con tope bajo y sin tabiques arriba ya no da kilómetros
+(el cálculo dice qué pisos quedarían sueltos); aviso de pisos flojos entre anillos (sin tabiques en ese sentido);
+nudos por anillo hasta 96; el giro por módulo respeta los cortes.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.

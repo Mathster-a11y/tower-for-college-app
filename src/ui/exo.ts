@@ -13,6 +13,8 @@ import { plantaDeNivel } from '../engine/silueta';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
 import { disenadorExo3D } from './exo3d';
+import { camposMalla, vistaMalla } from './exoMalla';
+import { MALLA_POR_DEFECTO, pisosFlojos } from '../engine/exoMalla';
 import { ExoDeCalculo, type DatosExo } from '../engine/exoDeCalculo';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -209,6 +211,11 @@ export function estadoExo(): EstadoChip {
 // ------------------------------------------------------------------ torsión con el exo
 /** la rototraslación del viento elegido con las caras del exo como dos piezas más en cada sentido */
 function seccionTorsion(def: ExoDef): HTMLElement | null {
+  if (def.tipo === 'M') {
+    const s0 = seccion('Torsión con el exo');
+    s0.cuerpo.append(h('p', { class: 'nota' }, 'La malla rodea toda la planta: es un tubo, muy rígido al giro. La app todavía no le suma esa rigidez a la rototraslación: la torsión la siguen tomando los tabiques solos (del lado seguro).'));
+    return s0.el;
+  }
   if (def.tipo === 'F') {
     // los brazos frenan la flexión del núcleo, no su giro: no hay una cuenta de torsión que valga la pena mostrar
     const s0 = seccion('Torsión con el exo');
@@ -328,8 +335,16 @@ export function panelExo(c: H) {
     c.append(h('div', { class: 'kpis' },
       kpi(vientoReglamento() ? 'Deriva de servicio' : 'Flecha azotea', `${fmt(fl.u * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * relS * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · ${fl.texto} = ${fmt(fl.lim * 1000, 0)}`, colorEstado(fl.u <= fl.lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
-      kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
+      kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : def.tipo === 'M' ? 'J equivalente de la malla' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
       kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
+    if (def.tipo === 'M' && d.entrada.malla) {
+      // pisos entre anillos que la malla frena mal (sin tabiques en ese sentido, o donde la malla se cierra arriba)
+      const flojos = pisosFlojos(d.entrada.malla, d.entrada.zs, d.r.u);
+      if (flojos.length) {
+        const peor = flojos.reduce((a, b) => (b.veces > a.veces ? b : a));
+        c.append(h('p', { class: 'nota aviso-malla' }, `Con el viento ${d.dir}, ${flojos.length === 1 ? 'un piso entre anillos se mueve' : `${flojos.length} pisos entre anillos se mueven`} de más (el peor, a la cota ${fmt(peor.z, 1)} m, con ${fmt(peor.veces, 1)} veces la deriva media de la torre). Esos pisos solo los frena la flexión de las barras que cruzan la losa${isFinite(d.r.uSin[n]) ? '' : ' (en este sentido no hay tabiques que tomen viento)'}. Para arreglarlo: un módulo más corto (anillos más seguidos), más nudos por anillo o tabiques en ese sentido.`));
+      }
+    }
     const ens = (['A', 'B'] as const).map(x => entradaExo(x, def)).filter(Boolean) as EntradaExo[];
     const peso = ens.length === 2 ? pesoExo(def, ens) : NaN;
     const bDim = h('button', { type: 'button', class: 'primario', title: 'Prueba los tubos del catálogo de menor a mayor y agranda solo la clase de barra que falla, con los dos vientos' }, 'Dimensionar: el más liviano que verifica');
@@ -348,15 +363,16 @@ export function panelExo(c: H) {
       const msg = document.getElementById('mensaje');
       if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
-    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
+    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
     const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });
-  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; delete x.zonas; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
+  campo(fo, 'Ficha', 'exo-tipo', def.tipo, v => set(x => { x.tipo = v as TipoExo; delete x.barras; delete x.nuevas; delete x.zonas; if (x.tipo === 'M') x.malla ??= { ...MALLA_POR_DEFECTO }; }), { lista: Object.keys(TIPOS_EXO), ayuda: `${TIPOS_EXO[def.tipo].nombre}: ${TIPOS_EXO[def.tipo].texto}` });
   const nu = (f: (x: ExoDef, v: number) => void) => (v: string) => { const x = parseFloat(v.replace(',', '.')); if (isFinite(x) && x > 0) set(e => f(e, x)); };
   campo(fo, 'Separación', 'exo-sep', def.separacion, nu((x, v) => (x.separacion = v)), { tipo: 'number', unidad: 'm', ayuda: 'distancia de la fachada al eje de las columnas del exo' });
   if (def.tipo !== 'F') campo(fo, 'Módulo', 'exo-mod', def.modulo, nu((x, v) => { x.modulo = Math.round(v); delete x.barras; delete x.nuevas; }), { tipo: 'number', unidad: 'pisos', ayuda: 'alto de cada cruz, marco o diamante' });
+  if (def.tipo === 'M') camposMalla(fo, def, set);
   if (def.zonas?.length) fo.append(h('p', { class: 'nota aviso-loft nota-ancha' }, `Hay ${def.zonas.length} zonas en altura: cada una tiene su ficha y su módulo (se editan en «Diseño 3D», en el centro). La ficha y el módulo de acá valen para lo que no diga cada zona.`));
   // ficha A sobre una planta circular (como el Gherkin): nudos por anillo y anillos alternados (lo dibujan el 3D y la planta)
   if (def.tipo === 'A') {
@@ -515,7 +531,7 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
   const x0 = 70, y0 = 70, alto = H - 170, anchoAl = Math.min(W * 0.42, 460);
   const k = Math.min(alto / (zT - z0), (anchoAl - 60) / d.ancho);
   const X = (s: number) => x0 + anchoAl / 2 + s * k, Y = (z: number) => y0 + alto - (z - z0) * k;
-  svg.append(el('text', { x: 16, y: 28, class: 'ex-titulo' }, `${d.def.tipo === 'F' ? 'Plano de los brazos (por el núcleo)' : 'Cara paralela al viento'} ${d.dir} · flujo de fuerzas (${TIPOS_EXO[d.def.tipo].nombre})`));
+  svg.append(el('text', { x: 16, y: 28, class: 'ex-titulo' }, `${d.def.tipo === 'F' ? 'Plano de los brazos (por el núcleo)' : d.def.tipo === 'M' ? 'La malla vista por el viento' : 'Cara paralela al viento'} ${d.dir} · flujo de fuerzas (${TIPOS_EXO[d.def.tipo].nombre})`));
   // fachada de la torre (gris) detrás
   const sTorre = d.ancho / 2 - d.def.separacion;
   svg.append(el('rect', { x: X(-sTorre), y: Y(zT), width: 2 * sTorre * k, height: (zT - z0) * k, class: 'ex-torre' }));
@@ -637,20 +653,22 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
 export function centroExo(c: H, tam: Tam) {
   if (!estado.proyecto.exo) {
     c.append(h('div', { class: 'tarjeta-vacia' }, h('h3', {}, 'Sin exoesqueleto'), h('p', { class: 'nota' }, 'Tildá «Agregar un exoesqueleto» en el panel de la izquierda para ver cómo cambia la torre: la flecha, el reparto del viento y los esfuerzos de cada barra.'),
-      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F', 'L'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t }; })); return b; }))));
+      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F', 'M', 'L'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t, ...(t === 'M' ? { malla: { ...MALLA_POR_DEFECTO } } : {}) }; })); return b; }))));
     return;
   }
   // vista: el alzado de una cara (con los diagramas) o el diseñador 3D de las cuatro caras
   const segV = h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista del exoesqueleto' });
-  ([['alzado', 'Alzado de una cara', 'El flujo de fuerzas, los diagramas y el detalle de cada barra'], ['3d', 'Diseño 3D', 'Las cuatro caras alrededor de las losas: zonas en altura, plantillas, pintar secciones y agregar barras tocando la torre']] as const).forEach(([v, t, ti]) => {
+  const esMalla = estado.proyecto.exo.tipo === 'M';
+  (esMalla ? [['alzado', 'La malla vista por el viento', 'La malla proyectada en el plano del viento: el flujo de fuerzas, los diagramas y el detalle de cada barra'], ['3d', 'Malla en 3D', 'La malla sobre la fachada real, girable, pintada con su esfuerzo, y la planta de cada anillo']] as const
+    : [['alzado', 'Alzado de una cara', 'El flujo de fuerzas, los diagramas y el detalle de cada barra'], ['3d', 'Diseño 3D', 'Las cuatro caras alrededor de las losas: zonas en altura, plantillas, pintar secciones y agregar barras tocando la torre']] as const).forEach(([v, t, ti]) => {
     const b = h('button', { type: 'button', 'aria-pressed': String(vistaExo === v), title: ti }, t);
     b.addEventListener('click', () => { vistaExo = v; estado.avisarPanel(); });
     segV.append(b);
   });
   c.append(h('div', { class: 'fila-acciones' }, segV));
-  if (vistaExo === '3d') { c.append(disenadorExo3D()); return; }
+  if (vistaExo === '3d') { c.append(esMalla ? vistaMalla() : disenadorExo3D()); return; }
   const d = datosExo();
-  if (!d) { c.append(h('p', { class: 'error' }, exoActual().ultimoError ? `No se pudo calcular: ${exoActual().ultimoError} Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
+  if (!d) { c.append(h('p', { class: 'error' }, exoActual().ultimoError ? `No se pudo calcular: ${exoActual().ultimoError}${/mecanismo/.test(exoActual().ultimoError) ? ' Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).' : ''}` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Qué se ve en el alzado' });
   MODOS.forEach(([m, t, ayuda]) => { const b = h('button', { type: 'button', 'aria-pressed': String(modo === m), title: ayuda }, t); b.addEventListener('click', () => { modo = m; estado.avisarPanel(); }); seg.append(b); });
