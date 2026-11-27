@@ -127,9 +127,11 @@ function conJ(h: HojaJRes, J: (number | null | undefined)[] | undefined): HojaJR
 
 export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
   const Kz: number[] = [], qz: number[] = [], P: number[] = [], Q: number[] = [], R: number[] = [], S: number[] = [];
-  // las fórmulas completas llegan hasta la fila 55 (PB); 56–58 (subsuelos) solo tienen la cota
-  for (let i = 0; i < N_FILAS; i++) {
-    if (i <= 50) {
+  // las fórmulas completas llegan hasta la fila 55 (PB); 56–58 (subsuelos) solo tienen la cota. Con filas libres
+  // (CIRSOC y FEM con más de 49 niveles) la tabla es más larga: PB en la fila nF − 4
+  const nF = Math.max(N_FILAS, v.Z.length), fPB = nF - 4;
+  for (let i = 0; i < nF; i++) {
+    if (i <= fPB) {
       const z0 = n0(v.Z[i]);
       const z = op.kzMin5 && z0 > 0 ? Math.max(z0, 5) : z0;
       Kz[i] = 2.01 * pow(z / v.zg, 2 / v.alfa);
@@ -139,10 +141,10 @@ export function calcViento(v: Viento, op: Opciones = {}): VientoRes {
       qz[i] = 0;
     }
   }
-  const qh = maxOf(qz.slice(0, 51));
+  const qh = maxOf(qz.slice(0, fPB + 1));
   const nuevo = (op.motor ?? config.motor) === 'nuevo';
-  for (let i = 0; i < N_FILAS; i++) {
-    if (i <= 50) {
+  for (let i = 0; i < nF; i++) {
+    if (i <= fPB) {
       P[i] = qz[i] * v.G * v.Cpb;
       // actual: Q = $N$4·G·Cps · nuevo: N = IF(M = 0; 0; $N$4) y Q = N·G·Cps
       Q[i] = (nuevo && qz[i] === 0 ? 0 : qh) * v.G * v.Cps;
@@ -169,14 +171,16 @@ export function calcMNyQ(v: Viento, vr: VientoRes, d: MNyQDatos): MNyQRes {
   const B: number[] = [], C: number[] = [], D: number[] = [], E: number[] = [], F: number[] = [], G: number[] = [];
   const H: number[] = [], I: number[] = [], J: number[] = [], K: number[] = [], L: number[] = [], M: number[] = [];
   const N: number[] = [], O: number[] = [];
-  for (let k = 0; k < N_FILAS; k++) B[k] = k === 0 ? 0 : n0(v.Z[k]);
-  const Bnext = (k: number) => (k + 1 < N_FILAS ? B[k + 1] : 0); // M,NyQ!B58 está vacía
-  for (let k = 0; k < N_FILAS; k++) {
+  // (con filas libres la tabla es más larga: PB en la fila nF − 4 y la última, nF − 1)
+  const nF = Math.max(N_FILAS, v.Z.length), fPB = nF - 4;
+  for (let k = 0; k < nF; k++) B[k] = k === 0 ? 0 : n0(v.Z[k]);
+  const Bnext = (k: number) => (k + 1 < nF ? B[k + 1] : 0); // M,NyQ!B58 está vacía
+  for (let k = 0; k < nF; k++) {
     C[k] = d.C[k] ?? (k === 0 ? 0 : B[k - 1] - B[k]);
     D[k] = d.D[k] ?? (k === 0 ? 0 : (B[k - 1] - Bnext(k)) / 2);
     E[k] = d.E[k] ?? (k === 0 ? 0 : E[k - 1]);
     F[k] = d.F[k] ?? (k === 0 ? 0 : F[k - 1]);
-    G[k] = k <= 50 ? vr.S[k] : 0; // G55:G57 apuntan a un libro externo: dan 0
+    G[k] = k <= fPB ? vr.S[k] : 0; // G55:G57 apuntan a un libro externo: dan 0
     H[k] = D[k] * E[k] * G[k];
     I[k] = k === 0 ? 0 : H[k - 1] + I[k - 1];
     J[k] = k === 0 ? 0 : J[k - 1] + I[k] * C[k];
@@ -186,9 +190,9 @@ export function calcMNyQ(v: Viento, vr: VientoRes, d: MNyQDatos): MNyQRes {
     N[k] = k === 0 ? 0 : D[k - 1] * F[k - 1] * G[k - 1] + N[k - 1];
     O[k] = k === 0 ? 0 : O[k - 1] + N[k] * C[k];
   }
-  const H61 = sum(H), J61 = J[53], M61 = M[53], O61 = O[53];
-  const F62 = div(maxOf(B.slice(0, 52)), F[51]);
-  const G65 = H61, G66 = div(J61, G65), G67 = M61, G68 = F[53] / 2, G69 = maxOf(B), G70 = F[48];
+  const H61 = sum(H), J61 = J[nF - 1], M61 = M[nF - 1], O61 = O[nF - 1];
+  const F62 = div(maxOf(B.slice(0, fPB + 2)), F[fPB + 1]);
+  const G65 = H61, G66 = div(J61, G65), G67 = M61, G68 = F[nF - 1] / 2, G69 = maxOf(B), G70 = F[fPB - 2];
   const b1 = n0(d.b1), a1 = n0(d.a1);
   const N82 = b1 * a1, N83 = M61, N84 = (N83 / 7) * 9;
   const N85 = div(-N83, N82) / 10, N86 = div(-N84, N82) / 10;
@@ -387,10 +391,12 @@ export function calcularPlanilla(d: PlanillaDatos, op: Opciones = {}): PlanillaR
   const jort = conJ(calcHojaJ(d.jort, true, nuevo), op.Jreal?.B);
   const AYp = jpar.filas.map(f => f.AY), AYo = jort.filas.map(f => f.AY);
   // cara mayor: D5 = M,NyQ!I55, F5 = M,NyQ!J55 (fila del 1º subsuelo); cara menor: N55 y O55
-  const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[51], mnyq.J[51], false, nuevo, d.rotA.par ?? null);
-  const rotB = calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true, nuevo, d.rotB.par ?? null);
+  // (la fila de debajo de PB: la 51 de la planilla; con filas libres, la que sigue a PB)
+  const f1 = mnyq.B.length - 3;
+  const rotA = calcRoto(AYp, AYo, d.rotA.H, mnyq.I[f1], mnyq.J[f1], false, nuevo, d.rotA.par ?? null);
+  const rotB = calcRoto(AYo, AYp, d.rotB.H, mnyq.N[f1], mnyq.O[f1], true, nuevo, d.rotB.par ?? null);
   const flex = calcFlex(jpar, rotA, d.flex);
   // en la hoja de cara menor, «nuevo» solo cambia el rango de B51 e I51 (truncaL25 es de cara mayor)
-  const rotBReal = nuevo ? undefined : calcRoto(AYo, AYp, d.rotB.H, mnyq.N[51], mnyq.O[51], true, true, d.rotB.par ?? null);
+  const rotBReal = nuevo ? undefined : calcRoto(AYo, AYp, d.rotB.H, mnyq.N[f1], mnyq.O[f1], true, true, d.rotB.par ?? null);
   return { viento, mnyq, jpar, jort, jminA: calcJMinimo(mnyq, false), jminB: calcJMinimo(mnyq, true), rotA, rotB, flex, ...(rotBReal ? { rotBReal } : {}) };
 }

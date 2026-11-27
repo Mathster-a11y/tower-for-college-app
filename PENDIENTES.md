@@ -10,7 +10,7 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 
 **En curso**
 - (nada en curso en `alternativa`)
-- `claude/ejemplos-cirsoc` (27/11): CIRSOC y FEM con más de 49 niveles sobre PB (sin la tabla de la planilla). La CI con la revisión de punteros espera a que el usuario tenga la computadora.
+- (nada en curso en `claude/ejemplos-cirsoc`; la CI con la revisión de punteros espera a que el usuario tenga la computadora)
 
 **Hecho hace poco en `alternativa`** (27/11): planta → «Extender o recortar hasta…» (un muro hasta el eje de otro: T, o esquina si el otro tampoco llega); aviso al abrir cuando el ejemplo guardado en el navegador quedó de una versión anterior. Ayudas → «Distancia al centro» (baricentro de la pieza del viento elegido al centro de la losa: Δx, Δy, r y θ antihorario desde +x).  el núcleo del Gherkin relevado en las plantas de Foster (anillo de 16 columnas, 4 centrales y los muros que se repiten; todo al 38º, D y S al 39º), en lugar del tubo de Ø 22 m; datos e imágenes en `docs/gherkin-nucleo/`. (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
@@ -61,9 +61,9 @@ corriendo en un navegador con WebGPU.
 **Para la otra rama** (vistos desde acá, sin tocar)
 - ~~«Ver la explicación» de Rototraslación: chico para el dedo.~~ (27/11, `claude/ejemplos-cirsoc`: botón con recuadro, 44 px de alto en tablet)
 - Que `tools/revision_punteros.cjs` corra en GitHub en cada cambio a `main`.
-- Que CIRSOC y FEM acepten más de 49 niveles sobre PB: hoy todos los métodos arman los niveles sobre la tabla de la
-  planilla y con 50 el corte, el momento y el vuelco del nivel más alto salen mal. Con eso, los ejemplos (que solo
-  tienen que cumplir CIRSOC) podrían ir piso por piso: el Citicorp separaría el 11º y el 12º.
+- ~~Que CIRSOC y FEM acepten más de 49 niveles sobre PB~~ (27/11, `claude/ejemplos-cirsoc`: con CIRSOC y FEM la tabla
+  de los niveles crece con la torre, `config.filasLibres`; Planilla y Guía siguen con las 49 filas del Excel y avisan).
+  Ya se pueden pasar los ejemplos a piso por piso (área de `alternativa`): el Citicorp separaría el 11º y el 12º.
 
 ## Lo que falta (lista viva, noviembre 2026)
 

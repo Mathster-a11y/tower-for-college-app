@@ -11,7 +11,7 @@ const muro = (id: string, dir: 'X' | 'Y', x: number, y: number, largo: number, e
 
 describe('motor nuevo (planilla 2025)', () => {
   it('por defecto la app sigue con el motor actual y el método de la app', () => {
-    expect(config).toEqual({ motor: 'actual', metodo: 'app' });
+    expect(config).toEqual({ motor: 'actual', metodo: 'app', filasLibres: false });
   });
   it('valores de control de la especificación (6.5): asimétrica W 2,70 · X 0,75 · Z 0,25 · AB 2,25 · AE 0,35 · AF 10,75', () => {
     for (const nuevo of [false, true]) {

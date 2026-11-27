@@ -14,7 +14,12 @@
 export type Motor = 'actual' | 'nuevo';
 export type Metodo = 'app' | 'planilla';
 
-export const config: { motor: Motor; metodo: Metodo } = { motor: 'actual', metodo: 'app' };
+/**
+ * filasLibres: la tabla de los niveles («viento» y «M,NyQ») crece con la torre en lugar de las 50 filas fijas de la
+ * planilla (PB baja a la fila que haga falta). Solo para los métodos CIRSOC y FEM, que no se escriben en la planilla:
+ * con Planilla y Guía la app tiene que dar lo mismo que el Excel, que admite hasta 49 niveles sobre PB.
+ */
+export const config: { motor: Motor; metodo: Metodo; filasLibres: boolean } = { motor: 'actual', metodo: 'app', filasLibres: false };
 
 export function usarConfig<T>(c: Partial<typeof config>, f: () => T): T {
   const antes = { ...config };

@@ -104,7 +104,7 @@ export interface EntradaDesglose {
 // ------------------------------------------------------------------ 1 · viento
 function hojaViento(x: EntradaDesglose): HojaDesglose {
   const v = x.d.viento, rv = x.r.viento;
-  const filas = x.filaNivel.map((k, j) => ({ k, nombre: x.nombresNivel[j], z: n0(v.Z[k]) })).filter(f => f.k <= 50 && f.z > 0);
+  const filas = x.filaNivel.map((k, j) => ({ k, nombre: x.nombresNivel[j], z: n0(v.Z[k]) })).filter(f => f.k <= Math.max(50, v.Z.length - 4) && f.z > 0);
   const Kz = (z: number) => 2.01 * Math.pow(Math.max(z, 5) / v.zg, 2 / v.alfa);
   const qz = (z: number) => 0.613 * v.Kzt * v.Kd * v.V ** 2 * v.I * Kz(z);
   const zh = Math.max(...filas.map(f => f.z), 0);
@@ -169,7 +169,7 @@ function fuerzasAnaliticas(x: EntradaDesglose) {
   // ancho y largo de cada nivel (se arrastran hacia abajo, como en la hoja)
   const Bv: number[] = [], Lv: number[] = [];
   ks.forEach((k, j) => { Bv[j] = d.mnyq.E[k] ?? (j ? Bv[j - 1] : 0); Lv[j] = d.mnyq.F[k] ?? (j ? Lv[j - 1] : 0); });
-  const p = ks.map(k => (k <= 50 ? x.r.viento.S[k] : 0));            // presión neta de la hoja viento (dato de esta hoja)
+  const p = ks.map(k => (k <= Math.max(50, x.r.viento.S.length - 4) ? x.r.viento.S[k] : 0));            // presión neta de la hoja viento (dato de esta hoja)
   // altura de influencia: mitad del entrepiso de arriba y mitad del de abajo; en la azotea, medio entrepiso; sin viento en PB y abajo
   const hInf = zs.map((z, j) => (iPB >= 0 && j >= iPB ? 0 : j === 0 ? (zs.length > 1 ? (z - zs[1]) / 2 : 0) : (zs[j - 1] - (zs[j + 1] ?? z)) / 2));
   const WA = hInf.map((h, j) => h * Bv[j] * p[j]), WB = hInf.map((h, j) => h * Lv[j] * p[j]);
