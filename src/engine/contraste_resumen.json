@@ -1,0 +1,156 @@
+[
+ {
+  "caso": "anexo_A",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.158,
+  "flechaPynite": 0.0009,
+  "flechaEuler": 0.098669,
+  "flechaTimoshenko": 0.099812,
+  "corteTimoshenko": 19.91
+ },
+ {
+  "caso": "anexo_B",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.001,
+  "flechaPynite": 0.0001,
+  "flechaEuler": 0.15296,
+  "flechaTimoshenko": 0.154474,
+  "corteTimoshenko": 0.2
+ },
+ {
+  "caso": "guia_A",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.108,
+  "flechaPynite": 0.0006,
+  "flechaEuler": 0.062625,
+  "flechaTimoshenko": 0.063792,
+  "corteTimoshenko": 12.51
+ },
+ {
+  "caso": "guia_B",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.002,
+  "flechaPynite": 0.0001,
+  "flechaEuler": 0.076572,
+  "flechaTimoshenko": 0.077254,
+  "corteTimoshenko": 0.04
+ },
+ {
+  "caso": "p4_A",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.203,
+  "flechaPynite": 0.0072,
+  "flechaEuler": 0.033563,
+  "flechaTimoshenko": 0.034166,
+  "corteTimoshenko": 12.04
+ },
+ {
+  "caso": "p4_B",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.338,
+  "flechaPynite": 0.0008,
+  "flechaEuler": 0.023548,
+  "flechaTimoshenko": 0.024084,
+  "corteTimoshenko": 17.28
+ },
+ {
+  "caso": "p5_A",
+  "piezas": 7,
+  "alturaCompleta": false,
+  "planillaOpenSees": null,
+  "pyniteOpenSees": 1.854,
+  "flechaPynite": 1.3486,
+  "flechaEuler": 0.053685,
+  "flechaTimoshenko": 0.055041,
+  "corteTimoshenko": 17.24
+ },
+ {
+  "caso": "p5_B",
+  "piezas": 7,
+  "alturaCompleta": false,
+  "planillaOpenSees": null,
+  "pyniteOpenSees": 0.252,
+  "flechaPynite": 0.2028,
+  "flechaEuler": 0.047661,
+  "flechaTimoshenko": 0.048655,
+  "corteTimoshenko": 16.79
+ },
+ {
+  "caso": "p6_A",
+  "piezas": 13,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.033,
+  "flechaPynite": -0.0001,
+  "flechaEuler": 0.025575,
+  "flechaTimoshenko": 0.026523,
+  "corteTimoshenko": 14.1
+ },
+ {
+  "caso": "p6_B",
+  "piezas": 13,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.033,
+  "flechaPynite": 0.0,
+  "flechaEuler": 0.025575,
+  "flechaTimoshenko": 0.026441,
+  "corteTimoshenko": 13.0
+ },
+ {
+  "caso": "p8_A",
+  "piezas": 5,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 1.075,
+  "flechaPynite": 0.0016,
+  "flechaEuler": 0.064217,
+  "flechaTimoshenko": 0.065679,
+  "corteTimoshenko": 12.64
+ },
+ {
+  "caso": "p8_B",
+  "piezas": 5,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 1.075,
+  "flechaPynite": 0.0015,
+  "flechaEuler": 0.064217,
+  "flechaTimoshenko": 0.06556,
+  "corteTimoshenko": 10.44
+ },
+ {
+  "caso": "planta34_A",
+  "piezas": 12,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0,
+  "pyniteOpenSees": 0.508,
+  "flechaPynite": 0.0007,
+  "flechaEuler": 0.180652,
+  "flechaTimoshenko": 0.183308,
+  "corteTimoshenko": 19.54
+ },
+ {
+  "caso": "planta34_B",
+  "piezas": 6,
+  "alturaCompleta": true,
+  "planillaOpenSees": 0.0004,
+  "pyniteOpenSees": 0.196,
+  "flechaPynite": 0.0001,
+  "flechaEuler": 0.7737,
+  "flechaTimoshenko": 0.775716,
+  "corteTimoshenko": 3.46
+ }
+]

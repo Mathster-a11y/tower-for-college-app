@@ -10,7 +10,7 @@
  * Ejes locales, iguales para los dos vientos: «x» es la coordenada perpendicular al viento (la posición de la
  * planilla) e «y» la dirección del viento. Las fuerzas van en +y. Unidades de la app: m, t, m⁴, t/m².
  */
-import type { Proyecto } from './modelo';
+import { areaMuro, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { aPlanilla, type Direccion } from './mapping';
 import { calcularPlanilla } from './planilla';
 
@@ -51,6 +51,25 @@ export interface EntradaFem {
 
 const r = (v: number) => (isFinite(v) ? v : 0);
 
+/**
+ * Área de corte de un elemento en el sentido del viento (la que usa la deformación por corte, Timoshenko): las partes
+ * del elemento que corren en el sentido del viento (sus almas).
+ *  - tabique: todo el tabique si es paralelo al viento; si no, nada.
+ *  - cajón (tubo rectangular): las dos caras paralelas al viento; macizo, 5/6 del área (un rectángulo).
+ *  - tubo circular: la mitad del área (pared delgada); macizo, 0,9 del área.
+ *  - perfil: las tiras alargadas en el sentido del viento.
+ * Antes se sumaban los muros «paralelos» por su dirección: un cajón o un tubo es un solo elemento con dirección «Y», así
+ * que en el viento B daba 0 y en el A contaba una sola cara.
+ */
+export function areaCorte(mu: Muro, dir: Direccion): number {
+  const t = tipoDe(mu);
+  if (t === 'tabique') return mu.dir === (dir === 'A' ? 'Y' : 'X') ? mu.largo * mu.espesor : 0;
+  if (t === 'tubo-circ') return (mu.espesor >= mu.largo / 2 ? 0.9 : 0.5) * areaMuro(mu);
+  const rs = rectangulos(mu);
+  if (t === 'tubo-rect' && rs.length === 1) return (5 / 6) * rs[0].ax * rs[0].ay;
+  return rs.reduce((s, q) => { const lv = dir === 'A' ? q.ay : q.ax, lt = dir === 'A' ? q.ax : q.ay; return s + (lv > lt ? q.ax * q.ay : 0); }, 0);
+}
+
 export function entradaFem(p: Proyecto, dir: Direccion = 'A', caso = p.nombre ?? 'proyecto'): EntradaFem {
   const a = aPlanilla(p), res = calcularPlanilla(a.datos);
   const otra: Direccion = dir === 'A' ? 'B' : 'A';
@@ -59,8 +78,6 @@ export function entradaFem(p: Proyecto, dir: Direccion = 'A', caso = p.nombre ??
   const W = (k: number) => (dir === 'A' ? m.H[k] : m.D[k] * m.F[k] * m.G[k]) ?? 0;
   const niveles = p.niveles.map((n, j) => ({ nombre: n.nombre, z: n.cota, W: W(a.filaNivel[j]) })).filter(n => n.z >= 0);
   const zTop = Math.max(...niveles.map(n => n.z));
-  // muros paralelos al viento: el viento A corre en y (muros «Y»), el B en x (muros «X»)
-  const dirMuro = dir === 'A' ? 'Y' : 'X';
   const enViento = (mu: { x: number; y: number }) => (dir === 'A' ? mu.y : mu.x);
   const piezas: PiezaFem[] = a.piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).map(pz => {
     const ms = p.muros.filter(mu => pz.muros.includes(mu.id));
@@ -70,7 +87,7 @@ export function entradaFem(p: Proyecto, dir: Direccion = 'A', caso = p.nombre ??
       nombre: pz.nombre, x: pz.posicion,
       y: sA > 0 ? ms.reduce((s, mu) => s + area(mu) * enViento(mu), 0) / sA : 0,
       J: rot.B[pz.filaHoja!], A: pz.area,
-      Av: ms.filter(mu => mu.dir === dirMuro).reduce((s, mu) => s + area(mu), 0),
+      Av: ms.reduce((s, mu) => s + areaCorte(mu, dir), 0),
       zDesde: Math.max(0, Math.min(...ms.map(mu => mu.zDesde ?? 0))),
       zHasta: Math.min(zTop, Math.max(...ms.map(mu => mu.zHasta ?? zTop))),
     };

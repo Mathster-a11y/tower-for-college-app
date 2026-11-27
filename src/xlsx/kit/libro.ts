@@ -13,6 +13,7 @@
  */
 import JSZip from 'jszip';
 import type { Libro as LibroEval, Valor } from '../formulas';
+import { FUENTE_EXCEL, NOTA_LETRAS } from '../../ui/tipografia';
 
 // ---------------------------------------------------------------------------------------------------- referencias
 export const col = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -36,14 +37,14 @@ const FMT_ID: Record<Fmt, number> = { g: 0, '0': 164, '0.0': 165, '0.00': 166, '
 /** colores de la cátedra (azul de los encabezados, amarillo de los coeficientes) */
 const AZUL = '1F4E79', CELESTE = 'DDEBF7', AMARILLO = 'FFF2CC', GRIS = 'F2F2F2', VERDE = 'E2EFDA', BORDE = 'BFBFBF';
 const FUENTES = [
-  '<font><sz val="10"/><color rgb="FF000000"/><name val="Arial"/><family val="2"/></font>',                 // 0 normal
-  '<font><b/><sz val="10"/><color rgb="FF000000"/><name val="Arial"/><family val="2"/></font>',             // 1 negrita
-  `<font><b/><sz val="14"/><color rgb="FF${AZUL}"/><name val="Arial"/><family val="2"/></font>`,           // 2 título
-  `<font><b/><sz val="11"/><color rgb="FF${AZUL}"/><name val="Arial"/><family val="2"/></font>`,           // 3 subtítulo
-  '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/><family val="2"/></font>',             // 4 blanca
-  '<font><i/><sz val="9"/><color rgb="FF595959"/><name val="Arial"/><family val="2"/></font>',              // 5 nota
-  '<font><sz val="9"/><color rgb="FF595959"/><name val="Arial"/><family val="2"/></font>',                  // 6 unidad
-  `<font><b/><sz val="10"/><color rgb="FF${AZUL}"/><name val="Arial"/><family val="2"/></font>`,           // 7 dato
+  `<font><sz val="10"/><color rgb="FF000000"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,                 // 0 normal
+  `<font><b/><sz val="10"/><color rgb="FF000000"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,             // 1 negrita
+  `<font><b/><sz val="14"/><color rgb="FF${AZUL}"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,           // 2 título
+  `<font><b/><sz val="11"/><color rgb="FF${AZUL}"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,           // 3 subtítulo
+  `<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,             // 4 blanca
+  `<font><i/><sz val="9"/><color rgb="FF595959"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,              // 5 nota
+  `<font><sz val="9"/><color rgb="FF595959"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,                  // 6 unidad
+  `<font><b/><sz val="10"/><color rgb="FF${AZUL}"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`,           // 7 dato
 ];
 const relleno = (c: string) => `<fill><patternFill patternType="solid"><fgColor rgb="FF${c}"/><bgColor indexed="64"/></patternFill></fill>`;
 const RELLENOS = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>', relleno(AZUL), relleno(CELESTE), relleno(AMARILLO), relleno(GRIS), relleno(VERDE), relleno('FFFFFF')];
@@ -98,8 +99,8 @@ export interface Grafico {
   sinLeyenda?: boolean;
 }
 const A_ = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
-const txPr = (sz = 900) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="Arial"/></a:defRPr></a:pPr><a:endParaRPr lang="es-AR"/></a:p></c:txPr>`;
-const tituloXml = (t: string, sz = 1100) => `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="1"/></a:pPr><a:r><a:rPr lang="es-AR" sz="${sz}" b="1"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>${esc(t)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
+const txPr = (sz = 900) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="${FUENTE_EXCEL}"/></a:defRPr></a:pPr><a:endParaRPr lang="es-AR"/></a:p></c:txPr>`;
+const tituloXml = (t: string, sz = 1100) => `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="1"/></a:pPr><a:r><a:rPr lang="es-AR" sz="${sz}" b="1"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="${FUENTE_EXCEL}"/></a:rPr><a:t>${esc(t)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
 const ejeXml = (id: number, cruza: number, pos: 'b' | 'l', titulo: string, grilla: boolean) =>
   `<c:valAx><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="${pos}"/>${grilla ? '<c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="E1E5EA"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>' : ''}${tituloXml(titulo, 900)}<c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="8A949E"/></a:solidFill></a:ln></c:spPr>${txPr()}<c:crossAx val="${cruza}"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/></c:valAx>`;
 export function graficoXml(g: Grafico): string {
@@ -212,6 +213,7 @@ export class LibroK {
   }
 
   async xlsx(): Promise<Uint8Array> {
+    this.notaDeLetras();
     const zip = new JSZip(), st = new Estilos();
     const hojasXml = this.hojas.map(h => h.xml(st, h.graficos.length > 0));
     let nGraf = 0;
@@ -251,6 +253,15 @@ export class LibroK {
   }
 
   /** el libro en la forma del evaluador de fórmulas (para recalcularlo dentro de la app o en las pruebas) */
+  /** al final del «Léame»: la letra del libro y dónde conseguirla (una vez) */
+  private notaDeLetras() {
+    const le = this.hojas.find(h => h.nombre === 'Léame');
+    if (!le || [...le.celdas.values()].some(c => c.v === NOTA_LETRAS)) return;
+    const fila = Math.max(0, ...[...le.celdas.keys()].map(k => +k.replace(/^[A-Z]+/, ''))) + 2;
+    const col = le.anchos.length ? le.anchos.indexOf(Math.max(...le.anchos)) + 1 : 1;
+    le.put(col, fila, NOTA_LETRAS, { papel: 'nota', ajustar: true });
+    le.altos.set(fila, 30);
+  }
   aLibroEvaluable(): { libro: LibroEval; nombres: Map<string, { hoja: string; ref: string }> } {
     const libro: LibroEval = new Map();
     for (const h of this.hojas) {

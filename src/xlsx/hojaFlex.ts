@@ -18,6 +18,7 @@ import type { Asignacion, PiezaEquivalente } from '../engine/mapping';
 import type { Proyecto } from '../engine/modelo';
 import type { Motor } from '../engine/config';
 import { filaExcelJ } from '../engine/planilla';
+import { FUENTE_EXCEL } from '../ui/tipografia';
 
 export const HOJA_FLEX = 'Flexocompresión PB';
 
@@ -26,7 +27,7 @@ export type EstiloFlex = 'tit' | 'pb' | 'banda' | 'cab' | 'desc' | 'unid' | 'nro
   | 'simetrica' | 'asimetrica' | 'tubo' | 'portico' | 'nota' | 'formula' | 'lab' | 'coef';
 const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** agrega a styles.xml los estilos de la hoja (Arial, bordes finos, rellenos de la cátedra); devuelve sus índices y los de los formatos condicionales */
+/** agrega a styles.xml los estilos de la hoja (IBM Plex Sans, bordes finos, rellenos de la cátedra); devuelve sus índices y los de los formatos condicionales */
 export function estilosFlex(st: string): { st: string; S: Record<EstiloFlex, number>; dxfOk: number; dxfNo: number } {
   if (!/<dxfs[\s>]/.test(st)) st = st.replace(/(<tableStyles|<colors|<extLst|<\/styleSheet>)/, '<dxfs count="0"></dxfs>$1');
   st = st.replace(/<dxfs count="(\d+)"\s*\/>/, '<dxfs count="$1"></dxfs>');
@@ -43,7 +44,7 @@ export function estilosFlex(st: string): { st: string; S: Record<EstiloFlex, num
     agregar('numFmts', `<numFmt numFmtId="${id}" formatCode="${esc(code)}"/>`);
     return id;
   };
-  const font = (sz: number, b = false, color = '000000') => agregar('fonts', `<font>${b ? '<b/>' : ''}<sz val="${sz}"/><color rgb="FF${color}"/><name val="Arial"/><family val="2"/></font>`);
+  const font = (sz: number, b = false, color = '000000') => agregar('fonts', `<font>${b ? '<b/>' : ''}<sz val="${sz}"/><color rgb="FF${color}"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
   const fill = (rgb: string) => agregar('fills', `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgb}"/><bgColor indexed="64"/></patternFill></fill>`);
   const fTit = font(14, true, '0000FF'), fPB = font(18, true), f8 = font(8), f10 = font(10), f10b = font(10, true);
   const amarilloClaro = fill('FFFF99'), amarillo = fill('FFFF00'), gris = fill('C0C0C0'), naranja = fill('FFCC00'), verde = fill('99CC00'), celeste = fill('00CCFF'), lila = fill('CC99FF');

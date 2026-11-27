@@ -3,6 +3,7 @@
  * presión que empuja en azul (comprime) y la succión en rojo (tracciona); la velocidad con el espectro térmico; las
  * partículas, las flechas y las celdas en tinta, sin rojo ni azul.
  */
+import { FAMILIA_UI } from '../tipografia';
 const NS = 'http://www.w3.org/2000/svg';
 type A = Record<string, string | number>;
 function s(tag: string, a: A = {}, ...hijos: (SVGElement | string)[]): SVGElement {
@@ -19,7 +20,7 @@ function flecha(x1: number, y1: number, x2: number, y2: number, color = TINTA, a
   const p1 = `${x2 - c * Math.cos(a - 0.45)},${y2 - c * Math.sin(a - 0.45)}`, p2 = `${x2 - c * Math.cos(a + 0.45)},${y2 - c * Math.sin(a + 0.45)}`;
   return s('g', {}, s('line', { x1, y1, x2, y2, stroke: color, 'stroke-width': ancho, 'stroke-linecap': 'round' }), s('polygon', { points: `${x2},${y2} ${p1} ${p2}`, fill: color }));
 }
-const texto = (x: number, y: number, t: string, a: A = {}) => s('text', { x, y, 'font-size': 10, fill: TINTA, 'font-family': 'system-ui, sans-serif', ...a }, t);
+const texto = (x: number, y: number, t: string, a: A = {}) => s('text', { x, y, 'font-size': 10, fill: TINTA, 'font-family': FAMILIA_UI, ...a }, t);
 const lienzo = (w: number, h: number, titulo: string, ...hijos: SVGElement[]) =>
   s('svg', { viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': titulo, class: 'ilustracion' }, s('title', {}, titulo), ...hijos);
 

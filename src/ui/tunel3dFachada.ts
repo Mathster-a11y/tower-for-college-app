@@ -13,6 +13,7 @@ import { descargarCSV } from './csv';
 import { llaveHtml, type Llave } from './llaveColor';
 import type { celdasDeCara, Geometria3D, PromedioCp } from '../viento/geometria3d';
 import { anchoZonaEsquina, bandas, desplegar, G_PICO, GCPI_CERRADO, NOMBRE_ESTADISTICA, valorCelda, zonasFachada, type Desplegada, type Estadistica, type FilaZona } from '../viento/fachada3d';
+import { letraLienzo } from './tipografia';
 
 export const cfgFachada = { est: 'media' as Estadistica, unidad: 'cp' as 'cp' | 'kn', enBandas: true, area: 4.5 };
 let alCambiar: () => void = () => undefined;
@@ -131,7 +132,7 @@ export function dibujarDesplegada(d: Desplegada, p: PromedioCp | null, info: { c
   const g = cv.getContext('2d')!; g.scale(k, k);
   const tinta = css('--ink', '#223344'), dim = css('--dim', '#8a94a0');
   const X = (s: number) => izq + s * px, Y = (z: number) => arriba + (d.alto - z) * px;
-  g.font = '600 10px system-ui, sans-serif'; g.textBaseline = 'alphabetic';
+  g.font = letraLienzo(10, 600); g.textBaseline = 'alphabetic';
   for (const pn of d.paneles) {
     // las celdas que caen en el mismo lugar (entrantes de la planta): la de valor más extremo
     const lugar = new Map<string, number>();

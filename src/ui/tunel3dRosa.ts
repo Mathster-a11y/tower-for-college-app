@@ -15,6 +15,7 @@ import type { celdasDeCara, Geometria3D, P, PromedioCp } from '../viento/geometr
 import { anchoZonaEsquina, desplegar, G_PICO, zonasDe, type Desplegada } from '../viento/fachada3d';
 import { categoriaRosa, CRITERIOS, Envolvente, factorAltura, giroParaRumbo, gradosRumbo, grillaAlrededor, MediaPlano, puntosFachada, rosaPareja, RUMBOS, veredaEnPlanta, type GrillaPlanta, type Rumbo, type SectorRosa } from '../viento/direcciones';
 import { datos102De } from '../engine/cargas/cirsoc102';
+import { letraLienzo } from './tipografia';
 
 export const cfgRosa = {
   /** el rumbo al que apunta el eje +y del proyecto (la flecha del norte, al revés) */
@@ -181,6 +182,6 @@ function dibujarMapa(gr: GrillaPlanta, cat: string[], pel: Uint8Array, silueta: 
   g.strokeStyle = '#8a949e'; g.lineWidth = 1; g.stroke();
   g.strokeStyle = '#223344'; g.fillStyle = '#223344'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - (tx - cx), cy - (ty - cy)); g.lineTo(tx, ty); g.stroke();
   g.beginPath(); g.arc(tx, ty, 3, 0, 2 * Math.PI); g.fill();
-  g.font = '700 12px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText('N', cx + 1.6 * L * Math.cos(ang), cy - 1.6 * L * Math.sin(ang) + 4);
+  g.font = letraLienzo(12, 700); g.textAlign = 'center'; g.fillText('N', cx + 1.6 * L * Math.cos(ang), cy - 1.6 * L * Math.sin(ang) + 4);
   return cv;
 }

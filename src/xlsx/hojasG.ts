@@ -8,6 +8,7 @@
 import type JSZip from 'jszip';
 import type { Proyecto } from '../engine/modelo';
 import { T } from './proyectoTablas';
+import { FUENTE_EXCEL, NOTA_LETRAS } from '../ui/tipografia';
 
 export interface ImagenG { titulo: string; png: Uint8Array; ancho: number; alto: number }
 export interface OpcionesG {
@@ -63,11 +64,11 @@ function agregarEstilos(st: string): { st: string; S: Record<Estilo, number> } {
     agregar('numFmts', `<numFmt numFmtId="${id}" formatCode="${esc(code)}"/>`);
     return id;
   };
-  const fBold = agregar('fonts', '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/><family val="2"/></font>');
-  const fTit = agregar('fonts', '<font><b/><sz val="14"/><color rgb="FF1F4E79"/><name val="Arial"/><family val="2"/></font>');
-  const fNota = agregar('fonts', '<font><i/><sz val="9"/><color rgb="FF595959"/><name val="Arial"/><family val="2"/></font>');
-  const fNorm = agregar('fonts', '<font><sz val="10"/><color rgb="FF000000"/><name val="Arial"/><family val="2"/></font>');
-  const fB2 = agregar('fonts', '<font><b/><sz val="10"/><color rgb="FF000000"/><name val="Arial"/><family val="2"/></font>');
+  const fBold = agregar('fonts', `<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
+  const fTit = agregar('fonts', `<font><b/><sz val="14"/><color rgb="FF1F4E79"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
+  const fNota = agregar('fonts', `<font><i/><sz val="9"/><color rgb="FF595959"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
+  const fNorm = agregar('fonts', `<font><sz val="10"/><color rgb="FF000000"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
+  const fB2 = agregar('fonts', `<font><b/><sz val="10"/><color rgb="FF000000"/><name val="${FUENTE_EXCEL}"/><family val="2"/></font>`);
   const fillH = agregar('fills', '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E79"/><bgColor indexed="64"/></patternFill></fill>');
   const fillS = agregar('fills', '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill>');
   const fillR = agregar('fills', '<fill><patternFill patternType="solid"><fgColor rgb="FFE2EFDA"/><bgColor indexed="64"/></patternFill></fill>');
@@ -116,8 +117,8 @@ class Hoja {
 }
 
 const A_ = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
-const txPr = (sz = 900) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="Arial"/></a:defRPr></a:pPr><a:endParaRPr lang="es-AR"/></a:p></c:txPr>`;
-const tituloXml = (t: string, sz = 1100) => `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="1"/></a:pPr><a:r><a:rPr lang="es-AR" sz="${sz}" b="1"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>${esc(t)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
+const txPr = (sz = 900) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="${FUENTE_EXCEL}"/></a:defRPr></a:pPr><a:endParaRPr lang="es-AR"/></a:p></c:txPr>`;
+const tituloXml = (t: string, sz = 1100) => `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="1"/></a:pPr><a:r><a:rPr lang="es-AR" sz="${sz}" b="1"><a:solidFill><a:srgbClr val="1F2328"/></a:solidFill><a:latin typeface="${FUENTE_EXCEL}"/></a:rPr><a:t>${esc(t)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
 const ejeXml = (id: number, cruza: number, pos: 'b' | 'l', titulo: string, extra = '') =>
   `<c:valAx><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="${pos}"/>${pos === 'l' || extra.includes('grid') ? '<c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="E1E5EA"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>' : ''}${tituloXml(titulo, 900)}<c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="8A949E"/></a:solidFill></a:ln></c:spPr>${txPr()}<c:crossAx val="${cruza}"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/></c:valAx>`;
 function graficoXml(g: Grafico): string {
@@ -160,6 +161,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     'T3D …: la torre completa (proyecto, niveles, muros, contornos, grupos, losa, caminos, cotas y guías). Con estas hojas la app vuelve a armar la torre; se pueden editar.',
     'Dibujos explicativos de las hojas originales (viento, M,NyQ y las hojas J): rediseñados como tarjetas con «paso a paso». Son imágenes puestas sobre la hoja; los dibujos originales siguen en el archivo, ocultos (Excel: Inicio → Buscar y seleccionar → Panel de selección).', '',
     'Google Sheets: subí este archivo a Drive y abrilo con Google Sheets. Las fórmulas y los gráficos siguen andando.',
+    `Las hojas nuevas (G · y T3D) usan ${NOTA_LETRAS.replace(/^Letra: /, '')} Las hojas originales de la cátedra siguen en su letra.`,
   ].forEach((t, i) => le.p(`A${i + 1}`, t, i === 0 ? 'tit' : 'txt'));
   hojas.push(le);
 

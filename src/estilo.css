@@ -467,7 +467,8 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .rototrasl .rt-rayo.extremo { stroke: var(--elegido); stroke-width: 1.5; }
 .rototrasl .rt-funicular { fill: none; stroke: var(--elegido); stroke-width: 2; }
 .rototrasl .rt-funicular.extremo { stroke-width: 1.6; }
-.rototrasl .rt-resultante { stroke: var(--accent); stroke-width: 2; }
+/* la resultante ΣJ, de R al CR por el eje de inercia: en el color del eje (la leyenda lo dice así); el azul es compresión */
+.rototrasl .rt-resultante { stroke: var(--elegido); stroke-width: 2.2; }
 .rototrasl .rt-W { stroke: var(--carga); stroke-width: 3; }
 .rototrasl .rt-Mt { fill: none; stroke: var(--ink); stroke-width: 2; }
 .rototrasl .rt-flecha:hover line { filter: drop-shadow(0 0 3px var(--elegido)); }
@@ -762,8 +763,7 @@ text[data-par].ultimo { font-size: 15px; }
 .rototrasl .rt-flecha-dib .punta { stroke: var(--lienzo); stroke-width: 1.2; stroke-linejoin: round; }
 .rototrasl.paso-1 .rt-muro.paralelo { fill: var(--ink2); opacity: .32; }
 .rototrasl.paso-1 .rt-muro { opacity: .2; }
-.rototrasl .rt-J .tronco { stroke: var(--serie-1); }
-.rototrasl .rt-J .punta { fill: var(--serie-1); }
+/* los vectores J van en el verde de la leyenda («J de cada tabique»): ni rojo ni azul, que son tracción y compresión */
 /* contraste de los elementos en los otros dibujos de planta */
 .rototrasl .rt-muro, .rototrasl .rt-muro.paralelo { stroke: var(--ink); stroke-width: 1.2; }
 .rototrasl.paso-1 .rt-muro, .rototrasl.paso-1 .rt-muro.paralelo { stroke-opacity: .5; }
@@ -2349,3 +2349,62 @@ input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; 
 .dist-muestra.dx { border-color: var(--deformada); }
 .dist-muestra.dy { border-color: var(--corte); }
 .dist-muestra.r { border-top-style: solid; border-top-width: 2px; border-color: var(--ink); }
+/* tabla de alturas → perfil: el texto pegado y, al lado, el alzado que sale */
+dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: none; }
+.tabla-perfil-lado { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: start; margin: 8px 0; }
+.tabla-perfil-lado textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 300px; resize: vertical; font: 12.5px/1.45 var(--mono); tab-size: 12; }
+.alzado-tabla { width: 220px; height: 300px; border: 1px solid var(--edge); border-radius: 8px; background: var(--lienzo); }
+.alzado-tabla .torre { fill: color-mix(in srgb, var(--ink) 10%, transparent); stroke: var(--ink); stroke-width: 1.2; }
+.alzado-tabla .punto { fill: var(--elegido); }
+.alzado-tabla .suelo { stroke: var(--ink2); stroke-width: 1; }
+.alzado-tabla .rot { font: 10px var(--mono); fill: var(--ink2); }
+.tabla-perfil-avisos { margin: 2px 0 6px; padding-left: 18px; color: var(--revisar); font-size: 12px; }
+.tarjeta .nota-chica.error { color: var(--mal); }
+@media (max-width: 640px) { .tabla-perfil-lado { grid-template-columns: 1fr; } .alzado-tabla { justify-self: center; } }
+
+/* FEM: contraste con OpenSees y Pynite */
+.tabla-scroll { overflow-x: auto; }
+.tabla-contraste { border-collapse: collapse; font-size: 12px; width: 100%; }
+.tabla-contraste th, .tabla-contraste td { padding: 3px 6px; border-bottom: 1px solid var(--hair, var(--edge)); text-align: right; white-space: nowrap; }
+.tabla-contraste th { font-weight: 600; color: var(--ink2); font-size: 11px; white-space: normal; vertical-align: bottom; }
+.tabla-contraste th:first-child, .tabla-contraste td:first-child { text-align: left; }
+.tabla-contraste td:not(:first-child) { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tabla-contraste td:first-child { white-space: normal; min-width: 7em; }
+.tabla-contraste th, .tabla-contraste td { padding-left: 4px; padding-right: 4px; }
+
+/* Ayuda: programas y letras de terceros */
+.terceros { padding-left: 18px; }
+.terceros li + li { margin-top: 3px; }
+
+/* comparar dos versiones: lado a lado */
+.cmp-vista { display: grid; gap: 8px; margin: 6px 0 12px; }
+.cmp-lados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cmp-col { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.cmp-planta { width: 100%; max-width: 300px; height: auto; border: 1px solid var(--edge); border-radius: 8px; background: var(--lienzo); }
+.cmp-planta .losa { fill: color-mix(in srgb, var(--ink) 4%, transparent); stroke: var(--ink2); stroke-width: 1; }
+.cmp-planta .muro { fill: color-mix(in srgb, var(--ink2) 40%, transparent); }
+.cmp-planta .muro.toma { fill: var(--ink); }
+.cmp-planta .viento { fill: none; stroke: var(--carga); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cmp-barras { display: grid; gap: 3px; }
+.cmp-barra { display: grid; grid-template-columns: 4.5em 1fr 4.8em; gap: 6px; align-items: center; font-size: 12px; padding: 1px 4px; border-radius: 4px; }
+.cmp-barra.cambia { background: var(--revisar-fill); }
+.cmp-barra .n { font-family: var(--mono); font-size: 11px; }
+.cmp-barra .b { height: 9px; background: color-mix(in srgb, var(--ink) 8%, transparent); border-radius: 2px; overflow: hidden; }
+.cmp-barra .b i { display: block; height: 100%; background: var(--deformada); }
+.cmp-barra .v { font-family: var(--mono); font-size: 11px; text-align: right; }
+@media (max-width: 640px) { .cmp-lados { grid-template-columns: 1fr; } }
+
+/* Predecí antes de ver: la pregunta (en lugar del dibujo) y la comparación (arriba del dibujo) */
+.predecir { display: grid; gap: 8px; max-width: 640px; margin: 8px 0 14px; padding: 14px 16px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
+.predecir h3 { margin: 0; font-size: 16px; }
+.predecir p { margin: 0; }
+.predecir .predecir-tit { font: 600 10px var(--fuente); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.predecir .campo-vertice { width: 110px; font-size: 15px; }
+.predecir.hecha { border-color: var(--edge); background: var(--field); }
+.predecir.hecha.bien { border-color: var(--ok); background: var(--ok-fill); }
+.predecir .predecir-explica { font-size: 12.5px; color: var(--ink2); }
+
+/* dos colores más para los pares del funicular (sin rojo ni azul) */
+:root { --par-marron: #8c6d4f; --par-pizarra: #5f7480; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --par-marron: #c4a383; --par-pizarra: #9fb3bf; } }
+:root[data-theme="dark"] { --par-marron: #c4a383; --par-pizarra: #9fb3bf; }

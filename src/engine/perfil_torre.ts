@@ -184,20 +184,32 @@ export function aplicarCarpinteria(p: Proyecto): number {
  * títulos) se saltean. Los anchos se toman en proporción al de la cota de la losa base (interpolado en la tabla), así que
  * la losa base da el tamaño y la tabla, la forma. Tramos rectos entre filas (con muchas filas sigue la curva tal cual).
  */
-export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { puntos: PuntoPerfil[]; filas: number; fuera: number; error?: string } {
-  const filas: number[][] = [];
-  for (const linea of texto.split(/\r?\n/)) {
+export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { puntos: PuntoPerfil[]; filas: number; fuera: number; error?: string; avisos: string[] } {
+  const filas: number[][] = [], avisos: string[] = [];
+  let primeraUtil = true;
+  texto.split(/\r?\n/).forEach((linea, k) => {
     const t = linea.trim();
-    if (!t) continue;
+    if (!t) return;
     const celdas = (t.includes('\t') ? t.split('\t') : t.includes(';') ? t.split(';') : t.split(/\s+/)).map(c => c.trim()).filter(c => c !== '');
     const nums = celdas.map(c => Number(c.replace(/\s/g, '').replace(',', '.')));
-    if (nums.length < 2 || nums.some(x => !Number.isFinite(x))) continue;     // títulos o filas raras
+    if (nums.length < 2 || nums.some(x => !Number.isFinite(x))) {
+      // la primera fila con texto es el título; las demás que no se pueden leer, se avisan con su número
+      if (!(primeraUtil && !filas.length)) avisos.push(`Fila ${k + 1} («${t.length > 30 ? t.slice(0, 29) + '…' : t}»): no son números, se saltea.`);
+      primeraUtil = false;
+      return;
+    }
+    primeraUtil = false;
     filas.push(nums);
-  }
-  if (filas.length < 2) return { puntos: [], filas: filas.length, fuera: 0, error: 'Hacen falta por lo menos dos filas con cota y ancho.' };
-  if (!(zTop > zBase)) return { puntos: [], filas: filas.length, fuera: 0, error: 'La losa base tiene que estar debajo de la azotea.' };
+  });
+  if (filas.length < 2) return { puntos: [], filas: filas.length, fuera: 0, avisos, error: 'Hacen falta por lo menos dos filas con cota y ancho.' };
+  if (!(zTop > zBase)) return { puntos: [], filas: filas.length, fuera: 0, avisos, error: 'La losa base tiene que estar debajo de la azotea.' };
+  // filas con la misma cota: queda la última (la tabla no puede tener dos anchos a la misma altura)
+  const porCota = new Map<number, number[]>();
+  filas.forEach(f => { const c = Math.round(f[0] * 1e4) / 1e4; if (porCota.has(c)) avisos.push(`La cota ${String(c).replace('.', ',')} m está dos veces: queda la última fila.`); porCota.set(c, f); });
+  filas.length = 0; filas.push(...porCota.values());
+  if (filas.length < 2) return { puntos: [], filas: filas.length, fuera: 0, avisos, error: 'Hacen falta por lo menos dos cotas distintas.' };
   filas.sort((a, b) => a[0] - b[0]);
-  if (filas.some(f => !(f[1] > 0) || (f.length >= 3 && !(f[2] > 0)))) return { puntos: [], filas: filas.length, fuera: 0, error: 'Los anchos tienen que ser mayores que cero.' };
+  if (filas.some(f => !(f[1] > 0) || (f.length >= 3 && !(f[2] > 0)))) return { puntos: [], filas: filas.length, fuera: 0, avisos, error: 'Los anchos tienen que ser mayores que cero.' };
   // el valor de una columna a la cota z (interpolado; fuera de la tabla, el del extremo)
   const en = (col: number, z: number) => {
     const v = (f: number[]) => (col < f.length ? f[col] : col === 2 ? f[1] : 0);
@@ -209,6 +221,9 @@ export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { 
   const ax0 = en(1, zBase), ay0 = en(2, zBase), dx0 = en(3, zBase), dy0 = en(4, zBase);
   const dentro = filas.filter(f => f[0] >= zBase - 1e-6 && f[0] <= zTop + 1e-6);
   const fuera = filas.length - dentro.length;
+  if (fuera) avisos.push(`${fuera} ${fuera === 1 ? 'fila queda' : 'filas quedan'} fuera de la torre (de ${String(+zBase.toFixed(2)).replace('.', ',')} a ${String(+zTop.toFixed(2)).replace('.', ',')} m): no se usan.`);
+  if (filas[0][0] > zBase + 1e-6) avisos.push('La tabla empieza más arriba que la losa base: hasta su primera fila, el ancho es el de esa fila.');
+  if (filas[filas.length - 1][0] < zTop - 1e-6) avisos.push('La tabla termina más abajo que la azotea: arriba de su última fila, el ancho es el de esa fila.');
   // la base y la azotea siempre (interpoladas si la tabla no tiene esas cotas justas)
   const cotas = [...new Set([zBase, ...dentro.map(f => f[0]), zTop])].sort((a, b) => a - b);
   const r4 = (x: number) => +x.toFixed(4);
@@ -216,5 +231,23 @@ export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { 
     const fx = en(1, z) / ax0, fy = en(2, z) / ay0, dx = en(3, z) - dx0, dy = en(4, z) - dy0;
     return { h: r4((z - zBase) / (zTop - zBase)), fx: r4(fx), ...(Math.abs(fy - fx) > 1e-6 ? { fy: r4(fy) } : {}), ...(Math.abs(dx) > 1e-6 ? { dx: r4(dx) } : {}), ...(Math.abs(dy) > 1e-6 ? { dy: r4(dy) } : {}) };
   });
-  return { puntos, filas: filas.length, fuera };
+  return { puntos, filas: filas.length, fuera, avisos };
+}
+
+/**
+ * El camino inverso: el perfil como tabla (cota, ancho en x, ancho en y, corrimiento x, corrimiento y), una fila por losa
+ * de la base a la azotea, separada por tabuladores para pegar en Excel. Los anchos son los de la caja de la losa base
+ * por el factor del perfil; leída con perfilDesdeTabla da el mismo perfil (en tramos rectos, en esas cotas).
+ */
+export function tablaDesdePerfil(p: Proyecto, pf: PerfilTorre): string {
+  const ib = nivelBase(p, pf), zb = p.niveles[ib]?.cota ?? 0, zt = p.niveles[0]?.cota ?? 0;
+  const caja = cajaSilueta(plantaDeNivel(p, ib).silueta);
+  // con «solo la planilla» los anchos son los B y L de la base (como en aplicarPerfil); si no, los de su losa
+  const nb = p.niveles[ib], base = pf.aplica === 'medidas' ? { B: nb?.B || caja.B, L: nb?.L || caja.L } : caja;
+  const n = (x: number, d = 3) => String(+x.toFixed(d)).replace('.', ',');
+  const filas = p.niveles.slice(0, ib + 1).map(nv => nv.cota).filter(z => z >= zb - 1e-6).sort((a, b) => a - b).map(z => {
+    const v = valorPerfil(pf, zt > zb ? (z - zb) / (zt - zb) : 0);
+    return [n(z, 2), n(base.B * v.fx), n(base.L * v.fy), n(v.dx), n(v.dy)].join('\t');
+  });
+  return ['cota (m)\tancho en x (m)\tancho en y (m)\tcorrimiento x (m)\tcorrimiento y (m)', ...filas].join('\n');
 }

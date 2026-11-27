@@ -14,8 +14,9 @@ import { describirConfig } from '../engine/metodos/tipos';
 import { AUTOR } from '../autoria';
 import { medidasNiveles } from '../engine/perfilTorre';
 import type { Control } from '../engine/verificaciones';
+import { FUENTE_PPTX } from './tipografia';
 
-const TINTA = '1F2328', GRIS = '5F6B76', AZUL = '1A6BBD', OK = '1A7A3A', MAL = 'C62828', AMBAR = '8A5F00', FUENTE = 'Calibri';
+const TINTA = '1F2328', GRIS = '5F6B76', AZUL = '1A6BBD', OK = '1A7A3A', MAL = 'C62828', AMBAR = '8A5F00', FUENTE = FUENTE_PPTX;
 interface Img { png: string; ancho: number; alto: number }
 
 /** un SVG a PNG fuera de la pantalla, con el tema claro */
