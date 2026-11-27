@@ -3,7 +3,7 @@ import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/abert
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, confirmar, pedirTexto, pedirTextoLargo } from './tarjeta';
 import { estado, COLORES } from './estado';
-import { cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
+import { areaMuro, cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
 import { esCirc, partes, PARTES, piezaTipo, problemaMedidas, rehacerPieza, TIPOS, type MedidasPieza, type TipoPieza } from '../engine/piezasTipo';
 import { aMetros, contornoDesdeCAD, factorUnidad, imanCAD, leerDXFCompleto, murosDesdeCAD, nodosCAD, type Entidad } from '../engine/cad';
@@ -24,6 +24,7 @@ import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { distanciaAlCentro } from '../engine/distanciaCentro';
+import { seccionReal, unionHuellas } from '../engine/seccionPieza';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
@@ -1914,6 +1915,23 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.className = 'calco-panel areas-panel';
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
+  // «Sección de cálculo» (Ayudas): lo que entra al cálculo de la pieza del muro elegido (en el viento elegido): cada
+  // muro con sus medidas reales, la sección sin superposiciones (su contorno) y las partes que se pisan, con el área, el
+  // baricentro y el J que usa el cálculo y lo que va a la hoja J
+  let verSec = false;
+  const bSec = document.createElement('button');
+  bSec.type = 'button'; bSec.textContent = 'Sección de cálculo';
+  bSec.title = 'Elegí un muro: muestra la sección de su pieza tal como entra al cálculo (medidas de cada muro, área, baricentro y J, y lo que va a la hoja J), y marca los muros que se pisan';
+  bSec.setAttribute('aria-pressed', 'false');
+  bSec.addEventListener('click', () => {
+    verSec = !verSec; bSec.setAttribute('aria-pressed', String(verSec));
+    if (verSec && !estado.seleccion) mensaje('Sección de cálculo: tocá un muro de la pieza que querés revisar.');
+    dibujar();
+  });
+  const panelSec = document.createElement('div');
+  panelSec.className = 'calco-panel sec-panel';
+  panelSec.hidden = true;
+  dock.appendChild(panelSec);
   // «Distancia al centro» (Ayudas): la pieza del muro elegido (en el viento elegido), su baricentro G, el centro O de la
   // losa del nivel, las componentes Δx y Δy y la distancia polar r con el ángulo θ (desde +x, antihorario)
   let verDist = false;
@@ -2130,7 +2148,7 @@ export function montarPlanta(cont: HTMLElement) {
   bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
   pintarJuntas();
   // «Ayudas»: guías, cotas y grilla (antes en la barra) y lo que se usa menos
-  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bDist, bJuntas);
+  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bSec, bDist, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
@@ -3092,6 +3110,7 @@ export function montarPlanta(cont: HTMLElement) {
       const fm = estado.fantasma;
       (tipoDe(fm) === 'tubo-circ' ? [{ x: fm.x, y: fm.y, ax: fm.largo, ay: fm.largo }] : rectangulos(fm)).forEach(r => svg.appendChild(el('rect', { x: X(r.x - r.ax / 2), y: Y(r.y + r.ay / 2), width: r.ax * escala, height: r.ay * escala, class: 'fantasma' })));
     }
+    dibujarSeccion(X, Y);
     dibujarDistancia(X, Y, iN);
     if (verAreas) acomodarAreas();
     manijasSil.forEach(m => svg.appendChild(m));
@@ -3099,6 +3118,60 @@ export function montarPlanta(cont: HTMLElement) {
       svg.appendChild(el('circle', { cx: ox + destinoIman.x * escala, cy: oy - destinoIman.y * escala, r: 6, class: 'iman-destino' }));
       svg.appendChild(el('text', { x: ox + cursor.x * escala + 10, y: oy - cursor.y * escala - 10, class: 'etiqueta iman-txt' }, ultimoIman));
     }
+  }
+  /** «Sección de cálculo»: la sección real de la pieza sobre la planta y la carta con las medidas */
+  function dibujarSeccion(X: (x: number) => number, Y: (y: number) => number) {
+    panelSec.hidden = !verSec;
+    if (!verSec) return;
+    const p = estado.proyecto, dir = estado.dir, sel = estado.seleccion;
+    const mk = <K extends keyof HTMLElementTagNameMap>(t: K, txt = '', cls = '') => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+    const f2 = (v: number) => v.toFixed(2).replace('.', ','), f3 = (v: number) => v.toFixed(3).replace('.', ',');
+    const cerrar = mk('button', 'Cerrar'); (cerrar as HTMLButtonElement).type = 'button';
+    cerrar.addEventListener('click', () => { verSec = false; bSec.setAttribute('aria-pressed', 'false'); dibujar(); });
+    const m0 = p.muros.find(m => m.id === sel);
+    const pz = m0 ? estado.calculo.asig?.piezas.find(q => q.dir === dir && q.muros.includes(m0.id)) : undefined;
+    if (!m0 || !pz) {
+      panelSec.replaceChildren(mk('b', 'Sección de cálculo'), mk('span', m0 ? `${m0.id} no forma pieza en el viento ${dir}: no entra al cálculo del J.` : 'Tocá un muro: se muestra la sección de su pieza en el viento elegido.', 'nota-chica'), cerrar);
+      return;
+    }
+    const ms = pz.muros.map(id => p.muros.find(m => m.id === id)!).filter(Boolean);
+    const sr = seccionReal(ms), suma = ms.reduce((q, m) => q + areaMuro(m), 0);
+    // medidas reales de cada muro: un muro recto (también en diagonal) con su largo de punta a punta y su espesor
+    const tabla = mk('table', '', 'sec-tabla');
+    const cab = mk('tr'); ['muro', 'largo', 'espesor', 'área'].forEach(t => cab.append(mk('th', t))); tabla.append(cab);
+    ms.forEach(m => {
+      const E = ejeDeMuro(m), t = tipoDe(m), tr = mk('tr');
+      const [L, e] = E ? [f2(E.L), f2(E.e)] : t === 'tubo-circ' ? [`Ø ${f2(m.largo)}`, f2(Math.min(m.espesor, m.largo / 2))] : [f2(m.largo), f2(m.espesor)];
+      tr.append(mk('td', m.id), mk('td', L, 'n'), mk('td', e, 'n'), mk('td', f3(areaMuro(m)), 'n'));
+      tabla.append(tr);
+    });
+    const fila = (a: string, b: string, cls = '') => { const r = mk('div', '', 'sec-fila' + (cls ? ` ${cls}` : '')); r.append(mk('span', a), mk('span', b, 'n')); return r; };
+    const Jreal = pz.Jreal ?? 0;
+    const hoja = pz.fila && typeof pz.fila.B === 'number' && typeof pz.fila.C === 'number' && (pz.molde === 'simétrico') && Object.keys(pz.fila).length === 2
+      ? `rectángulo equivalente ${f3(pz.fila.B as number)} × ${f3(pz.fila.C as number)} m` : `molde ${pz.molde}`;
+    panelSec.replaceChildren(
+      mk('b', `Sección de cálculo · ${pz.nombre} (viento ${dir})`),
+      mk('span', `${ms.length} ${ms.length === 1 ? 'muro' : 'muros'}: las medidas con que entra cada uno`, 'nota-chica'),
+      tabla,
+      fila('suma de los muros', `${f3(suma)} m²`),
+      ...(sr ? [fila('se pisan (no se cuenta dos veces)', `− ${f3(sr.superpuesta)} m²`, 'aviso')] : []),
+      fila('área que entra al cálculo', `${f3(pz.area)} m²`, 'total'),
+      fila(`baricentro (${dir === 'A' ? 'x' : 'y'})`, `${f3(pz.posicion)} m`),
+      fila(`J real, viento ${dir}`, `${f3(Jreal)} m⁴`, 'total'),
+      ...(pz.Jhoja !== undefined ? [fila('J de la hoja J', `${f3(pz.Jhoja)} m⁴`)] : []),
+      mk('span', `En la hoja J va con ${hoja}.${sr ? ' Los muros rayados se pisan: alargá o acortá cada uno hasta la cara del otro para que el dibujo coincida con lo que se calcula.' : ' Ningún muro se pisa: la sección es la suma de los muros.'}`, 'nota-chica'),
+      cerrar);
+    // dibujo: el contorno de la sección real y, rayado, lo que se pisa
+    const g = el('g', { class: 'sec-calculo' });
+    const d = (pols: [number, number][][][]) => pols.map(pg => pg.map(r => 'M' + r.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('L') + 'Z').join('')).join('');
+    if (!svg.querySelector('#sec-rayado')) {
+      const defs = el('defs'), pt = el('pattern', { id: 'sec-rayado', patternUnits: 'userSpaceOnUse', width: 6, height: 6, patternTransform: 'rotate(45)' });
+      pt.appendChild(el('rect', { width: 6, height: 6, class: 'sec-rayado-fondo' })); pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 6, class: 'sec-rayado-linea' }));
+      defs.appendChild(pt); svg.appendChild(defs);
+    }
+    g.appendChild(el('path', { d: d(unionHuellas(ms)), class: 'sec-contorno', 'fill-rule': 'evenodd' }));
+    if (sr) g.appendChild(el('path', { d: d(sr.superposiciones), class: 'sec-superpuesta' }));
+    svg.appendChild(g);
   }
   /** «Distancia al centro»: el dibujo sobre la planta y la carta con los números */
   function dibujarDistancia(X: (x: number) => number, Y: (y: number) => number, iN: number) {

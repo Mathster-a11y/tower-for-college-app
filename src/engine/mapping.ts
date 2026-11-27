@@ -20,6 +20,7 @@ import { config } from './config';
 import { areaMuro, dInterior, entraEnCalculo, NOMBRE_CLASE, rectangulos, tipoDe, type ClasePieza, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
 import { detectarJuntas, huellasLimpias, propiedadesPoligonos } from './juntas';
+import { seccionReal } from './seccionPieza';
 import { propsPoligonos, seccionDebil } from './aberturas';
 
 export type Direccion = 'A' | 'B';
@@ -94,7 +95,7 @@ export function perfilPlanilla(nombre: string, dir: Direccion, muros0: Muro[], p
   const fuera = muros0.filter(m => rol(m) === 'fuera');
   fuera.forEach(m => set(m, 'fuera del cálculo'));
   const muros = muros0.filter(m => rol(m) !== 'fuera');
-  const area = muros0.reduce((a, m) => a + areaMuro(m), 0);
+  const area = seccionReal(muros0)?.A ?? muros0.reduce((a, m) => a + areaMuro(m), 0);
   const areaInf = muros0.reduce((a, m) => a + m.areaInf, 0);
   // coordenadas del método: s a lo largo del viento (+ = arriba), t perpendicular (+ = derecha)
   const s = (m: Muro) => (A ? m.y : m.x), t = (m: Muro) => (A ? m.x : -m.y);
@@ -197,9 +198,10 @@ function piezaPorClase(nombre: string, dir: Direccion, muros: Muro[], papeles: A
   const dirAlma = dir === 'A' ? 'Y' : 'X';
   const avisos: string[] = [];
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
-  const area = muros.reduce((q, m) => q + (m.aberturas?.length ? propsPoligonos(seccionDebil(m) ?? []).A : areaMuro(m)), 0);
-  const xg = muros.reduce((q, m) => q + areaMuro(m) * m.x, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
-  const yg = muros.reduce((q, m) => q + areaMuro(m) * m.y, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
+  const sr = seccionReal(muros);
+  const area = sr ? sr.A + muros.filter(m => m.aberturas?.length).reduce((q, m) => q + propsPoligonos(seccionDebil(m) ?? []).A, 0) : muros.reduce((q, m) => q + (m.aberturas?.length ? propsPoligonos(seccionDebil(m) ?? []).A : areaMuro(m)), 0);
+  const xg = sr && !muros.some(m => m.aberturas?.length) ? sr.xg : muros.reduce((q, m) => q + areaMuro(m) * m.x, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
+  const yg = sr && !muros.some(m => m.aberturas?.length) ? sr.yg : muros.reduce((q, m) => q + areaMuro(m) * m.y, 0) / Math.max(1e-12, muros.reduce((q, m) => q + areaMuro(m), 0));
   const base = { nombre, dir, muros: muros.map(m => m.id), area, areaInf: muros.reduce((q, m) => q + m.areaInf, 0), filaHoja: null, avisos, posicion: dir === 'A' ? xg : yg, clase };
   if (clase === 'singular' && muros.length === 1 && tipoDe(muros[0]) === 'tabique' && !muros[0].aberturas?.length) {
     const m = muros[0];
@@ -224,9 +226,11 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const s = (m: Muro) => (dir === 'A' ? m.y : m.x);            // coordenada en la dirección del viento
   const t = (m: Muro) => (dir === 'A' ? m.x : m.y);            // coordenada transversal
   const avisos: string[] = [];
-  const area = muros.reduce((a, m) => a + areaMuro(m), 0);
+  // (muros que se pisan: el área y el baricentro de su unión, sin contar dos veces lo superpuesto)
+  const sr = seccionReal(muros);
+  const area = sr ? sr.A : muros.reduce((a, m) => a + areaMuro(m), 0);
   // posición del baricentro de las áreas, sin redondear (la planilla de la guía la calcula con fórmulas y tiene que dar igual)
-  const posicion = muros.reduce((a, m) => a + areaMuro(m) * t(m), 0) / area;
+  const posicion = sr ? (dir === 'A' ? sr.xg : sr.yg) : muros.reduce((a, m) => a + areaMuro(m) * t(m), 0) / area;
   const areaInf = muros.reduce((a, m) => a + m.areaInf, 0);
   const base = { nombre, dir, muros: muros.map(m => m.id), posicion, area, areaInf, filaHoja: null, avisos };
   const set = (m: Muro, p: Papel) => { papeles[m.id] = { ...(papeles[m.id] ?? { A: 'sin pieza', B: 'sin pieza' }), [dir]: p }; };
@@ -518,6 +522,9 @@ export function Jreal(muros: Muro[], dir: Direccion): number {
     const sg = (deb.reduce((q, c) => q + c.A * c.s, 0) + Ar * sgR) / A;
     return deb.reduce((q, c) => q + c.I + c.A * (c.s - sg) ** 2, 0) + (Ar > 0 ? Jr + Ar * (sgR - sg) ** 2 : 0);
   }
+  // muros que se pisan (sin estar unidos): la sección es su unión, sin contar dos veces lo superpuesto
+  const sr = seccionReal(muros);
+  if (sr) return dir === 'A' ? sr.Jx : sr.Jy;
   const limpias = huellasLimpias(muros, detectarJuntas(muros), {}, dir === 'A' ? 'A' : 'B');
   const deLimpias = [...limpias.values()].flat().filter(pg => pg.length >= 3).map(pg => { const k = propiedadesPoligonos([pg]); return { A: k.A, I: dir === 'A' ? k.Jx : k.Jy, s: dir === 'A' ? k.yg : k.xg }; });
   const perf = muros.filter(m => tipoDe(m) === 'perfil' && !limpias.has(m.id)).map(m => { const k = propiedades(m.perfil!); return { A: k.A, I: dir === 'A' ? k.JA : k.JB, s: dir === 'A' ? m.y + k.yg : m.x + k.xg }; });

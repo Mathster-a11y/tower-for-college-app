@@ -19,6 +19,7 @@
     "@ibm/plex-math": "^1.1.0",
     "jszip": "^3.10.1",
     "pdfjs-dist": "^4.10.38",
+    "polygon-clipping": "^0.15.7",
     "pptxgenjs": "^3.12.0",
     "three": "^0.170.0"
   },
