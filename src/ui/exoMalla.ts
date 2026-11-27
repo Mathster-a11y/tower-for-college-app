@@ -191,7 +191,7 @@ export function vistaMalla(): HTMLElement {
     tAn.textContent = `anillo ${r + 1} de ${g!.anillos.length} · cota ${fmt(z, 2)} m · ${ns.length} nudos, uno cada ${fmt(ns.reduce((s, q) => s + q.trib, 0) / Math.max(1, ns.length), 2)} m de fachada`;
   }
   dibujarAx(); dibujarPl();
-  colD.append(derivaPorPiso(d.r.u, d.entrada.zs, g, d.dir));
+  colD.append(derivaPorPiso(d.r.u, d.entrada.zs, g, d.dir, d.entrada.EJ));
   return caja;
 }
 
@@ -275,9 +275,17 @@ export function seccionBarridoMalla(def: ExoDef): HTMLElement {
  * La deriva de cada piso (Δu / h, en mm por metro) con el viento elegido, al lado de la malla: la media de la torre
  * punteada y los pisos flojos (más de 3 veces la media) marcados. Color de la deformada (no es tracción ni compresión).
  */
-function derivaPorPiso(u: number[], zs: number[], g: import('../engine/exoMalla').MallaGeo, dir: 'A' | 'B'): SVGSVGElement {
+function derivaPorPiso(u: number[], zs: number[], g: import('../engine/exoMalla').MallaGeo, dir: 'A' | 'B', EJ: (z: number) => number): SVGSVGElement {
   const S = 260, Hh = 300, m = { i: 36, d: 10, a: 10, b: 28 };
-  const der = u.map((x, i) => (Math.abs(x - (i ? u[i - 1] : 0)) / Math.max(1e-9, zs[i + 1] - zs[i])) * 1000);
+  // un nivel sin nudos de la malla ni tabiques (sin losa: la cúpula de vidrio) no tiene un corrimiento propio: el
+  // cálculo lo interpola con una ménsula blanda. Ahí la deriva es la del tramo entero, de un nivel firme al siguiente
+  const conNudos = new Set(g.nudos.map(q => q.k)), firme = (k: number) => k === 0 || k === zs.length - 1 || conNudos.has(k) || EJ(zs[k]) > 0;
+  const uk = (k: number) => (k ? u[k - 1] : 0);
+  const der = u.map((_, i) => {
+    let a = i; while (a > 0 && !firme(a)) a--;
+    let b = i + 1; while (b < zs.length - 1 && !firme(b)) b++;
+    return (Math.abs(uk(b) - uk(a)) / Math.max(1e-9, zs[b] - zs[a])) * 1000;
+  });
   const media = (Math.abs(u[u.length - 1] ?? 0) / Math.max(1e-9, zs[zs.length - 1] - zs[0])) * 1000;
   const flojos = new Set(pisosFlojos(g, zs, u).map(f => f.z));
   const dMax = Math.max(1e-9, ...der, media * 1.2), z0 = zs[0], z1 = zs[zs.length - 1];
