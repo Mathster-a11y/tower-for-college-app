@@ -10,7 +10,7 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 
 **En curso**
 - (nada en curso en `alternativa`)
-- `claude/ejemplos-cirsoc` (27/11, pedido del usuario, área del exo): ficha M, torsión de la malla, verificación de los anillos, hoja de Excel de la malla y las demás mejoras propuestas (secciones por altura, barrido del ángulo, densidad variable, patrones, editar barras, exportar). La CI con la revisión de punteros espera a que el usuario tenga la computadora.
+- (nada en curso en `claude/ejemplos-cirsoc`; la CI con la revisión de punteros espera a que el usuario tenga la computadora)
 
 **Hecho hace poco en `alternativa`** (27/11): Ayudas → «Distancia al centro» (baricentro de la pieza del viento elegido al centro de la losa: Δx, Δy, r y θ antihorario desde +x).  el núcleo del Gherkin relevado en las plantas de Foster (anillo de 16 columnas, 4 centrales y los muros que se repiten; todo al 38º, D y S al 39º), en lugar del tubo de Ø 22 m; datos e imágenes en `docs/gherkin-nucleo/`. (26/11): un solo perfil de la torre para la carta de la planta y el editor de
 Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
@@ -36,6 +36,13 @@ la torsión en la rototraslación (hoy la toman los tabiques solos, del lado seg
 Chequeo de la ficha M (27/11, al unir con `main`): una malla con tope bajo y sin tabiques arriba ya no da kilómetros
 (el cálculo dice qué pisos quedarían sueltos); aviso de pisos flojos entre anillos (sin tabiques en ese sentido);
 nudos por anillo hasta 96; el giro por módulo respeta los cortes.
+Mejoras de la ficha M (27/11, pedido del usuario, área del exo): la malla frena el giro (Σ J·d² equivalente del
+reticulado espacial, en la rototraslación); los anillos se verifican con el CIRSOC 301 (empuje hacia afuera de las
+diagonales, como zuncho); hoja «G · Malla» del Excel (igual en LibreOffice); «Dimensionar» ajusta cada tramo de
+sección en altura (arreglo que vale para todas las fichas: el Gherkin con la ficha A no llegaba nunca) y salta tubos;
+«Qué malla conviene» (módulo × nudos, rigidez por tonelada); hexagrid; nudos por anillo arriba; sacar barras a mano;
+deriva de cada piso al lado de la malla; contraste con Pynite (.py, tools/motor_fem/pynite_malla.py). Toca exo.ts
+(dimensionarExo, anillos301, torsionConTubo), app.ts, estilo.css, ui/exo.ts y proyectoTablas.ts con cambios chicos.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
