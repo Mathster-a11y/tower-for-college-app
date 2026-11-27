@@ -1078,6 +1078,23 @@ estado.suscribirGuardado(async falla => {
   if (r.boton === 0) descargarProyecto();
 });
 if (estado.avisoInicio) void tarjeta({ tipo: 'aviso', titulo: 'Proyecto guardado', texto: estado.avisoInicio, botones: ['Entendido'] });
+// el proyecto guardado es un ejemplo, pero sus muros no son los del ejemplo de esta versión (se abrió con una anterior)
+else void (async () => {
+  const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
+  const huella = (q: { muros: unknown[] }) => JSON.stringify(q.muros);
+  for (const f of ejemplos) {
+    const l = leerProyecto(f());
+    if (!l.ok || l.proyecto.nombre !== estado.proyecto.nombre || huella(l.proyecto) === huella(estado.proyecto)) continue;
+    const visto = `torre3d.ejemploVisto.${l.proyecto.nombre}`, h = String(huella(l.proyecto).length) + ':' + [...huella(l.proyecto)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7);
+    try { if (localStorage.getItem(visto) === h) return; } catch { /* sin almacenamiento */ }
+    const r = await tarjeta({ tipo: 'pregunta', titulo: 'Hay una versión nueva de este ejemplo',
+      texto: `Los muros de «${estado.proyecto.nombre}» guardado en este navegador no son los del ejemplo de esta versión: el ejemplo cambió desde que lo abriste, o lo editaste vos. Si traés el nuevo, tu copia queda en Mis proyectos.`,
+      botones: ['Traer el ejemplo nuevo', 'Seguir con mi copia'] });   // Escape = el último
+    if (r.boton !== 0) { try { localStorage.setItem(visto, h); } catch { /* sin almacenamiento */ } return; }
+    if (await reemplazarConCopia(l.proyecto)) mensaje(`Ejemplo actualizado: «${l.proyecto.nombre}». Tu copia anterior está en Mis proyectos.`);
+    return;
+  }
+})();
 
 // la app arrancó: se saca el cartel de «Cargando…»
 (window as unknown as { __torreLista?: boolean }).__torreLista = true;
