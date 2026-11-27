@@ -33,7 +33,7 @@ letra en cada «Léame»). Tocó `src/app.ts`, `src/estilo.css` y `src/ui/planta
 - Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
 
 **Para la otra rama** (vistos desde acá, sin tocar)
-- «Ver la explicación» de Rototraslación: chico para el dedo.
+- ~~«Ver la explicación» de Rototraslación: chico para el dedo.~~ (27/11, `claude/ejemplos-cirsoc`: botón con recuadro, 44 px de alto en tablet)
 - Que `tools/revision_punteros.cjs` corra en GitHub en cada cambio a `main`.
 - Que CIRSOC y FEM acepten más de 49 niveles sobre PB: hoy todos los métodos arman los niveles sobre la tabla de la
   planilla y con 50 el corte, el momento y el vuelco del nivel más alto salen mal. Con eso, los ejemplos (que solo
