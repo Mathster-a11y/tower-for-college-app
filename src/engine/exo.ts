@@ -18,7 +18,7 @@
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
 import type { RotoRes } from './planilla';
-import { cargasMalla, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
+import { cargasMalla, fuerzasAnillos, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
 
 export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L' | 'M';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
@@ -1066,6 +1066,9 @@ function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: n
   const Wl = def.viento === 'fachada' ? W.map(() => 0) : W;
   const P = Wl.map((w, i) => w + caras.reduce((s, c) => s + c.c.F[i], 0));
   const K = Kt.map((f, i) => f.map((v, j) => (F ? 0 : v) + caras.reduce((s, c) => s + c.c.K[i][j], 0)));
+  // ficha M: un nivel sin nudos de la malla ni tabiques (sin losa, entre dos anillos) sigue a los de al lado con una
+  // ménsula muy blanda (J = 10⁻⁴ m⁴), sin carga: su corrimiento sale interpolado y no cambia nada más
+  if (def.tipo === 'M' && K.some((f, i) => !(f[i] > 0))) { const Kp = rigidezTabiques(zs, () => Eh * 1e-4); K.forEach((f, i) => f.forEach((_, j) => { f[j] += Kp[i][j]; })); }
   const u = resolver(K, P.map(w => [w])).map(f => f[0]);
   // sin exo: si arriba no hay tabiques que tomen viento (núcleo solo de gravedad) la ménsula no existe → sin número
   let uSin: number[];
@@ -1196,32 +1199,61 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
   const CAT = catalogo(base);
   const idx = { columna: 0, diagonal: 0, viga: 0, mastil: 0 };
   const conMastil = base.tipo === 'E' || !!base.zonas?.some(z => z.tipo === 'E');
+  // las secciones por tramos de altura de columnas, diagonales y vigas se dimensionan cada una por su lado (antes se
+  // agrandaba solo la de abajo y, arriba, mandaba la del tramo: no llegaba nunca)
+  // (los tramos con una sección más grande que el catálogo, como las supercolumnas de cajón, quedan como están)
+  const tramos = base.tramos ?? [];
+  const Amax = propsSeccion(CAT[CAT.length - 1]).A;
+  const fijo = tramos.map(t => t.clase === 'mastil' || propsSeccion(t.sec).A > Amax * (1 + 1e-9));
+  const idxT = tramos.map(() => 0);
   // ficha E: el mástil también se dimensiona; si se afina en altura (tramos), arriba va tres tamaños más chico
   const armar = (): ExoDef => ({
     ...base, columna: CAT[idx.columna], diagonal: CAT[idx.diagonal], viga: CAT[idx.viga],
-    ...(conMastil ? { mastil: CAT[idx.mastil], tramos: (base.tramos ?? []).map(t => (t.clase === 'mastil' ? { ...t, sec: CAT[Math.max(0, idx.mastil - 3)] } : t)) } : {}),
+    ...(tramos.length ? { tramos: tramos.map((t, i) => (t.clase === 'mastil' ? (conMastil ? { ...t, sec: CAT[Math.max(0, idx.mastil - 3)] } : t) : fijo[i] ? t : { ...t, sec: CAT[idxT[i]] })) } : {}),
+    ...(conMastil ? { mastil: CAT[idx.mastil] } : {}),
   });
+  // el grupo de una barra: el tramo de su clase que empieza más alto por debajo de su pie, o la sección de la clase
+  type Grupo = ClaseBarra | number;
+  const grupo = (clase: ClaseBarra, z: number | undefined): Grupo => {
+    if (z === undefined) return clase;
+    let mejor = -1;
+    tramos.forEach((t, i) => { if (t.clase === clase && t.desde <= z + 1e-6 && (mejor < 0 || t.desde > tramos[mejor].desde)) mejor = i; });
+    // una barra de un tramo fijo: no hay nada que agrandar ahí; se agranda la clase (le saca carga)
+    return mejor >= 0 ? (fijo[mejor] ? clase : mejor) : clase;
+  };
   const ult = CAT.length - 1;
   for (let paso = 1; paso <= maxPasos; paso++) {
     const def = armar();
-    const falla = { columna: false, diagonal: false, viga: false };
+    const falla = new Set<Grupo>();
+    // cuánto le falta al peor de cada grupo (relación de uso): con mucho, se saltean tubos (A crece como la relación)
+    const peorDe = new Map<Grupo, number>();
+    const marcar = (g: Grupo, r: number) => { falla.add(g); if (isFinite(r)) peorDe.set(g, Math.max(peorDe.get(g) ?? 1, r)); };
     let flecha = false;
     entradas.forEach(en => {
       const r = calcularExo(paraViento(conMalla(def, en), en.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { anchosPerp: en.anchosPerp });
-      r.controles.forEach(c => { if (c.estado !== 'verifica') falla[c.clase] = true; });
+      const zDe = new Map(r.caras.flatMap(c => c.esfuerzos.map(e => [`${c.nombre}|${e.id}`, Math.min(e.a.z, e.b.z)] as [string, number])));
+      r.controles.forEach(c => { if (c.estado !== 'verifica') marcar(grupo(c.clase, zDe.get(`${c.cara}|${c.id}`)), Math.abs(c.sigma) / Math.max(1e-9, def.sigmaAdm)); });
       if (r.u[r.u.length - 1] > en.h / (base.limiteH ?? 500)) flecha = true;
     });
     // acero: además, el CIRSOC 301 (estados límite) con 1,2·D + 1,6·W (se mira cuando ya pasa lo del curso: es más lento)
-    if (!falla.columna && !falla.diagonal && !falla.viga && !flecha && base.material !== 'hormigon')
-      entradas.forEach(en => cirsoc301(conMalla(def, en), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir, corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) falla[c.clase] = true; }));
-    if (!falla.columna && !falla.diagonal && !falla.viga && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
+    if (!falla.size && !flecha && base.material !== 'hormigon')
+      entradas.forEach(en => cirsoc301(conMalla(def, en), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, FY_F24, { dir: en.dir, corr: en.corr, anchosPerp: en.anchosPerp }).forEach(c => { if (!c.verifica) marcar(grupo(c.clase, c.z), c.ratio); }));
+    if (!falla.size && !flecha) return { def, verifica: true, peso: pesoExo(def, entradas), pasos: paso, motivo: 'verifica' };
     let movio = false;
-    (['columna', 'diagonal', 'viga'] as const).forEach(k => { if (falla[k] && idx[k] < ult) { idx[k]++; movio = true; } });
+    // un tubo más (o los que hagan falta para que el área crezca como la relación de uso, ^0,8 para no pasarse)
+    const siguiente = (i: number, r: number) => { const A0 = propsSeccion(CAT[i]).A, meta = A0 * Math.max(1, r) ** 0.8; let k = i + 1; while (k < ult && propsSeccion(CAT[k]).A < meta) k++; return Math.min(ult, k); };
+    const subir = (g: Grupo, r = 1) => {
+      if (typeof g === 'number') { if (!fijo[g] && idxT[g] < ult) { idxT[g] = siguiente(idxT[g], r); movio = true; } }
+      else if (idx[g] < ult) { idx[g] = siguiente(idx[g], r); movio = true; }
+    };
+    falla.forEach(g => subir(g, peorDe.get(g) ?? 1));
+    const fallaClase = (k: ClaseBarra) => [...falla].some(g => (typeof g === 'number' ? tramos[g].clase === k : g === k));
     // en la ficha E las columnas que fallan pueden ser el mástil (es una columna): crece con ellas
-    if (conMastil && (falla.columna || flecha) && idx.mastil < ult) { idx.mastil++; movio = true; }
-    if (flecha && !falla.columna && !falla.diagonal) (['columna', 'diagonal'] as const).forEach(k => { if (idx[k] < ult) { idx[k]++; movio = true; } });
+    if (conMastil && (fallaClase('columna') || flecha) && idx.mastil < ult) { idx.mastil++; movio = true; }
+    // la flecha: más rigidez en columnas y diagonales (en todos sus tramos)
+    if (flecha && !fallaClase('columna') && !fallaClase('diagonal')) (['columna', 'diagonal'] as const).forEach(k => { subir(k); tramos.forEach((t, i) => { if (t.clase === k) subir(i); }); });
     // la clase que falla ya está en el tubo más grande: se agrandan las otras (las diagonales y las vigas le sacan carga)
-    if (!movio && (falla.columna || falla.diagonal || falla.viga || flecha)) (['diagonal', 'viga', 'columna'] as const).forEach(k => { if (!movio && idx[k] < ult) { idx[k]++; movio = true; } });
+    if (!movio && (falla.size || flecha)) (['diagonal', 'viga', 'columna'] as const).forEach(k => { if (!movio) subir(k); });
     if (!movio) return { def, verifica: false, peso: pesoExo(def, entradas), pasos: paso, motivo: 'ni el tubo más grande del catálogo alcanza: probá otra ficha, otro módulo o más separación' };
   }
   const def = armar();
@@ -1294,6 +1326,8 @@ export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo, factor = Math
 export const FY_F24 = 24000;
 export interface Cirsoc301Barra {
   cara: string; id: string; clase: ClaseBarra;
+  /** cota del pie de la barra (m): para saber en qué tramo de sección está */
+  z?: number;
   /** esfuerzos mayorados (t, tm): 1,2·D + 1,6·W con el viento en los dos sentidos (el peor) */
   Pu: number; Mu: number;
   /** resistencias de diseño: φc·Pn (compresión), φt·Pn (tracción), φb·Mn */
@@ -1441,9 +1475,65 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
       for (const x of [inter(Pc, phiPc, MuC), inter(Pt, phiPt, MuT), { v: Mu / phiMn, e: 'H1-1b' as const }]) if (x.v > peor.v) { peor = { ...x, comb: cb.nombre }; PuPeor = Pc >= Pt ? -Pc : Pt; }
     }
     // una pared esbelta abolla antes de llegar a la resistencia: no verifica (habría que reducir el área, 302 apéndice)
-    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
+    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, z: Math.min(eW.a.z, eW.b.z), Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
   }));
+  // ficha M: los anillos (a tracción o compresión, con el empuje de las diagonales en sus nudos)
+  if (def.tipo === 'M' && def.mallaGeo) out.push(...anillos301(def, def.mallaGeo, rW, rD, rL, combos.filter(c => !c.otro), Fy, op.costura ?? true));
   return out;
+}
+
+/**
+ * Ficha M: los anillos con el CIRSOC 301. Cada caso (viento, D y L) da las fuerzas reales de las barras; su empuje hacia
+ * afuera en los nudos lo toma el anillo (fuerzasAnillos), y se combina como las demás barras, con el viento de los dos
+ * lados. Barra solo axial: tracción φ·Pn = 0,9·Fy·A y compresión φ·Pn = 0,85·Fcr·A con el largo del tramo (la losa
+ * lo arriostra en los nudos). Van con la clase «viga» (su sección es la de las vigas) y la letra R.
+ */
+function anillos301(def: ExoDef, g: MallaGeo, rW: ResultadoExo, rD: ResultadoExo, rL: ResultadoExo | null, combos: CombExo[], Fy: number, costura: boolean): Cirsoc301Barra[] {
+  const fW = fuerzasAnillos(g, rW.caras[0]?.esfuerzos ?? []), fD = fuerzasAnillos(g, rD.caras[0]?.esfuerzos ?? []), fL = rL ? fuerzasAnillos(g, rL.caras[0]?.esfuerzos ?? []) : null;
+  const out: Cirsoc301Barra[] = [];
+  let n = 0;
+  g.barras.forEach((b, i) => {
+    if (b.clase !== 'anillo') return;
+    n++;
+    const P = g.nudos[b.a], Q = g.nudos[b.b], L = Math.hypot(Q.x - P.x, Q.y - P.y, Q.z - P.z);
+    const s = seccionEn(def, 'anillo', Math.min(P.z, Q.z)), p = propsSeccion(s), bi = Math.max(0, s.b - 2 * s.e);
+    const lambdaC = (L / (p.i * Math.PI)) * Math.sqrt(Fy / def.E);
+    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
+    const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, costura);
+    const pared: Cirsoc301Barra['pared'] = s.e >= s.b / 2 - 1e-9 || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
+    const phiPc = 0.85 * Fcr * p.A, phiPt = 0.9 * Fy * p.A;
+    const w = fW.get(i) ?? 0, d = fD.get(i) ?? 0, l = fL?.get(i) ?? 0;
+    let peor = { v: -1, Pu: 0, comb: '' };
+    for (const cb of combos) for (const sg of cb.W ? [1, -1] : [1]) {
+      const N = cb.D * d + (cb.L ?? 0) * l + cb.W * sg * w, v = N >= 0 ? N / phiPt : -N / phiPc;
+      if (v > peor.v) peor = { v, Pu: N, comb: cb.nombre };
+    }
+    out.push({ cara: 'anillos', id: `R${n}`, clase: 'viga', z: Math.min(P.z, Q.z), Pu: peor.Pu, Mu: 0, phiPc, phiPt, phiMn: 0.9 * Fy * p.W, lambdaC, bt, ratio: peor.v >= 0.2 ? peor.v : peor.v / 2, ecuacion: peor.v >= 0.2 ? 'H1-1a' : 'H1-1b', combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
+  });
+  return out;
+}
+
+/**
+ * Ficha M: la malla es una sola pieza en cada sentido, centrada (su J equivalente en el medio de la planta), y además un
+ * tubo que frena el giro por sí mismo: Jgiro (m⁶), el Σ J·d² equivalente que sale del reticulado espacial (giroMalla).
+ * Alrededor del centro de rigidez nuevo se suma el traslado: Jeq · cr².
+ */
+function torsionConTubo(r: RotoRes, JeqPar: number, JeqPer: number, Jgiro: number): TorsionExo {
+  const par: { J: number; h: number }[] = [], per: { J: number; h: number }[] = [];
+  r.B.forEach((J, i) => {
+    if (!(J > 0) || !isFinite(r.K[i])) return;
+    if (i < r.nP) par.push({ J, h: r.K[i] + r.J7 });
+    else if (i >= r.oO) per.push({ J, h: r.K[i] + r.J38 });
+    else per.push({ J, h: r.K[i] + r.J28 });
+  });
+  const sumJ = (xs: { J: number }[]) => xs.reduce((s, x) => s + x.J, 0), sumJh = (xs: { J: number; h: number }[]) => xs.reduce((s, x) => s + x.J * x.h, 0);
+  const crCon = sumJh(par) / (sumJ(par) + JeqPar), crPerCon = per.length || JeqPer > 0 ? sumJh(per) / (sumJ(per) + JeqPer) : 0;
+  const polar = (xs: { J: number; h: number }[], c: number) => xs.reduce((s, x) => s + x.J * (x.h - c) ** 2, 0);
+  const kTabCon = polar(par, crCon) + polar(per, crPerCon);
+  const kCon = kTabCon + Jgiro + JeqPar * crCon ** 2 + JeqPer * crPerCon ** 2;
+  const mtSin = r.J15, mtCon = r.D5 * crCon, kSin = r.M51;
+  const giro = mtSin && kSin ? (mtCon / kCon) / (mtSin / kSin) : NaN;
+  return { crSin: r.J7, crCon, mtSin, mtCon, kSin, kCon, kTabCon, giro, parteExo: kCon > 0 ? 1 - kTabCon / kCon : 0 };
 }
 
 // ------------------------------------------------------------------ torsión con el exoesqueleto
@@ -1463,7 +1553,8 @@ export interface TorsionExo {
  * @param r la rototraslación de la planilla del viento elegido; JeqPar y tPar: las caras paralelas a ese viento (J de una
  *   cara, m⁴, y su distancia al centro, m); JeqPer y tPer: las del otro viento
  */
-export function torsionConExo(r: RotoRes, JeqPar: number, tPar: number, JeqPer: number, tPer: number): TorsionExo {
+export function torsionConExo(r: RotoRes, JeqPar: number, tPar: number, JeqPer: number, tPer: number, malla?: { Jgiro: number }): TorsionExo {
+  if (malla) return torsionConTubo(r, JeqPar, JeqPer, malla.Jgiro);
   const par: { J: number; h: number }[] = [], per: { J: number; h: number }[] = [];
   r.B.forEach((J, i) => {
     if (!(J > 0) || !isFinite(r.K[i])) return;

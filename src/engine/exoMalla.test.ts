@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ejemploBasicoExo, ejemploGherkin } from './ejemplosExo';
-import { mallaDe, anillosMalla, nudosEnContorno, corrido, pisosFlojos } from './exoMalla';
-import { calcularExo, conMalla, propsSeccion, rigidezTabiques, pesoExo, seccionEn, type ExoDef } from './exo';
+import { mallaDe, anillosMalla, nudosEnContorno, corrido, pisosFlojos, giroMalla, fuerzasAnillos, tramosParejos, type MallaGeo } from './exoMalla';
+import { calcularExo, conMalla, propsSeccion, rigidezTabiques, pesoExo, seccionEn, dimensionarExo, type ExoDef } from './exo';
 import type { Proyecto } from './modelo';
 import { calcularProyecto } from './calculoProyecto';
 import { ExoDeCalculo } from './exoDeCalculo';
@@ -37,7 +37,7 @@ function resolver(A: number[][], b: number[]): number[] {
  * piso (u, v, θ del piso: el nudo se corre u − θ·(y − yc) en x y v + θ·(x − xc) en y; w libre) más la ménsula de los
  * tabiques en u. Viento en x (el viento B de la app).
  */
-function referencia3D(geo: ReturnType<typeof mallaDe>, def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, dir: 'A' | 'B' = 'B') {
+function referencia3D(geo: ReturnType<typeof mallaDe>, def: ExoDef, zs: number[], W: number[], EJ: (z: number) => number, dir: 'A' | 'B' = 'B', torsor?: number[]) {
   const n = zs.length - 1, libres = geo.nudos.map((q, i) => (q.k > 0 ? i : -1)).filter(i => i >= 0);
   const iw = new Map(libres.map((id, j) => [id, 3 * n + j]));
   const N = 3 * n + libres.length, K = Array.from({ length: N }, () => new Array<number>(N).fill(0));
@@ -68,7 +68,7 @@ function referencia3D(geo: ReturnType<typeof mallaDe>, def: ExoDef, zs: number[]
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) K[3 * i + o][3 * j + o] += Kt[i][j];
   // los pisos sin nudos de la malla no tienen nada de costado ni al giro: un resorte despreciable (no hay carga ahí)
   for (let i = 0; i < n; i++) { K[3 * i + 1 - o][3 * i + 1 - o] += 1e-6; K[3 * i + 2][3 * i + 2] += 1e-6; }
-  const F = new Array<number>(N).fill(0); W.forEach((w, k) => { F[3 * k + o] = w; });
+  const F = new Array<number>(N).fill(0); W.forEach((w, k) => { F[3 * k + o] = w; }); torsor?.forEach((t, k) => { F[3 * k + 2] = t; });
   const x = resolver(K, F);
   return { u: Array.from({ length: n }, (_, k) => x[3 * k + o]), v: Array.from({ length: n }, (_, k) => x[3 * k + 1 - o]), th: Array.from({ length: n }, (_, k) => x[3 * k + 2]),
     N: Bs.map(({ row, k, b }) => ({ b, N: k * [...row].reduce((s, [g, v]) => s + v * x[g], 0) })) };
@@ -116,6 +116,37 @@ describe('malla sobre la fachada: geometría', () => {
     // en un anillo «del medio» del diagrid los nudos caen a mitad de cada tramo (no en las esquinas)
     const m = nudosEnContorno(q, 12, true, true, 0);
     acum.slice(0, 4).forEach(cc => expect(m.some(x => Math.abs((((x.pos % 60) + 60) % 60) - cc) < 1e-9)).toBe(false));
+  });
+});
+
+describe('malla sobre la fachada: patrones, densidad y barras sacadas', () => {
+  it('hexagrid: capas alternadas de diagonales y montantes; se calcula y es menos rígido que el diagrid', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const hex = { ...p.exo!, malla: { patron: 'hexagrid' as const, nudos: 18 } };
+    const d = ex.datos('A', hex)!;
+    expect(d, ex.ultimoError).not.toBeNull();
+    const g = d.entrada.malla!;
+    expect(g.barras.some(b => b.clase === 'columna')).toBe(true);
+    expect(g.barras.some(b => b.clase === 'diagonal')).toBe(true);
+    expect(d.r.caras[0].Jeq).toBeLessThan(ex.datos('A', p.exo!)!.r.caras[0].Jeq);
+  });
+  it('densidad variable: de 24 nudos abajo a 12 arriba', () => {
+    const { p, def, zs } = gherkinM();
+    const g = mallaDe(p, { ...def, malla: { ...def.malla!, nudos: 24, nudosArriba: 12 } }, zs);
+    const n = (r: number) => g.nudos.filter(q => q.anillo === r).length;
+    expect(n(0)).toBe(24); expect(n(g.anillos.length - 1)).toBe(12);
+    for (let r = 1; r < g.anillos.length; r++) expect(n(r)).toBeLessThanOrEqual(n(r - 1));
+  });
+  it('barras sacadas a mano: salen de la malla entera (con sus tramos entre pisos) y quedan para dibujarlas', () => {
+    const { p, def, zs } = gherkinM();
+    const g0 = mallaDe(p, def, zs);
+    const clave = g0.barras.find(b => b.clase === 'diagonal' && g0.nudos[b.a].z === 0)!.clave!;
+    const g = mallaDe(p, { ...def, malla: { ...def.malla!, sacadas: [clave] } }, zs);
+    expect(g.barras.some(b => b.clave === clave)).toBe(false);
+    expect(g.quitadas?.length).toBe(1);
+    expect(g0.barras.filter(b => b.clave === clave).length).toBeGreaterThan(1);    // cruzaba pisos: varios tramos
   });
 });
 
@@ -191,6 +222,53 @@ describe('malla sobre la fachada: límite del método', () => {
   });
 });
 
+describe('malla sobre la fachada: la torsión', () => {
+  it('el giro de los pisos con un torsor es el del reticulado espacial (Gherkin, malla articulada)', () => {
+    const { p, def: def0, zs } = gherkinM();
+    const def = { ...def0, malla: { ...def0.malla!, arriostrada: false } };
+    const g = mallaDe(p, def, zs), n = zs.length - 1;
+    const T = zs.slice(1).map((z, k) => (g.anillos.includes(k + 1) ? 100 + z : 0));   // torsor solo en los pisos con nudos
+    const th = giroMalla(g, zs, T, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
+    const ref = referencia3D(g, def, zs, new Array(n).fill(0), () => 2.1e6 * 50, 'B', T);
+    g.anillos.filter(k => k > 0).forEach(k => expect(th[k - 1]).toBeCloseTo(ref.th[k - 1], 12));
+    expect(th[n - 1]).toBeGreaterThan(0);
+  });
+  it('el Gherkin con la malla: la rigidez al giro es la de una pieza de su J equivalente lejos del centro (J·d² ≈ Jeq·R², R de decenas de m)', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const Jg = ex.jGiroMalla(p.exo!), Jeq = ex.datos('A', p.exo!)!.r.caras[0].Jeq;
+    // un tubo delgado: la rigidez al giro (corte) y a la flexión van como Jeq·R² con R del orden del radio (24 a 26 m;
+    // el giro del tubo crece casi lineal con la altura y la ménsula como z²: el ajuste da un R algo mayor)
+    const R = Math.sqrt(Jg / Jeq);
+    expect(R).toBeGreaterThan(15); expect(R).toBeLessThan(60);
+  });
+});
+
+describe('malla sobre la fachada: los anillos', () => {
+  it('un empuje parejo hacia adentro en un anillo de 12 nudos: compresión de zuncho F / (2·sen(π/12))', () => {
+    const N = 12, R = 20, F = 10;
+    const nudos = Array.from({ length: N }, (_, i) => ({ x: R * Math.cos((2 * Math.PI * i) / N), y: R * Math.sin((2 * Math.PI * i) / N), z: 4, k: 1, anillo: 1, t: i / N, trib: 1 }));
+    const g: MallaGeo = { nudos, barras: nudos.map((_, i) => ({ clase: 'anillo' as const, a: i, b: (i + 1) % N })), anillos: [0, 1], perimetro: [], cx: 0, cy: 0 };
+    // una barra traccionada desde cada nudo hacia el eje (un tensor): tira del nudo F hacia adentro
+    const barras = nudos.map(q => ({ N: F, p3: { a: { x: q.x, y: q.y, z: q.z }, b: { x: 0, y: 0, z: q.z } } }));
+    const T = fuerzasAnillos(g, barras);
+    T.forEach(v => expect(v).toBeCloseTo(-F / (2 * Math.sin(Math.PI / N)), 4));
+    // un empuje a lo largo de la fachada (corte) no carga el anillo: lo toma la losa
+    const corte = nudos.map(q => ({ N: F, p3: { a: { x: q.x, y: q.y, z: q.z }, b: { x: q.x - q.y, y: q.y + q.x, z: q.z } } }));
+    fuerzasAnillos(g, corte).forEach(v => expect(Math.abs(v)).toBeLessThan(1e-6));
+  });
+  it('el Gherkin verifica también sus anillos con el CIRSOC 301 (la cúpula los tracciona o comprime)', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), d = ex.datos('A', p.exo!)!;
+    const an = ex.verif301(d).filter(x => x.cara === 'anillos');
+    expect(an.length).toBe(d.entrada.malla!.barras.filter(b => b.clase === 'anillo').length);
+    expect(an.every(x => isFinite(x.ratio) && x.ratio >= 0)).toBe(true);
+    expect(Math.max(...an.map(x => Math.abs(x.Pu)))).toBeGreaterThan(1);
+  });
+});
+
 describe('malla sobre la fachada: en el cálculo de la app', () => {
   it('con las losas atadas, ningún piso queda suelto: el corrimiento crece parejo con la altura (Gherkin, hasta la cúpula)', () => {
     const { p } = gherkinM();
@@ -215,7 +293,7 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
       expect(d!.tCaras).toEqual([0]);
       expect(d!.r.fraccionExo).toBeGreaterThan(0.3);                // el diagrid toma buena parte del momento
       const v = ex.verif301(d!);
-      expect(v.length).toBe(d!.r.caras[0].esfuerzos.length);
+      expect(v.filter(x => x.cara !== 'anillos').length).toBe(d!.r.caras[0].esfuerzos.length);
       expect(v.every(x => isFinite(x.ratio))).toBe(true);
     }
     // la malla sola es igual de rígida con los dos vientos (la planta es redonda; el núcleo no, por eso las flechas difieren)
@@ -253,5 +331,67 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     const g = gherkinM(); g.p.calculo = { ...(g.p.calculo ?? {}), metodo: 'cirsoc' } as typeof g.p.calculo;
     const dg = new ExoDeCalculo(g.p, calcularProyecto(g.p), 'cirsoc').datos('A', g.p.exo!)!;
     expect(pisosFlojos(dg.entrada.malla!, dg.entrada.zs, dg.r.u)).toEqual([]);
+  });
+  it('la hoja «G · Malla» del Excel: cada barra con nombre fijo, sus nudos, sus fuerzas y el peso de la app', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), m = ex.hojaMalla(p.exo!)!;
+    const g = ex.datos('A', p.exo!)!.entrada.malla!;
+    expect(m.nudos.length).toBe(g.nudos.length); expect(m.barras.length).toBe(g.barras.length);
+    expect(new Set(m.barras.map(b => b.id)).size).toBe(m.barras.length);
+    const peso = m.barras.reduce((s2, b) => s2 + m.gamma * propsSeccion({ b: b.sec.b, e: b.sec.e }).A * b.L, 0);
+    expect(peso).toBeCloseTo(m.peso, 6);
+    // las diagonales tienen fuerza con los dos vientos; los anillos, su verificación
+    expect(m.barras.filter(b => b.clase === 'diagonal').every(b => b.NA !== null && b.NB !== null)).toBe(true);
+    expect(m.barras.filter(b => b.clase === 'anillo').every(b => b.ratio !== null)).toBe(true);
+    expect(m.Jgiro).toBeGreaterThan(0);
+  });
+  it('secciones por altura: «Dimensionar» ajusta cada tramo (el Gherkin con sus tramos de diagonales verifica)', () => {
+    // con la ficha A del ejemplo: antes se agrandaba solo la sección de abajo y arriba mandaban los tramos (no llegaba nunca)
+    const p = ejemploGherkin();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const ens = (['A', 'B'] as const).map(d => ex.datos(d, p.exo!)!.entrada);
+    const r = dimensionarExo(p.exo!, ens);
+    expect(r.verifica, r.motivo).toBe(true);
+    const diag = r.def.tramos!.filter(t => t.clase === 'diagonal').sort((a, b) => a.desde - b.desde);
+    // de abajo arriba, las diagonales se afinan
+    const A = [r.def.diagonal, ...diag.map(t => t.sec)].map(x => propsSeccion(x).A);
+    A.slice(1).forEach((a, i) => expect(a).toBeLessThanOrEqual(A[i] + 1e-12));
+  });
+  it('tramos parejos en altura: cortes en anillos, una entrada por clase de la malla', () => {
+    const { p, def, zs } = gherkinM();
+    const g = mallaDe(p, def, zs), tr = tramosParejos(g, zs, 4, 'diagrid', (c, z) => seccionEn(def, c, z));
+    const cotas = [...new Set(tr.map(t => t.desde))];
+    expect(cotas.length).toBe(3);
+    cotas.forEach(z => expect(g.anillos.some(k => Math.abs(zs[k] - z) < 1e-9)).toBe(true));
+    expect(new Set(tr.map(t => t.clase))).toEqual(new Set(['diagonal', 'viga']));
+  });
+  it('qué malla conviene: el barrido de módulos y nudos da rigidez, acero y ángulo de cada malla (Gherkin)', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const f = ex.barridoMalla(p.exo!, [2, 4, 8], [12, 24]);
+    expect(f.length).toBe(6);
+    f.forEach(x => { expect(x.Jeq).toBeGreaterThan(0); expect(x.peso).toBeGreaterThan(0); expect(x.angulo).toBeGreaterThan(20); expect(x.angulo).toBeLessThan(90); });
+    // con más pisos por módulo, las diagonales se paran
+    const ang = (m: number) => f.find(x => x.modulo === m && x.nudos === 12)!.angulo;
+    expect(ang(8)).toBeGreaterThan(ang(4)); expect(ang(4)).toBeGreaterThan(ang(2));
+  });
+  it('la cúpula de vidrio (niveles sin losa): no se ata la malla ni se carga losa ahí, y la deriva arriba sale pareja', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), d = ex.datos('A', p.exo!)!;
+    const g = d.entrada.malla!, zs = d.entrada.zs, u = d.r.u;
+    const sinLosa = zs.map(z => !!p.niveles.find(n => Math.abs(n.cota - z) < 1e-6)?.sinLosa);
+    zs.forEach((_, k) => { if (sinLosa[k] && !g.anillos.includes(k)) expect(g.nudos.some(q => q.k === k)).toBe(false); });
+    zs.forEach((_, k) => { if (sinLosa[k]) expect(g.perimetro[k]).toBe(0); });
+    // el viento total no cambia (solo se pasa a los niveles con nudos)
+    const W0 = d.entrada.W.reduce((a, b) => a + b, 0);
+    expect(W0).toBeGreaterThan(0);
+    zs.slice(1).forEach((_, i) => { if (!g.nudos.some(q => q.k === i + 1) && !(d.entrada.EJ(zs[i + 1]) > 0)) expect(d.entrada.W[i]).toBe(0); });
+    // de 160 m para arriba, ningún piso con más de 1,5 veces la deriva media
+    const media = u[u.length - 1] / (zs[zs.length - 1] - zs[0]);
+    u.forEach((x, i) => { if (zs[i + 1] > 160) expect((x - u[i - 1]) / (zs[i + 1] - zs[i])).toBeLessThan(1.5 * media); });
   });
 });

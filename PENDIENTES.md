@@ -36,6 +36,22 @@ la torsión en la rototraslación (hoy la toman los tabiques solos, del lado seg
 Chequeo de la ficha M (27/11, al unir con `main`): una malla con tope bajo y sin tabiques arriba ya no da kilómetros
 (el cálculo dice qué pisos quedarían sueltos); aviso de pisos flojos entre anillos (sin tabiques en ese sentido);
 nudos por anillo hasta 96; el giro por módulo respeta los cortes.
+Mejoras de la ficha M (27/11, pedido del usuario, área del exo): la malla frena el giro (Σ J·d² equivalente del
+reticulado espacial, en la rototraslación); los anillos se verifican con el CIRSOC 301 (empuje hacia afuera de las
+diagonales, como zuncho); hoja «G · Malla» del Excel (igual en LibreOffice); «Dimensionar» ajusta cada tramo de
+sección en altura (arreglo que vale para todas las fichas: el Gherkin con la ficha A no llegaba nunca) y salta tubos;
+«Qué malla conviene» (módulo × nudos, rigidez por tonelada); hexagrid; nudos por anillo arriba; sacar barras a mano;
+deriva de cada piso al lado de la malla; contraste con Pynite (.py, tools/motor_fem/pynite_malla.py). Niveles sin losa
+(la cúpula de vidrio): la malla no se ata ni se carga losa ahí y su viento pasa a los niveles con nudos; nudos de un anillo
+a 1 m como mínimo (la lente); la deriva de cada piso en escalones. Toca exo.ts
+(dimensionarExo, anillos301, torsionConTubo), app.ts, estilo.css, ui/exo.ts y proyectoTablas.ts con cambios chicos.
+Túneles con pisos abiertos (27/11, terminado; `docs/prompt_tunel_pisos_abiertos.md`): un nivel con carpintería «sin» y
+sin carpintería propia (la plaza del Citicorp) se simula con sus muros y columnas, no con la losa, con la misma regla
+y el mismo texto en los tres túneles (`src/engine/pisoAbierto.ts`): en el 2D en planta, con la planta «como está
+dibujada» (como «solo los muros», al menos 40 celdas por ancho, sin ochavas); en el corte vertical, cada pieza que
+cruza la línea es una barra hasta el nivel de arriba (engrosada a 1,2 celdas, al menos 120 celdas de alto) y la piel
+arranca en el cajón del 8º–9º; en el 3D ya era así (ahora con la nota y una prueba de la geometría). Falta verlo
+corriendo en un navegador con WebGPU.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
@@ -45,9 +61,9 @@ nudos por anillo hasta 96; el giro por módulo respeta los cortes.
 **Para la otra rama** (vistos desde acá, sin tocar)
 - ~~«Ver la explicación» de Rototraslación: chico para el dedo.~~ (27/11, `claude/ejemplos-cirsoc`: botón con recuadro, 44 px de alto en tablet)
 - Que `tools/revision_punteros.cjs` corra en GitHub en cada cambio a `main`.
-- Que CIRSOC y FEM acepten más de 49 niveles sobre PB: hoy todos los métodos arman los niveles sobre la tabla de la
-  planilla y con 50 el corte, el momento y el vuelco del nivel más alto salen mal. Con eso, los ejemplos (que solo
-  tienen que cumplir CIRSOC) podrían ir piso por piso: el Citicorp separaría el 11º y el 12º.
+- ~~Que CIRSOC y FEM acepten más de 49 niveles sobre PB~~ (27/11, `claude/ejemplos-cirsoc`: con CIRSOC y FEM la tabla
+  de los niveles crece con la torre, `config.filasLibres`; Planilla y Guía siguen con las 49 filas del Excel y avisan).
+  Ya se pueden pasar los ejemplos a piso por piso (área de `alternativa`): el Citicorp separaría el 11º y el 12º.
 
 ## Lo que falta (lista viva, noviembre 2026)
 

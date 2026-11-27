@@ -8,7 +8,7 @@ import { aPlanilla, type Asignacion } from './mapping';
 import { calcularPlanilla, type PlanillaRes } from './planilla';
 import { calcularCorregido, type ResultadoCorregido } from './correcciones';
 import { controles, type Control } from './verificaciones';
-import { usarConfig } from './config';
+import { config, usarConfig } from './config';
 import { viento102, type Viento102 } from './cargas/cirsoc102';
 import { calcularFem, esfuerzosFem, type ResultadoMetodoFem } from './metodos/fem';
 import { compararMetodos, type Comparacion } from './metodos/combinado';
@@ -54,6 +54,8 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
     const base = calcularConConfig(proyecto, { ...c, metodo: 'planilla' });
     return { ...base, config: c, combinado: compararMetodos(proyecto, calcularProyecto) };
   }
+  // CIRSOC y FEM no se escriben en la planilla: la tabla de los niveles crece con la torre (más de 49 niveles sobre PB)
+  if ((c.metodo === 'cirsoc' || c.metodo === 'fem') && !config.filasLibres) return usarConfig({ filasLibres: true }, () => calcularConConfig(proyecto, c));
   const asig = aPlanilla(proyecto);
   const res = calcularPlanilla(asig.datos);
   const iPB = proyecto.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);

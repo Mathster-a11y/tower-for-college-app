@@ -5,11 +5,12 @@
  * Cada objeto recuerda lo que ya calculó: la etapa, el riel, el avance, los controles y el informe piden lo mismo
  * varias veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez.
  */
-import { armarCara, conMalla, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
+import { armarCara, conMalla, gammaExo, pesoExo, propsSeccion, seccionEn, type ClaseBarra, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
-import { mallaDe } from './exoMalla';
+import { giroMalla, indiceBarraMalla, mallaDe, vientoANudos, nombresMalla, MALLA_POR_DEFECTO, PATRONES_MALLA } from './exoMalla';
+import type { MallaHoja } from '../xlsx/hojasG';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
 import type { Viento102 } from './cargas/cirsoc102';
@@ -23,6 +24,14 @@ export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho:
   /** torre inclinada o corrida (Diseño → Perfil): corrimiento del centro de la torre en cada cota de zs, a lo largo de la cara (corr) y de costado (tc) */
   corr?: number[]; tc?: number[] }
 export type DatosExoCompletos = DatosExo & { entrada: EntradaExo };
+/** una malla del barrido de la ficha M: rigidez, acero y rigidez por tonelada con las mismas secciones; deriva / límite */
+/** la malla para Pynite (ver datosPyniteMalla) */
+export interface DatosPyniteMalla {
+  E: number; Eh: number; zs: number[]; cx: number; cy: number; nudos: [number, number, number, number][]; barras: [number, number, number, number, boolean, boolean][]; nombres: string[];
+  WA: number[]; WB: number[]; JA: number[]; JB: number[];
+  app: { uA: number[]; uB: number[]; NA: number[]; NB: number[]; giro: number[]; anillos: number[] };
+}
+export interface FilaMalla { modulo: number; nudos: number; angulo: number; Jeq: number; peso: number; porTonelada: number; deriva: number }
 /** lo que el worker manda ya calculado: la torre con el exo de cada viento y la verificación de las barras, por clave */
 export interface SemillaExo { torre: Record<string, ResultadoExo>; barras: Record<string, Cirsoc301Barra[]> }
 
@@ -101,6 +110,8 @@ export class ExoDeCalculo {
       const { ancho, t, anchos, ts, corr, tc, anchosPerp } = this.anchosCara(dir, def, zs);
       // ficha M: la malla sobre la fachada real es una sola «cara» (la malla entera, proyectada en el plano del viento)
       const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined, tCaras = malla ? [0] : [-t, t];
+      // (ficha M: el viento de un nivel sin nudos ni tabiques va a los niveles con nudos de al lado)
+      if (malla) W.splice(0, W.length, ...vientoANudos(malla, zs, W, z => EJ(z) > 0));
       if (malla) {
         // arriba del tope de la malla, los pisos sin tabiques que tomen viento quedarían sueltos (corrimientos de kilómetros)
         const zTop = zs[malla.anillos[malla.anillos.length - 1]], sueltos = zs.slice(1).filter(z => z > zTop + 1e-6 && !(EJ(z) > 0));
@@ -153,6 +164,108 @@ export class ExoDeCalculo {
   }
 
   /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
+  /**
+   * Ficha M: la rigidez de la malla al giro de la planta, como un Σ J·d² equivalente (m⁶, en hormigón como los tabiques):
+   * el tubo de barras con las losas rígidas que giran, bajo un torsor con la forma del viento A, comparado con una
+   * ménsula de J = 1 m⁴ bajo ese viento, en el último anillo. NaN si no hay malla.
+   */
+  jGiroMalla(def: ExoDef): number {
+    return this.recordar('jGiro', def, () => {
+      const d = this.datos('A', def);
+      if (def.tipo !== 'M' || !d?.entrada.malla) return NaN;
+      const { zs, W, Eh } = d.entrada, m = def.malla ?? MALLA_POR_DEFECTO;
+      const g = mallaDe(this.p, { ...def, malla: { ...m, arriostrada: false } }, zs);
+      const th = giroMalla(g, zs, W, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
+      // la ménsula de J = 1 m⁴ bajo las fuerzas W, en la cota de cada anillo; el J·d² equivalente ajusta el giro de todos
+      // los anillos (mínimos cuadrados: θ ≈ u / J·d²), no solo el de arriba (en una cúpula, el último anillo es muy
+      // chico y su giro depende de cómo se cierra la malla)
+      const u = (x: number) => W.reduce((s, P, i) => { const a = zs[i + 1] - zs[0]; return s + (P * (x <= a ? x * x * (3 * a - x) : a * a * (3 * x - a))) / (6 * Eh); }, 0);
+      let uu = 0, ut = 0;
+      g.anillos.filter(k => k > 0).forEach(k => { const t = th[k - 1], ur = u(zs[k] - zs[0]); if (isFinite(t)) { uu += ur * ur; ut += ur * t; } });
+      return ut > 0 ? uu / ut : NaN;
+    });
+  }
+  /**
+   * Ficha M: qué malla conviene. Con las mismas secciones, cada combinación de módulo (pisos de anillo a anillo, sin los
+   * cortes a mano) y nudos por anillo da una rigidez (J equivalente, el promedio de los dos vientos) y un acero; la
+   * rigidez por tonelada mide qué geometría rinde más. Con el ángulo medio de las diagonales y la deriva de servicio.
+   */
+  barridoMalla(def: ExoDef, modulos: number[], nudos: number[]): FilaMalla[] {
+    const m0 = def.malla ?? MALLA_POR_DEFECTO, out: FilaMalla[] = [];
+    for (const modulo of modulos) for (const n of nudos) {
+      // (sin guardar cada malla en la memoria: son muchas y no se vuelven a pedir)
+      const d = { ...def, modulo, cortes: undefined, malla: { ...m0, nudos: n } };
+      const ds = (['A', 'B'] as const).map(dir => this.datosSinMemoria(dir, d));
+      if (ds.some(x => !x)) continue;
+      const [dA, dB] = ds as DatosExoCompletos[], g = dA.entrada.malla!;
+      const diag = g.barras.filter(b => b.clase === 'diagonal').map(b => { const A = g.nudos[b.a], B = g.nudos[b.b]; return (Math.atan2(Math.abs(B.z - A.z), Math.hypot(B.x - A.x, B.y - A.y)) * 180) / Math.PI; });
+      const Jeq = ((dA.r.caras[0]?.Jeq ?? 0) + (dB.r.caras[0]?.Jeq ?? 0)) / 2, peso = pesoExo(d, [dA.entrada, dB.entrada]);
+      const fl = Math.max(this.flecha(dA).u / this.flecha(dA).lim, this.flecha(dB).u / this.flecha(dB).lim);
+      out.push({ modulo, nudos: n, angulo: diag.length ? diag.reduce((s2, v) => s2 + v, 0) / diag.length : NaN, Jeq, peso, porTonelada: peso > 0 ? Jeq / peso : 0, deriva: fl });
+    }
+    return out;
+  }
+  /**
+   * Ficha M: la malla para resolverla aparte como reticulado espacial (tools/motor_fem/pynite_malla.py): nudos, barras
+   * con su sección y sus articulaciones, el viento y el J de los tabiques de cada piso, y lo que da la app con el viento
+   * solo (sin peso ni losas), para comparar: el corrimiento de cada piso y la fuerza de cada barra.
+   */
+  datosPyniteMalla(def: ExoDef): DatosPyniteMalla | null {
+    if (def.tipo !== 'M') return null;
+    const dA = this.datos('A', def), dB = this.datos('B', def);
+    if (!dA || !dB) return null;
+    const g = dA.entrada.malla!, zs = dA.entrada.zs, Eh = dA.entrada.Eh, indice = indiceBarraMalla(g);
+    const colRigida = (def.uniones?.columna ?? 'rigida') === 'rigida', baseArt = def.uniones?.base === 'articulada';
+    const sin = (d: DatosExoCompletos) => { const en = d.entrada; return calcularExo(paraViento(conMalla({ ...d.def, pesoPropio: false }, en), d.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { qLosa: 0, anchosPerp: en.anchosPerp }); };
+    const rA = sin(dA), rB = sin(dB);
+    const lista = g.barras.map((b, i) => [b, i] as const).filter(([b]) => b.clase !== 'anillo');
+    const fuerzas = (r: ResultadoExo) => { const N = g.barras.map(() => 0); r.caras[0].esfuerzos.forEach(e => { const i = e.p3 ? indice(e.p3) : undefined; if (i !== undefined) N[i] = e.N; }); return lista.map(([, i]) => N[i]); };
+    const thApp = giroMalla(mallaDe(this.p, { ...def, malla: { ...(def.malla ?? MALLA_POR_DEFECTO), arriostrada: false } }, zs), zs, dA.entrada.W, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
+    return {
+      E: def.E, Eh, zs, cx: g.cx, cy: g.cy,
+      nudos: g.nudos.map(q => [q.x, q.y, q.z, q.k]),
+      barras: lista.map(([b]) => {
+        const A = g.nudos[b.a], B = g.nudos[b.b], pr = propsSeccion(seccionEn(def, b.clase as ClaseBarra, Math.min(A.z, B.z)));
+        const rel = (q: typeof A) => (b.clase === 'columna' ? !colRigida : q.anillo >= 0) || (q.k === 0 && baseArt);
+        return [b.a, b.b, pr.A, pr.I, rel(A), rel(B)];
+      }),
+      nombres: lista.map(([, i]) => nombresMalla(g)[i]),
+      WA: dA.entrada.W, WB: dB.entrada.W,
+      JA: zs.slice(1).map(z => dA.entrada.EJ(z) / Eh), JB: zs.slice(1).map(z => dB.entrada.EJ(z) / Eh),
+      app: { uA: [0, ...rA.u], uB: [0, ...rB.u], NA: fuerzas(rA), NB: fuerzas(rB), giro: [0, ...thApp], anillos: g.anillos },
+    };
+  }
+  /** ficha M: los datos de la hoja «G · Malla» del Excel (nudos, barras, fuerzas con los dos vientos y la peor relación del CIRSOC 301) */
+  hojaMalla(def: ExoDef): MallaHoja | null {
+    if (def.tipo !== 'M') return null;
+    const dA = this.datos('A', def), dB = this.datos('B', def), g = dA?.entrada.malla ?? dB?.entrada.malla;
+    if (!g) return null;
+    const nombres = nombresMalla(g), indice = indiceBarraMalla(g);
+    const N: Record<'A' | 'B', (number | null)[]> = { A: g.barras.map(() => null), B: g.barras.map(() => null) };
+    const ratio: (number | null)[] = g.barras.map(() => null);
+    const reglamento = def.material !== 'hormigon';
+    for (const [dir, d] of [['A', dA], ['B', dB]] as const) {
+      if (!d) continue;
+      const esf = d.r.caras[0]?.esfuerzos ?? [];
+      const porId = new Map(esf.map(e => [e.id, e]));
+      g.barras.forEach((b, i) => { if (b.clase !== 'anillo') N[dir][i] = 0; });
+      esf.forEach(e => { const i = e.p3 ? indice(e.p3) : undefined; if (i !== undefined) N[dir][i] = e.N; });
+      if (reglamento) this.verif301(d).forEach(v => {
+        const i = v.cara === 'anillos' ? nombres.indexOf(v.id) : (() => { const e = porId.get(v.id); return e?.p3 ? indice(e.p3) : undefined; })();
+        if (i !== undefined && i >= 0) ratio[i] = Math.max(ratio[i] ?? 0, v.ratio);
+      });
+    }
+    const ens = ([dA, dB].filter(Boolean) as DatosExoCompletos[]).map(d => d.entrada);
+    const Jg = this.jGiroMalla(def);
+    return {
+      patron: PATRONES_MALLA[(def.malla ?? MALLA_POR_DEFECTO).patron].nombre, gamma: gammaExo(def), peso: pesoExo(def, ens), Jgiro: Jg > 0 ? Jg : undefined,
+      nudos: g.nudos.map((q, i) => [`N${i + 1}`, q.anillo >= 0 ? q.anillo + 1 : null, q.x, q.y, q.z]),
+      barras: g.barras.map((b, i) => {
+        const A = g.nudos[b.a], B = g.nudos[b.b], sec = seccionEn(def, b.clase, Math.min(A.z, B.z));
+        return { id: nombres[i], clase: b.clase === 'anillo' ? 'anillo' : b.clase, a: b.a, b: b.b, L: Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z), sec: { b: sec.b, e: sec.e }, NA: N.A[i], NB: N.B[i], ratio: ratio[i] };
+      }),
+    };
+  }
   verif301(d: DatosExoCompletos): Cirsoc301Barra[] {
     return this.recordar(`301 ${d.dir} ${d.ancho} ${d.tCaras.join(' ')}`, d.def, () => {
       const en = d.entrada, reglamento = !!this.vientoReglamento;

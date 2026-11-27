@@ -9,7 +9,8 @@
  *  - diagrid: en cada anillo los nudos van corridos medio paso respecto del de abajo; cada nudo sube con dos diagonales
  *    a los dos nudos vecinos del anillo de arriba (rombos), como el de 30 St Mary Axe;
  *  - columnas y cruces: columnas que siguen la fachada de anillo en anillo y, en cada paño, una cruz de San Andrés.
- * Los anillos (vigas horizontales) se dibujan y se pesan: en el modelo, la losa rígida de cada piso hace su trabajo.
+ * Los anillos (vigas horizontales) se dibujan y se pesan; en el modelo la losa rígida de cada piso hace su trabajo, y
+ * después se verifican con el empuje hacia afuera de las diagonales en sus nudos (fuerzasAnillos).
  * Con las losas atadas en cada piso (por defecto), cada barra tiene un nudo en cada piso que cruza y es continua ahí.
  *
  * Cálculo por proyección, exacto con las hipótesis de la app. Las losas son diafragmas rígidos: en cada piso todos los
@@ -27,7 +28,7 @@ import type { Proyecto } from './modelo';
 import { contornoAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 import type { Barra, Cara, ClaseBarra, ExoDef, Nudo, Seccion } from './exo';
 
-export type PatronMalla = 'diagrid' | 'columnas';
+export type PatronMalla = 'diagrid' | 'columnas' | 'hexagrid';
 export interface MallaDef {
   patron: PatronMalla;
   /** nudos por anillo (en toda la vuelta) */
@@ -44,13 +45,23 @@ export interface MallaDef {
    * entre anillos solo los sostienen los tabiques (y si arriba no hay, quedan sueltos)
    */
   arriostrada?: boolean;
+  /**
+   * nudos por anillo arriba (densidad variable): de «nudos» en la base a este número en el último anillo, en línea recta
+   * con la altura; vacío = los mismos en toda la altura
+   */
+  nudosArriba?: number;
+  /** barras sacadas a mano (su clave: claveBarra), por ejemplo para abrir una entrada en planta baja */
+  sacadas?: string[];
 }
 /** tope de nudos por anillo: con más, el cálculo se vuelve lento y las barras más cortas que un piso */
 export const NUDOS_MAX = 96;
+/** separación mínima entre los nudos de un anillo (m): en una cúpula que se cierra, los de arriba llevan menos nudos */
+export const SEPARACION_MIN = 1;
 export const MALLA_POR_DEFECTO: MallaDef = { patron: 'diagrid', nudos: 16, esquinas: true };
 export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string }> = {
   diagrid: { nombre: 'Diagrid', texto: 'Rombos de diagonales sobre la fachada, sin columnas: cada anillo corrido medio paso respecto del de abajo (30 St Mary Axe).' },
   columnas: { nombre: 'Columnas y cruces', texto: 'Columnas que siguen la fachada de anillo en anillo y una cruz de San Andrés en cada paño.' },
+  hexagrid: { nombre: 'Hexagrid', texto: 'Panal de hexágonos sobre la fachada: una capa de diagonales y una de montantes, alternadas. Más abierto y liviano a la vista que el diagrid, pero menos rígido: trabaja en parte por flexión de los nudos.' },
 };
 
 export interface NudoMalla {
@@ -60,7 +71,11 @@ export interface NudoMalla {
   /** posición en la vuelta (0 a 1, desde el arranque) y metros de fachada que le tocan */
   t: number; trib: number;
 }
-export interface BarraMalla { clase: ClaseBarra | 'anillo'; a: number; b: number }
+export interface BarraMalla {
+  clase: ClaseBarra | 'anillo'; a: number; b: number;
+  /** la barra entera de anillo a anillo a la que pertenece (sus tramos entre pisos tienen la misma): para sacarla a mano */
+  clave?: string;
+}
 export interface MallaGeo {
   nudos: NudoMalla[]; barras: BarraMalla[];
   /** índices de zs de los anillos, de abajo arriba */
@@ -69,6 +84,8 @@ export interface MallaGeo {
   perimetro: number[];
   /** centro de la planta de PB (las posiciones s del modelo se miden desde acá) */
   cx: number; cy: number;
+  /** las barras sacadas a mano (entre nudos que siguen en la malla), para dibujarlas */
+  quitadas?: BarraMalla[];
 }
 
 // ------------------------------------------------------------------ contorno: orientación, corrimiento y esquinas
@@ -165,7 +182,7 @@ export function anillosMalla(def: ExoDef, zs: number[]): number[] {
   } else { bordes = []; for (let k = 0; k <= kTop; k += mod) bordes.push(k); }
   if (bordes[bordes.length - 1] !== kTop) bordes.push(kTop);
   bordes = [...new Set(bordes)].sort((a, b) => a - b);
-  if (m.patron !== 'diagrid') return bordes;
+  if (m.patron === 'columnas') return bordes;
   const out: number[] = [];
   bordes.forEach((k, i) => { out.push(k); const s = bordes[i + 1]; if (s !== undefined && s - k >= 2) out.push(Math.round((k + s) / 2)); });
   return [...new Set(out)].sort((a, b) => a - b);
@@ -179,6 +196,13 @@ function contornoEn(p: Proyecto, z: number): { fachada: Punto[]; losa: Punto[] }
   const dx = p.niveles[i]?.dx ?? 0, dy = p.niveles[i]?.dy ?? 0;
   const mover = (q: Punto[]) => limpio(q.map(a => ({ x: a.x + dx, y: a.y + dy })));
   return { fachada: mover(puntosSilueta(contornoAlViento(p, i).v, 4)), losa: mover(puntosSilueta(plantaDeNivel(p, i).silueta, 4)) };
+}
+
+/** la clave de una barra de anillo a anillo: su clase y la posición de sus dos nudos (anillo y lugar en la vuelta) */
+export function claveBarra(A: NudoMalla, B: NudoMalla, clase: BarraMalla['clase']): string {
+  const p = (q: NudoMalla) => `${q.anillo}:${Math.round((((q.t % 1) + 1) % 1) * 1e4)}`;
+  const [x, y] = [p(A), p(B)].sort();
+  return `${clase}|${x}|${y}`;
 }
 
 /**
@@ -203,9 +227,15 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const z1 = def.cortes?.find(z => z > zs[0] + 1e-6) ?? zs[Math.min(mod, zs.length - 1)];
     const ang = (((m.giro ?? 0) * Math.PI) / 180) * ((zs[k] - zs[0]) / Math.max(1e-6, z1 - zs[0]));
     const origen = arranque(q, ccx, ccy, ang);
-    const medio = m.patron === 'diagrid' && r % 2 === 1;
+    // diagrid: cada anillo corrido medio paso; hexagrid: corrido después de cada capa de diagonales (0, ½, ½, 0, 0, ½…)
+    const medio = m.patron === 'diagrid' ? r % 2 === 1 : m.patron === 'hexagrid' ? Math.floor((r + 1) / 2) % 2 === 1 : false;
+    // densidad variable: de N en la base a «nudos arriba» en el último anillo
+    const fz = anillos.length > 1 ? (zs[k] - zs[anillos[0]]) / Math.max(1e-6, zs[anillos[anillos.length - 1]] - zs[anillos[0]]) : 0;
+    const Nd = m.nudosArriba ? Math.min(NUDOS_MAX, Math.max(3, Math.round(N + (m.nudosArriba - N) * fz))) : N;
+    // un anillo muy chico (la lente de una cúpula): no más nudos que uno por metro de vuelta
+    const Nr = Math.max(3, Math.min(Nd, Math.floor(P / SEPARACION_MIN)));
     const ids: number[] = [];
-    nudosEnContorno(q, N, m.esquinas !== false, medio, origen).forEach(({ pos, trib }) => {
+    nudosEnContorno(q, Nr, m.esquinas !== false, medio, origen).forEach(({ pos, trib }) => {
       const pt = enPosicion(q, acum, P, pos);
       ids.push(nudos.length);
       nudos.push({ x: pt.x, y: pt.y, z: zs[k], k, anillo: r, t: ((((pos - origen) % P) + P) % P) / P, trib });
@@ -219,17 +249,21 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
   const despues = (ids: number[], t: number) => ids.reduce((m2, id) => { const d = dt(t, nudos[id].t); return d > 1e-9 && d < m2.d ? { id, d } : m2; }, { id: ids[0], d: Infinity }).id;
   const antes = (ids: number[], t: number) => ids.reduce((m2, id) => { const d = dt(nudos[id].t, t); return d > 1e-9 && d < m2.d ? { id, d } : m2; }, { id: ids[0], d: Infinity }).id;
   const vistos = new Set<string>();
+  const sacadas = new Set(m.sacadas ?? []), quitadas: BarraMalla[] = [];
   const barra = (clase: BarraMalla['clase'], a: number, b: number) => {
     if (a === b) return;
     const k = `${clase}|${Math.min(a, b)}|${Math.max(a, b)}`;
-    if (vistos.has(k)) return; vistos.add(k); barras.push({ clase, a, b });
+    if (vistos.has(k)) return; vistos.add(k);
+    const br: BarraMalla = { clase, a, b, clave: claveBarra(nudos[a], nudos[b], clase) };
+    (sacadas.has(br.clave!) ? quitadas : barras).push(br);
   };
   porAnillo.forEach((ids, r) => {
     // el anillo (no en la base: ahí la malla apoya en la fundación)
     if (r > 0) { const orden = [...ids].sort((a, b) => nudos[a].t - nudos[b].t); orden.forEach((id, i) => barra('anillo', id, orden[(i + 1) % orden.length])); }
     const arriba = porAnillo[r + 1];
     if (!arriba) return;
-    if (m.patron === 'diagrid') ids.forEach(id => { barra('diagonal', id, despues(arriba, nudos[id].t)); barra('diagonal', id, antes(arriba, nudos[id].t)); });
+    if (m.patron === 'diagrid' || (m.patron === 'hexagrid' && r % 2 === 0)) ids.forEach(id => { barra('diagonal', id, despues(arriba, nudos[id].t)); barra('diagonal', id, antes(arriba, nudos[id].t)); });
+    else if (m.patron === 'hexagrid') ids.forEach(id => barra('columna', id, cercano(arriba, nudos[id].t)));
     else {
       const orden = [...ids].sort((a, b) => nudos[a].t - nudos[b].t);
       orden.forEach((id, i) => {
@@ -239,6 +273,8 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
       });
     }
   });
+  // los niveles sin losa (la cúpula de vidrio del Gherkin): no hay losa que atar ni franja de losa que cargar
+  const conLosa = zs.map(z => !p.niveles.find(nv => Math.abs(nv.cota - z) < 1e-6)?.sinLosa);
   // las losas atadas en cada piso: cada barra que cruza pisos entre anillos se parte en ellos (el nudo, sobre la barra recta)
   const partidas = m.arriostrada === false ? barras : barras.flatMap(b => {
     const A = nudos[b.a], B = nudos[b.b];
@@ -246,20 +282,21 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const [lo, hi] = A.k < B.k ? [b.a, b.b] : [b.b, b.a], L0 = nudos[lo], L1 = nudos[hi];
     const out: BarraMalla[] = []; let prev = lo;
     for (let k = L0.k + 1; k < L1.k; k++) {
+      if (!conLosa[k]) continue;
       const f = (zs[k] - L0.z) / (L1.z - L0.z || 1);
       const id = nudos.length;
       nudos.push({ x: L0.x + (L1.x - L0.x) * f, y: L0.y + (L1.y - L0.y) * f, z: zs[k], k, anillo: -1, t: L0.t + ((((L1.t - L0.t + 0.5) % 1) + 1) % 1 - 0.5) * f, trib: 0 });
-      out.push({ clase: b.clase, a: prev, b: id }); prev = id;
+      out.push({ clase: b.clase, a: prev, b: id, clave: b.clave }); prev = id;
     }
-    out.push({ clase: b.clase, a: prev, b: hi });
+    out.push({ clase: b.clase, a: prev, b: hi, clave: b.clave });
     return out;
   });
   // el ancho de influencia de los nudos de los pisos entre anillos: la fachada de ese piso repartida entre ellos
   const porPiso = new Map<number, number[]>();
   nudos.forEach((q, i) => { if (q.anillo < 0) porPiso.set(q.k, [...(porPiso.get(q.k) ?? []), i]); });
   porPiso.forEach((ids, k) => { const P = perimetroPol(corrido(contornos[k].fachada, def.separacion ?? 0)); ids.forEach(i => { nudos[i].trib = P / ids.length; }); });
-  const perimetro = contornos.map(c => perimetroPol(c.losa));
-  return { nudos, barras: partidas, anillos, perimetro, cx, cy };
+  const perimetro = contornos.map((c, k) => (conLosa[k] ? perimetroPol(c.losa) : 0));
+  return { nudos, barras: partidas, anillos, perimetro, cx, cy, ...(quitadas.length ? { quitadas } : {}) };
 }
 
 // ------------------------------------------------------------------ proyección en el plano del viento
@@ -355,4 +392,204 @@ export function pisosFlojos(g: MallaGeo, zs: number[], u: number[], veces = 3): 
     const k = i + 1, d = Math.abs(x - (i ? u[i - 1] : 0)) / Math.max(1e-9, zs[k] - zs[k - 1]);
     return !enAnillo.has(k) && d > veces * media ? [{ z: zs[k], veces: d / media }] : [];
   });
+}
+
+// ------------------------------------------------------------------ torsión: la malla como tubo
+/**
+ * Resuelve K·x = b con K simétrica definida positiva guardada en banda (fila i: columnas i..i+b). Factorización LDLᵀ
+ * de banda: la malla ordenada piso por piso tiene una banda de unos dos anillos.
+ */
+function resolverBanda(n: number, ancho: number, K: Map<number, number>[], b: number[]): number[] {
+  const D = new Float64Array(n), L: Float64Array[] = Array.from({ length: n }, () => new Float64Array(ancho + 1));
+  // L[i][j-i] para j ≥ i: copia de K
+  K.forEach((fila, i) => fila.forEach((v, j) => { if (j >= i) L[i][j - i] = v; }));
+  for (let i = 0; i < n; i++) {
+    const d = L[i][0];
+    if (!(Math.abs(d) > 1e-12)) throw new Error('La malla no frena el giro de algún piso.');
+    D[i] = d;
+    const lim = Math.min(n - 1, i + ancho);
+    for (let j = i + 1; j <= lim; j++) {
+      const lij = L[i][j - i];
+      if (lij === 0) continue;
+      const f = lij / d;
+      for (let k = j; k <= lim; k++) { const lik = L[i][k - i]; if (lik !== 0) L[j][k - j] -= f * lik; }
+    }
+  }
+  const y = Float64Array.from(b);
+  for (let i = 0; i < n; i++) { const lim = Math.min(n - 1, i + ancho), yi = y[i]; for (let j = i + 1; j <= lim; j++) if (L[i][j - i]) y[j] -= (L[i][j - i] / D[i]) * yi; }
+  for (let i = 0; i < n; i++) y[i] /= D[i];
+  for (let i = n - 1; i >= 0; i--) { const lim = Math.min(n - 1, i + ancho); let s = y[i]; for (let j = i + 1; j <= lim; j++) if (L[i][j - i]) s -= (L[i][j - i] / D[i]) * y[j]; y[i] = s; }
+  return [...y];
+}
+
+/**
+ * El giro de los pisos de la malla con un torsor T por piso (t·m): reticulado espacial de barras articuladas (E·A/L en
+ * su dirección), con cada losa rígida que gira θ alrededor del eje vertical del centro de la base (el nudo se corre
+ * θ·(−(y − cy), x − cx)) y cada nudo libre de subir o bajar. Los anillos no trabajan (la losa no se deforma). Los pisos
+ * sin nudos (entre anillos, sin losas atadas) pasan su torsor con un tubo muy blando, como en el J equivalente. Usa la
+ * malla sin partir: los nudos de las barras en los pisos se deslizarían a lo largo de la barra (sin rigidez al giro).
+ */
+export function giroMalla(g: MallaGeo, zs: number[], T: number[], E: number, area: (clase: ClaseBarra | 'anillo', zMin: number) => number, blando = 0): number[] {
+  const n = zs.length - 1;
+  // orden de las incógnitas: piso por piso, las w de sus nudos y después su θ
+  const idW = new Map<number, number>(), idT: number[] = [];
+  let m = 0;
+  const porK = new Map<number, number[]>();
+  g.nudos.forEach((q, i) => { if (q.k > 0) porK.set(q.k, [...(porK.get(q.k) ?? []), i]); });
+  for (let k = 1; k <= n; k++) { for (const i of porK.get(k) ?? []) idW.set(i, m++); idT[k] = m++; }
+  const K: Map<number, number>[] = Array.from({ length: m }, () => new Map());
+  let ancho = 0;
+  const sumar = (i: number, j: number, v: number) => { const [a, b] = i <= j ? [i, j] : [j, i]; K[a].set(b, (K[a].get(b) ?? 0) + v); ancho = Math.max(ancho, b - a); };
+  g.barras.forEach(b => {
+    if (b.clase === 'anillo') return;
+    const A = g.nudos[b.a], B = g.nudos[b.b];
+    const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, L = Math.hypot(dx, dy, dz);
+    if (L < 1e-9) return;
+    // δ = e · (dB − dA): con el giro, e·t es el mismo en los dos extremos (el brazo de la barra respecto del eje)
+    const brazo = ((A.x - g.cx) * dy - (A.y - g.cy) * dx) / L, ez = dz / L;
+    const coef: [number, number][] = [];
+    if (B.k > 0) coef.push([idT[B.k], brazo], [idW.get(b.b)!, ez]);
+    if (A.k > 0) coef.push([idT[A.k], -brazo], [idW.get(b.a)!, -ez]);
+    const k = (E * area(b.clase, Math.min(A.z, B.z))) / L;
+    for (const [i, ci] of coef) for (const [j, cj] of coef) if (i <= j && ci && cj) sumar(i, j, k * ci * cj);
+  });
+  // el tubo blando de los pisos (y un resto mínimo en las w, para los nudos que solo tocan barras horizontales)
+  const kb = blando > 0 ? blando : 1e-9;
+  for (let k = 1; k <= n; k++) {
+    const h = zs[k] - zs[k - 1], c = (12 * kb) / h ** 3;
+    sumar(idT[k], idT[k], c); if (k > 1) { sumar(idT[k - 1], idT[k - 1], c); sumar(idT[k - 1], idT[k], -c); }
+  }
+  idW.forEach(i => { if (!(K[i].get(i)! > 0)) sumar(i, i, 1e-9); });
+  const bvec = new Array<number>(m).fill(0);
+  for (let k = 1; k <= n; k++) bvec[idT[k]] = T[k - 1] ?? 0;
+  const x = resolverBanda(m, ancho, K, bvec);
+  return Array.from({ length: n }, (_, k) => x[idT[k + 1]]);
+}
+
+// ------------------------------------------------------------------ los anillos
+/** clave de un punto del espacio (para encontrar el nudo de la malla de una barra del modelo por su posición real) */
+const claveP = (q: { x: number; y: number; z: number }) => `${q.x.toFixed(4)}|${q.y.toFixed(4)}|${q.z.toFixed(3)}`;
+
+/**
+ * La fuerza de cada barra de anillo (t; + tracción), a partir de las fuerzas reales de las demás barras (con p3: sus
+ * extremos en el espacio). En cada nudo de un anillo las barras que llegan dejan una fuerza horizontal (el empuje de las
+ * diagonales que se abren o se cierran). El anillo toma la parte hacia afuera (o hacia adentro) con fuerzas axiales en
+ * sus tramos, como un zuncho (en un círculo con un empuje parejo, T = p·R); la parte a lo largo de la fachada (el corte
+ * del viento que pasa de la losa a la malla) la toma la losa, como en el diseño habitual de los diagrid. Vuelve un mapa índice de barra de g.barras → fuerza.
+ */
+export function fuerzasAnillos(g: MallaGeo, barras: { N: number; p3?: { a: { x: number; y: number; z: number }; b: { x: number; y: number; z: number } } }[]): Map<number, number> {
+  const idDe = new Map(g.nudos.map((q, i) => [claveP(q), i]));
+  const H = new Map<number, { x: number; y: number }>();
+  for (const e of barras) {
+    if (!e.p3 || !e.N) continue;
+    const ia = idDe.get(claveP(e.p3.a)), ib = idDe.get(claveP(e.p3.b));
+    const { a, b } = e.p3, L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    if (L < 1e-9) continue;
+    // una barra traccionada tira de cada nudo hacia el otro extremo
+    const fx = (e.N * (b.x - a.x)) / L, fy = (e.N * (b.y - a.y)) / L;
+    if (ia !== undefined) { const v = H.get(ia) ?? { x: 0, y: 0 }; v.x += fx; v.y += fy; H.set(ia, v); }
+    if (ib !== undefined) { const v = H.get(ib) ?? { x: 0, y: 0 }; v.x -= fx; v.y -= fy; H.set(ib, v); }
+  }
+  const out = new Map<number, number>();
+  // cada anillo por separado: sus tramos en orden, y las dos ecuaciones (x, y) de cada nudo
+  const porAnillo = new Map<number, number[]>();
+  g.barras.forEach((b, i) => { if (b.clase === 'anillo') { const r = g.nudos[b.a].anillo; porAnillo.set(r, [...(porAnillo.get(r) ?? []), i]); } });
+  porAnillo.forEach(ids => {
+    const m = ids.length, nudos = [...new Set(ids.flatMap(i => [g.barras[i].a, g.barras[i].b]))], fila = new Map(nudos.map((n, j) => [n, j]));
+    // la normal hacia afuera de cada nudo: la bisectriz de los dos tramos que llegan (anillo antihorario)
+    const vecinos = new Map<number, number[]>();
+    ids.forEach(i => { const b = g.barras[i]; vecinos.set(b.a, [...(vecinos.get(b.a) ?? []), b.b]); vecinos.set(b.b, [...(vecinos.get(b.b) ?? []), b.a]); });
+    const normal = (n: number) => {
+      const [p, q] = vecinos.get(n)!.map(k => g.nudos[k]), o = g.nudos[n];
+      // el que viene antes en la vuelta (t menor, dando la vuelta) y el que viene después
+      const [ant, sig] = ((q.t - o.t + 1) % 1) < ((p.t - o.t + 1) % 1) ? [p, q] : [q, p];
+      const tx = sig.x - ant.x, ty = sig.y - ant.y, l = Math.hypot(tx, ty) || 1;
+      return { x: ty / l, y: -tx / l };
+    };
+    // una ecuación por nudo, la del empuje hacia afuera: Σ T·(u·n) = −H·n. En un lado recto u·n = 0: ese empuje lo toma
+    // la flexión de la viga y la losa, no el anillo
+    const A: number[][] = Array.from({ length: nudos.length }, () => new Array<number>(m).fill(0)), rhs = new Array<number>(nudos.length).fill(0);
+    const ns = nudos.map(normal);
+    ids.forEach((i, j) => {
+      const b = g.barras[i], P = g.nudos[b.a], Q = g.nudos[b.b], L = Math.hypot(Q.x - P.x, Q.y - P.y) || 1, ux = (Q.x - P.x) / L, uy = (Q.y - P.y) / L;
+      const ra = fila.get(b.a)!, rb = fila.get(b.b)!;
+      A[ra][j] += ux * ns[ra].x + uy * ns[ra].y; A[rb][j] -= ux * ns[rb].x + uy * ns[rb].y;
+    });
+    nudos.forEach((n, j) => { const v = H.get(n); if (v) rhs[j] = -(v.x * ns[j].x + v.y * ns[j].y); });
+    // ecuaciones normales (mínimos cuadrados: en un rectángulo los nudos de los lados no dan ecuación)
+    const M = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, k) => A.reduce((s, f) => s + f[i] * f[k], 0)));
+    const c = Array.from({ length: m }, (_, i) => A.reduce((s, f, r) => s + f[i] * rhs[r], 0));
+    const tr = M.reduce((s, f, i) => s + f[i], 0) / Math.max(1, m);
+    for (let i = 0; i < m; i++) M[i][i] += 1e-9 * tr;
+    const T = gauss(M, c);
+    ids.forEach((i, j) => out.set(i, T[j]));
+  });
+  return out;
+}
+function gauss(M: number[][], b: number[]): number[] {
+  const n = b.length, A = M.map((f, i) => [...f, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    if (Math.abs(A[c][c]) < 1e-14) continue;
+    for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; if (f) for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; }
+  }
+  const x = new Array<number>(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = A[r][n]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = Math.abs(A[r][r]) < 1e-14 ? 0 : s / A[r][r]; }
+  return x;
+}
+
+// ------------------------------------------------------------------ nombres fijos de las barras (para tablas y Excel)
+/**
+ * El nombre de cada barra de la malla, el mismo con los dos vientos: C (columnas), D (diagonales) y R (anillos), en el
+ * orden de g.barras. (Las barras del modelo de cada viento se numeran aparte, porque las que no ven el viento no entran.)
+ */
+export function nombresMalla(g: MallaGeo): string[] {
+  const n: Record<string, number> = {};
+  return g.barras.map(b => { const l = b.clase === 'columna' ? 'C' : b.clase === 'diagonal' ? 'D' : b.clase === 'anillo' ? 'R' : 'V'; n[l] = (n[l] ?? 0) + 1; return `${l}${n[l]}`; });
+}
+/** índice en g.barras de una barra del modelo, por la posición real de sus extremos (p3) */
+export function indiceBarraMalla(g: MallaGeo): (p3: { a: { x: number; y: number; z: number }; b: { x: number; y: number; z: number } }) => number | undefined {
+  const idDe = new Map(g.nudos.map((q, i) => [claveP(q), i]));
+  const porPar = new Map<string, number>();
+  g.barras.forEach((b, i) => porPar.set(`${Math.min(b.a, b.b)}|${Math.max(b.a, b.b)}`, i));
+  return p3 => { const a = idDe.get(claveP(p3.a)), b = idDe.get(claveP(p3.b)); return a === undefined || b === undefined ? undefined : porPar.get(`${Math.min(a, b)}|${Math.max(a, b)}`); };
+}
+
+// ------------------------------------------------------------------ secciones por altura
+/**
+ * Tramos de sección parejos en altura para la malla: n tramos (el primero es la sección de la clase), cortados en los
+ * anillos más cerca de cada n-ésimo de la altura. Cada clase de la malla (las diagonales, las columnas si hay, y las
+ * vigas de los anillos) arranca cada tramo con la sección que tiene hoy a esa cota; después «Dimensionar» los ajusta.
+ */
+export function tramosParejos(g: MallaGeo, zs: number[], n: number, patron: PatronMalla, secDe: (clase: ClaseBarra, z: number) => { b: number; e: number }): { clase: ClaseBarra; desde: number; sec: { b: number; e: number } }[] {
+  const zr = g.anillos.map(k => zs[k]), z0 = zr[0], z1 = zr[zr.length - 1];
+  const cortes = [...new Set(Array.from({ length: Math.max(0, Math.round(n) - 1) }, (_, i) => {
+    const meta = z0 + ((i + 1) * (z1 - z0)) / Math.round(n);
+    return zr.reduce((b, z) => (Math.abs(z - meta) < Math.abs(b - meta) ? z : b), zr[0]);
+  }))].filter(z => z > z0 + 1e-6 && z < z1 - 1e-6).sort((a, b) => a - b);
+  const clases: ClaseBarra[] = patron === 'columnas' ? ['columna', 'diagonal', 'viga'] : ['diagonal', 'viga'];
+  return clases.flatMap(clase => cortes.map(desde => ({ clase, desde, sec: { ...secDe(clase, desde) } })));
+}
+
+/**
+ * El viento de los niveles donde la malla no tiene nudos ni hay tabiques (un nivel sin losa entre dos anillos, como la
+ * cúpula de vidrio del Gherkin): no hay losa que lo lleve a un solo punto, así que la piel lo pasa a los niveles con
+ * nudos de abajo y de arriba, por la distancia. W[i] es el viento del nivel zs[i + 1].
+ */
+export function vientoANudos(g: MallaGeo, zs: number[], W: number[], conTabiques: (z: number) => boolean): number[] {
+  const conNudos = new Set(g.nudos.map(q => q.k));
+  const firme = (k: number) => k === 0 || conNudos.has(k) || conTabiques(zs[k]);
+  const out = [...W];
+  for (let k = 1; k < zs.length; k++) {
+    if (firme(k) || !out[k - 1]) continue;
+    let ab = k - 1; while (ab > 0 && !firme(ab)) ab--;
+    let ar = k + 1; while (ar < zs.length && !firme(ar)) ar++;
+    const w = out[k - 1]; out[k - 1] = 0;
+    if (ar >= zs.length) { if (ab > 0) out[ab - 1] += w; continue; }
+    const t = (zs[k] - zs[ab]) / (zs[ar] - zs[ab]);
+    if (ab > 0) out[ab - 1] += w * (1 - t);
+    out[ar - 1] += w * t;
+  }
+  return out;
 }

@@ -13,7 +13,7 @@ import { plantaDeNivel } from '../engine/silueta';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
 import { disenadorExo3D } from './exo3d';
-import { camposMalla, vistaMalla } from './exoMalla';
+import { botonPyniteMalla, camposMalla, seccionBarridoMalla, vistaMalla } from './exoMalla';
 import { MALLA_POR_DEFECTO, pisosFlojos } from '../engine/exoMalla';
 import { ExoDeCalculo, type DatosExo } from '../engine/exoDeCalculo';
 
@@ -211,11 +211,7 @@ export function estadoExo(): EstadoChip {
 // ------------------------------------------------------------------ torsión con el exo
 /** la rototraslación del viento elegido con las caras del exo como dos piezas más en cada sentido */
 function seccionTorsion(def: ExoDef): HTMLElement | null {
-  if (def.tipo === 'M') {
-    const s0 = seccion('Torsión con el exo');
-    s0.cuerpo.append(h('p', { class: 'nota' }, 'La malla rodea toda la planta: es un tubo, muy rígido al giro. La app todavía no le suma esa rigidez a la rototraslación: la torsión la siguen tomando los tabiques solos (del lado seguro).'));
-    return s0.el;
-  }
+  if (def.tipo === 'M') return seccionTorsionMalla(def);
   if (def.tipo === 'F') {
     // los brazos frenan la flexión del núcleo, no su giro: no hay una cuenta de torsión que valga la pena mostrar
     const s0 = seccion('Torsión con el exo');
@@ -240,6 +236,30 @@ function seccionTorsion(def: ExoDef): HTMLElement | null {
         : kpi('Giro de la planta', `${fmt(t.giro * 100, 0)} %`, `del que tiene sin el exo (torsor / rigidez a la torsión); con un mismo torsor, ${fmt(giroMismo * 100, 0)} %`, colorEstado(t.giro < 1)),
       kpi('Torsión que toma el exo', `${fmt(t.parteExo * 100, 0)} %`, `rigidez a la torsión: ${fmt(t.kSin, 0)} → ${fmt(t.kCon, 0)} m⁶`)),
     h('p', { class: 'nota chica' }, 'Es una cuenta aparte: la planilla de la cátedra sigue con los tabiques solos. Si el giro baja mucho, la corrección por torsión de cada tabique (columna N de la rototraslación) baja en la misma proporción.'));
+  return s.el;
+}
+
+/** ficha M: la malla es un tubo cerrado; su rigidez al giro sale del reticulado espacial y entra a la rototraslación */
+function seccionTorsionMalla(def: ExoDef): HTMLElement | null {
+  const dir = estado.dir, otra = dir === 'A' ? 'B' : 'A', dp = datosExo(dir, def), dq = datosExo(otra, def);
+  const r = dir === 'A' ? estado.calculo.valores.rotA : estado.calculo.valores.rotB;
+  const s = seccion('Torsión con el exo');
+  const Jg = exoActual().jGiroMalla(def);
+  if (!dp || !dq || !r || !(Jg > 0)) { s.cuerpo.append(h('p', { class: 'nota' }, 'Todavía no se puede calcular la rigidez de la malla al giro (falta la rototraslación o la malla no frena el giro de algún piso).')); return s.el; }
+  const JA = dp.r.caras[0]?.Jeq ?? 0, JB = dq.r.caras[0]?.Jeq ?? 0;
+  const t = torsionConExo(r, JA, 0, JB, 0, { Jgiro: Jg });
+  if (!(t.kSin > 0)) return null;
+  const simetrica = !isFinite(t.giro) || Math.abs(t.mtSin) < 1e-6, giroMismo = t.kSin / t.kCon;
+  const R = Math.sqrt(Jg / Math.max(1e-9, (JA + JB) / 2));
+  s.cuerpo.append(
+    h('p', { class: 'nota' }, `La malla rodea toda la planta: es un tubo cerrado y frena el giro por sí misma, con las diagonales trabajando a lo largo de la fachada. Su rigidez al giro sale del reticulado espacial de la malla (cada losa gira entera y cada nudo sube o baja libre), con un torsor de la forma del viento, comparada con una ménsula de hormigón en todos los anillos (mínimos cuadrados): Σ J · d² equivalente = ${fmt(Jg, 0)} m⁶, como una pieza de ${fmt((JA + JB) / 2, 0)} m⁴ a ${fmt(R, 1)} m del centro. Además, la malla entra como una pieza más en cada sentido, en el medio de la planta, con su J equivalente (${fmt(JA, 0)} m⁴ con el viento ${dir}).`),
+    h('div', { class: 'kpis' },
+      kpi('Centro de rigidez', `${fmt(t.crSin, 2)} → ${fmt(t.crCon, 2)} m`, 'desde el eje de la torre: la malla lo lleva al medio'),
+      kpi('Torsor Q · e', `${fmt(t.mtSin, 0)} → ${fmt(t.mtCon, 0)} tm`, 'baja porque el centro de rigidez se acerca a donde actúa el viento'),
+      simetrica ? kpi('Giro con un mismo torsor', `${fmt(giroMismo * 100, 0)} %`, 'del que tiene sin la malla: la torre es simétrica y con el viento de frente no hay torsor, pero con el viento corrido (casos 2 y 4 del CIRSOC) o de cuarto sí', colorEstado(true))
+        : kpi('Giro de la planta', `${fmt(t.giro * 100, 0)} %`, `del que tiene sin la malla (torsor / rigidez a la torsión); con un mismo torsor, ${fmt(giroMismo * 100, 0)} %`, colorEstado(t.giro < 1)),
+      kpi('Torsión que toma la malla', `${fmt(t.parteExo * 100, 0)} %`, `rigidez a la torsión: ${fmt(t.kSin, 0)} → ${fmt(t.kCon, 0)} m⁶`)),
+    h('p', { class: 'nota chica' }, 'Es una cuenta aparte: la planilla de la cátedra sigue con los tabiques solos. Para la rigidez al giro, la malla se toma articulada de anillo a anillo (sin la flexión de las barras en los pisos que cruzan), del lado seguro.'));
   return s.el;
 }
 
@@ -331,12 +351,13 @@ export function panelExo(c: H) {
     const n = d.r.u.length - 1, fl = flechaExo(d), relS = fl.u / (d.r.u[n] || 1);
     const reglamento = !!vientoReglamento() && def.material !== 'hormigon';
     const malos = reglamento ? verif301(d).filter(x => !x.verifica).length : d.r.controles.filter(x => x.estado !== 'verifica').length;
+    const total = reglamento ? verif301(d).length : d.r.controles.length;
     if (vientoReglamento()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'fem' ? 'FEM' : 'CIRSOC'}: el viento de cada piso es el del CIRSOC 102-25 (de resistencia${estado.config.metodo === 'fem' ? ', con la frecuencia del modelo' : ''}), el ΣJ de los tabiques es el de la sección real, las barras se verifican con el CIRSOC 301/302 y las combinaciones del 101-25, y el desplazamiento se controla como deriva con el viento de servicio.`));
     c.append(h('div', { class: 'kpis' },
       kpi(vientoReglamento() ? 'Deriva de servicio' : 'Flecha azotea', `${fmt(fl.u * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * relS * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · ${fl.texto} = ${fmt(fl.lim * 1000, 0)}`, colorEstado(fl.u <= fl.lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : def.tipo === 'M' ? 'J equivalente de la malla' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
-      kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
+      kpi(def.tipo === 'M' && reglamento ? 'Barras, con los anillos' : 'Barras', `${total - malos} de ${total}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
     if (def.tipo === 'M' && d.entrada.malla) {
       // pisos entre anillos que la malla frena mal (sin tabiques en ese sentido, o donde la malla se cierra arriba)
       const flojos = pisosFlojos(d.entrada.malla, d.entrada.zs, d.r.u);
@@ -359,12 +380,13 @@ export function panelExo(c: H) {
     const dimensionar = () => {
       const r = dimensionarExo(def, ens);
       const t = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
-      estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.columna = r.def.columna; x.diagonal = r.def.diagonal; x.viga = r.def.viga; if (x.tipo === 'E') { x.mastil = r.def.mastil; x.tramos = r.def.tramos; } } });
+      estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.columna = r.def.columna; x.diagonal = r.def.diagonal; x.viga = r.def.viga; if (r.def.tramos) x.tramos = r.def.tramos; if (x.tipo === 'E') x.mastil = r.def.mastil; } });
       const msg = document.getElementById('mensaje');
-      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
+      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm${r.def.tramos?.some(t => t.clase !== 'mastil') ? `; por tramos de altura: ${r.def.tramos.filter(t => t.clase !== 'mastil').map(tr => `${tr.clase === 'viga' && def.tipo === 'M' ? 'anillos' : `${tr.clase}s`} desde ${fmt(tr.desde, 1)} m ${t(tr.sec)}`).join(', ')}` : ''} · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
+    if (def.tipo === 'M' && ens.length === 2) c.append(seccionBarridoMalla(def), botonPyniteMalla(def));
     const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });

@@ -22,7 +22,9 @@ const de = (id: string, sim: string, titulo: string, externo: string, valor: (r:
   ({ id, sim, titulo, ec: '', externo, valor, dec, unidad });
 
 /** fila de la azotea en las hojas «viento» y «M,NyQ» (la de mayor qz) */
-const filaAzotea = (r: RP) => { let k = 0; r.res.viento.qz.slice(0, 51).forEach((q, i) => { if (q > r.res.viento.qz[k]) k = i; }); return k; };
+// (PB en la fila 50 de la planilla; con más de 49 niveles en CIRSOC y FEM la tabla es más larga: 3 subsuelos debajo de PB)
+const filaPBDe = (r: RP) => Math.max(50, r.res.viento.qz.length - 4);
+const filaAzotea = (r: RP) => { let k = 0; r.res.viento.qz.slice(0, filaPBDe(r) + 1).forEach((q, i) => { if (q > r.res.viento.qz[k]) k = i; }); return k; };
 
 export function grafoPlanilla(datos: PlanillaDatos, piezas: PiezaEquivalente[], filaPB: number, hormigon: string, motor: Motor, s: SelPlanilla): Grafo<PlanillaDatos, RP> {
   const dir = s.dir, A = dir === 'A';
@@ -173,7 +175,7 @@ export function tablaNivelesPlanilla(r: RP): H {
   const t = h('table', { class: 'tabla chica' });
   t.append(h('thead', {}, h('tr', {}, ...['fila', 'z (m)', 'Kz', 'qz (N/m²)', 'p (t/m²)', 'W (t)', 'Q (t)', 'M (tm)'].map(x => h('th', {}, x)))));
   const tb = h('tbody');
-  r.res.mnyq.B.forEach((z, k) => { if (k > 50 || !r.res.viento.qz[k]) return; tb.append(h('tr', {}, h('td', {}, String(k + 4)), ...[[z, 2], [r.res.viento.Kz[k], 3], [r.res.viento.qz[k], 0], [r.res.viento.S[k], 4], [r.res.mnyq.H[k], 2], [r.res.mnyq.I[k], 2], [r.res.mnyq.J[k], 0]].map(([v, d]) => h('td', { class: 'n' }, fmt(v, d))))); });
+  r.res.mnyq.B.forEach((z, k) => { if (k > filaPBDe(r) || !r.res.viento.qz[k]) return; tb.append(h('tr', {}, h('td', {}, String(k + 4)), ...[[z, 2], [r.res.viento.Kz[k], 3], [r.res.viento.qz[k], 0], [r.res.viento.S[k], 4], [r.res.mnyq.H[k], 2], [r.res.mnyq.I[k], 2], [r.res.mnyq.J[k], 0]].map(([v, d]) => h('td', { class: 'n' }, fmt(v, d))))); });
   t.append(tb);
   return h('div', { class: 'scroll' }, t);
 }

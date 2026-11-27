@@ -15,7 +15,7 @@
  *    flexocompresión lee el módulo que corresponde; si no alcanzan, se usa otra fila y la app calcula la
  *    flexocompresión con el módulo correcto (columna «Guía») y avisa.
  */
-import { FLEX_D_FIJO, FLEX_FILA_NUEVO, N_FILAS, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
+import { FLEX_D_FIJO, FLEX_FILA_NUEVO, RANURA_FILA_NUEVO, TIPO_FILA_PARALELOS, calcFilaJ, type FilaJ, type PlanillaDatos, type TipoFila } from './planilla';
 import { config } from './config';
 import { areaMuro, dInterior, entraEnCalculo, NOMBRE_CLASE, rectangulos, tipoDe, type ClasePieza, type Muro, type Proyecto } from './modelo';
 import { acople, propiedades, rectanguloEquivalente } from './perfil';
@@ -630,27 +630,30 @@ export function aPlanilla(p: Proyecto): Asignacion {
   if (iPB < 0) avisos.push('No hay ningún nivel con cota ≥ 0 (PB).');
   const arriba = niveles.slice(0, iPB + 1);
   const subs = niveles.slice(iPB + 1);
-  // la fila 4 de M,NyQ es siempre 0: el nivel más alto que entra es el de la fila 5 → 49 niveles sobre PB
-  if (arriba.length - 1 > 49) avisos.push(`La planilla admite hasta 49 niveles sobre PB (este proyecto tiene ${arriba.length - 1}): el más alto cae en la fila 4 de «M,NyQ», que la planilla deja siempre en 0, y el corte, el momento y el vuelco salen mal. Sacá niveles o juntá los de arriba.`);
+  // la fila 4 de M,NyQ es siempre 0: el nivel más alto que entra es el de la fila 5 → 49 niveles sobre PB. Con filas
+  // libres (CIRSOC y FEM) la tabla crece: PB va en la fila P (50 o más) y los subsuelos debajo
+  const P = config.filasLibres ? Math.max(50, arriba.length) : 50, nF = P + 4;
+  if (arriba.length - 1 > 49 && config.filasLibres) avisos.push(`Este proyecto tiene ${arriba.length - 1} niveles sobre PB: con CIRSOC y FEM la app los calcula todos, pero la planilla de la cátedra (el Excel) llega a 49. La planilla exportada y los métodos Planilla y Guía no son válidos para esta torre.`);
+  if (arriba.length - 1 > 49 && !config.filasLibres) avisos.push(`La planilla admite hasta 49 niveles sobre PB (este proyecto tiene ${arriba.length - 1}): el más alto cae en la fila 4 de «M,NyQ», que la planilla deja siempre en 0, y el corte, el momento y el vuelco salen mal. Sacá niveles o juntá los de arriba.`);
   if (subs.length > 3) avisos.push('La planilla admite hasta 3 subsuelos.');
   const conTramos = p.muros.filter(m => m.espesores?.length).map(m => m.id);
   if (conTramos.length) avisos.push(`${conTramos.length === 1 ? 'El muro' : 'Los muros'} ${conTramos.slice(0, 6).join(', ')}${conTramos.length > 6 ? '…' : ''} cambia${conTramos.length > 1 ? 'n' : ''} de espesor en altura: la hoja J de la planilla usa el espesor de PB; la app calcula el J de cada piso, el peso y la deformada con cada tramo (etapas 05 y botón J del 3D).`);
   if (subs.length < 3) avisos.push(`La planilla tiene 3 subsuelos fijos; ${3 - subs.length === 1 ? 'el que falta se carga' : `los ${3 - subs.length} que faltan se cargan`} con altura 0 y sin superficie.`);
 
-  const Z = new Array<number>(N_FILAS).fill(0);
-  const C = new Array<number | null>(N_FILAS).fill(null), D = new Array<number | null>(N_FILAS).fill(null);
-  const E = new Array<number | null>(N_FILAS).fill(null), F = new Array<number | null>(N_FILAS).fill(null);
+  const Z = new Array<number>(nF).fill(0);
+  const C = new Array<number | null>(nF).fill(null), D = new Array<number | null>(nF).fill(null);
+  const E = new Array<number | null>(nF).fill(null), F = new Array<number | null>(nF).fill(null);
   E[0] = 0; F[0] = 0; C[0] = 0;
   const filaNivel: number[] = [];
-  const kTop = 50 - (arriba.length - 1);
+  const kTop = P - (arriba.length - 1);
   arriba.forEach((n, j) => { const k = kTop + j; Z[k] = n.cota; filaNivel.push(k); });
   for (let j = 0; j < 3; j++) {
-    const k = 51 + j;
+    const k = P + 1 + j;
     if (j < subs.length) { Z[k] = subs[j].cota; filaNivel.push(k); }
-    else { Z[k] = j > 0 ? Z[k - 1] : Z[50]; E[k] = 0; F[k] = 0; }
+    else { Z[k] = j > 0 ? Z[k - 1] : Z[P]; E[k] = 0; F[k] = 0; }
   }
   // último piso: C y D escritos a mano (medio entrepiso más el parapeto), y D = 0 en la fila de arriba
-  if (kTop >= 1 && kTop <= 50) {
+  if (kTop >= 1 && kTop <= P) {
     const ent = arriba.length > 1 ? arriba[0].cota - arriba[1].cota : 0;
     C[kTop] = ent; D[kTop] = r4(ent / 2 + Math.max(0, p.sitio.parapeto ?? 0)); D[kTop - 1] = 0;
   }

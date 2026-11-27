@@ -118,16 +118,18 @@ export function jMinimoConAlturaTotal(j: JMinimo, h: number): JMinimo {
 /** fuerza del viento sobre la parte expuesta de PB (criterio C, mixto) y su altura sobre la fundación */
 export function fuerzaPB(d: PlanillaDatos, filaPB: number): { W: number; brazo: number; altura: number; p: number } {
   const v = d.viento, Z = d.viento.Z;
-  if (filaPB < 1 || filaPB > 50) return { W: 0, brazo: 0, altura: 0, p: 0 };
+  // (PB en la fila 50 de la planilla; con filas libres, más abajo: la tabla tiene 3 subsuelos debajo de PB)
+  const fPB = Math.max(50, Z.length - 4);
+  if (filaPB < 1 || filaPB > fPB) return { W: 0, brazo: 0, altura: 0, p: 0 };
   const zPB = Z[filaPB] ?? 0, zArriba = Z[filaPB - 1] ?? zPB;
   const altura = Math.max(0, (zArriba - zPB) / 2);                          // de PB a la mitad del entrepiso
   const Kz = (z: number) => 2.01 * Math.pow(Math.max(z, 5) / v.zg, 2 / v.alfa);
   const qz = (z: number) => 0.613 * v.Kzt * v.Kd * v.V ** 2 * v.I * Kz(z);
-  const zs = Z.slice(0, 51).filter(z => z > 0);
+  const zs = Z.slice(0, fPB + 1).filter(z => z > 0);
   const qh = zs.length ? qz(Math.max(...zs)) : 0;
   const p = (qz(zPB) * v.G * v.Cpb - qh * v.G * v.Cps) / 10000;             // t/m², con Kz de z = 5 m
   let B = 0; for (let k = 0; k <= filaPB; k++) if (d.mnyq.E[k] != null) B = d.mnyq.E[k]!;
-  const zFund = Math.min(...Z.slice(filaPB, 54));
+  const zFund = Math.min(...Z.slice(filaPB, fPB + 4));
   return { W: altura * B * p, brazo: zPB - zFund, altura, p };
 }
 /**
