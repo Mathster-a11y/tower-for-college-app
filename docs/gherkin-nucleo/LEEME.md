@@ -44,9 +44,10 @@ lo que no es estructural y hasta qué altura llega cada cosa. Coordenadas en met
   nudo, corrida unos 0,3 m).
 - De los dudosos queda solo A2_inf (el piso del ascensor A′); F1 y F2 quedan en «descartados».
 
-## Pendiente antes de pasarlo a la app
+- Alturas: toda la estructura (anillo, columnas y muros) hasta la losa del 38º (+157,70 m); solo las 4 columnas
+  centrales (D y S) siguen hasta la losa del 39º (+161,85 m). Ver `progreso_6_corte.jpg`.
+- Las columnas D giran unos 35° (horario en la mitad izquierda), como las marcó el usuario sobre el trazado v3.
 
-- Hasta qué losa suben el anillo y los muros: 38º o 39º. `progreso_4_corte.jpg` es un corte del ejemplo actual con el
-  núcleo nuevo. En el 38º la losa tiene 15,05 m de radio y sobran 2,40 m entre la cara del anillo (12,65 m) y la piel;
-  en el 39º sobran 0,60 m; la losa del 40º (11,43 m) queda adentro del anillo, así que el anillo no puede llegar ahí.
-- Los scripts leen las láminas de la carpeta de subidas de la sesión; para rehacerlos hay que apuntar `U` a las imágenes.
+## Pendiente
+
+- Pasarlo al ejemplo `ejemploGherkin`, en lugar del tubo de Ø 22 m (con el pedido explícito del usuario).

@@ -27,8 +27,8 @@ def panel(ox,oy,S,xr,z0,z1,titulo,detalle):
   for s in (-1,1):
     for (xc,w,col,op) in [(R95,LADO,NAR,1),(4.56,LADO,NAR,0.45),(3.56,LADO,NAR,0.45),(9.66,0.33,VER,1)]:
       xa=X(s*xc-w/2); 
-      o.append(f'<rect x="{xa:.1f}" y="{Z(157.7):.1f}" width="{w*S:.1f}" height="{(157.7-0)*S:.1f}" fill="{col}" opacity="{op}"/>')
-      o.append(f'<rect x="{xa:.1f}" y="{Z(161.85):.1f}" width="{w*S:.1f}" height="{4.15*S:.1f}" fill="url(#ray)" stroke="{col}" stroke-width="1" opacity="{max(op,0.7)}"/>')
+      zt=161.85 if op<1 else 157.7
+      o.append(f'<rect x="{xa:.1f}" y="{Z(zt):.1f}" width="{w*S:.1f}" height="{zt*S:.1f}" fill="{col}" opacity="{op}"/>')
     # banco A (detrás, en vista)
     o.append(f'<rect x="{min(X(s*1.55),X(s*4.95)):.1f}" y="{Z(157.7):.1f}" width="{3.4*S:.1f}" height="{157.7*S:.1f}" fill="{VER}" opacity="0.12"/>')
   # losas
@@ -52,7 +52,7 @@ o=['<defs><pattern id="ray" width="6" height="6" patternUnits="userSpaceOnUse" p
 o+=panel(70,50,4.2,31,-2,182,'Corte E–O del ejemplo, mirando al norte',False)
 o+=panel(420,50,22,21,133,182,'Detalle: del 32º a la cúpula',True)
 Wt=420+42*22+30; Ht=50+49*22+130
-leg=[('rect',NAR,1,'columna del anillo cortada (R95, 0,70 m)'),('rect',NAR,0.45,'columnas D y S, en vista'),('rect',VER,1,'muro W cortado'),('rect',VER,0.12,'banco de ascensores A, en vista'),('ray',NAR,1,'opción: seguir del 38º al 39º'),('dash',VIO,1,'tubo Ø 22 m del ejemplo actual'),('dot',NAR,1,'cara exterior del anillo (r = 12,65 m)')]
+leg=[('rect',NAR,1,'columna del anillo cortada (R95, 0,70 m, hasta el 38º)'),('rect',NAR,0.45,'columnas D y S, en vista (hasta el 39º)'),('rect',VER,1,'muro W cortado'),('rect',VER,0.12,'banco de ascensores A, en vista'),('dash',VIO,1,'tubo Ø 22 m del ejemplo actual'),('dot',NAR,1,'cara exterior del anillo (r = 12,65 m)')]
 y=50+49*22+40; x=70
 for i,(k,c,op,t) in enumerate(leg):
   xx=x+(i%3)*400; yy=y+(i//3)*28
