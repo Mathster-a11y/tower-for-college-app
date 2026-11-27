@@ -7,7 +7,7 @@
  * (se dice en el nombre del nivel). Las cotas de los módulos del exo (exo.cortes) caen siempre en un nivel.
  */
 import type { Muro, Nivel, Proyecto } from './modelo';
-import { nucleoGherkin } from './nucleoGherkin';
+import { nucleoGherkin, remate40 } from './nucleoGherkin';
 
 const FT = 0.3048;
 const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -301,7 +301,10 @@ export function ejemploGherkin(): Proyecto {
   // (niveles sin losa: solo carpintería; no se dibuja losa ni suma su peso)
   niveles.push({ nombre: 'Lente (179,77 m)', cota: hLente, B: lado(2.4), L: lado(2.4), silueta: circulo(2.4), carpinteria: circulo(2.4), sinLosa: true });
   for (let j = 1; j < cupula.length; j++) niveles.push({ ...nivel(`Cúpula de vidrio (${String(cupula[j]).replace('.', ',')} m)`, cupula[j], cupula[j - 1], null), sinLosa: true });
-  niveles.push(nivel(`40º (${uso(40)})`, hTop, cupula[cupula.length - 1], D(hTop)));
+  // el 40º es un entrepiso en D (planta del 40º de Foster): arco norte de 9,76 m de radio y borde sur más plano, que llega
+  // a 5,9 m del centro; al sur queda el restaurante del 39º en doble altura. Su borde se ata al diagrid con puntales
+  const entrepiso40 = [{ x: 9.2, y: -3.2, b: 0.517 }, { x: 0, y: 9.8, b: 0.517 }, { x: -9.2, y: -3.2, b: 0.1505 }, { x: 0, y: -5.9, b: 0.1505 }];
+  niveles.push(nivel(`40º (${uso(40)})`, hTop, cupula[cupula.length - 1], D(hTop), entrepiso40));
   for (let k = 39; k >= 1; k--) niveles.push(nivel(`${k}º (${uso(k)})`, k * dz, (k + 1) * dz, D(k * dz), conPozos(k) ? losaConPozos(k) : undefined));
   niveles.push(nivel('PB (hall de doble altura)', 0, dz, D(0)), { nombre: 'Subsuelo', cota: -6.15 });
   // un rombo cada 4 pisos (anillos de nudos cada 2 pisos, 8,3 m); el último anillo, en el piso 40 (166 m)
@@ -323,7 +326,8 @@ export function ejemploGherkin(): Proyecto {
     // núcleo relevado en las plantas de Foster (docs/gherkin-nucleo): muros de 25 cm y columnas de 0,70 m; todo hasta la
     // losa del 38º; la escalera, el ascensor chico, W, D, S y P hasta la del 39º. La losa del 40º apoya en el diagrid
     // (W2, el muro corto que va de la columna de 95° hacia la de 109°, de 35 cm: con 25 cm pedía más del 4 % de acero)
-    muros: nucleoGherkin({ z38: zPiso(38), z39: zPiso(39), espesorDe: { W2: 0.35 } }),
+    // y lo que lleva el entrepiso del 40º (pozos, ascensor expreso, columnas redondas y escalera caracol); D y S llegan al 40º
+    muros: [...nucleoGherkin({ z38: zPiso(38), z39: zPiso(39), z40: hTop, espesorDe: { W2: 0.35 } }), ...remate40({ z21: zPiso(21), z38: zPiso(38), z39: zPiso(39), z40: hTop })],
     exo: {
       tipo: 'A', separacion: 0, modulo: 4, cortes, anchoVariable: true, pasoH: 9.65, circular: { nudos: 18, hasta: hTop },
       columna: { b: 0.15, e: 0.008 }, diagonal: { b: 0.5, e: 0.06 }, viga: { b: 0.3, e: 0.016 },
@@ -339,7 +343,8 @@ export function ejemploGherkin(): Proyecto {
         'Cálculo: las fichas de la etapa 08 son caras planas, así que el diagrid circular se calcula como un tubo cuadrado de la misma área (lado 0,886 D), con nudos cada 9,65 m en la cara; el viento sobre el cuadrado es mayor que sobre el cilindro (del lado seguro). El 3D y la planta dibujan el diagrid circular real; el color de sus barras es el esfuerzo del tubo circular con el momento que toma el exo (rojo tracción, azul compresión) más el peso de las losas.',
         'Tubos de 508 mm × 40 mm de PB al piso 2 y de 273 mm × 12,5 mm en los pisos 36 a 38 (Archinomy). La app usa cajones cuadrados verificados con el CIRSOC 301/302 y el viento del 102-25: 0,50 m × 60 mm hasta el piso 13, 0,45 × 50 mm hasta el 25, 0,40 × 30 mm hasta el 33 y 0,30 × 20 mm arriba. Anillos: cajón de 0,30 m × 16 mm (supuesto).',
         'Núcleo circular de servicios y ascensores, de columnas de acero que llevan solo carga vertical (el viento lo toma entero el diagrid): Arup, Archinomy. Relevado en las plantas de Foster: se superpusieron las de oficinas bajas, medias y altas, alineadas por sus columnas (coinciden con 2 a 5 cm), y quedó lo que se repite en todas. Un anillo de 16 columnas a 12,3 m del centro, giradas con su radio; cuatro columnas centrales (D, en el nudo de los ascensores, y S, del lado del hall); y, de cada lado, el banco de 3 ascensores, un ascensor suelto, la escalera, un ascensor chico y dos muros hacia el anillo. Lo que cambia de planta a planta (baños, ascensores bajos, locales) no entra. Datos e imágenes en docs/gherkin-nucleo.',
-        'Núcleo en la app: muros de 25 cm (W2, el corto junto a la columna de 95°, de 35 cm: con 25 cm pedía más del 4 % de acero) y columnas de 0,70 × 0,70 m de hormigón (en la obra son de acero). El anillo, los bancos de ascensores y el resto llegan a la losa del 38º; las escaleras, el ascensor chico, el muro W y las columnas D, S y P siguen hasta la del 39º (son lo que aparece en la planta del restaurante; el anillo ya no está) y el 40º apoya en el diagrid. Los muros de cada mitad forman una pieza que toma viento junto con el diagrid (en la obra lo toma solo el diagrid); las columnas llevan solo carga vertical. Las losas pasan enteras por el medio del núcleo.',
+        'Núcleo en la app: muros de 25 cm (W2, el corto junto a la columna de 95°, de 35 cm: con 25 cm pedía más del 4 % de acero) y columnas de 0,70 × 0,70 m de hormigón (en la obra son de acero). El anillo, los bancos de ascensores y el resto llegan a la losa del 38º; las escaleras, el ascensor chico, el muro W y la columna P siguen hasta la del 39º (son lo que aparece en la planta del restaurante; el anillo ya no está), y D y S hasta la del 40º. Los muros de cada mitad forman una pieza que toma viento junto con el diagrid (en la obra lo toma solo el diagrid); las columnas llevan solo carga vertical. Las losas pasan enteras por el medio del núcleo.',
+        'Entrepiso del 40º (el bar bajo la cúpula), de las plantas del 39º y del 40º: es una losa en D (arco norte de 9,76 m de radio; al sur queda el restaurante en doble altura) atada al diagrid con puntales radiales. Apoya en D y S, en dos pozos de ascensor junto a S (de la transferencia del 21º al 40º; en las oficinas bajas no están), en el ascensor expreso al restaurante (del 38º), en dos columnas redondas de 0,55 m bajo su borde norte y en la escalera caracol que sube al bar (muro curvo de 2,86 m de radio y tambor de 1,3 m). Esas piezas arrancan arriba de la fundación: llevan peso pero no entran al cálculo de viento. Los puntales no se modelan: el borde apoya en el anillo del diagrid del 40º (losas apoyadas en el exo).',
         'Losas: compuestas de 160 mm sobre chapa Ribdeck 80, con vigas radiales cada 10° del núcleo a la fachada y una viga radial que ata cada nudo al núcleo; sin columnas interiores (New Steel Construction). El diagrid lleva una franja de 7 m junto a la fachada (supuesto), con 0,4 t/m² de peso y 0,25 t/m² de sobrecarga.',
         'Pozos de luz: cada piso gira 5° y deja seis pozos triangulares que suben en espiral (Harvard Design Magazine). Acá la losa termina en seis triángulos abiertos a la fachada (son su contorno, no huecos): cada uno va de un nudo del diagrid al siguiente (20°) con la punta al 63 % del radio, y giran 5° por piso con las espirales, así que sus vértices caen sobre las diagonales (plantas de Foster y del folleto), en las oficinas del 2º al 30º; el 16º es entero (folleto, 2024) y el 31º ya no los tiene (planta del piso 31).',
         'Áreas útiles del folleto (CBRE, 2024): piso 16, 19 558 ft² (1817 m²); 22, 17 878; 30, 12 226 ft² (1136 m²). Ascensores en tres tramos (medio, alto y expreso al restaurante), con transferencia en los pisos 21 y 22; 2,75 m de piso a cielorraso.',
