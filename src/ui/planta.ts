@@ -25,7 +25,7 @@ import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { distanciaAlCentro } from '../engine/distanciaCentro';
 import { jEnDireccion, propiedadesSeccion, seccionReal, unionHuellas } from '../engine/seccionPieza';
-import { aTope, criterioDelProyecto, esColumna, rectsEscuadra } from '../engine/escuadra';
+import { aEscuadra, aTope, criterioDelProyecto, esColumna, rectsEscuadra } from '../engine/escuadra';
 import { diferencia } from '../engine/poligonos';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
@@ -1917,6 +1917,15 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.className = 'calco-panel areas-panel';
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
+  // «Muros a escuadra (D)» (Ayudas): la planta dibuja los muros como entran al cálculo con el criterio D (cada uno un
+  // rectángulo a escuadra que no toca a ningún otro elemento) y el espacio muerto rayado. Por defecto, los encuentros
+  // a tope (A) o a inglete (B)
+  let verD = false;
+  const bVerD = document.createElement('button');
+  bVerD.type = 'button'; bVerD.textContent = 'Muros a escuadra (D)';
+  bVerD.title = 'Ver los muros como rectángulos a escuadra que no se tocan (criterio D), con el espacio muerto rayado. Apagado: los encuentros a tope (A) o a inglete (B), como se diseñan.';
+  bVerD.setAttribute('aria-pressed', 'false');
+  bVerD.addEventListener('click', () => { verD = !verD; bVerD.setAttribute('aria-pressed', String(verD)); mensaje(verD ? 'Vista de muros a escuadra (D): lo rayado es espacio muerto, que no se calcula con ese criterio.' : 'Vista de los encuentros como se diseñan (A o B).'); dibujar(); });
   // «Sección de cálculo» (Ayudas): lo que entra al cálculo de la pieza del muro elegido (en el viento elegido): cada
   // muro con sus medidas reales, la sección sin superposiciones (su contorno) y las partes que se pisan, con el área, el
   // baricentro y el J que usa el cálculo y lo que va a la hoja J
@@ -2150,7 +2159,7 @@ export function montarPlanta(cont: HTMLElement) {
   bJuntas.addEventListener('click', () => { estado.juntasLimpias = !estado.juntasLimpias; try { localStorage.setItem('torre3d.juntas', estado.juntasLimpias ? '1' : '0'); } catch { /* */ } pintarJuntas(); dibujar(); });
   pintarJuntas();
   // «Ayudas»: guías, cotas y grilla (antes en la barra) y lo que se usa menos
-  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bSec, bDist, bJuntas);
+  listaMas.append(gui.boton, ...col.botones.slice(1), bGrilla, bCalco, bAreas, bSec, bVerD, bDist, bJuntas);
   bMas.addEventListener('click', ev => { ev.stopPropagation(); listaMas.hidden = !listaMas.hidden; { const r = bMas.getBoundingClientRect(), c = cont.getBoundingClientRect(); listaMas.style.left = `${Math.max(4, Math.min(r.left - c.left, c.width - 170))}px`; listaMas.style.top = `${r.bottom - c.top + 4}px`; } bMas.setAttribute('aria-expanded', String(!listaMas.hidden)); });
   listaMas.addEventListener('click', () => { setTimeout(() => { listaMas.hidden = true; }, 0); });
   document.addEventListener('pointerdown', ev => { if (!mas.contains(ev.target as Node) && !listaMas.contains(ev.target as Node)) listaMas.hidden = true; });
@@ -2788,7 +2797,26 @@ export function montarPlanta(cont: HTMLElement) {
     const limpias = estado.juntasLimpias ? huellasLimpias(msNivel, juntasN, p.juntas ?? {}, estado.dir) : new Map<string, { x: number; y: number }[][]>();
     // lo que todavía se pisa (puntas corridas, muros que atraviesan columnas): resuelto como en el cálculo (A): las
     // columnas enteras y cada muro contra la cara del que pasa; se dibujan así los muros que cambian
-    if (estado.juntasLimpias) {
+    if (verD) {
+      // vista D: cada muro a escuadra; el espacio muerto (lo que el diseño ocupa y D no) rayado, debajo de los muros
+      const res = aTope(msNivel, p.juntas ?? {}, estado.dir), esc = aEscuadra(msNivel);
+      const gm = el('g', { class: 'sec-calculo vista-d' });
+      if (!svg.querySelector('#sec-muerto')) {
+        const defs = el('defs'), pt = el('pattern', { id: 'sec-muerto', patternUnits: 'userSpaceOnUse', width: 7, height: 7, patternTransform: 'rotate(45)' });
+        pt.appendChild(el('rect', { width: 7, height: 7, class: 'sec-muerto-fondo' })); pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 7, class: 'sec-muerto-linea' }));
+        defs.appendChild(pt); svg.appendChild(defs);
+      }
+      const an = (pg: { x: number; y: number }[]) => [pg.map(q => [q.x, q.y] as [number, number])];
+      msNivel.forEach(m => {
+        if (esColumna(m)) return;
+        const d = esc.rects.get(m.id) ?? [];
+        limpias.set(m.id, d);
+        const disenio = (res.rects.get(m.id) ?? []).map(an);
+        const muerto = disenio.length ? (d.length ? diferencia(disenio, ...d.map(an)) ?? [] : disenio) : [];
+        muerto.forEach(pg => gm.appendChild(el('path', { d: pg.map(r => 'M' + r.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('L') + 'Z').join(''), class: 'sec-muerto', 'fill-rule': 'evenodd' })));
+      });
+      svg.appendChild(gm);
+    } else if (estado.juntasLimpias) {
       const res = aTope(msNivel, p.juntas ?? {}, estado.dir);
       msNivel.forEach(m => {
         const r = res.rects.get(m.id);
