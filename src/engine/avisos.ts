@@ -11,12 +11,13 @@
  *
  * Los niveles se agrupan: «del 3º al 12º» en vez de un aviso por piso.
  */
+import { seccionReal } from './seccionPieza';
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { comunLosas, tramoEn } from './carpinteria';
 import { contornoEnvolventeEnZ } from './envolvente';
 import { cajaSilueta, carpinteriaDeNivel, contornoAlViento, medidasAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
-export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
+export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza' | 'muros-superpuestos';
 export interface AvisoDiseno {
   tipo: TipoAviso;
   /** texto para el usuario */
@@ -164,6 +165,20 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     const [plan, caja] = clave.split('|');
     out.push({ tipo: 'bl-caja', cotas, texto: `La losa mide ${caja.replace('×', ' × ').replace(/\./g, ',')} m ${rangoNiveles(p, cotas)}, pero la planilla calcula el viento con B × L = ${plan.replace('×', ' × ').replace(/\./g, ',')} m.`, arreglo: 'En la carta de la losa: «Usar la caja como B y L» (el ancho que enfrenta el viento) o, en una planta curva, «Igual área como B y L» (conserva el área de la planta). También se pueden aplicar a todos los niveles, o hacer que el perfil escriba B y L.' });
   });
+  // muros de una misma pieza que se pisan sin estar unidos: el cálculo usa su unión (no cuenta dos veces lo que se
+  // superpone), pero el dibujo queda confuso y el muro no tiene las medidas que parece: se avisa para unirlos
+  {
+    const porPieza = new Map<string, Muro[]>();
+    p.muros.filter(m => m.llega && m.piezaA).forEach(m => porPieza.set(m.piezaA, [...(porPieza.get(m.piezaA) ?? []), m]));
+    porPieza.forEach((ms, nombre) => {
+      const sr = seccionReal(ms);
+      if (!sr) return;
+      const f2 = (v: number) => v.toFixed(2).replace('.', ',');
+      out.push({ tipo: 'muros-superpuestos', muro: ms[0].id, muros: ms.map(m => m.id), cotas: [],
+        texto: `En la pieza ${nombre}, ${sr.superposiciones.length === 1 ? 'dos muros se pisan' : `hay ${sr.superposiciones.length} lugares donde los muros se pisan`} (${f2(sr.superpuesta)} m² en total): el cálculo toma la sección sin repetir esa parte (${f2(sr.A)} m² en lugar de ${f2(sr.Asuma)} m²).`,
+        arreglo: 'Ayudas → «Sección de cálculo» muestra dónde se pisan. Alargá o acortá cada muro hasta la cara del otro, así el dibujo coincide con lo que se calcula.' });
+    });
+  }
   if (papeles) p.muros.forEach(m => {
     const pa = papeles[m.id];
     if (!pa || !m.llega || m.soloGravedad) return;

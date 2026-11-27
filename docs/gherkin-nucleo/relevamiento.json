@@ -32,7 +32,9 @@
    "giro": 0,
    "nota": "misma lámina y escala que p6; sin columnas del anillo para ajustar"
   },
-  "muros": "Cada muro se ajustó a la línea de tinta común de p1, p5 y p6 (dispersión menor a 1 cm en casi todos; W y W2 unos 8 cm porque en una lámina son más gruesos)"
+  "muros": "Cada muro se ajustó a la línea de tinta común de p1, p5 y p6 (dispersión menor a 1 cm en casi todos; W y W2 unos 8 cm porque en una lámina son más gruesos)",
+  "encuentros": "Las puntas de los muros se llevaron a los encuentros exactos (L: las dos puntas al cruce de los ejes; T: la punta sobre el eje del que pasa; en el nudo D, W, A_ext y A_inf al mismo punto), para que cierren en esquina o en T sin pisarse. Se movieron entre 1 y 47 cm.",
+  "tubos": "A_int (frente de los ascensores) y A2_sup sin las puertas, y B_inf alargado hasta la punta de B_ext: el banco de ascensores, el ascensor suelto y la escalera quedan cerrados, como funcionan estructuralmente (las puertas no se modelan)."
  },
  "columnas": [
   {
@@ -149,12 +151,12 @@
   {
    "id": "A_ext",
    "de": [
-    -4.95,
-    11.13
+    -4.946,
+    11.052
    ],
    "a": [
-    -4.56,
-    2.74
+    -4.556,
+    2.66
    ],
    "plantas": "p1 p5 p6",
    "nota": "banco A, cara exterior (el banco está girado unos 3,5°: se abre hacia afuera arriba)",
@@ -163,12 +165,12 @@
   {
    "id": "A_sup",
    "de": [
-    -5.13,
-    11.04
+    -4.946,
+    11.052
    ],
    "a": [
-    -2.01,
-    11.24
+    -2.045,
+    11.238
    ],
    "plantas": "p1 p5 p6",
    "hasta": "38º"
@@ -176,39 +178,25 @@
   {
    "id": "A_int",
    "de": [
-    -2.04,
-    11.15
+    -2.045,
+    11.238
    ],
    "a": [
-    -1.53,
-    2.67
+    -1.531,
+    2.68
    ],
    "plantas": "p1 p5 p6",
-   "vanos_y": [
-    [
-     10.33,
-     9.17
-    ],
-    [
-     7.67,
-     6.33
-    ],
-    [
-     4.83,
-     3.67
-    ]
-   ],
-   "nota": "frente de las puertas de los 3 ascensores",
+   "nota": "frente de las puertas de los 3 ascensores · cerrado: estructuralmente funciona como tubo (las puertas no se modelan)",
    "hasta": "38º"
   },
   {
    "id": "A_inf",
    "de": [
-    -4.6,
+    -4.556,
     2.66
    ],
    "a": [
-    -1.55,
+    -1.531,
     2.68
    ],
    "plantas": "p1 p5 p6",
@@ -217,12 +205,12 @@
   {
    "id": "A2_ext",
    "de": [
-    -7.68,
-    9.65
+    -7.673,
+    9.544
    ],
    "a": [
-    -7.45,
-    5.95
+    -7.452,
+    5.984
    ],
    "plantas": "p1 p5 p6",
    "nota": "ascensor suelto A′",
@@ -231,31 +219,26 @@
   {
    "id": "A2_sup",
    "de": [
-    -7.74,
-    9.54
+    -7.673,
+    9.544
    ],
    "a": [
-    -4.95,
-    9.72
+    -4.884,
+    9.724
    ],
    "plantas": "p1 p5 p6",
-   "vanos_x": [
-    [
-     -7.2,
-     -5.87
-    ]
-   ],
-   "hasta": "38º"
+   "hasta": "38º",
+   "nota": "cerrado: estructuralmente funciona como tubo (las puertas no se modelan)"
   },
   {
    "id": "B_sup",
    "de": [
-    -9.36,
-    7.08
+    -9.199,
+    6.988
    ],
    "a": [
-    -4.54,
-    4.31
+    -4.635,
+    4.365
    ],
    "plantas": "p1 p5 p6",
    "nota": "escalera, muro de arriba: de R51 al banco A",
@@ -264,12 +247,12 @@
   {
    "id": "B_ext",
    "de": [
-    -9.1,
-    7.16
+    -9.199,
+    6.988
    ],
    "a": [
-    -10.91,
-    4.02
+    -10.669,
+    4.438
    ],
    "plantas": "p1 p5 p6",
    "nota": "escalera, frente hacia la fachada",
@@ -278,26 +261,26 @@
   {
    "id": "B_inf",
    "de": [
-    -9.32,
-    3.66
+    -10.669,
+    4.438
    ],
    "a": [
-    -6.06,
-    1.78
+    -6.156,
+    1.835
    ],
    "plantas": "p1 p5 p6",
-   "nota": "escalera, muro de abajo = techo del ascensor C; termina en W",
+   "nota": "escalera, muro de abajo = techo del ascensor C; termina en W · alargado hasta B_ext: la escalera queda cerrada como tubo",
    "hasta": "40º"
   },
   {
    "id": "C_ext",
    "de": [
-    -9.42,
-    3.47
+    -9.333,
+    3.667
    ],
    "a": [
-    -10.2,
-    1.7
+    -10.208,
+    1.683
    ],
    "plantas": "p1 p5 p6",
    "hasta": "40º"
@@ -305,12 +288,12 @@
   {
    "id": "C_inf",
    "de": [
-    -10.22,
-    1.69
+    -10.208,
+    1.683
    ],
    "a": [
-    -8.48,
-    0.67
+    -8.45,
+    0.652
    ],
    "plantas": "p1 p5 p6",
    "nota": "termina en W",
@@ -319,12 +302,12 @@
   {
    "id": "W",
    "de": [
-    -12.2,
-    -1.28
+    -12.073,
+    -1.216
    ],
    "a": [
-    -4.65,
-    2.52
+    -4.556,
+    2.66
    ],
    "plantas": "p1 p5 p6",
    "nota": "de R95 al nudo D: borde de arriba del bloque de servicios",
@@ -333,8 +316,8 @@
   {
    "id": "W2",
    "de": [
-    -12.26,
-    -0.81
+    -12.073,
+    -1.216
    ],
    "a": [
     -10.77,
@@ -347,11 +330,11 @@
   {
    "id": "A2_inf",
    "de": [
-    -6.67,
+    -6.836,
     5.63
    ],
    "a": [
-    -4.7,
+    -4.694,
     5.63
    ],
    "plantas": "p1 p5 p6",

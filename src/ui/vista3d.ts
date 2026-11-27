@@ -10,9 +10,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
-import { enPlanta, polilinea } from '../engine/perfil';
+import { enPlanta } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { plantaDeNivel } from '../engine/silueta';
+import { circuloFino, discretizarCurva } from '../engine/curvas';
 import { prepararSecciones } from '../engine/loft';
 import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
@@ -58,6 +59,8 @@ function corrimientoDe(p: { niveles: { cota: number; dx?: number | null; dy?: nu
 class Prisma {
   malla: THREE.Mesh; bordes: THREE.LineSegments; conBordes = true;
   private base: number[] = []; private baseB: number[] = [];
+  /** normales de cada vértice, en planta (x, y, z arriba): suaves donde el contorno dobla poco (curvas), planas en las esquinas */
+  private norm: number[] = [];
   constructor(pol: P2[], zs: number[], mat: THREE.Material, matB: THREE.LineBasicMaterial, private zMover?: number, huecos: P2[][] = [], corr: (z: number) => P2 = corrimientoActual) {
     // torre con perfil (Diseño → Perfil): cada tramo se corre lo que se corre su nivel respecto de PB
     const cs = zs.slice(0, -1).map((z, k) => corr((z + zs[k + 1]) / 2));
@@ -65,12 +68,23 @@ class Prisma {
     let dk: P2 = { x: 0, y: 0 };
     const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => this.base.push(a[0] + dk.x, a[1] + dk.y, a[2], b[0] + dk.x, b[1] + dk.y, b[2], c[0] + dk.x, c[1] + dk.y, c[2]);
     const n = pol.length;
-    for (const anillo of [pol, ...huecos]) for (let k = 0; k + 1 < zs.length; k++) for (let i = 0; i < anillo.length; i++) {
-      const p = anillo[i], q = anillo[(i + 1) % anillo.length], z0 = zs[k], z1 = zs[k + 1];
-      dk = cs[k];
-      tri([p.x, p.y, z0], [q.x, q.y, z0], [q.x, q.y, z1]);
-      tri([p.x, p.y, z0], [q.x, q.y, z1], [p.x, p.y, z1]);
-    }
+    // normales de los lados: la de cada arista, hacia afuera del sólido; en un vértice donde el contorno dobla menos de
+    // 30° (una curva discretizada) se promedian con la arista vecina, así la luz pasa sin escalones; en una esquina, no
+    const nrm = (...v: number[]) => this.norm.push(...v);
+    const area = (a: P2[]) => a.reduce((s, p, i) => { const q = a[(i + 1) % a.length]; return s + p.x * q.y - q.x * p.y; }, 0);
+    const lisa = Math.cos((30 * Math.PI) / 180);
+    [pol, ...huecos].forEach((anillo, ia) => {
+      const m = anillo.length, sg = (area(anillo) >= 0 ? 1 : -1) * (ia === 0 ? 1 : -1);
+      const ne = anillo.map((p, i) => { const q = anillo[(i + 1) % m], dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1; return { x: (sg * dy) / L, y: (-sg * dx) / L }; });
+      const junto = (a: P2, b: P2) => { if (a.x * b.x + a.y * b.y < lisa) return a; const x = a.x + b.x, y = a.y + b.y, L = Math.hypot(x, y) || 1; return { x: x / L, y: y / L }; };
+      for (let k = 0; k + 1 < zs.length; k++) for (let i = 0; i < m; i++) {
+        const p = anillo[i], q = anillo[(i + 1) % m], z0 = zs[k], z1 = zs[k + 1];
+        const np = junto(ne[i], ne[(i - 1 + m) % m]), nq = junto(ne[i], ne[(i + 1) % m]);
+        dk = cs[k];
+        tri([p.x, p.y, z0], [q.x, q.y, z0], [q.x, q.y, z1]); nrm(np.x, np.y, 0, nq.x, nq.y, 0, nq.x, nq.y, 0);
+        tri([p.x, p.y, z0], [q.x, q.y, z1], [p.x, p.y, z1]); nrm(np.x, np.y, 0, nq.x, nq.y, 0, np.x, np.y, 0);
+      }
+    });
     // tapas: triangulación que sirve también para contornos cóncavos (siluetas en L, con arcos, etc.) y con huecos
     const todos = [...pol, ...huecos.flat()];
     const tris = n <= 4 && !huecos.length ? Array.from({ length: n - 2 }, (_, i) => [0, i + 1, i + 2]) : THREE.ShapeUtils.triangulateShape(pol.map(p => new THREE.Vector2(p.x, p.y)), huecos.map(h => h.map(p => new THREE.Vector2(p.x, p.y))));
@@ -78,6 +92,7 @@ class Prisma {
     for (const [z, arriba] of [[zs[0], false], [zs[zs.length - 1], true]] as const) { dk = csz(z); tris.forEach(([i0, i1, i2]) => {
       const a: [number, number, number] = [todos[i0].x, todos[i0].y, z], b: [number, number, number] = [todos[i1].x, todos[i1].y, z], c: [number, number, number] = [todos[i2].x, todos[i2].y, z];
       if (arriba !== horario) tri(a, c, b); else tri(a, b, c);
+      const nz = arriba ? 1 : -1; nrm(0, 0, nz, 0, 0, nz, 0, 0, nz);
     }); }
     // bordes: contorno arriba y abajo y, si es un rectángulo, las aristas verticales piso por piso
     const seg = (a: number[], b: number[]) => this.baseB.push(a[0] + dk.x, a[1] + dk.y, a[2], b[0] + dk.x, b[1] + dk.y, b[2]);
@@ -116,7 +131,12 @@ class Prisma {
       attr.needsUpdate = true;
     };
     poner(this.base, this.malla.geometry.getAttribute('position') as THREE.BufferAttribute);
-    this.malla.geometry.computeVertexNormals();
+    // normales propias (planta → three: x, z, −y); el movimiento de la rototraslación es casi rígido y chico
+    if (this.norm.length === this.base.length) {
+      const na = new Float32Array(this.norm.length);
+      for (let i = 0; i < this.norm.length; i += 3) { na[i] = this.norm[i]; na[i + 1] = this.norm[i + 2]; na[i + 2] = -this.norm[i + 1]; }
+      this.malla.geometry.setAttribute('normal', new THREE.BufferAttribute(na, 3));
+    } else this.malla.geometry.computeVertexNormals();
     this.malla.geometry.computeBoundingSphere();
     poner(this.baseB, this.bordes.geometry.getAttribute('position') as THREE.BufferAttribute);
     this.bordes.geometry.computeBoundingSphere();
@@ -214,7 +234,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (!m) {
         const t = sigma === null ? 0 : 0.15 + 0.85 * (Math.abs(paso) / 10);
         const c = neutro.clone().lerp(paso > 0 ? cTr : cCo, t);
-        m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, flatShading: true, emissive: sel ? new THREE.Color(0x1f6f8b) : new THREE.Color(0), emissiveIntensity: 0.5 });
+        m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, emissive: sel ? new THREE.Color(0x1f6f8b) : new THREE.Color(0), emissiveIntensity: 0.5 });
         cache.set(k, m);
       }
       return m;
@@ -261,10 +281,10 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const juntas = losasJuntas(p);
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
-      const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 5);
+      const pol = discretizarCurva(plantaDeNivel(p, iN).silueta);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
-      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: puntosSilueta(j.v, 5) }))]) {
+      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: discretizarCurva(j.v) }))]) {
         const losa = new Prisma(v, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
         capa(losa.malla, 'Losas', `Losa ${n.nombre}${z === n.cota ? '' : ` (piso de ${f2z(z)} m)`}`);
         prismas.push(losa);
@@ -308,10 +328,10 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
           const za = zs[k], zb = zs[k + 1], mm = muroEn(m, (za + zb) / 2);
           const f = [...porPiso].reverse().find(x => x.z <= za + 1e-6);
           const mat = tens!.material(f ? f.sigma : null, estado.seleccion === m.id);
-          const pols: P2[][] = tipoDe(mm) === 'perfil' ? [polilinea(enPlanta(mm).v, 6, 16)] : tipoDe(mm) === 'tubo-circ'
-            ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+          const pols: P2[][] = tipoDe(mm) === 'perfil' ? [discretizarCurva(enPlanta(mm).v)] : tipoDe(mm) === 'tubo-circ'
+            ? [circuloFino(mm.x, mm.y, mm.largo / 2)]
             : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
-          const hs = tipoDe(mm) === 'perfil' ? (enPlanta(mm).huecos ?? []).map(hh => polilinea(hh, 6, 16)) : [];
+          const hs = tipoDe(mm) === 'perfil' ? (enPlanta(mm).huecos ?? []).map(hh => discretizarCurva(hh)) : [];
           pols.forEach(pol => { const pr = new Prisma(pol, [za, zb], mat, tinta, undefined, hs); pr.conBordes = true; prismas.push(pr); });
         }
         return;
@@ -319,13 +339,13 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       const color = espectro ? new THREE.Color(0xffffff) : new THREE.Color(COLORES[papel] === '#FFFFFF' ? '#d9d9d9' : COLORES[papel]);
       const entra = entraEnCalculo(m, fondoCota, top);
       if (!entra && !estado.capas.fuera) return;
-      const mat = new THREE.MeshStandardMaterial({ color, vertexColors: espectro, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4, flatShading: true,
+      const mat = new THREE.MeshStandardMaterial({ color, vertexColors: espectro, roughness: 0.7, transparent: !entra, opacity: entra ? 1 : 0.4,
         emissive: estado.seleccion === m.id ? new THREE.Color(0x1f6f8b) : new THREE.Color(0x000000), emissiveIntensity: 0.6 });
       const z0 = Math.max(fondoCota, m.zDesde ?? fondoCota), z1 = Math.min(top, m.zHasta ?? top);
       if (z1 - z0 <= 0) return;
       const zs = [z0, ...cotas.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6), z1];
       if (tipoDe(m) === 'perfil') {
-        const pp = enPlanta(m), ext = polilinea(pp.v, 6, 16), hs = (pp.huecos ?? []).map(hh => polilinea(hh, 6, 16));
+        const pp = enPlanta(m), ext = discretizarCurva(pp.v), hs = (pp.huecos ?? []).map(hh => discretizarCurva(hh));
         const pr = new Prisma(ext, zs, mat, tinta, undefined, hs); pr.conBordes = def; prismas.push(pr);
         return;
       }
@@ -347,7 +367,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         const za = cortes[k], zb = cortes[k + 1], mm = muroEn(m, (za + zb) / 2);
         const zsT = [za, ...zs.filter(z => z > za + 1e-6 && z < zb - 1e-6), zb];
         const pols: P2[][] = tipoDe(mm) === 'tubo-circ'
-          ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+          ? [circuloFino(mm.x, mm.y, mm.largo / 2)]
           : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
         pols.forEach(pol => { const pr = new Prisma(pol, zsT, mat, tinta); pr.conBordes = def || cortes.length > 2; prismas.push(pr); });
       }

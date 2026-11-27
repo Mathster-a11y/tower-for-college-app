@@ -590,6 +590,7 @@ const TERCEROS: [string, string, string, string][] = [
   ['pdf.js (Mozilla)', 'calcar planos en PDF', 'Apache 2.0', 'https://mozilla.github.io/pdf.js/'],
   ['PptxGenJS', 'las presentaciones en PowerPoint', 'MIT', 'https://gitbrent.github.io/PptxGenJS/'],
   ['JSZip', 'los Excel y los .zip', 'MIT (o GPL 3, a elección; se usa con la MIT)', 'https://stuk.github.io/jszip/'],
+  ['polygon-clipping', 'la sección real de cada pieza (los muros que se pisan no se cuentan dos veces)', 'MIT', 'https://github.com/mfogel/polygon-clipping'],
   ['IBM Plex Sans e IBM Plex Math', 'la letra del texto y de las fórmulas', 'SIL Open Font License 1.1', 'https://github.com/IBM/plex'],
   ['JetBrains Mono', 'la letra de los números', 'SIL Open Font License 1.1', 'https://www.jetbrains.com/lp/mono/'],
 ];
