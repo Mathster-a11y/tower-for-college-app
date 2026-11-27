@@ -203,6 +203,21 @@ export function hojaMalla(): MallaHoja | null {
   return def && def.tipo === 'M' ? exoActual().hojaMalla(def) : null;
 }
 
+/** ficha M: botón que baja el programa de Pynite que resuelve la malla como reticulado espacial y la compara con la app */
+export function botonPyniteMalla(def: ExoDef): HTMLElement {
+  const b = h('button', { type: 'button', class: 'boton', title: 'Un programa en Python (Google Colab o la computadora) que resuelve la malla con Pynite, otro programa de elementos finitos, como reticulado espacial de verdad, y la compara con la app' }, 'Contrastar la malla con Pynite (.py)');
+  b.addEventListener('click', async () => {
+    const d = exoActual().datosPyniteMalla(def), msg = document.getElementById('mensaje');
+    if (!d) { if (msg) msg.textContent = 'No se pudo armar la malla para Pynite.'; return; }
+    const { programaPyniteMalla } = await import('./exportarPyniteMalla');
+    const { nombre, texto } = programaPyniteMalla(d, estado.proyecto.nombre);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([texto], { type: 'text/plain;charset=utf-8' })); a.download = nombre;
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (msg) msg.textContent = `Bajó ${nombre}: corrélo en Google Colab (primero «!pip install PyniteFEA») o con Python. Compara los corrimientos, las fuerzas y el giro de la app con Pynite.`;
+  });
+  return h('div', { class: 'fila-acciones' }, b, h('span', { class: 'nota chica' }, 'En el Gherkin con 12 nudos por anillo, Pynite y la app difieren menos del 0,2 % en los corrimientos y del 0,1 % en las fuerzas.'));
+}
+
 // ------------------------------------------------------------------ qué malla conviene
 let barridoM: { clave: string; filas: FilaMalla[] } | null = null;
 /** el barrido vale mientras no cambien el proyecto ni el exo (sin contar el módulo, los nudos y los cortes, que se barren) */

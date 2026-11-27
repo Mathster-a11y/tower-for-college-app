@@ -13,7 +13,7 @@ import { plantaDeNivel } from '../engine/silueta';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
 import { disenadorExo3D } from './exo3d';
-import { camposMalla, seccionBarridoMalla, vistaMalla } from './exoMalla';
+import { botonPyniteMalla, camposMalla, seccionBarridoMalla, vistaMalla } from './exoMalla';
 import { MALLA_POR_DEFECTO, pisosFlojos } from '../engine/exoMalla';
 import { ExoDeCalculo, type DatosExo } from '../engine/exoDeCalculo';
 
@@ -252,7 +252,7 @@ function seccionTorsionMalla(def: ExoDef): HTMLElement | null {
   const simetrica = !isFinite(t.giro) || Math.abs(t.mtSin) < 1e-6, giroMismo = t.kSin / t.kCon;
   const R = Math.sqrt(Jg / Math.max(1e-9, (JA + JB) / 2));
   s.cuerpo.append(
-    h('p', { class: 'nota' }, `La malla rodea toda la planta: es un tubo cerrado y frena el giro por sí misma, con las diagonales trabajando a lo largo de la fachada. Su rigidez al giro sale del reticulado espacial de la malla (cada losa gira entera y cada nudo sube o baja libre), con un torsor de la forma del viento, comparada con una ménsula de hormigón: Σ J · d² equivalente = ${fmt(Jg, 0)} m⁶, como una pieza de ${fmt((JA + JB) / 2, 0)} m⁴ a ${fmt(R, 1)} m del centro. Además, la malla entra como una pieza más en cada sentido, en el medio de la planta, con su J equivalente (${fmt(JA, 0)} m⁴ con el viento ${dir}).`),
+    h('p', { class: 'nota' }, `La malla rodea toda la planta: es un tubo cerrado y frena el giro por sí misma, con las diagonales trabajando a lo largo de la fachada. Su rigidez al giro sale del reticulado espacial de la malla (cada losa gira entera y cada nudo sube o baja libre), con un torsor de la forma del viento, comparada con una ménsula de hormigón en todos los anillos (mínimos cuadrados): Σ J · d² equivalente = ${fmt(Jg, 0)} m⁶, como una pieza de ${fmt((JA + JB) / 2, 0)} m⁴ a ${fmt(R, 1)} m del centro. Además, la malla entra como una pieza más en cada sentido, en el medio de la planta, con su J equivalente (${fmt(JA, 0)} m⁴ con el viento ${dir}).`),
     h('div', { class: 'kpis' },
       kpi('Centro de rigidez', `${fmt(t.crSin, 2)} → ${fmt(t.crCon, 2)} m`, 'desde el eje de la torre: la malla lo lleva al medio'),
       kpi('Torsor Q · e', `${fmt(t.mtSin, 0)} → ${fmt(t.mtCon, 0)} tm`, 'baja porque el centro de rigidez se acerca a donde actúa el viento'),
@@ -386,7 +386,7 @@ export function panelExo(c: H) {
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
-    if (def.tipo === 'M' && ens.length === 2) c.append(seccionBarridoMalla(def));
+    if (def.tipo === 'M' && ens.length === 2) c.append(seccionBarridoMalla(def), botonPyniteMalla(def));
     const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });

@@ -5,7 +5,7 @@
  * Cada objeto recuerda lo que ya calculó: la etapa, el riel, el avance, los controles y el informe piden lo mismo
  * varias veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez.
  */
-import { armarCara, conMalla, gammaExo, pesoExo, propsSeccion, seccionEn, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
+import { armarCara, conMalla, gammaExo, pesoExo, propsSeccion, seccionEn, type ClaseBarra, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
@@ -25,6 +25,12 @@ export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho:
   corr?: number[]; tc?: number[] }
 export type DatosExoCompletos = DatosExo & { entrada: EntradaExo };
 /** una malla del barrido de la ficha M: rigidez, acero y rigidez por tonelada con las mismas secciones; deriva / límite */
+/** la malla para Pynite (ver datosPyniteMalla) */
+export interface DatosPyniteMalla {
+  E: number; Eh: number; zs: number[]; cx: number; cy: number; nudos: [number, number, number, number][]; barras: [number, number, number, number, boolean, boolean][]; nombres: string[];
+  WA: number[]; WB: number[]; JA: number[]; JB: number[];
+  app: { uA: number[]; uB: number[]; NA: number[]; NB: number[]; giro: number[]; anillos: number[] };
+}
 export interface FilaMalla { modulo: number; nudos: number; angulo: number; Jeq: number; peso: number; porTonelada: number; deriva: number }
 /** lo que el worker manda ya calculado: la torre con el exo de cada viento y la verificación de las barras, por clave */
 export interface SemillaExo { torre: Record<string, ResultadoExo>; barras: Record<string, Cirsoc301Barra[]> }
@@ -168,11 +174,13 @@ export class ExoDeCalculo {
       const { zs, W, Eh } = d.entrada, m = def.malla ?? MALLA_POR_DEFECTO;
       const g = mallaDe(this.p, { ...def, malla: { ...m, arriostrada: false } }, zs);
       const th = giroMalla(g, zs, W, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
-      const kr = g.anillos[g.anillos.length - 1], x = zs[kr] - zs[0];
-      // la ménsula de J = 1 m⁴ bajo las fuerzas W en la cota del último anillo
-      const u = W.reduce((s, P, i) => { const a = zs[i + 1] - zs[0]; return s + (P * (x <= a ? x * x * (3 * a - x) : a * a * (3 * x - a))) / (6 * Eh); }, 0);
-      const t = th[kr - 1];
-      return t > 0 && isFinite(t) ? u / t : NaN;
+      // la ménsula de J = 1 m⁴ bajo las fuerzas W, en la cota de cada anillo; el J·d² equivalente ajusta el giro de todos
+      // los anillos (mínimos cuadrados: θ ≈ u / J·d²), no solo el de arriba (en una cúpula, el último anillo es muy
+      // chico y su giro depende de cómo se cierra la malla)
+      const u = (x: number) => W.reduce((s, P, i) => { const a = zs[i + 1] - zs[0]; return s + (P * (x <= a ? x * x * (3 * a - x) : a * a * (3 * x - a))) / (6 * Eh); }, 0);
+      let uu = 0, ut = 0;
+      g.anillos.filter(k => k > 0).forEach(k => { const t = th[k - 1], ur = u(zs[k] - zs[0]); if (isFinite(t)) { uu += ur * ur; ut += ur * t; } });
+      return ut > 0 ? uu / ut : NaN;
     });
   }
   /**
@@ -194,6 +202,36 @@ export class ExoDeCalculo {
       out.push({ modulo, nudos: n, angulo: diag.length ? diag.reduce((s2, v) => s2 + v, 0) / diag.length : NaN, Jeq, peso, porTonelada: peso > 0 ? Jeq / peso : 0, deriva: fl });
     }
     return out;
+  }
+  /**
+   * Ficha M: la malla para resolverla aparte como reticulado espacial (tools/motor_fem/pynite_malla.py): nudos, barras
+   * con su sección y sus articulaciones, el viento y el J de los tabiques de cada piso, y lo que da la app con el viento
+   * solo (sin peso ni losas), para comparar: el corrimiento de cada piso y la fuerza de cada barra.
+   */
+  datosPyniteMalla(def: ExoDef): DatosPyniteMalla | null {
+    if (def.tipo !== 'M') return null;
+    const dA = this.datos('A', def), dB = this.datos('B', def);
+    if (!dA || !dB) return null;
+    const g = dA.entrada.malla!, zs = dA.entrada.zs, Eh = dA.entrada.Eh, indice = indiceBarraMalla(g);
+    const colRigida = (def.uniones?.columna ?? 'rigida') === 'rigida', baseArt = def.uniones?.base === 'articulada';
+    const sin = (d: DatosExoCompletos) => { const en = d.entrada; return calcularExo(paraViento(conMalla({ ...d.def, pesoPropio: false }, en), d.dir), en.zs, en.W, en.EJ, en.ancho, en.tCaras, en.Eh, en.anchos, en.corr, { qLosa: 0, anchosPerp: en.anchosPerp }); };
+    const rA = sin(dA), rB = sin(dB);
+    const lista = g.barras.map((b, i) => [b, i] as const).filter(([b]) => b.clase !== 'anillo');
+    const fuerzas = (r: ResultadoExo) => { const N = g.barras.map(() => 0); r.caras[0].esfuerzos.forEach(e => { const i = e.p3 ? indice(e.p3) : undefined; if (i !== undefined) N[i] = e.N; }); return lista.map(([, i]) => N[i]); };
+    const thApp = giroMalla(mallaDe(this.p, { ...def, malla: { ...(def.malla ?? MALLA_POR_DEFECTO), arriostrada: false } }, zs), zs, dA.entrada.W, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
+    return {
+      E: def.E, Eh, zs, cx: g.cx, cy: g.cy,
+      nudos: g.nudos.map(q => [q.x, q.y, q.z, q.k]),
+      barras: lista.map(([b]) => {
+        const A = g.nudos[b.a], B = g.nudos[b.b], pr = propsSeccion(seccionEn(def, b.clase as ClaseBarra, Math.min(A.z, B.z)));
+        const rel = (q: typeof A) => (b.clase === 'columna' ? !colRigida : q.anillo >= 0) || (q.k === 0 && baseArt);
+        return [b.a, b.b, pr.A, pr.I, rel(A), rel(B)];
+      }),
+      nombres: lista.map(([, i]) => nombresMalla(g)[i]),
+      WA: dA.entrada.W, WB: dB.entrada.W,
+      JA: zs.slice(1).map(z => dA.entrada.EJ(z) / Eh), JB: zs.slice(1).map(z => dB.entrada.EJ(z) / Eh),
+      app: { uA: [0, ...rA.u], uB: [0, ...rB.u], NA: fuerzas(rA), NB: fuerzas(rB), giro: [0, ...thApp], anillos: g.anillos },
+    };
   }
   /** ficha M: los datos de la hoja «G · Malla» del Excel (nudos, barras, fuerzas con los dos vientos y la peor relación del CIRSOC 301) */
   hojaMalla(def: ExoDef): MallaHoja | null {
