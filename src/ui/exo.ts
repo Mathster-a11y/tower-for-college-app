@@ -211,11 +211,7 @@ export function estadoExo(): EstadoChip {
 // ------------------------------------------------------------------ torsión con el exo
 /** la rototraslación del viento elegido con las caras del exo como dos piezas más en cada sentido */
 function seccionTorsion(def: ExoDef): HTMLElement | null {
-  if (def.tipo === 'M') {
-    const s0 = seccion('Torsión con el exo');
-    s0.cuerpo.append(h('p', { class: 'nota' }, 'La malla rodea toda la planta: es un tubo, muy rígido al giro. La app todavía no le suma esa rigidez a la rototraslación: la torsión la siguen tomando los tabiques solos (del lado seguro).'));
-    return s0.el;
-  }
+  if (def.tipo === 'M') return seccionTorsionMalla(def);
   if (def.tipo === 'F') {
     // los brazos frenan la flexión del núcleo, no su giro: no hay una cuenta de torsión que valga la pena mostrar
     const s0 = seccion('Torsión con el exo');
@@ -240,6 +236,30 @@ function seccionTorsion(def: ExoDef): HTMLElement | null {
         : kpi('Giro de la planta', `${fmt(t.giro * 100, 0)} %`, `del que tiene sin el exo (torsor / rigidez a la torsión); con un mismo torsor, ${fmt(giroMismo * 100, 0)} %`, colorEstado(t.giro < 1)),
       kpi('Torsión que toma el exo', `${fmt(t.parteExo * 100, 0)} %`, `rigidez a la torsión: ${fmt(t.kSin, 0)} → ${fmt(t.kCon, 0)} m⁶`)),
     h('p', { class: 'nota chica' }, 'Es una cuenta aparte: la planilla de la cátedra sigue con los tabiques solos. Si el giro baja mucho, la corrección por torsión de cada tabique (columna N de la rototraslación) baja en la misma proporción.'));
+  return s.el;
+}
+
+/** ficha M: la malla es un tubo cerrado; su rigidez al giro sale del reticulado espacial y entra a la rototraslación */
+function seccionTorsionMalla(def: ExoDef): HTMLElement | null {
+  const dir = estado.dir, otra = dir === 'A' ? 'B' : 'A', dp = datosExo(dir, def), dq = datosExo(otra, def);
+  const r = dir === 'A' ? estado.calculo.valores.rotA : estado.calculo.valores.rotB;
+  const s = seccion('Torsión con el exo');
+  const Jg = exoActual().jGiroMalla(def);
+  if (!dp || !dq || !r || !(Jg > 0)) { s.cuerpo.append(h('p', { class: 'nota' }, 'Todavía no se puede calcular la rigidez de la malla al giro (falta la rototraslación o la malla no frena el giro de algún piso).')); return s.el; }
+  const JA = dp.r.caras[0]?.Jeq ?? 0, JB = dq.r.caras[0]?.Jeq ?? 0;
+  const t = torsionConExo(r, JA, 0, JB, 0, { Jgiro: Jg });
+  if (!(t.kSin > 0)) return null;
+  const simetrica = !isFinite(t.giro) || Math.abs(t.mtSin) < 1e-6, giroMismo = t.kSin / t.kCon;
+  const R = Math.sqrt(Jg / Math.max(1e-9, (JA + JB) / 2));
+  s.cuerpo.append(
+    h('p', { class: 'nota' }, `La malla rodea toda la planta: es un tubo cerrado y frena el giro por sí misma, con las diagonales trabajando a lo largo de la fachada. Su rigidez al giro sale del reticulado espacial de la malla (cada losa gira entera y cada nudo sube o baja libre), con un torsor de la forma del viento, comparada con una ménsula de hormigón: Σ J · d² equivalente = ${fmt(Jg, 0)} m⁶, como una pieza de ${fmt((JA + JB) / 2, 0)} m⁴ a ${fmt(R, 1)} m del centro. Además, la malla entra como una pieza más en cada sentido, en el medio de la planta, con su J equivalente (${fmt(JA, 0)} m⁴ con el viento ${dir}).`),
+    h('div', { class: 'kpis' },
+      kpi('Centro de rigidez', `${fmt(t.crSin, 2)} → ${fmt(t.crCon, 2)} m`, 'desde el eje de la torre: la malla lo lleva al medio'),
+      kpi('Torsor Q · e', `${fmt(t.mtSin, 0)} → ${fmt(t.mtCon, 0)} tm`, 'baja porque el centro de rigidez se acerca a donde actúa el viento'),
+      simetrica ? kpi('Giro con un mismo torsor', `${fmt(giroMismo * 100, 0)} %`, 'del que tiene sin la malla: la torre es simétrica y con el viento de frente no hay torsor, pero con el viento corrido (casos 2 y 4 del CIRSOC) o de cuarto sí', colorEstado(true))
+        : kpi('Giro de la planta', `${fmt(t.giro * 100, 0)} %`, `del que tiene sin la malla (torsor / rigidez a la torsión); con un mismo torsor, ${fmt(giroMismo * 100, 0)} %`, colorEstado(t.giro < 1)),
+      kpi('Torsión que toma la malla', `${fmt(t.parteExo * 100, 0)} %`, `rigidez a la torsión: ${fmt(t.kSin, 0)} → ${fmt(t.kCon, 0)} m⁶`)),
+    h('p', { class: 'nota chica' }, 'Es una cuenta aparte: la planilla de la cátedra sigue con los tabiques solos. Para la rigidez al giro, la malla se toma articulada de anillo a anillo (sin la flexión de las barras en los pisos que cruzan), del lado seguro.'));
   return s.el;
 }
 

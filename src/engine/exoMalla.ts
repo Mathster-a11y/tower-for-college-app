@@ -356,3 +356,75 @@ export function pisosFlojos(g: MallaGeo, zs: number[], u: number[], veces = 3): 
     return !enAnillo.has(k) && d > veces * media ? [{ z: zs[k], veces: d / media }] : [];
   });
 }
+
+// ------------------------------------------------------------------ torsión: la malla como tubo
+/**
+ * Resuelve K·x = b con K simétrica definida positiva guardada en banda (fila i: columnas i..i+b). Factorización LDLᵀ
+ * de banda: la malla ordenada piso por piso tiene una banda de unos dos anillos.
+ */
+function resolverBanda(n: number, ancho: number, K: Map<number, number>[], b: number[]): number[] {
+  const D = new Float64Array(n), L: Float64Array[] = Array.from({ length: n }, () => new Float64Array(ancho + 1));
+  // L[i][j-i] para j ≥ i: copia de K
+  K.forEach((fila, i) => fila.forEach((v, j) => { if (j >= i) L[i][j - i] = v; }));
+  for (let i = 0; i < n; i++) {
+    const d = L[i][0];
+    if (!(Math.abs(d) > 1e-12)) throw new Error('La malla no frena el giro de algún piso.');
+    D[i] = d;
+    const lim = Math.min(n - 1, i + ancho);
+    for (let j = i + 1; j <= lim; j++) {
+      const lij = L[i][j - i];
+      if (lij === 0) continue;
+      const f = lij / d;
+      for (let k = j; k <= lim; k++) { const lik = L[i][k - i]; if (lik !== 0) L[j][k - j] -= f * lik; }
+    }
+  }
+  const y = Float64Array.from(b);
+  for (let i = 0; i < n; i++) { const lim = Math.min(n - 1, i + ancho), yi = y[i]; for (let j = i + 1; j <= lim; j++) if (L[i][j - i]) y[j] -= (L[i][j - i] / D[i]) * yi; }
+  for (let i = 0; i < n; i++) y[i] /= D[i];
+  for (let i = n - 1; i >= 0; i--) { const lim = Math.min(n - 1, i + ancho); let s = y[i]; for (let j = i + 1; j <= lim; j++) if (L[i][j - i]) s -= (L[i][j - i] / D[i]) * y[j]; y[i] = s; }
+  return [...y];
+}
+
+/**
+ * El giro de los pisos de la malla con un torsor T por piso (t·m): reticulado espacial de barras articuladas (E·A/L en
+ * su dirección), con cada losa rígida que gira θ alrededor del eje vertical del centro de la base (el nudo se corre
+ * θ·(−(y − cy), x − cx)) y cada nudo libre de subir o bajar. Los anillos no trabajan (la losa no se deforma). Los pisos
+ * sin nudos (entre anillos, sin losas atadas) pasan su torsor con un tubo muy blando, como en el J equivalente. Usa la
+ * malla sin partir: los nudos de las barras en los pisos se deslizarían a lo largo de la barra (sin rigidez al giro).
+ */
+export function giroMalla(g: MallaGeo, zs: number[], T: number[], E: number, area: (clase: ClaseBarra | 'anillo', zMin: number) => number, blando = 0): number[] {
+  const n = zs.length - 1;
+  // orden de las incógnitas: piso por piso, las w de sus nudos y después su θ
+  const idW = new Map<number, number>(), idT: number[] = [];
+  let m = 0;
+  const porK = new Map<number, number[]>();
+  g.nudos.forEach((q, i) => { if (q.k > 0) porK.set(q.k, [...(porK.get(q.k) ?? []), i]); });
+  for (let k = 1; k <= n; k++) { for (const i of porK.get(k) ?? []) idW.set(i, m++); idT[k] = m++; }
+  const K: Map<number, number>[] = Array.from({ length: m }, () => new Map());
+  let ancho = 0;
+  const sumar = (i: number, j: number, v: number) => { const [a, b] = i <= j ? [i, j] : [j, i]; K[a].set(b, (K[a].get(b) ?? 0) + v); ancho = Math.max(ancho, b - a); };
+  g.barras.forEach(b => {
+    if (b.clase === 'anillo') return;
+    const A = g.nudos[b.a], B = g.nudos[b.b];
+    const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, L = Math.hypot(dx, dy, dz);
+    if (L < 1e-9) return;
+    // δ = e · (dB − dA): con el giro, e·t es el mismo en los dos extremos (el brazo de la barra respecto del eje)
+    const brazo = ((A.x - g.cx) * dy - (A.y - g.cy) * dx) / L, ez = dz / L;
+    const coef: [number, number][] = [];
+    if (B.k > 0) coef.push([idT[B.k], brazo], [idW.get(b.b)!, ez]);
+    if (A.k > 0) coef.push([idT[A.k], -brazo], [idW.get(b.a)!, -ez]);
+    const k = (E * area(b.clase, Math.min(A.z, B.z))) / L;
+    for (const [i, ci] of coef) for (const [j, cj] of coef) if (i <= j && ci && cj) sumar(i, j, k * ci * cj);
+  });
+  // el tubo blando de los pisos (y un resto mínimo en las w, para los nudos que solo tocan barras horizontales)
+  const kb = blando > 0 ? blando : 1e-9;
+  for (let k = 1; k <= n; k++) {
+    const h = zs[k] - zs[k - 1], c = (12 * kb) / h ** 3;
+    sumar(idT[k], idT[k], c); if (k > 1) { sumar(idT[k - 1], idT[k - 1], c); sumar(idT[k - 1], idT[k], -c); }
+  }
+  idW.forEach(i => { if (!(K[i].get(i)! > 0)) sumar(i, i, 1e-9); });
+  const bvec = new Array<number>(m).fill(0);
+  for (let k = 1; k <= n; k++) bvec[idT[k]] = T[k - 1] ?? 0;
+  const x = resolverBanda(m, ancho, K, bvec);
+  return Array.from({ length: n }, (_, k) => x[idT[k + 1]]);
+}

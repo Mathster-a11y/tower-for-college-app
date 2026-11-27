@@ -1446,6 +1446,29 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
   return out;
 }
 
+/**
+ * Ficha M: la malla es una sola pieza en cada sentido, centrada (su J equivalente en el medio de la planta), y además un
+ * tubo que frena el giro por sí mismo: Jgiro (m⁶), el Σ J·d² equivalente que sale del reticulado espacial (giroMalla).
+ * Alrededor del centro de rigidez nuevo se suma el traslado: Jeq · cr².
+ */
+function torsionConTubo(r: RotoRes, JeqPar: number, JeqPer: number, Jgiro: number): TorsionExo {
+  const par: { J: number; h: number }[] = [], per: { J: number; h: number }[] = [];
+  r.B.forEach((J, i) => {
+    if (!(J > 0) || !isFinite(r.K[i])) return;
+    if (i < r.nP) par.push({ J, h: r.K[i] + r.J7 });
+    else if (i >= r.oO) per.push({ J, h: r.K[i] + r.J38 });
+    else per.push({ J, h: r.K[i] + r.J28 });
+  });
+  const sumJ = (xs: { J: number }[]) => xs.reduce((s, x) => s + x.J, 0), sumJh = (xs: { J: number; h: number }[]) => xs.reduce((s, x) => s + x.J * x.h, 0);
+  const crCon = sumJh(par) / (sumJ(par) + JeqPar), crPerCon = per.length || JeqPer > 0 ? sumJh(per) / (sumJ(per) + JeqPer) : 0;
+  const polar = (xs: { J: number; h: number }[], c: number) => xs.reduce((s, x) => s + x.J * (x.h - c) ** 2, 0);
+  const kTabCon = polar(par, crCon) + polar(per, crPerCon);
+  const kCon = kTabCon + Jgiro + JeqPar * crCon ** 2 + JeqPer * crPerCon ** 2;
+  const mtSin = r.J15, mtCon = r.D5 * crCon, kSin = r.M51;
+  const giro = mtSin && kSin ? (mtCon / kCon) / (mtSin / kSin) : NaN;
+  return { crSin: r.J7, crCon, mtSin, mtCon, kSin, kCon, kTabCon, giro, parteExo: kCon > 0 ? 1 - kTabCon / kCon : 0 };
+}
+
 // ------------------------------------------------------------------ torsión con el exoesqueleto
 export interface TorsionExo {
   /** centro de rigidez (posición, m) y torsor Q · e (tm), sin y con el exo */
@@ -1463,7 +1486,8 @@ export interface TorsionExo {
  * @param r la rototraslación de la planilla del viento elegido; JeqPar y tPar: las caras paralelas a ese viento (J de una
  *   cara, m⁴, y su distancia al centro, m); JeqPer y tPer: las del otro viento
  */
-export function torsionConExo(r: RotoRes, JeqPar: number, tPar: number, JeqPer: number, tPer: number): TorsionExo {
+export function torsionConExo(r: RotoRes, JeqPar: number, tPar: number, JeqPer: number, tPer: number, malla?: { Jgiro: number }): TorsionExo {
+  if (malla) return torsionConTubo(r, JeqPar, JeqPer, malla.Jgiro);
   const par: { J: number; h: number }[] = [], per: { J: number; h: number }[] = [];
   r.B.forEach((J, i) => {
     if (!(J > 0) || !isFinite(r.K[i])) return;

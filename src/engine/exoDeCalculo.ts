@@ -5,11 +5,11 @@
  * Cada objeto recuerda lo que ya calculó: la etapa, el riel, el avance, los controles y el informe piden lo mismo
  * varias veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez.
  */
-import { armarCara, conMalla, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
+import { armarCara, conMalla, propsSeccion, seccionEn, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
-import { mallaDe } from './exoMalla';
+import { giroMalla, mallaDe, MALLA_POR_DEFECTO } from './exoMalla';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
 import type { Viento102 } from './cargas/cirsoc102';
@@ -153,6 +153,25 @@ export class ExoDeCalculo {
   }
 
   /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
+  /**
+   * Ficha M: la rigidez de la malla al giro de la planta, como un Σ J·d² equivalente (m⁶, en hormigón como los tabiques):
+   * el tubo de barras con las losas rígidas que giran, bajo un torsor con la forma del viento A, comparado con una
+   * ménsula de J = 1 m⁴ bajo ese viento, en el último anillo. NaN si no hay malla.
+   */
+  jGiroMalla(def: ExoDef): number {
+    return this.recordar('jGiro', def, () => {
+      const d = this.datos('A', def);
+      if (def.tipo !== 'M' || !d?.entrada.malla) return NaN;
+      const { zs, W, Eh } = d.entrada, m = def.malla ?? MALLA_POR_DEFECTO;
+      const g = mallaDe(this.p, { ...def, malla: { ...m, arriostrada: false } }, zs);
+      const th = giroMalla(g, zs, W, def.E, (c, z) => propsSeccion(seccionEn(def, c, z)).A);
+      const kr = g.anillos[g.anillos.length - 1], x = zs[kr] - zs[0];
+      // la ménsula de J = 1 m⁴ bajo las fuerzas W en la cota del último anillo
+      const u = W.reduce((s, P, i) => { const a = zs[i + 1] - zs[0]; return s + (P * (x <= a ? x * x * (3 * a - x) : a * a * (3 * x - a))) / (6 * Eh); }, 0);
+      const t = th[kr - 1];
+      return t > 0 && isFinite(t) ? u / t : NaN;
+    });
+  }
   verif301(d: DatosExoCompletos): Cirsoc301Barra[] {
     return this.recordar(`301 ${d.dir} ${d.ancho} ${d.tCaras.join(' ')}`, d.def, () => {
       const en = d.entrada, reglamento = !!this.vientoReglamento;
