@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { entradaFem, type EntradaFem } from '../src/engine/femEntrada';
 import { modal, resolverTorre, type ModeloTorre } from '../src/engine/fem/pseudo3d';
+import { cargasDeEntrada, modeloDeEntrada } from '../src/engine/contrasteFem';
 import { CASOS_FEM } from '../tools/motor_fem/casos';
 
 interface ResMotor { motor: string; corte: Record<string, number>; momento: Record<string, number>; uy: number[]; rz: number[]; z: number[] }
@@ -53,8 +54,8 @@ describe.each(casos)('motor FEM · $caso', ({ caso, f, v }) => {
     e.planilla.reparto.forEach((r, i) => expect(r.pct).toBeCloseTo(guardada.planilla.reparto[i].pct, 9));
   });
 
-  it('prueba de oro: la planilla reparte el corte igual que OpenSees con ménsulas de Euler', () => {
-    expect(guardada.alturaCompleta).toBe(true);
+  // la planilla supone que todas las piezas llegan a la azotea: con muros que terminan antes (P5) no hay prueba de oro
+  it.runIf(guardada.alturaCompleta)('prueba de oro: la planilla reparte el corte igual que OpenSees con ménsulas de Euler', () => {
     const os = pct(euler.corte, nombres), tol = TOLERANCIA[caso] ?? 0.001;
     for (const r of guardada.planilla.reparto) expect(Math.abs(os[r.nombre] - r.pct)).toBeLessThan(tol);
   });
@@ -69,10 +70,12 @@ describe.each(casos)('motor FEM · $caso', ({ caso, f, v }) => {
 
   it('Pynite (otro programa, otra forma de armar la losa) da la misma flecha y casi el mismo reparto', () => {
     const fe = euler.uy[euler.uy.length - 1], fp = pynite.uy[pynite.uy.length - 1];
-    expect(Math.abs(fp - fe) / fe).toBeLessThan(1e-4);
+    // con piezas que terminan antes de la azotea, los brazos de Pynite (no infinitamente rígidos) pesan más
+    expect(Math.abs(fp - fe) / fe).toBeLessThan(guardada.alturaCompleta ? 1e-4 : 0.02);
     const a = pct(euler.corte, nombres), b = pct(pynite.corte, nombres);
-    // los brazos de Pynite no son infinitamente rígidos: hasta medio punto en las piezas que más toman
-    for (const n of nombres) expect(Math.abs(a[n] - b[n])).toBeLessThan(0.6);
+    // los brazos de Pynite no son infinitamente rígidos: medio punto más un 2 % de lo que toma la pieza (un núcleo que
+    // toma el 65 %, como en P8, difiere un punto); con piezas que terminan antes, hasta un punto y medio más
+    for (const n of nombres) expect(Math.abs(a[n] - b[n])).toBeLessThan((guardada.alturaCompleta ? 0.6 : 1.5) + 0.02 * a[n]);
   });
 
   it('con Timoshenko (deformación por corte) la torre es un poco más flexible, y el reparto cambia', () => {
@@ -83,19 +86,7 @@ describe.each(casos)('motor FEM · $caso', ({ caso, f, v }) => {
   });
 });
 
-/** el modelo del motor de la app con los datos de un caso: piezas del viento (en x) y perpendiculares (en y, Av = 1 como OpenSees) */
-function modeloDe(e: EntradaFem, timo: boolean): ModeloTorre {
-  const zTop = Math.max(...e.niveles.map(n => n.z));
-  return {
-    z: e.niveles.filter(n => n.z > 0).map(n => n.z).sort((a, b) => a - b), E: e.E, G: e.G, timo,
-    piezas: [...e.piezas.map(p => ({ nombre: p.nombre, dir: 'A' as const, pos: p.x, J: p.J, Av: p.Av, zHasta: p.zHasta })),
-      ...e.perp.map(p => ({ nombre: p.nombre, dir: 'B' as const, pos: p.y, J: p.J, Av: 1, zHasta: zTop }))],
-  };
-}
-const cargasDe = (e: EntradaFem, mo: ModeloTorre) => {
-  const W = mo.z.map(z => e.niveles.find(n => Math.abs(n.z - z) < 1e-9)!.W);
-  return { Fx: W.map(() => 0), Fy: W, Mz: W.map(() => 0) };
-};
+const modeloDe = modeloDeEntrada, cargasDe = cargasDeEntrada;
 
 describe.each(casos)('motor pseudo-3D de la app · $caso', ({ caso }) => {
   const e = leer<EntradaFem>(`${caso}.entrada.json`);

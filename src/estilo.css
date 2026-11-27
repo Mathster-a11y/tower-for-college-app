@@ -2337,3 +2337,13 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .tabla-perfil-avisos { margin: 2px 0 6px; padding-left: 18px; color: var(--revisar); font-size: 12px; }
 .tarjeta .nota-chica.error { color: var(--mal); }
 @media (max-width: 640px) { .tabla-perfil-lado { grid-template-columns: 1fr; } .alzado-tabla { justify-self: center; } }
+
+/* FEM: contraste con OpenSees y Pynite */
+.tabla-scroll { overflow-x: auto; }
+.tabla-contraste { border-collapse: collapse; font-size: 12px; width: 100%; }
+.tabla-contraste th, .tabla-contraste td { padding: 3px 6px; border-bottom: 1px solid var(--hair, var(--edge)); text-align: right; white-space: nowrap; }
+.tabla-contraste th { font-weight: 600; color: var(--ink2); font-size: 11px; white-space: normal; vertical-align: bottom; }
+.tabla-contraste th:first-child, .tabla-contraste td:first-child { text-align: left; }
+.tabla-contraste td:not(:first-child) { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tabla-contraste td:first-child { white-space: normal; min-width: 7em; }
+.tabla-contraste th, .tabla-contraste td { padding-left: 4px; padding-right: 4px; }

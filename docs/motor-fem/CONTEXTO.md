@@ -247,3 +247,18 @@ Después de cada paso: `npm test`, verificador externo, capturas para el usuario
 
 Rama de trabajo: `claude/nice-ptolemy-xvgp8n`. Junta `motor-fem` con el último trabajo de la app (tablas de Muros,
 planta sin superposiciones, armado de piezas). Se sigue el plan de la sección 8 desde el paso 1.
+
+
+## 12. Más casos y contraste desde la app (27/11/2026)
+
+- `tools/motor_fem/casos.ts` suma cuatro torres de prueba: P4 (asimétrica), P5 (muros que terminan antes de la azotea:
+  ahí no hay prueba de oro, la planilla no vale), P6 (redonda, núcleo cajón y columnas circulares) y P8 (subsuelos).
+  `verificar.py` guarda además `src/engine/contraste_resumen.json`, que la app muestra en la etapa FEM
+  («Contrastado con otros programas»).
+- **Hallazgo:** el área de corte de un núcleo cajón o de un tubo circular salía mal (un solo elemento con dirección «Y»:
+  0 en el viento B, una sola cara en el A). Ahora sale por tipo (`areaCorte` en `femEntrada.ts`): las dos almas del
+  cajón, la mitad del área del tubo. Cambia el FEM con Timoshenko en las torres con esos elementos.
+- Pynite difiere de OpenSees hasta 1,1 puntos en un núcleo que toma el 65 % (P8) y hasta 1,9 con muros que terminan
+  antes (P5): sus brazos de losa no son infinitamente rígidos. Las tolerancias de `test/motorFem.test.ts` lo dicen.
+- La app baja «Contraste con Pynite (.py)» (Exportar, o el botón de la etapa FEM): la torre del proyecto en base64, el
+  mismo `pynite_torre.py` y la comparación con la planilla y el motor de la app. Se corre en Google Colab.

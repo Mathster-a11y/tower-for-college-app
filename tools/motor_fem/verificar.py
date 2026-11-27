@@ -20,6 +20,7 @@ def pct(corte, nombres):
 
 
 peor = 0.0
+resumen = []
 for f in sorted(glob.glob(os.path.join(DIR, '*.entrada.json'))):
     d = json.load(open(f))
     res = [opensees_torre.resolver(d, False), pynite_torre.resolver(d), opensees_torre.resolver(d, True)]
@@ -33,8 +34,17 @@ for f in sorted(glob.glob(os.path.join(DIR, '*.entrada.json'))):
     for r in res:
         p = pct(r['corte'], nombres)
         print(f"  {r['motor']:24s}" + ''.join(f'{p[n]:10.2f}' for n in nombres) + f"    {r['uy'][-1]:.6f}")
+    pE, pP, pT = pct(res[0]['corte'], nombres), pct(res[1]['corte'], nombres), pct(res[2]['corte'], nombres)
+    fE, fP, fT = res[0]['uy'][-1], res[1]['uy'][-1], res[2]['uy'][-1]
+    resumen.append({'caso': caso, 'piezas': len(nombres), 'alturaCompleta': d['alturaCompleta'],
+                    'planillaOpenSees': round(max(abs(pE[n] - pl[n]) for n in nombres), 4) if d['alturaCompleta'] else None,
+                    'pyniteOpenSees': round(max(abs(pP[n] - pE[n]) for n in nombres), 3),
+                    'flechaPynite': round((fP - fE) / fE * 100, 4), 'flechaEuler': round(fE, 6), 'flechaTimoshenko': round(fT, 6),
+                    'corteTimoshenko': round(max(abs(pT[n] - pE[n]) for n in nombres), 2)})
     if d['alturaCompleta']:
         p = pct(res[0]['corte'], nombres)
         dif = max(abs(p[n] - pl[n]) for n in nombres); peor = max(peor, dif)
         print(f"  prueba de oro (planilla = OpenSees Euler): diferencia máxima {dif:.4f} puntos")
 print(f"\nPeor diferencia planilla − OpenSees Euler: {peor:.4f} puntos de %")
+# el resumen que muestra la app (etapa FEM → «Contrastado con otros programas»)
+json.dump(resumen, open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'engine', 'contraste_resumen.json'), 'w'), indent=1, ensure_ascii=False)
