@@ -24,6 +24,8 @@ export interface DatosExo { r: ResultadoExo; def: ExoDef; dir: 'A' | 'B'; ancho:
   /** torre inclinada o corrida (Diseño → Perfil): corrimiento del centro de la torre en cada cota de zs, a lo largo de la cara (corr) y de costado (tc) */
   corr?: number[]; tc?: number[] }
 export type DatosExoCompletos = DatosExo & { entrada: EntradaExo };
+/** una malla del barrido de la ficha M: rigidez, acero y rigidez por tonelada con las mismas secciones; deriva / límite */
+export interface FilaMalla { modulo: number; nudos: number; angulo: number; Jeq: number; peso: number; porTonelada: number; deriva: number }
 /** lo que el worker manda ya calculado: la torre con el exo de cada viento y la verificación de las barras, por clave */
 export interface SemillaExo { torre: Record<string, ResultadoExo>; barras: Record<string, Cirsoc301Barra[]> }
 
@@ -172,6 +174,26 @@ export class ExoDeCalculo {
       const t = th[kr - 1];
       return t > 0 && isFinite(t) ? u / t : NaN;
     });
+  }
+  /**
+   * Ficha M: qué malla conviene. Con las mismas secciones, cada combinación de módulo (pisos de anillo a anillo, sin los
+   * cortes a mano) y nudos por anillo da una rigidez (J equivalente, el promedio de los dos vientos) y un acero; la
+   * rigidez por tonelada mide qué geometría rinde más. Con el ángulo medio de las diagonales y la deriva de servicio.
+   */
+  barridoMalla(def: ExoDef, modulos: number[], nudos: number[]): FilaMalla[] {
+    const m0 = def.malla ?? MALLA_POR_DEFECTO, out: FilaMalla[] = [];
+    for (const modulo of modulos) for (const n of nudos) {
+      // (sin guardar cada malla en la memoria: son muchas y no se vuelven a pedir)
+      const d = { ...def, modulo, cortes: undefined, malla: { ...m0, nudos: n } };
+      const ds = (['A', 'B'] as const).map(dir => this.datosSinMemoria(dir, d));
+      if (ds.some(x => !x)) continue;
+      const [dA, dB] = ds as DatosExoCompletos[], g = dA.entrada.malla!;
+      const diag = g.barras.filter(b => b.clase === 'diagonal').map(b => { const A = g.nudos[b.a], B = g.nudos[b.b]; return (Math.atan2(Math.abs(B.z - A.z), Math.hypot(B.x - A.x, B.y - A.y)) * 180) / Math.PI; });
+      const Jeq = ((dA.r.caras[0]?.Jeq ?? 0) + (dB.r.caras[0]?.Jeq ?? 0)) / 2, peso = pesoExo(d, [dA.entrada, dB.entrada]);
+      const fl = Math.max(this.flecha(dA).u / this.flecha(dA).lim, this.flecha(dB).u / this.flecha(dB).lim);
+      out.push({ modulo, nudos: n, angulo: diag.length ? diag.reduce((s2, v) => s2 + v, 0) / diag.length : NaN, Jeq, peso, porTonelada: peso > 0 ? Jeq / peso : 0, deriva: fl });
+    }
+    return out;
   }
   /** ficha M: los datos de la hoja «G · Malla» del Excel (nudos, barras, fuerzas con los dos vientos y la peor relación del CIRSOC 301) */
   hojaMalla(def: ExoDef): MallaHoja | null {

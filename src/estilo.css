@@ -2422,6 +2422,10 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .malla-patron { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .formulario > .malla-linea { grid-column: 1 / -1; }
 .nota.aviso-malla { border-left: 3px solid var(--revisar); padding-left: 8px; }
+/* barrido de la malla: la rigidez por tonelada de cada malla (verde: rinde más; no es tracción ni compresión) */
+.malla-barrido td { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--ok) calc(var(--k, 0) * 28%), transparent); }
+.malla-barrido td.mejor { outline: 2px solid var(--ok); outline-offset: -2px; font-weight: 600; }
+.malla-barrido .malla-ang { color: var(--ink2); font-size: 11px; }
 /* «Sección de cálculo» (Ayudas): el contorno de la sección real y lo que se pisa, rayado (color de aviso: no es
    tracción ni compresión) */
 .sec-calculo path { pointer-events: none; vector-effect: non-scaling-stroke; }

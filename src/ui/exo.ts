@@ -13,7 +13,7 @@ import { plantaDeNivel } from '../engine/silueta';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
 import { disenadorExo3D } from './exo3d';
-import { camposMalla, vistaMalla } from './exoMalla';
+import { camposMalla, seccionBarridoMalla, vistaMalla } from './exoMalla';
 import { MALLA_POR_DEFECTO, pisosFlojos } from '../engine/exoMalla';
 import { ExoDeCalculo, type DatosExo } from '../engine/exoDeCalculo';
 
@@ -386,6 +386,7 @@ export function panelExo(c: H) {
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
+    if (def.tipo === 'M' && ens.length === 2) c.append(seccionBarridoMalla(def));
     const st = seccionTorsion(def); if (st) c.append(st);
   }
   const fo = h('div', { class: 'formulario' });

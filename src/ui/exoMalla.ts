@@ -4,12 +4,13 @@
  * en rojo, compresión en azul, como en toda la app), y la planta de un anillo con sus nudos sobre la fachada.
  */
 import { estado, fmt } from './estado';
-import { h, type H } from './comp';
+import { h, seccion, type H } from './comp';
 import { campo } from './paneles';
 import { datosExo, exoActual } from './exo';
 import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, tramosParejos, type MallaDef, type PatronMalla } from '../engine/exoMalla';
 import { calcularExo, conMalla, paraViento, seccionEn, type ExoDef } from '../engine/exo';
 import type { MallaHoja } from '../xlsx/hojasG';
+import type { FilaMalla } from '../engine/exoDeCalculo';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -162,4 +163,57 @@ const clave = (a: { x: number; y: number; z: number }, b: { x: number; y: number
 export function hojaMalla(): MallaHoja | null {
   const def = estado.proyecto.exo;
   return def && def.tipo === 'M' ? exoActual().hojaMalla(def) : null;
+}
+
+// ------------------------------------------------------------------ qué malla conviene
+let barridoM: { clave: string; filas: FilaMalla[] } | null = null;
+/** el barrido vale mientras no cambien el proyecto ni el exo (sin contar el módulo, los nudos y los cortes, que se barren) */
+const claveBarridoM = (def: ExoDef) => JSON.stringify([estado.proyecto.niveles.length, estado.calculo?.valores ? 1 : 0, { ...def, modulo: 0, cortes: 0, malla: { ...(def.malla ?? MALLA_POR_DEFECTO), nudos: 0 } }]);
+/** ficha M: probar módulos y nudos por anillo con las mismas secciones y comparar la rigidez por tonelada */
+export function seccionBarridoMalla(def: ExoDef): HTMLElement {
+  const s = seccion('Qué malla conviene');
+  const modulos = [2, 4, 6, 8], nudos = [12, 16, 20, 24];
+  s.cuerpo.append(h('p', { class: 'nota' }, `Con las mismas secciones, cada malla (módulo de anillo a anillo × nudos por anillo) tiene su rigidez y su acero. La rigidez por tonelada (J equivalente / acero) dice qué geometría rinde más: con más rigidez por tonelada, el «Dimensionar» llega con menos acero. Los módulos chicos acuestan las diagonales (toman bien el corte); los grandes las paran (toman bien la flexión). En un diagrid alto el óptimo suele quedar con las diagonales entre 60° y 70° (Moon, Connor y Fernández, 2007). Prueba ${modulos.length * nudos.length} mallas sin los cortes a mano.`));
+  const res = h('div', {});
+  const boton = h('button', { type: 'button', class: 'boton' }, `Probar módulos de ${modulos[0]} a ${modulos[modulos.length - 1]} pisos y de ${nudos[0]} a ${nudos[nudos.length - 1]} nudos`);
+  const mostrar = (filas: FilaMalla[]) => {
+    res.replaceChildren();
+    if (!filas.length) { res.append(h('p', { class: 'nota' }, 'Ninguna malla se pudo calcular.')); return; }
+    const mejor = filas.reduce((a, b) => (b.porTonelada > a.porTonelada ? b : a));
+    const k = (f: FilaMalla) => f.porTonelada / mejor.porTonelada;
+    // la tabla: una fila por módulo, una columna por cantidad de nudos, con la rigidez por tonelada relativa a la mejor
+    const tabla = h('table', { class: 'tabla-valores malla-barrido' });
+    tabla.append(h('tr', {}, h('th', {}, 'módulo \\ nudos'), ...nudos.map(n => h('th', {}, String(n)))));
+    modulos.forEach(mo => tabla.append(h('tr', {}, h('th', {}, `${mo} pisos`), ...nudos.map(n => {
+      const f = filas.find(x => x.modulo === mo && x.nudos === n);
+      if (!f) return h('td', {}, '—');
+      const td = h('td', { title: `${fmt(f.angulo, 0)}° · J eq ${fmt(f.Jeq, 0)} m⁴ · ${fmt(f.peso, 0)} t · deriva ${fmt(f.deriva * 100, 0)} % del límite` }, `${fmt(k(f) * 100, 0)} %`, h('span', { class: 'malla-ang' }, ` ${fmt(f.angulo, 0)}°`));
+      if (f === mejor) td.classList.add('mejor');
+      td.style.setProperty('--k', String(Math.max(0, Math.min(1, k(f)))));
+      return td;
+    }))));
+    const usar = h('button', { type: 'button', class: 'primario' }, `Usar la mejor: módulo de ${mejor.modulo} pisos y ${mejor.nudos} nudos`);
+    usar.addEventListener('click', () => estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.modulo = mejor.modulo; delete x.cortes; x.malla = { ...(x.malla ?? MALLA_POR_DEFECTO), nudos: mejor.nudos }; } }));
+    res.append(tabla,
+      h('p', { class: 'nota chica' }, `Cada celda: la rigidez por tonelada de esa malla, con la mejor (resaltada) = 100 %, y el ángulo medio de sus diagonales. La mejor: ${fmt(mejor.angulo, 0)}°, J equivalente ${fmt(mejor.Jeq, 0)} m⁴ con ${fmt(mejor.peso, 0)} t (${fmt(mejor.porTonelada, 2)} m⁴/t). Después de elegir, «Dimensionar» busca los tubos.`),
+      h('div', { class: 'fila-acciones' }, usar));
+  };
+  boton.addEventListener('click', () => {
+    boton.setAttribute('disabled', '');
+    // de a una malla, dejando pintar entre una y otra (las de módulo grande y muchos nudos tardan un par de segundos)
+    const pares = modulos.flatMap(mo => nudos.map(n => [mo, n] as const)), filas: FilaMalla[] = [], ex = exoActual();
+    const paso = (i: number) => {
+      if (!boton.isConnected) return;
+      if (i >= pares.length) { barridoM = { clave: claveBarridoM(def), filas }; mostrar(filas); boton.removeAttribute('disabled'); return; }
+      try { filas.push(...ex.barridoMalla(def, [pares[i][0]], [pares[i][1]])); } catch { /* una malla que no se puede calcular queda vacía */ }
+      mostrar(filas);
+      res.prepend(h('p', { class: 'nota' }, `Probando mallas: ${i + 1} de ${pares.length}…`));
+      setTimeout(() => paso(i + 1), 0);
+    };
+    res.replaceChildren(h('p', { class: 'nota' }, 'Probando mallas…'));
+    setTimeout(() => paso(0), 30);
+  });
+  s.cuerpo.append(h('div', { class: 'fila-acciones' }, boton), res);
+  if (barridoM && barridoM.clave === claveBarridoM(def)) mostrar(barridoM.filas);
+  return s.el;
 }

@@ -335,4 +335,15 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     cotas.forEach(z => expect(g.anillos.some(k => Math.abs(zs[k] - z) < 1e-9)).toBe(true));
     expect(new Set(tr.map(t => t.clase))).toEqual(new Set(['diagonal', 'viga']));
   });
+  it('qué malla conviene: el barrido de módulos y nudos da rigidez, acero y ángulo de cada malla (Gherkin)', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const f = ex.barridoMalla(p.exo!, [2, 4, 8], [12, 24]);
+    expect(f.length).toBe(6);
+    f.forEach(x => { expect(x.Jeq).toBeGreaterThan(0); expect(x.peso).toBeGreaterThan(0); expect(x.angulo).toBeGreaterThan(20); expect(x.angulo).toBeLessThan(90); });
+    // con más pisos por módulo, las diagonales se paran
+    const ang = (m: number) => f.find(x => x.modulo === m && x.nudos === 12)!.angulo;
+    expect(ang(8)).toBeGreaterThan(ang(4)); expect(ang(4)).toBeGreaterThan(ang(2));
+  });
 });
