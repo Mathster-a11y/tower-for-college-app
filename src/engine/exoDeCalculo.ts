@@ -5,11 +5,12 @@
  * Cada objeto recuerda lo que ya calculó: la etapa, el riel, el avance, los controles y el informe piden lo mismo
  * varias veces por cálculo, y con el CIRSOC 301 cada pedido resuelve todas las caras otra vez.
  */
-import { armarCara, conMalla, propsSeccion, seccionEn, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
+import { armarCara, conMalla, gammaExo, pesoExo, propsSeccion, seccionEn, paraViento, calcularExo, cirsoc301, COMBOS_101_25, COMBOS_CURSO, COMBOS_OBLICUOS_101_25, COMBOS_OBLICUOS_CURSO, FY_F24, type Cirsoc301Barra, type EntradaExo, type ExoDef, type ResultadoExo } from './exo';
 import { datosAltura, moduloHormigon, rigidez, rigidezPorNivel } from './diagramas';
 import { plantaDeNivel } from './silueta';
 import { exoConLosasJuntas } from './losasJuntas';
-import { giroMalla, mallaDe, MALLA_POR_DEFECTO } from './exoMalla';
+import { giroMalla, indiceBarraMalla, mallaDe, nombresMalla, MALLA_POR_DEFECTO, PATRONES_MALLA } from './exoMalla';
+import type { MallaHoja } from '../xlsx/hojasG';
 import type { Proyecto } from './modelo';
 import type { PlanillaRes } from './planilla';
 import type { Viento102 } from './cargas/cirsoc102';
@@ -171,6 +172,37 @@ export class ExoDeCalculo {
       const t = th[kr - 1];
       return t > 0 && isFinite(t) ? u / t : NaN;
     });
+  }
+  /** ficha M: los datos de la hoja «G · Malla» del Excel (nudos, barras, fuerzas con los dos vientos y la peor relación del CIRSOC 301) */
+  hojaMalla(def: ExoDef): MallaHoja | null {
+    if (def.tipo !== 'M') return null;
+    const dA = this.datos('A', def), dB = this.datos('B', def), g = dA?.entrada.malla ?? dB?.entrada.malla;
+    if (!g) return null;
+    const nombres = nombresMalla(g), indice = indiceBarraMalla(g);
+    const N: Record<'A' | 'B', (number | null)[]> = { A: g.barras.map(() => null), B: g.barras.map(() => null) };
+    const ratio: (number | null)[] = g.barras.map(() => null);
+    const reglamento = def.material !== 'hormigon';
+    for (const [dir, d] of [['A', dA], ['B', dB]] as const) {
+      if (!d) continue;
+      const esf = d.r.caras[0]?.esfuerzos ?? [];
+      const porId = new Map(esf.map(e => [e.id, e]));
+      g.barras.forEach((b, i) => { if (b.clase !== 'anillo') N[dir][i] = 0; });
+      esf.forEach(e => { const i = e.p3 ? indice(e.p3) : undefined; if (i !== undefined) N[dir][i] = e.N; });
+      if (reglamento) this.verif301(d).forEach(v => {
+        const i = v.cara === 'anillos' ? nombres.indexOf(v.id) : (() => { const e = porId.get(v.id); return e?.p3 ? indice(e.p3) : undefined; })();
+        if (i !== undefined && i >= 0) ratio[i] = Math.max(ratio[i] ?? 0, v.ratio);
+      });
+    }
+    const ens = ([dA, dB].filter(Boolean) as DatosExoCompletos[]).map(d => d.entrada);
+    const Jg = this.jGiroMalla(def);
+    return {
+      patron: PATRONES_MALLA[(def.malla ?? MALLA_POR_DEFECTO).patron].nombre, gamma: gammaExo(def), peso: pesoExo(def, ens), Jgiro: Jg > 0 ? Jg : undefined,
+      nudos: g.nudos.map((q, i) => [`N${i + 1}`, q.anillo >= 0 ? q.anillo + 1 : null, q.x, q.y, q.z]),
+      barras: g.barras.map((b, i) => {
+        const A = g.nudos[b.a], B = g.nudos[b.b], sec = seccionEn(def, b.clase, Math.min(A.z, B.z));
+        return { id: nombres[i], clase: b.clase === 'anillo' ? 'anillo' : b.clase, a: b.a, b: b.b, L: Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z), sec: { b: sec.b, e: sec.e }, NA: N.A[i], NB: N.B[i], ratio: ratio[i] };
+      }),
+    };
   }
   verif301(d: DatosExoCompletos): Cirsoc301Barra[] {
     return this.recordar(`301 ${d.dir} ${d.ancho} ${d.tCaras.join(' ')}`, d.def, () => {

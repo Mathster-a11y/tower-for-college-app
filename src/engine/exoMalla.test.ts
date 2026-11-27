@@ -300,4 +300,18 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     const dg = new ExoDeCalculo(g.p, calcularProyecto(g.p), 'cirsoc').datos('A', g.p.exo!)!;
     expect(pisosFlojos(dg.entrada.malla!, dg.entrada.zs, dg.r.u)).toEqual([]);
   });
+  it('la hoja «G · Malla» del Excel: cada barra con nombre fijo, sus nudos, sus fuerzas y el peso de la app', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), m = ex.hojaMalla(p.exo!)!;
+    const g = ex.datos('A', p.exo!)!.entrada.malla!;
+    expect(m.nudos.length).toBe(g.nudos.length); expect(m.barras.length).toBe(g.barras.length);
+    expect(new Set(m.barras.map(b => b.id)).size).toBe(m.barras.length);
+    const peso = m.barras.reduce((s2, b) => s2 + m.gamma * propsSeccion({ b: b.sec.b, e: b.sec.e }).A * b.L, 0);
+    expect(peso).toBeCloseTo(m.peso, 6);
+    // las diagonales tienen fuerza con los dos vientos; los anillos, su verificación
+    expect(m.barras.filter(b => b.clase === 'diagonal').every(b => b.NA !== null && b.NB !== null)).toBe(true);
+    expect(m.barras.filter(b => b.clase === 'anillo').every(b => b.ratio !== null)).toBe(true);
+    expect(m.Jgiro).toBeGreaterThan(0);
+  });
 });

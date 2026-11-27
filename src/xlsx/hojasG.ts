@@ -25,6 +25,15 @@ export interface OpcionesG {
   imagenes?: ImagenG[];
   /** exoesqueleto calculado por la app, viento A y B (si el proyecto tiene) */
   exo?: { A: ExoHoja | null; B: ExoHoja | null } | null;
+  /** ficha M: la malla sobre la fachada (nudos en el espacio y cada barra con sus fuerzas y su verificación) */
+  malla?: MallaHoja | null;
+}
+export interface MallaHoja {
+  patron: string; gamma: number; peso: number; Jgiro?: number;
+  /** nombre, anillo (número desde 1; vacío: un nudo donde la barra cruza una losa), x, y, z (m) */
+  nudos: [string, number | null, number, number, number][];
+  /** nombre, clase, índices de sus nudos (desde 0), largo de la app (m), sección (b, e en m), N con el viento A y B (t; + tracción), peor relación del CIRSOC 301 (vacío si no se calculó) */
+  barras: { id: string; clase: string; a: number; b: number; L: number; sec: { b: number; e: number }; NA: number | null; NB: number | null; ratio: number | null }[];
 }
 export interface ExoHoja {
   ficha: string; ancho: number; t: number; Eh: number; Eacero: number; colA: number; fraccion: number; Jeq: number; limiteH?: number; peso?: number;
@@ -155,6 +164,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     'G · Peso por muro: peso propio y losas que bajan por cada muro en PB.',
     'G · Niveles agrupados (torres de más de 49 pisos): qué pisos reales junta cada nivel y el peso de las losas con una losa por piso real.',
     'G · Exoesqueleto y G · Balance tabiques + exo (si la torre tiene exo): reparto del viento entre tabiques y exoesqueleto, piso por piso, y el momento que les queda a los tabiques y a cada pieza.',
+    'G · Malla (si el exo es la ficha M): los nudos de la malla en el espacio y cada barra con su largo, su sección, su peso (fórmulas), sus fuerzas con los dos vientos y su verificación del CIRSOC 301.',
     'G · Planta: los muros de «T3D Muros» dibujados (se actualiza al cambiar la tabla).',
     'G · Perfiles y áreas (app): perfiles irregulares y áreas de influencia, calculados por la app.',
     'G · Dibujos de la app: la carta de la torre y los dibujos de cada etapa, como imágenes.',
@@ -435,6 +445,39 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
     hojas.push(ex);
   }
 
+  // --- G · Malla (ficha M): nudos en el espacio y barras con fórmulas de control (largo, área, peso)
+  if (o.malla) {
+    const m = o.malla, MN = 'G · Malla';
+    const ma = new Hoja(MN, [9, 8, 10, 10, 9, 2, 9, 10, 7, 7, 9, 9, 9, 8, 8, 10, 10, 10, 10, 10, 9]);
+    ma.p('A1', `Malla sobre la fachada (ficha M · ${m.patron}): nudos y barras en el espacio, con la fuerza de cada barra`, 'tit');
+    ma.p('A2', 'Valores de la app (etapa 08): cada viento ve la malla proyectada en su plano y la fuerza vuelve a la barra real (N = N proyectada · L / L₂). Los anillos toman el empuje hacia afuera de las diagonales en sus nudos. Las celdas verdes son fórmulas de control: el largo sale de las coordenadas de los nudos, el área del tubo y el peso, de su sección.', 'nota');
+    ma.p('A3', 'Para pasar la malla a otro programa: los nudos (x, y, z) y las barras (nudo a, nudo b) alcanzan. Fuerzas: + tracción, − compresión.', 'nota');
+    const r0 = 6, r1 = r0 + m.nudos.length;
+    ma.p(`A${r0 - 1}`, 'Nudos', 'sub');
+    ['Nudo', 'anillo', 'x (m)', 'y (m)', 'z (m)'].forEach((t, j) => ma.p(`${col(1 + j)}${r0}`, t, 'h'));
+    m.nudos.forEach(([n, an, x, y, z], i) => { const r = r0 + 1 + i; ma.p(`A${r}`, n); ma.p(`B${r}`, an ?? 'piso', an === null ? 't' : 'n3'); ma.p(`C${r}`, x, 'n3'); ma.p(`D${r}`, y, 'n3'); ma.p(`E${r}`, z, 'n3'); });
+    ma.p(`G${r0 - 1}`, 'Barras', 'sub');
+    const cab = ['Barra', 'clase', 'nudo a', 'nudo b', 'L app (m)', 'L (m)', 'Δ L (m)', 'lado b (m)', 'espesor e (m)', 'A (m²)', 'peso (t)', 'N viento A (t)', 'N viento B (t)', 'CIRSOC 301', ''];
+    cab.forEach((t, j) => ma.p(`${col(7 + j)}${r0}`, t, 'h'));
+    m.barras.forEach((b, i) => {
+      const r = r0 + 1 + i, ra = r0 + 1 + b.a, rb = r0 + 1 + b.b;
+      ma.p(`G${r}`, b.id); ma.p(`H${r}`, b.clase); ma.p(`I${r}`, m.nudos[b.a][0]); ma.p(`J${r}`, m.nudos[b.b][0]);
+      ma.p(`K${r}`, b.L, 'n3'); ma.p(`L${r}`, `=SQRT((C${rb}-C${ra})^2+(D${rb}-D${ra})^2+(E${rb}-E${ra})^2)`, 'r3'); ma.p(`M${r}`, `=L${r}-K${r}`, 'r4');
+      ma.p(`N${r}`, b.sec.b, 'n4'); ma.p(`O${r}`, b.sec.e, 'n4'); ma.p(`P${r}`, `=N${r}^2-MAX(0,N${r}-2*O${r})^2`, 'r4'); ma.p(`Q${r}`, `=${m.gamma}*P${r}*L${r}`, 'r3');
+      ma.p(`R${r}`, b.NA, 'n3'); ma.p(`S${r}`, b.NB, 'n3'); ma.p(`T${r}`, b.ratio, 'n3'); ma.p(`U${r}`, b.ratio === null ? '' : b.ratio <= 1 ? '✓' : '✗');
+    });
+    const rbF = r0 + m.barras.length, rr = Math.max(r1, rbF) + 2;
+    ma.p(`G${rr}`, 'Totales', 'sub');
+    const tot: [string, ValorG, Estilo][] = [
+      ['acero de la malla, con los anillos (t)', `=SUM(Q${r0 + 1}:Q${rbF})`, 'r3'], ['acero según la app (t)', m.peso, 'n3'],
+      ['γ del acero (t/m³)', m.gamma, 'n3'], ['barras que no verifican', `=COUNTIF(T${r0 + 1}:T${rbF},">1")`, 'r3'],
+      ['mayor |Δ L| (m; debe dar 0)', `=MAX(MAX(M${r0 + 1}:M${rbF}),-MIN(M${r0 + 1}:M${rbF}))`, 'r4'],
+      ...(m.Jgiro ? [['rigidez de la malla al giro, Σ J·d² equivalente (m⁶)', m.Jgiro, 'n3'] as [string, ValorG, Estilo]] : []),
+    ];
+    tot.forEach(([t, v, st], k) => { ma.p(`G${rr + 1 + k}`, t, 't'); ma.p(`L${rr + 1 + k}`, v, st); });
+    hojas.push(ma);
+  }
+
   // --- G · Balance tabiques + exo: cuánto trabaja cada parte, leyendo las hojas originales con fórmulas
   if (o.exo && (o.exo.A || o.exo.B)) {
     const BA = 'G · Balance tabiques + exo';
@@ -562,7 +605,7 @@ function armarHojas(p: Proyecto, o: OpcionesG): Hoja[] {
 /** orden final: cada hoja «G ·» al lado de la original con la que trabaja; las «T3D …» al final */
 const ORDEN = ['Léame', 'viento', 'G · Viento corregido', 'M,NyQ', 'G · Carta de la torre', 'J Tabiques paralelos', 'J Tabiques ortogonales', 'G · Sección real',
   'G · Planta', 'G · Perfiles y áreas (app)', 'Rototrasl. cara mayor', 'Rototrasl. cara menor', 'G · Rotación muro por muro', 'Flex comp PB paralelos', 'G · Peso por muro',
-  'G · Exoesqueleto', 'G · Balance tabiques + exo', 'G · Niveles agrupados', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
+  'G · Exoesqueleto', 'G · Malla', 'G · Balance tabiques + exo', 'G · Niveles agrupados', 'G · Dibujos de la app', ...Object.values(T), 'T3D'];
 
 /** agrega las hojas «G ·» (o las reemplaza si la planilla ya las tenía) con sus gráficos e imágenes, y ordena el libro */
 export async function agregarHojasG(zip: JSZip, p: Proyecto, o: OpcionesG, agregarHoja: (nombre: string, xml: string) => Promise<string>): Promise<void> {

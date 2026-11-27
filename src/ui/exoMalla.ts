@@ -6,9 +6,10 @@
 import { estado, fmt } from './estado';
 import { h, type H } from './comp';
 import { campo } from './paneles';
-import { datosExo } from './exo';
+import { datosExo, exoActual } from './exo';
 import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, type MallaDef, type PatronMalla } from '../engine/exoMalla';
 import { calcularExo, conMalla, paraViento, type ExoDef } from '../engine/exo';
+import type { MallaHoja } from '../xlsx/hojasG';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -133,3 +134,9 @@ export function vistaMalla(): HTMLElement {
 }
 
 const clave = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => `${a.x.toFixed(4)},${a.y.toFixed(4)},${a.z.toFixed(3)}|${b.x.toFixed(4)},${b.y.toFixed(4)},${b.z.toFixed(3)}`;
+
+/** ficha M: la hoja «G · Malla» del Excel (nudos, barras, fuerzas con los dos vientos y la peor relación del CIRSOC 301) */
+export function hojaMalla(): MallaHoja | null {
+  const def = estado.proyecto.exo;
+  return def && def.tipo === 'M' ? exoActual().hojaMalla(def) : null;
+}

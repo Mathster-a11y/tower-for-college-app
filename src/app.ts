@@ -485,6 +485,7 @@ async function exportar() {
             fraccion: d.r.fraccionExo, Jeq: d.r.caras[0]?.Jeq ?? 0, limiteH: d.def.limiteH ?? 500, peso: pesoExo(d.def, (['A', 'B'] as const).map(x => datosExo(x)?.entrada).filter(Boolean) as EntradaExo[]), niveles: d.niveles, zs: d.r.zs, W: d.r.Ftab.map((f, i) => f + d.r.Fexo[i]), Ftab: d.r.Ftab, Fexo: d.r.Fexo, u: d.r.u, uSin: d.r.uSin, Mtab: d.r.Mtab,
             barras: d.r.controles.filter(c => !/^[KR]\d/.test(c.id) || d.def.tipo !== 'F').map(c => { const e = d.r.caras.find(x => x.nombre === c.cara)!.esfuerzos.find(x => x.id === c.id)!; return [`${c.cara} · ${c.id}`, c.clase, e.L, c.N, c.M, c.sigma / 10, c.lambda, c.estado]; }) }; };
           g.exo = { A: hoja('A'), B: hoja('B') };
+          g.malla = (await import('./ui/exoMalla')).hojaMalla();
         }
         try {
           const dib = (await dibujosPorHoja()).flat();

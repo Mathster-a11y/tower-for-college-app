@@ -502,3 +502,20 @@ function gauss(M: number[][], b: number[]): number[] {
   for (let r = n - 1; r >= 0; r--) { let s = A[r][n]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = Math.abs(A[r][r]) < 1e-14 ? 0 : s / A[r][r]; }
   return x;
 }
+
+// ------------------------------------------------------------------ nombres fijos de las barras (para tablas y Excel)
+/**
+ * El nombre de cada barra de la malla, el mismo con los dos vientos: C (columnas), D (diagonales) y R (anillos), en el
+ * orden de g.barras. (Las barras del modelo de cada viento se numeran aparte, porque las que no ven el viento no entran.)
+ */
+export function nombresMalla(g: MallaGeo): string[] {
+  const n: Record<string, number> = {};
+  return g.barras.map(b => { const l = b.clase === 'columna' ? 'C' : b.clase === 'diagonal' ? 'D' : b.clase === 'anillo' ? 'R' : 'V'; n[l] = (n[l] ?? 0) + 1; return `${l}${n[l]}`; });
+}
+/** índice en g.barras de una barra del modelo, por la posición real de sus extremos (p3) */
+export function indiceBarraMalla(g: MallaGeo): (p3: { a: { x: number; y: number; z: number }; b: { x: number; y: number; z: number } }) => number | undefined {
+  const idDe = new Map(g.nudos.map((q, i) => [claveP(q), i]));
+  const porPar = new Map<string, number>();
+  g.barras.forEach((b, i) => porPar.set(`${Math.min(b.a, b.b)}|${Math.max(b.a, b.b)}`, i));
+  return p3 => { const a = idDe.get(claveP(p3.a)), b = idDe.get(claveP(p3.b)); return a === undefined || b === undefined ? undefined : porPar.get(`${Math.min(a, b)}|${Math.max(a, b)}`); };
+}
