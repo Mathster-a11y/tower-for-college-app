@@ -115,18 +115,20 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ['Parapeto (m)', 'parapeto o baranda sobre la última losa: se suma a la altura de influencia de la azotea (vacío = 0)', p => p.sitio.parapeto ?? null, (p, v) => { const x = num(v); if (x && x > 0) p.sitio.parapeto = x; else delete p.sitio.parapeto; }],
   ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil, F núcleo con outriggers, M malla sobre la fachada, L libre (barra por barra; vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
     (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E', 'F', 'M', 'L'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
-  ['Exo: malla (ficha M)', 'la malla sobre la fachada, en JSON: patron (diagrid o columnas), nudos, esquinas, giro (°), hasta (m), arriostrada (losas atadas)',
+  ['Exo: malla (ficha M)', 'la malla sobre la fachada, en JSON: patron (diagrid, columnas o hexagrid), nudos, nudosArriba, esquinas, giro (°), hasta (m), arriostrada (losas atadas), sacadas (barras sacadas a mano)',
     p => (p.exo?.malla ? JSON.stringify(p.exo.malla) : null),
     (p, v) => {
       if (!p.exo || !txt(v)) return;
       try {
         const x = JSON.parse(txt(v)), n = Number(x?.nudos);
-        if (!x || !['diagrid', 'columnas'].includes(x.patron) || !(n >= 3)) return;
+        if (!x || !['diagrid', 'columnas', 'hexagrid'].includes(x.patron) || !(n >= 3)) return;
         const m: NonNullable<NonNullable<Proyecto['exo']>['malla']> = { patron: x.patron, nudos: Math.round(n) };
         if (typeof x.esquinas === 'boolean') m.esquinas = x.esquinas;
         if (typeof x.arriostrada === 'boolean') m.arriostrada = x.arriostrada;
         if (Number.isFinite(x.giro)) m.giro = x.giro;
         if (Number.isFinite(x.hasta) && x.hasta > 0) m.hasta = x.hasta;
+        if (Number.isFinite(x.nudosArriba) && x.nudosArriba >= 3) m.nudosArriba = Math.round(x.nudosArriba);
+        if (Array.isArray(x.sacadas)) m.sacadas = x.sacadas.filter((k: unknown): k is string => typeof k === 'string' && /^[a-z]+\|-?\d+:\d+\|-?\d+:\d+$/.test(k));
         p.exo.malla = m;
       } catch { /* texto que no es JSON: se ignora */ }
     }],

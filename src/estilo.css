@@ -2426,6 +2426,16 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .malla-barrido td { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--ok) calc(var(--k, 0) * 28%), transparent); }
 .malla-barrido td.mejor { outline: 2px solid var(--ok); outline-offset: -2px; font-weight: 600; }
 .malla-barrido .malla-ang { color: var(--ink2); font-size: 11px; }
+.malla-svg .malla-eje { stroke: var(--ink2); stroke-width: 1; }
+.malla-svg .malla-media { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 4 3; }
+.malla-svg .malla-deriva-linea { fill: none; stroke: var(--deformada); stroke-width: 2; }
+.malla-svg .malla-flojo { fill: var(--revisar); }
+.malla-svg .malla-rot { font-size: 10px; fill: var(--ink2); }
+.malla-deriva { margin-top: 8px; }
+.malla-svg .malla-quitada { stroke: var(--ink2); stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .7; }
+.malla-svg .malla-toque { stroke: transparent; stroke-width: 10; cursor: pointer; pointer-events: stroke; }
+.malla-svg .malla-toque:hover { stroke: color-mix(in srgb, var(--elegido) 35%, transparent); }
+@media (pointer: coarse) { .malla-svg .malla-toque { stroke-width: 18; } }
 /* «Sección de cálculo» (Ayudas): el contorno de la sección real y lo que se pisa, rayado (color de aviso: no es
    tracción ni compresión) */
 .sec-calculo path { pointer-events: none; vector-effect: non-scaling-stroke; }

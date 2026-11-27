@@ -28,7 +28,7 @@ import type { Proyecto } from './modelo';
 import { contornoAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 import type { Barra, Cara, ClaseBarra, ExoDef, Nudo, Seccion } from './exo';
 
-export type PatronMalla = 'diagrid' | 'columnas';
+export type PatronMalla = 'diagrid' | 'columnas' | 'hexagrid';
 export interface MallaDef {
   patron: PatronMalla;
   /** nudos por anillo (en toda la vuelta) */
@@ -45,6 +45,13 @@ export interface MallaDef {
    * entre anillos solo los sostienen los tabiques (y si arriba no hay, quedan sueltos)
    */
   arriostrada?: boolean;
+  /**
+   * nudos por anillo arriba (densidad variable): de «nudos» en la base a este número en el último anillo, en línea recta
+   * con la altura; vacío = los mismos en toda la altura
+   */
+  nudosArriba?: number;
+  /** barras sacadas a mano (su clave: claveBarra), por ejemplo para abrir una entrada en planta baja */
+  sacadas?: string[];
 }
 /** tope de nudos por anillo: con más, el cálculo se vuelve lento y las barras más cortas que un piso */
 export const NUDOS_MAX = 96;
@@ -52,6 +59,7 @@ export const MALLA_POR_DEFECTO: MallaDef = { patron: 'diagrid', nudos: 16, esqui
 export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string }> = {
   diagrid: { nombre: 'Diagrid', texto: 'Rombos de diagonales sobre la fachada, sin columnas: cada anillo corrido medio paso respecto del de abajo (30 St Mary Axe).' },
   columnas: { nombre: 'Columnas y cruces', texto: 'Columnas que siguen la fachada de anillo en anillo y una cruz de San Andrés en cada paño.' },
+  hexagrid: { nombre: 'Hexagrid', texto: 'Panal de hexágonos sobre la fachada: una capa de diagonales y una de montantes, alternadas. Más abierto y liviano a la vista que el diagrid, pero menos rígido: trabaja en parte por flexión de los nudos.' },
 };
 
 export interface NudoMalla {
@@ -61,7 +69,11 @@ export interface NudoMalla {
   /** posición en la vuelta (0 a 1, desde el arranque) y metros de fachada que le tocan */
   t: number; trib: number;
 }
-export interface BarraMalla { clase: ClaseBarra | 'anillo'; a: number; b: number }
+export interface BarraMalla {
+  clase: ClaseBarra | 'anillo'; a: number; b: number;
+  /** la barra entera de anillo a anillo a la que pertenece (sus tramos entre pisos tienen la misma): para sacarla a mano */
+  clave?: string;
+}
 export interface MallaGeo {
   nudos: NudoMalla[]; barras: BarraMalla[];
   /** índices de zs de los anillos, de abajo arriba */
@@ -70,6 +82,8 @@ export interface MallaGeo {
   perimetro: number[];
   /** centro de la planta de PB (las posiciones s del modelo se miden desde acá) */
   cx: number; cy: number;
+  /** las barras sacadas a mano (entre nudos que siguen en la malla), para dibujarlas */
+  quitadas?: BarraMalla[];
 }
 
 // ------------------------------------------------------------------ contorno: orientación, corrimiento y esquinas
@@ -166,7 +180,7 @@ export function anillosMalla(def: ExoDef, zs: number[]): number[] {
   } else { bordes = []; for (let k = 0; k <= kTop; k += mod) bordes.push(k); }
   if (bordes[bordes.length - 1] !== kTop) bordes.push(kTop);
   bordes = [...new Set(bordes)].sort((a, b) => a - b);
-  if (m.patron !== 'diagrid') return bordes;
+  if (m.patron === 'columnas') return bordes;
   const out: number[] = [];
   bordes.forEach((k, i) => { out.push(k); const s = bordes[i + 1]; if (s !== undefined && s - k >= 2) out.push(Math.round((k + s) / 2)); });
   return [...new Set(out)].sort((a, b) => a - b);
@@ -180,6 +194,13 @@ function contornoEn(p: Proyecto, z: number): { fachada: Punto[]; losa: Punto[] }
   const dx = p.niveles[i]?.dx ?? 0, dy = p.niveles[i]?.dy ?? 0;
   const mover = (q: Punto[]) => limpio(q.map(a => ({ x: a.x + dx, y: a.y + dy })));
   return { fachada: mover(puntosSilueta(contornoAlViento(p, i).v, 4)), losa: mover(puntosSilueta(plantaDeNivel(p, i).silueta, 4)) };
+}
+
+/** la clave de una barra de anillo a anillo: su clase y la posición de sus dos nudos (anillo y lugar en la vuelta) */
+export function claveBarra(A: NudoMalla, B: NudoMalla, clase: BarraMalla['clase']): string {
+  const p = (q: NudoMalla) => `${q.anillo}:${Math.round((((q.t % 1) + 1) % 1) * 1e4)}`;
+  const [x, y] = [p(A), p(B)].sort();
+  return `${clase}|${x}|${y}`;
 }
 
 /**
@@ -204,9 +225,13 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const z1 = def.cortes?.find(z => z > zs[0] + 1e-6) ?? zs[Math.min(mod, zs.length - 1)];
     const ang = (((m.giro ?? 0) * Math.PI) / 180) * ((zs[k] - zs[0]) / Math.max(1e-6, z1 - zs[0]));
     const origen = arranque(q, ccx, ccy, ang);
-    const medio = m.patron === 'diagrid' && r % 2 === 1;
+    // diagrid: cada anillo corrido medio paso; hexagrid: corrido después de cada capa de diagonales (0, ½, ½, 0, 0, ½…)
+    const medio = m.patron === 'diagrid' ? r % 2 === 1 : m.patron === 'hexagrid' ? Math.floor((r + 1) / 2) % 2 === 1 : false;
+    // densidad variable: de N en la base a «nudos arriba» en el último anillo
+    const fz = anillos.length > 1 ? (zs[k] - zs[anillos[0]]) / Math.max(1e-6, zs[anillos[anillos.length - 1]] - zs[anillos[0]]) : 0;
+    const Nr = m.nudosArriba ? Math.min(NUDOS_MAX, Math.max(3, Math.round(N + (m.nudosArriba - N) * fz))) : N;
     const ids: number[] = [];
-    nudosEnContorno(q, N, m.esquinas !== false, medio, origen).forEach(({ pos, trib }) => {
+    nudosEnContorno(q, Nr, m.esquinas !== false, medio, origen).forEach(({ pos, trib }) => {
       const pt = enPosicion(q, acum, P, pos);
       ids.push(nudos.length);
       nudos.push({ x: pt.x, y: pt.y, z: zs[k], k, anillo: r, t: ((((pos - origen) % P) + P) % P) / P, trib });
@@ -220,17 +245,21 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
   const despues = (ids: number[], t: number) => ids.reduce((m2, id) => { const d = dt(t, nudos[id].t); return d > 1e-9 && d < m2.d ? { id, d } : m2; }, { id: ids[0], d: Infinity }).id;
   const antes = (ids: number[], t: number) => ids.reduce((m2, id) => { const d = dt(nudos[id].t, t); return d > 1e-9 && d < m2.d ? { id, d } : m2; }, { id: ids[0], d: Infinity }).id;
   const vistos = new Set<string>();
+  const sacadas = new Set(m.sacadas ?? []), quitadas: BarraMalla[] = [];
   const barra = (clase: BarraMalla['clase'], a: number, b: number) => {
     if (a === b) return;
     const k = `${clase}|${Math.min(a, b)}|${Math.max(a, b)}`;
-    if (vistos.has(k)) return; vistos.add(k); barras.push({ clase, a, b });
+    if (vistos.has(k)) return; vistos.add(k);
+    const br: BarraMalla = { clase, a, b, clave: claveBarra(nudos[a], nudos[b], clase) };
+    (sacadas.has(br.clave!) ? quitadas : barras).push(br);
   };
   porAnillo.forEach((ids, r) => {
     // el anillo (no en la base: ahí la malla apoya en la fundación)
     if (r > 0) { const orden = [...ids].sort((a, b) => nudos[a].t - nudos[b].t); orden.forEach((id, i) => barra('anillo', id, orden[(i + 1) % orden.length])); }
     const arriba = porAnillo[r + 1];
     if (!arriba) return;
-    if (m.patron === 'diagrid') ids.forEach(id => { barra('diagonal', id, despues(arriba, nudos[id].t)); barra('diagonal', id, antes(arriba, nudos[id].t)); });
+    if (m.patron === 'diagrid' || (m.patron === 'hexagrid' && r % 2 === 0)) ids.forEach(id => { barra('diagonal', id, despues(arriba, nudos[id].t)); barra('diagonal', id, antes(arriba, nudos[id].t)); });
+    else if (m.patron === 'hexagrid') ids.forEach(id => barra('columna', id, cercano(arriba, nudos[id].t)));
     else {
       const orden = [...ids].sort((a, b) => nudos[a].t - nudos[b].t);
       orden.forEach((id, i) => {
@@ -250,9 +279,9 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
       const f = (zs[k] - L0.z) / (L1.z - L0.z || 1);
       const id = nudos.length;
       nudos.push({ x: L0.x + (L1.x - L0.x) * f, y: L0.y + (L1.y - L0.y) * f, z: zs[k], k, anillo: -1, t: L0.t + ((((L1.t - L0.t + 0.5) % 1) + 1) % 1 - 0.5) * f, trib: 0 });
-      out.push({ clase: b.clase, a: prev, b: id }); prev = id;
+      out.push({ clase: b.clase, a: prev, b: id, clave: b.clave }); prev = id;
     }
-    out.push({ clase: b.clase, a: prev, b: hi });
+    out.push({ clase: b.clase, a: prev, b: hi, clave: b.clave });
     return out;
   });
   // el ancho de influencia de los nudos de los pisos entre anillos: la fachada de ese piso repartida entre ellos
@@ -260,7 +289,7 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
   nudos.forEach((q, i) => { if (q.anillo < 0) porPiso.set(q.k, [...(porPiso.get(q.k) ?? []), i]); });
   porPiso.forEach((ids, k) => { const P = perimetroPol(corrido(contornos[k].fachada, def.separacion ?? 0)); ids.forEach(i => { nudos[i].trib = P / ids.length; }); });
   const perimetro = contornos.map(c => perimetroPol(c.losa));
-  return { nudos, barras: partidas, anillos, perimetro, cx, cy };
+  return { nudos, barras: partidas, anillos, perimetro, cx, cy, ...(quitadas.length ? { quitadas } : {}) };
 }
 
 // ------------------------------------------------------------------ proyección en el plano del viento

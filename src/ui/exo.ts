@@ -357,7 +357,7 @@ export function panelExo(c: H) {
       kpi(vientoReglamento() ? 'Deriva de servicio' : 'Flecha azotea', `${fmt(fl.u * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * relS * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · ${fl.texto} = ${fmt(fl.lim * 1000, 0)}`, colorEstado(fl.u <= fl.lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : def.tipo === 'M' ? 'J equivalente de la malla' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
-      kpi(def.tipo === 'M' && reglamento ? 'Barras y anillos' : 'Barras', `${total - malos} de ${total}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
+      kpi(def.tipo === 'M' && reglamento ? 'Barras, con los anillos' : 'Barras', `${total - malos} de ${total}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
     if (def.tipo === 'M' && d.entrada.malla) {
       // pisos entre anillos que la malla frena mal (sin tabiques en ese sentido, o donde la malla se cierra arriba)
       const flojos = pisosFlojos(d.entrada.malla, d.entrada.zs, d.r.u);

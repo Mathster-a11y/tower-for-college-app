@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, seccion, type H } from './comp';
 import { campo } from './paneles';
 import { datosExo, exoActual } from './exo';
-import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, tramosParejos, type MallaDef, type PatronMalla } from '../engine/exoMalla';
+import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, pisosFlojos, tramosParejos, type MallaDef, type PatronMalla } from '../engine/exoMalla';
 import { calcularExo, conMalla, paraViento, seccionEn, type ExoDef } from '../engine/exo';
 import type { MallaHoja } from '../xlsx/hojasG';
 import type { FilaMalla } from '../engine/exoDeCalculo';
@@ -28,6 +28,8 @@ export function camposMalla(fo: H, def: ExoDef, set: (f: (d: ExoDef) => void) =>
   const num = (v: string) => parseFloat(v.replace(',', '.'));
   campo(fo, 'Nudos por anillo', 'exo-malla-n', m.nudos, v => { const x = num(v); if (isFinite(x) && x >= 3) conMalla(y => { y.nudos = Math.min(NUDOS_MAX, Math.round(x)); }); },
     { tipo: 'number', ayuda: `en toda la vuelta, de 3 a ${NUDOS_MAX} (Gherkin: 18)` });
+  campo(fo, 'Nudos por anillo arriba', 'exo-malla-narriba', m.nudosArriba ?? '', v => { const x = num(v); conMalla(y => { if (isFinite(x) && x >= 3) y.nudosArriba = Math.min(NUDOS_MAX, Math.round(x)); else delete y.nudosArriba; }); },
+    { tipo: 'number', ayuda: 'densidad variable: de los nudos de abajo a estos en el último anillo; vacío: los mismos en toda la altura' });
   campo(fo, 'Giro por módulo', 'exo-malla-giro', m.giro ?? 0, v => { const x = num(v); if (isFinite(x)) conMalla(y => { y.giro = x || undefined; }); },
     { tipo: 'number', unidad: '°', ayuda: 'torres que se retuercen; 0: sin giro' });
   campo(fo, 'Malla hasta la cota', 'exo-malla-hasta', m.hasta ?? '', v => { const x = num(v); conMalla(y => { y.hasta = isFinite(x) && x > 0 ? x : undefined; }); },
@@ -68,7 +70,7 @@ export function camposMalla(fo: H, def: ExoDef, set: (f: (d: ExoDef) => void) =>
   fo.append(h('p', { class: 'nota chica nota-ancha' }, 'La malla sigue la fachada de cada nivel (la carpintería o, si no hay, el borde de la losa) corrida la separación hacia afuera: sirve para plantas redondas, elípticas, poligonales o curvas y para torres que se angostan o se corren. Se calcula entera con cada viento: es exacta con losas rígidas y una planta simétrica respecto del viento; con plantas asimétricas difiere menos del 1 % (el giro de la planta lo toma la rototraslación). Los anillos toman el empuje hacia afuera de las diagonales en sus nudos (como un zuncho: el peso, en una malla poligonal, abre los nudos) y se verifican con el CIRSOC 301 a tracción o compresión, con la sección de las vigas; el empuje a lo largo de la fachada lo toma la losa.'));
 }
 
-let giro = 30, anilloVisto = 0, soloViento = true;
+let giro = 30, anilloVisto = 0, soloViento = true, modoSacar = false;
 
 /** la vista «Malla en 3D»: la malla real girable y la planta de un anillo */
 export function vistaMalla(): HTMLElement {
@@ -97,13 +99,20 @@ export function vistaMalla(): HTMLElement {
 
   const fila = h('div', { class: 'malla-fila' });
   const ax = h('div', { class: 'malla-ax' }), pl = h('div', { class: 'malla-pl' });
-  fila.append(ax, pl);
+  const colD = h('div', {}, pl);
+  fila.append(ax, colD);
   const rGiro = h('input', { type: 'range', min: '0', max: '360', step: '5', value: String(giro), 'aria-label': 'Girar la malla' }) as HTMLInputElement;
   rGiro.addEventListener('input', () => { giro = +rGiro.value; dibujarAx(); });
   const rAn = h('input', { type: 'range', min: '0', max: String(g.anillos.length - 1), step: '1', value: String(Math.min(anilloVisto, g.anillos.length - 1)), 'aria-label': 'Anillo que se ve en planta' }) as HTMLInputElement;
   const tAn = h('span', { class: 'nota chica' });
   rAn.addEventListener('input', () => { anilloVisto = +rAn.value; dibujarPl(); dibujarAx(); });
-  caja.append(fila, h('div', { class: 'fila-acciones malla-controles' }, h('label', {}, 'Girar ', rGiro), h('label', {}, 'Anillo en planta ', rAn), tAn));
+  const bSacar = h('button', { type: 'button', 'aria-pressed': String(modoSacar), title: 'Tocá una barra para sacarla (por ejemplo, para abrir una entrada en planta baja) o una punteada para devolverla. Si la malla queda inestable, el cálculo lo avisa' }, 'Sacar o devolver barras');
+  bSacar.addEventListener('click', () => { modoSacar = !modoSacar; bSacar.setAttribute('aria-pressed', String(modoSacar)); dibujarAx(); });
+  const nSac = (g.quitadas ?? []).length;
+  const bTodas = h('button', { type: 'button' }, `Devolver las ${nSac}`);
+  bTodas.addEventListener('click', () => estado.cambiar(() => { const x = estado.proyecto.exo; if (x?.malla) { const m = { ...x.malla }; delete m.sacadas; x.malla = m; } }));
+  caja.append(fila, h('div', { class: 'fila-acciones malla-controles' }, h('label', {}, 'Girar ', rGiro), h('label', {}, 'Anillo en planta ', rAn), tAn),
+    h('div', { class: 'fila-acciones' }, h('div', { class: 'seg chico' }, bSacar), ...(nSac ? [bTodas, h('span', { class: 'nota chica' }, `${nSac} barra${nSac > 1 ? 's' : ''} sacada${nSac > 1 ? 's' : ''} a mano (si cambiás los nudos o el módulo, cambian de lugar y dejan de valer)`)] : [])));
 
   const W = 520, H = 560;
   function dibujarAx() {
@@ -129,6 +138,34 @@ export function vistaMalla(): HTMLElement {
       if (N !== undefined) l.append(sv('title', {}, `${b.clase === 'columna' ? 'Columna' : 'Diagonal'} · N = ${fmt(N, 1)} t (${N >= 0 ? 'tracción' : 'compresión'})`));
       svg.append(l);
     });
+    // las barras sacadas a mano: punteadas, para poder devolverlas
+    (g!.quitadas ?? []).forEach(b => {
+      const pa = pts[b.a], pb = pts[b.b];
+      svg.append(sv('line', { x1: X(pa.X).toFixed(1), y1: Y(pa.Y).toFixed(1), x2: X(pb.X).toFixed(1), y2: Y(pb.Y).toFixed(1), class: 'malla-quitada' }));
+    });
+    // modo «sacar o devolver barras»: cada barra entera (de anillo a anillo) con una franja ancha para tocarla
+    if (modoSacar) {
+      const vistas = new Set<string>();
+      const toque = (b: { a: number; b: number; clave?: string; clase: string }, quitada: boolean) => {
+        if (!b.clave || b.clase === 'anillo') return;
+        const pa = pts[b.a], pb = pts[b.b];
+        const t = sv('line', { x1: X(pa.X).toFixed(1), y1: Y(pa.Y).toFixed(1), x2: X(pb.X).toFixed(1), y2: Y(pb.Y).toFixed(1), class: 'malla-toque', 'data-clave': b.clave });
+        t.append(sv('title', {}, quitada ? 'Devolver esta barra' : 'Sacar esta barra (de anillo a anillo)'));
+        t.addEventListener('click', () => {
+          const clave = b.clave!;
+          estado.cambiar(() => {
+            const x = estado.proyecto.exo; if (!x) return;
+            const m = { ...(x.malla ?? MALLA_POR_DEFECTO) }, ss = new Set(m.sacadas ?? []);
+            if (ss.has(clave)) ss.delete(clave); else ss.add(clave);
+            m.sacadas = [...ss]; if (!m.sacadas.length) delete m.sacadas;
+            x.malla = m;
+          });
+        });
+        svg.append(t);
+      };
+      g!.barras.forEach(b => { if (b.clave && !vistas.has(b.clave + b.a)) { vistas.add(b.clave + b.a); toque(b, false); } });
+      (g!.quitadas ?? []).forEach(b => toque(b, true));
+    }
     // el anillo que se ve en planta, resaltado
     const r = Math.min(anilloVisto, g!.anillos.length - 1);
     g!.nudos.forEach((q, i) => { if (q.anillo === r) svg.append(sv('circle', { cx: X(pts[i].X).toFixed(1), cy: Y(pts[i].Y).toFixed(1), r: 2.6, class: 'malla-nudo-sel' })); });
@@ -154,6 +191,7 @@ export function vistaMalla(): HTMLElement {
     tAn.textContent = `anillo ${r + 1} de ${g!.anillos.length} · cota ${fmt(z, 2)} m · ${ns.length} nudos, uno cada ${fmt(ns.reduce((s, q) => s + q.trib, 0) / Math.max(1, ns.length), 2)} m de fachada`;
   }
   dibujarAx(); dibujarPl();
+  colD.append(derivaPorPiso(d.r.u, d.entrada.zs, g, d.dir));
   return caja;
 }
 
@@ -216,4 +254,28 @@ export function seccionBarridoMalla(def: ExoDef): HTMLElement {
   s.cuerpo.append(h('div', { class: 'fila-acciones' }, boton), res);
   if (barridoM && barridoM.clave === claveBarridoM(def)) mostrar(barridoM.filas);
   return s.el;
+}
+
+/**
+ * La deriva de cada piso (Δu / h, en mm por metro) con el viento elegido, al lado de la malla: la media de la torre
+ * punteada y los pisos flojos (más de 3 veces la media) marcados. Color de la deformada (no es tracción ni compresión).
+ */
+function derivaPorPiso(u: number[], zs: number[], g: import('../engine/exoMalla').MallaGeo, dir: 'A' | 'B'): SVGSVGElement {
+  const S = 260, Hh = 300, m = { i: 36, d: 10, a: 10, b: 28 };
+  const der = u.map((x, i) => (Math.abs(x - (i ? u[i - 1] : 0)) / Math.max(1e-9, zs[i + 1] - zs[i])) * 1000);
+  const media = (Math.abs(u[u.length - 1] ?? 0) / Math.max(1e-9, zs[zs.length - 1] - zs[0])) * 1000;
+  const flojos = new Set(pisosFlojos(g, zs, u).map(f => f.z));
+  const dMax = Math.max(1e-9, ...der, media * 1.2), z0 = zs[0], z1 = zs[zs.length - 1];
+  const X = (v: number) => m.i + (v / dMax) * (S - m.i - m.d), Y = (z: number) => Hh - m.b - ((z - z0) / Math.max(1e-9, z1 - z0)) * (Hh - m.a - m.b);
+  const svg = sv('svg', { viewBox: `0 0 ${S} ${Hh}`, class: 'malla-svg malla-deriva', role: 'img', 'aria-label': `Deriva de cada piso con el viento ${dir}` }) as SVGSVGElement;
+  svg.append(sv('line', { x1: X(0), y1: Y(z0), x2: X(0), y2: Y(z1), class: 'malla-eje' }), sv('line', { x1: X(0), y1: Y(z0), x2: S - m.d, y2: Y(z0), class: 'malla-eje' }));
+  svg.append(sv('line', { x1: X(media).toFixed(1), y1: Y(z0), x2: X(media).toFixed(1), y2: Y(z1), class: 'malla-media' }));
+  const pts = der.map((v, i) => `${X(v).toFixed(1)},${Y(zs[i + 1]).toFixed(1)}`);
+  svg.append(sv('polyline', { points: [`${X(der[0] ?? 0).toFixed(1)},${Y(z0).toFixed(1)}`, ...pts].join(' '), class: 'malla-deriva-linea' }));
+  der.forEach((v, i) => { if (flojos.has(zs[i + 1])) svg.append(sv('circle', { cx: X(v).toFixed(1), cy: Y(zs[i + 1]).toFixed(1), r: 4, class: 'malla-flojo' }, )); });
+  svg.append(sv('text', { x: m.i, y: Hh - 8, class: 'malla-rot' }, `deriva de cada piso (mm/m), viento ${dir}`));
+  svg.append(sv('text', { x: X(media) + 3, y: Y(z0) - 4, class: 'malla-rot' }, `media ${fmt(media, 2)}`));
+  svg.append(sv('text', { x: 2, y: Y(z1) + 4, class: 'malla-rot' }, `${fmt(z1, 0)} m`), sv('text', { x: 2, y: Y(z0), class: 'malla-rot' }, `${fmt(z0, 0)} m`));
+  if (flojos.size) svg.append(sv('text', { x: S - m.d, y: m.a + 10, class: 'malla-rot', 'text-anchor': 'end' }, `● ${flojos.size} piso${flojos.size > 1 ? 's' : ''} flojo${flojos.size > 1 ? 's' : ''}`));
+  return svg;
 }

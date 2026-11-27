@@ -119,6 +119,37 @@ describe('malla sobre la fachada: geometría', () => {
   });
 });
 
+describe('malla sobre la fachada: patrones, densidad y barras sacadas', () => {
+  it('hexagrid: capas alternadas de diagonales y montantes; se calcula y es menos rígido que el diagrid', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const hex = { ...p.exo!, malla: { patron: 'hexagrid' as const, nudos: 18 } };
+    const d = ex.datos('A', hex)!;
+    expect(d, ex.ultimoError).not.toBeNull();
+    const g = d.entrada.malla!;
+    expect(g.barras.some(b => b.clase === 'columna')).toBe(true);
+    expect(g.barras.some(b => b.clase === 'diagonal')).toBe(true);
+    expect(d.r.caras[0].Jeq).toBeLessThan(ex.datos('A', p.exo!)!.r.caras[0].Jeq);
+  });
+  it('densidad variable: de 24 nudos abajo a 12 arriba', () => {
+    const { p, def, zs } = gherkinM();
+    const g = mallaDe(p, { ...def, malla: { ...def.malla!, nudos: 24, nudosArriba: 12 } }, zs);
+    const n = (r: number) => g.nudos.filter(q => q.anillo === r).length;
+    expect(n(0)).toBe(24); expect(n(g.anillos.length - 1)).toBe(12);
+    for (let r = 1; r < g.anillos.length; r++) expect(n(r)).toBeLessThanOrEqual(n(r - 1));
+  });
+  it('barras sacadas a mano: salen de la malla entera (con sus tramos entre pisos) y quedan para dibujarlas', () => {
+    const { p, def, zs } = gherkinM();
+    const g0 = mallaDe(p, def, zs);
+    const clave = g0.barras.find(b => b.clase === 'diagonal' && g0.nudos[b.a].z === 0)!.clave!;
+    const g = mallaDe(p, { ...def, malla: { ...def.malla!, sacadas: [clave] } }, zs);
+    expect(g.barras.some(b => b.clave === clave)).toBe(false);
+    expect(g.quitadas?.length).toBe(1);
+    expect(g0.barras.filter(b => b.clave === clave).length).toBeGreaterThan(1);    // cruzaba pisos: varios tramos
+  });
+});
+
 describe('malla sobre la fachada: el cálculo por proyección', () => {
   it('da lo mismo que el reticulado espacial con losas rígidas (Gherkin, viento en x)', () => {
     const { p, def: def0, zs } = gherkinM();
