@@ -2325,3 +2325,27 @@ input.altura-vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; 
   .barra #estado-calculo { max-width: none; }
   .barra .espacio { flex: 1 1 0; min-width: 0; }
 }
+
+/* «Distancia al centro» (Ayudas): Δx verde, Δy violeta y r en tinta; ni rojo ni azul (son tracción y compresión) */
+.dist-centro line, .dist-centro path { fill: none; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dist-centro .dist-dx { stroke: var(--deformada); stroke-width: 2.5; stroke-dasharray: 7 5; }
+.dist-centro .dist-dy { stroke: var(--corte); stroke-width: 2.5; stroke-dasharray: 7 5; }
+.dist-centro .dist-r { stroke: var(--ink); stroke-width: 2; }
+.dist-centro .dist-base { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 3; }
+.dist-centro .dist-arco { stroke: var(--ink); stroke-width: 1.5; }
+.dist-centro .dist-o { fill: var(--ink); pointer-events: none; }
+.dist-centro .dist-g { fill: var(--lienzo); stroke: var(--elegido); stroke-width: 2.5; pointer-events: none; }
+.dist-centro .dist-g-cruz { stroke: var(--elegido); stroke-width: 2; }
+.dist-centro .dist-txt { font: 600 12px var(--fuente); paint-order: stroke; stroke: var(--lienzo); stroke-width: 4px; pointer-events: none; }
+.dist-centro .dist-txt.dx { fill: var(--deformada); }
+.dist-centro .dist-txt.dy { fill: var(--corte); }
+.dist-centro .dist-txt.r { fill: var(--ink); }
+.dist-centro .dist-txt.g { fill: var(--elegido); }
+.muro.dist-pieza > g > * { stroke: var(--elegido); stroke-width: 2.5px; }
+.dist-panel { width: 240px; }
+.dist-panel .nota-chica { font-size: 11px; color: var(--ink2); }
+.dist-fila { display: flex; align-items: center; gap: 6px; }
+.dist-muestra { display: inline-block; width: 20px; height: 0; border-top: 3px dashed; }
+.dist-muestra.dx { border-color: var(--deformada); }
+.dist-muestra.dy { border-color: var(--corte); }
+.dist-muestra.r { border-top-style: solid; border-top-width: 2px; border-color: var(--ink); }
