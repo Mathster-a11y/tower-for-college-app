@@ -2347,3 +2347,7 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .tabla-contraste td:not(:first-child) { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 .tabla-contraste td:first-child { white-space: normal; min-width: 7em; }
 .tabla-contraste th, .tabla-contraste td { padding-left: 4px; padding-right: 4px; }
+
+/* Ayuda: programas y letras de terceros */
+.terceros { padding-left: 18px; }
+.terceros li + li { margin-top: 3px; }

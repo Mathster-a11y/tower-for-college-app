@@ -584,6 +584,15 @@ export function panelAvisos(c: H) {
 }
 
 // ------------------------------------------------------------------ Ayuda
+/** lo de terceros que va dentro de la app: nombre, para qué, licencia y sitio */
+const TERCEROS: [string, string, string, string][] = [
+  ['three.js', 'la axonometría, el 3D y los túneles de viento 3D', 'MIT', 'https://threejs.org/'],
+  ['pdf.js (Mozilla)', 'calcar planos en PDF', 'Apache 2.0', 'https://mozilla.github.io/pdf.js/'],
+  ['PptxGenJS', 'las presentaciones en PowerPoint', 'MIT', 'https://gitbrent.github.io/PptxGenJS/'],
+  ['JSZip', 'los Excel y los .zip', 'MIT (o GPL 3, a elección; se usa con la MIT)', 'https://stuk.github.io/jszip/'],
+  ['IBM Plex Sans e IBM Plex Math', 'la letra del texto y de las fórmulas', 'SIL Open Font License 1.1', 'https://github.com/IBM/plex'],
+  ['JetBrains Mono', 'la letra de los números', 'SIL Open Font License 1.1', 'https://www.jetbrains.com/lp/mono/'],
+];
 export function panelAyuda(c: H) {
   const pasos: [string, string][] = [
     ['Sitio', 'Nombre, alumno y datos del viento (CIRSOC 102). La exposición completa zg y α. El hormigón fija la resistencia característica σbk (H30 → 30 MPa = 300 kg/cm²), que la app usa como límite de compresión, igual que la guía.'],
@@ -616,6 +625,11 @@ export function panelAyuda(c: H) {
   c.append(h('p', { class: 'nota' }, `Torre 3D · © ${ANIO} ${AUTOR}. `, lic, vigente()
     ? `: hasta el ${HASTA} se puede usar, compartir y adaptar citando al autor, sin fines comerciales. Después de esa fecha queda con todos los derechos reservados, salvo que el autor la renueve.`
     : `: venció el ${HASTA}. La app queda con todos los derechos reservados; para seguir usándola, consultá al autor.`));
+  // programas y letras de terceros que van dentro de la app (las licencias lo piden; también en LICENCIAS-TERCEROS.md)
+  c.append(h('h3', {}, 'Programas y letras de terceros'));
+  const terceros = h('ul', { class: 'nota terceros' });
+  TERCEROS.forEach(([nom, para, lic, url]) => terceros.append(h('li', {}, h('a', { href: url, target: '_blank', rel: 'noopener' }, nom), ` — ${para}. Licencia ${lic}.`)));
+  c.append(terceros, h('p', { class: 'nota chica' }, 'Para verificar el motor de cálculo (no van dentro de la app): OpenSees (Universidad de California, Berkeley; se usa solo para las pruebas) y Pynite (licencia MIT; el archivo «Contraste con Pynite» lo usa en tu computadora o en Google Colab).'));
   c.append(h('p', { class: 'nota chica' }, 'Material de la cátedra (Electiva Edificios en Torre, FAUD-UNMDP): la planilla del curso, las guías, las clases y el CIRSOC 102 que toma como referencia conservan los derechos de sus autores y no están incluidos en esta licencia.'));
 }
 
