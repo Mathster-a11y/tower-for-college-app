@@ -24,6 +24,7 @@ import { loftDeNivel, nivelesDeLoft, nuevoIdLoft, problemaLoft, type Loft } from
 import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { distanciaAlCentro } from '../engine/distanciaCentro';
+import { extenderHasta } from '../engine/extender';
 import { jEnDireccion, propiedadesSeccion, seccionReal, unionHuellas } from '../engine/seccionPieza';
 import { aEscuadra, aTope, criterioDelProyecto, esColumna, rectsEscuadra } from '../engine/escuadra';
 import { diferencia } from '../engine/poligonos';
@@ -1917,6 +1918,8 @@ export function montarPlanta(cont: HTMLElement) {
   panelAreas.className = 'calco-panel areas-panel';
   panelAreas.hidden = true;
   dock.appendChild(panelAreas);
+  // «Extender o recortar hasta»: el muro que se va a llevar hasta otro (null = no se está eligiendo)
+  let extHasta: string | null = null;
   // «Muros a escuadra (D)» (Ayudas): la planta dibuja los muros como entran al cálculo con el criterio D (cada uno un
   // rectángulo a escuadra que no toca a ningún otro elemento) y el espacio muerto rayado. Por defecto, los encuentros
   // a tope (A) o a inglete (B)
@@ -2420,6 +2423,15 @@ export function montarPlanta(cont: HTMLElement) {
         });
         ca.append(mk('span', 'El cálculo usa la sección más débil: el corte por las aberturas (J de los pedazos que quedan, con su Steiner).', 'prec-nota'));
         panelPrec.append(ca);
+      }
+      // extender o recortar hasta otro muro (como en AutoCAD): la punta más cercana al encuentro va al eje del otro
+      if (ejeDeMuro(m) && !muroBloqueado(p, m)) {
+        const bx = mk('button', extHasta === m.id ? 'Tocá el muro destino… (Esc cancela)' : 'Extender o recortar hasta…', 'b-extender') as HTMLButtonElement;
+        bx.type = 'button';
+        bx.title = 'Lleva la punta de este muro más cercana al encuentro hasta el eje de otro muro (lo alarga o lo acorta): quedan en T. Si el cruce cae fuera del otro, alarga los dos y cierra la esquina (L).';
+        bx.setAttribute('aria-pressed', String(extHasta === m.id));
+        bx.addEventListener('click', () => { extHasta = extHasta === m.id ? null : m.id; clavePrec = ''; mensaje(extHasta ? `Extender o recortar ${m.id}: tocá el muro hasta el que llega (Esc cancela).` : ''); armarPanelPrec(); dibujar(); });
+        panelPrec.append(bx);
       }
       // juntas de este muro con los otros: qué pasa en cada una (L: inglete o pasa uno; X: pasa uno; T: el que llega se corta)
       const js = detectarJuntas(p.muros.filter(o => !muroOculto(p, o))).filter(j => j.a === m.id || j.b === m.id);
@@ -3425,6 +3437,19 @@ export function montarPlanta(cont: HTMLElement) {
     trazo.push(q); pedirDibujo();
   }, true);
   svg.addEventListener('pointermove', ev => { if (modo === 'silueta' && trazo) { trazoCursor = puntoTrazo(ev); pedirDibujo(); } });
+  // «Extender o recortar hasta»: el próximo toque sobre un muro es el destino; afuera de un muro, se cancela
+  svg.addEventListener('pointerdown', ev => {
+    if (!extHasta || ev.button > 0) return;
+    ev.stopImmediatePropagation(); ev.preventDefault();
+    const id = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => e.closest?.('[data-muro]')).find(Boolean)?.getAttribute('data-muro') ?? '';
+    const origen = extHasta; extHasta = null; clavePrec = '';
+    if (!id || id === origen) { mensaje('Extender o recortar: cancelado.'); armarPanelPrec(); dibujar(); return; }
+    const res: { r: ReturnType<typeof extenderHasta> } = { r: { error: '' } };
+    estado.cambiar(pp => { res.r = extenderHasta(pp, origen, id); });
+    mensaje('error' in res.r ? res.r.error : res.r.texto);
+    armarPanelPrec(); dibujar();
+  }, true);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && extHasta) { extHasta = null; clavePrec = ''; mensaje('Extender o recortar: cancelado.'); armarPanelPrec(); dibujar(); } });
   // burbuja: con el mouse quieto 3 s sobre un muro, el área y el J de su pieza (la del viento elegido) en cuatro
   // direcciones del viento, con la sección con que entra al cálculo
   {
