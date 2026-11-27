@@ -519,3 +519,19 @@ export function indiceBarraMalla(g: MallaGeo): (p3: { a: { x: number; y: number;
   g.barras.forEach((b, i) => porPar.set(`${Math.min(b.a, b.b)}|${Math.max(b.a, b.b)}`, i));
   return p3 => { const a = idDe.get(claveP(p3.a)), b = idDe.get(claveP(p3.b)); return a === undefined || b === undefined ? undefined : porPar.get(`${Math.min(a, b)}|${Math.max(a, b)}`); };
 }
+
+// ------------------------------------------------------------------ secciones por altura
+/**
+ * Tramos de sección parejos en altura para la malla: n tramos (el primero es la sección de la clase), cortados en los
+ * anillos más cerca de cada n-ésimo de la altura. Cada clase de la malla (las diagonales, las columnas si hay, y las
+ * vigas de los anillos) arranca cada tramo con la sección que tiene hoy a esa cota; después «Dimensionar» los ajusta.
+ */
+export function tramosParejos(g: MallaGeo, zs: number[], n: number, patron: PatronMalla, secDe: (clase: ClaseBarra, z: number) => { b: number; e: number }): { clase: ClaseBarra; desde: number; sec: { b: number; e: number } }[] {
+  const zr = g.anillos.map(k => zs[k]), z0 = zr[0], z1 = zr[zr.length - 1];
+  const cortes = [...new Set(Array.from({ length: Math.max(0, Math.round(n) - 1) }, (_, i) => {
+    const meta = z0 + ((i + 1) * (z1 - z0)) / Math.round(n);
+    return zr.reduce((b, z) => (Math.abs(z - meta) < Math.abs(b - meta) ? z : b), zr[0]);
+  }))].filter(z => z > z0 + 1e-6 && z < z1 - 1e-6).sort((a, b) => a - b);
+  const clases: ClaseBarra[] = patron === 'columnas' ? ['columna', 'diagonal', 'viga'] : ['diagonal', 'viga'];
+  return clases.flatMap(clase => cortes.map(desde => ({ clase, desde, sec: { ...secDe(clase, desde) } })));
+}

@@ -7,8 +7,8 @@ import { estado, fmt } from './estado';
 import { h, type H } from './comp';
 import { campo } from './paneles';
 import { datosExo, exoActual } from './exo';
-import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, type MallaDef, type PatronMalla } from '../engine/exoMalla';
-import { calcularExo, conMalla, paraViento, type ExoDef } from '../engine/exo';
+import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, tramosParejos, type MallaDef, type PatronMalla } from '../engine/exoMalla';
+import { calcularExo, conMalla, paraViento, seccionEn, type ExoDef } from '../engine/exo';
 import type { MallaHoja } from '../xlsx/hojasG';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
@@ -31,6 +31,29 @@ export function camposMalla(fo: H, def: ExoDef, set: (f: (d: ExoDef) => void) =>
     { tipo: 'number', unidad: '°', ayuda: 'torres que se retuercen; 0: sin giro' });
   campo(fo, 'Malla hasta la cota', 'exo-malla-hasta', m.hasta ?? '', v => { const x = num(v); conMalla(y => { y.hasta = isFinite(x) && x > 0 ? x : undefined; }); },
     { tipo: 'number', unidad: 'm', ayuda: 'vacío: hasta la azotea' });
+  // secciones por altura: n tramos parejos, cortados en anillos (después «Dimensionar» ajusta cada uno)
+  const nTramos = 1 + new Set((def.tramos ?? []).filter(t => t.clase !== 'mastil').map(t => t.desde)).size;
+  campo(fo, 'Tramos de sección en altura', 'exo-malla-tramos', nTramos, v => {
+    const x = Math.round(num(v)), en = datosExo('A')?.entrada;
+    if (!(x >= 1 && x <= 8) || !en?.malla) return;
+    set(d => {
+      const sinTramos = { ...d, tramos: (d.tramos ?? []).filter(t => t.clase === 'mastil') };
+      const nuevos = tramosParejos(en.malla!, en.zs, x, (d.malla ?? MALLA_POR_DEFECTO).patron, (c, z) => seccionEn(d, c, z));
+      d.tramos = [...(sinTramos.tramos ?? []), ...nuevos];
+      if (!d.tramos.length) delete d.tramos;
+    });
+  }, { tipo: 'number', ayuda: '1: la misma sección en toda la altura; más: cada tramo con la suya (cortados en anillos). Después, «Dimensionar» ajusta cada tramo' });
+  const trs = (def.tramos ?? []).filter(t => t.clase !== 'mastil');
+  if (trs.length) {
+    const mm = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
+    const nombre = { columna: 'Columnas', diagonal: 'Diagonales', viga: 'Anillos' } as const;
+    const lineas = (['diagonal', 'columna', 'viga'] as const).filter(c => trs.some(t => t.clase === c)).map(c => {
+      const base = c === 'columna' ? def.columna : c === 'diagonal' ? def.diagonal : def.viga;
+      const ts = trs.filter(t => t.clase === c).sort((a, b) => a.desde - b.desde);
+      return `${nombre[c]}: ${[`abajo ${mm(base)}`, ...ts.map(t => `desde ${fmt(t.desde, 1)} m ${mm(t.sec)}`)].join(' · ')}`;
+    });
+    fo.append(h('p', { class: 'nota chica nota-ancha' }, `${lineas.join('. ')} (mm).`));
+  }
   const lab = h('label', { class: 'campo-linea malla-linea', title: 'Cada esquina de la planta es un nudo y los demás se reparten por los lados según su largo. En una planta curva no hay esquinas: se reparten por la vuelta' });
   const cb = h('input', { type: 'checkbox' }) as HTMLInputElement; cb.checked = m.esquinas !== false;
   cb.addEventListener('change', () => conMalla(x => { x.esquinas = cb.checked ? undefined : false; }));

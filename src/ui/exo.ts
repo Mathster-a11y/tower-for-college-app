@@ -380,9 +380,9 @@ export function panelExo(c: H) {
     const dimensionar = () => {
       const r = dimensionarExo(def, ens);
       const t = (x: { b: number; e: number }) => `${fmt(x.b * 1000, 0)}×${fmt(x.e * 1000, 1)}`;
-      estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.columna = r.def.columna; x.diagonal = r.def.diagonal; x.viga = r.def.viga; if (x.tipo === 'E') { x.mastil = r.def.mastil; x.tramos = r.def.tramos; } } });
+      estado.cambiar(() => { const x = estado.proyecto.exo; if (x) { x.columna = r.def.columna; x.diagonal = r.def.diagonal; x.viga = r.def.viga; if (r.def.tramos) x.tramos = r.def.tramos; if (x.tipo === 'E') x.mastil = r.def.mastil; } });
       const msg = document.getElementById('mensaje');
-      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
+      if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm${r.def.tramos?.some(t => t.clase !== 'mastil') ? `; por tramos de altura: ${r.def.tramos.filter(t => t.clase !== 'mastil').map(tr => `${tr.clase === 'viga' && def.tipo === 'M' ? 'anillos' : `${tr.clase}s`} desde ${fmt(tr.desde, 1)} m ${t(tr.sec)}`).join(', ')}` : ''} · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
     c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));

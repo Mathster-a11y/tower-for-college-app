@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ejemploBasicoExo, ejemploGherkin } from './ejemplosExo';
-import { mallaDe, anillosMalla, nudosEnContorno, corrido, pisosFlojos, giroMalla, fuerzasAnillos, type MallaGeo } from './exoMalla';
-import { calcularExo, conMalla, propsSeccion, rigidezTabiques, pesoExo, seccionEn, type ExoDef } from './exo';
+import { mallaDe, anillosMalla, nudosEnContorno, corrido, pisosFlojos, giroMalla, fuerzasAnillos, tramosParejos, type MallaGeo } from './exoMalla';
+import { calcularExo, conMalla, propsSeccion, rigidezTabiques, pesoExo, seccionEn, dimensionarExo, type ExoDef } from './exo';
 import type { Proyecto } from './modelo';
 import { calcularProyecto } from './calculoProyecto';
 import { ExoDeCalculo } from './exoDeCalculo';
@@ -313,5 +313,26 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     expect(m.barras.filter(b => b.clase === 'diagonal').every(b => b.NA !== null && b.NB !== null)).toBe(true);
     expect(m.barras.filter(b => b.clase === 'anillo').every(b => b.ratio !== null)).toBe(true);
     expect(m.Jgiro).toBeGreaterThan(0);
+  });
+  it('secciones por altura: «Dimensionar» ajusta cada tramo (el Gherkin con sus tramos de diagonales verifica)', () => {
+    // con la ficha A del ejemplo: antes se agrandaba solo la sección de abajo y arriba mandaban los tramos (no llegaba nunca)
+    const p = ejemploGherkin();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    const ens = (['A', 'B'] as const).map(d => ex.datos(d, p.exo!)!.entrada);
+    const r = dimensionarExo(p.exo!, ens);
+    expect(r.verifica, r.motivo).toBe(true);
+    const diag = r.def.tramos!.filter(t => t.clase === 'diagonal').sort((a, b) => a.desde - b.desde);
+    // de abajo arriba, las diagonales se afinan
+    const A = [r.def.diagonal, ...diag.map(t => t.sec)].map(x => propsSeccion(x).A);
+    A.slice(1).forEach((a, i) => expect(a).toBeLessThanOrEqual(A[i] + 1e-12));
+  });
+  it('tramos parejos en altura: cortes en anillos, una entrada por clase de la malla', () => {
+    const { p, def, zs } = gherkinM();
+    const g = mallaDe(p, def, zs), tr = tramosParejos(g, zs, 4, 'diagrid', (c, z) => seccionEn(def, c, z));
+    const cotas = [...new Set(tr.map(t => t.desde))];
+    expect(cotas.length).toBe(3);
+    cotas.forEach(z => expect(g.anillos.some(k => Math.abs(zs[k] - z) < 1e-9)).toBe(true));
+    expect(new Set(tr.map(t => t.clase))).toEqual(new Set(['diagonal', 'viga']));
   });
 });
