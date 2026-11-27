@@ -45,6 +45,8 @@ export interface MallaDef {
    */
   arriostrada?: boolean;
 }
+/** tope de nudos por anillo: con más, el cálculo se vuelve lento y las barras más cortas que un piso */
+export const NUDOS_MAX = 96;
 export const MALLA_POR_DEFECTO: MallaDef = { patron: 'diagrid', nudos: 16, esquinas: true };
 export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string }> = {
   diagrid: { nombre: 'Diagrid', texto: 'Rombos de diagonales sobre la fachada, sin columnas: cada anillo corrido medio paso respecto del de abajo (30 St Mary Axe).' },
@@ -184,7 +186,7 @@ function contornoEn(p: Proyecto, z: number): { fachada: Punto[]; losa: Punto[] }
  * viento: cada viento la proyecta en su plano (proyectarMalla).
  */
 export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
-  const m = def.malla ?? MALLA_POR_DEFECTO, N = Math.max(3, Math.round(m.nudos));
+  const m = def.malla ?? MALLA_POR_DEFECTO, N = Math.min(NUDOS_MAX, Math.max(3, Math.round(m.nudos)));
   const contornos = zs.map(z => contornoEn(p, z));
   const base = contornos[0].fachada;
   const cx = base.reduce((s, q) => s + q.x, 0) / base.length, cy = base.reduce((s, q) => s + q.y, 0) / base.length;
@@ -197,7 +199,9 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
     const P = acum[q.length];
     // el centro del nivel (la torre puede correrse) y el arranque: el ángulo 0, girado lo que pida la torsión de la malla
     const ccx = q.reduce((s, a) => s + a.x, 0) / q.length, ccy = q.reduce((s, a) => s + a.y, 0) / q.length;
-    const ang = (((m.giro ?? 0) * Math.PI) / 180) * ((zs[k] - zs[0]) / Math.max(1e-6, (zs[Math.min(mod, zs.length - 1)] - zs[0]) || 1));
+    // el alto de un módulo: hasta el primer corte (si la torre los tiene) o «módulo» pisos
+    const z1 = def.cortes?.find(z => z > zs[0] + 1e-6) ?? zs[Math.min(mod, zs.length - 1)];
+    const ang = (((m.giro ?? 0) * Math.PI) / 180) * ((zs[k] - zs[0]) / Math.max(1e-6, z1 - zs[0]));
     const origen = arranque(q, ccx, ccy, ang);
     const medio = m.patron === 'diagrid' && r % 2 === 1;
     const ids: number[] = [];
@@ -335,4 +339,20 @@ export function cargasMalla(g: MallaGeo, zs: number[], op: { gamma: number; peso
 /** peso del acero de la malla (t), con los anillos: Σ γ·A·L de las barras reales */
 export function pesoMalla(g: MallaGeo, gamma: number, area: (clase: ClaseBarra | 'anillo', zMin: number) => number): number {
   return g.barras.reduce((s, b) => { const A = g.nudos[b.a], B = g.nudos[b.b]; return s + gamma * area(b.clase, Math.min(A.z, B.z)) * Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z); }, 0);
+}
+
+/**
+ * Los pisos que la malla frena mal con un viento: su deriva de piso pasa 3 veces la media de la torre. Pasa en los pisos
+ * entre anillos cuando en ese sentido no hay tabiques (solo los frena la flexión de las barras que cruzan la losa: el nudo
+ * tiende a deslizarse a lo largo de la barra) o arriba, donde la malla se cierra (una cúpula). u: corrimientos de los
+ * pisos zs[1..]; vuelve la cota de cada piso flojo y cuántas veces la deriva media es la suya.
+ */
+export function pisosFlojos(g: MallaGeo, zs: number[], u: number[], veces = 3): { z: number; veces: number }[] {
+  const H = zs[zs.length - 1] - zs[0], media = Math.abs(u[u.length - 1] ?? 0) / Math.max(1e-9, H);
+  if (!(media > 0)) return [];
+  const enAnillo = new Set(g.anillos);
+  return u.flatMap((x, i) => {
+    const k = i + 1, d = Math.abs(x - (i ? u[i - 1] : 0)) / Math.max(1e-9, zs[k] - zs[k - 1]);
+    return !enAnillo.has(k) && d > veces * media ? [{ z: zs[k], veces: d / media }] : [];
+  });
 }

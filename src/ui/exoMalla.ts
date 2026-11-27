@@ -7,7 +7,7 @@ import { estado, fmt } from './estado';
 import { h, type H } from './comp';
 import { campo } from './paneles';
 import { datosExo } from './exo';
-import { MALLA_POR_DEFECTO, PATRONES_MALLA, type MallaDef, type PatronMalla } from '../engine/exoMalla';
+import { MALLA_POR_DEFECTO, NUDOS_MAX, PATRONES_MALLA, type MallaDef, type PatronMalla } from '../engine/exoMalla';
 import { calcularExo, conMalla, paraViento, type ExoDef } from '../engine/exo';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 
@@ -24,8 +24,8 @@ export function camposMalla(fo: H, def: ExoDef, set: (f: (d: ExoDef) => void) =>
   nombres.forEach(k => { const b = h('button', { type: 'button', 'aria-pressed': String(m.patron === k), title: PATRONES_MALLA[k].texto }, PATRONES_MALLA[k].nombre); b.addEventListener('click', () => conMalla(x => { x.patron = k; })); seg.append(b); });
   fo.append(h('div', { class: 'campo-linea malla-linea malla-patron' }, h('span', {}, 'Patrón'), seg), h('p', { class: 'nota chica nota-ancha' }, PATRONES_MALLA[m.patron].texto));
   const num = (v: string) => parseFloat(v.replace(',', '.'));
-  campo(fo, 'Nudos por anillo', 'exo-malla-n', m.nudos, v => { const x = num(v); if (isFinite(x) && x >= 3) conMalla(y => { y.nudos = Math.round(x); }); },
-    { tipo: 'number', ayuda: 'en toda la vuelta (Gherkin: 18)' });
+  campo(fo, 'Nudos por anillo', 'exo-malla-n', m.nudos, v => { const x = num(v); if (isFinite(x) && x >= 3) conMalla(y => { y.nudos = Math.min(NUDOS_MAX, Math.round(x)); }); },
+    { tipo: 'number', ayuda: `en toda la vuelta, de 3 a ${NUDOS_MAX} (Gherkin: 18)` });
   campo(fo, 'Giro por módulo', 'exo-malla-giro', m.giro ?? 0, v => { const x = num(v); if (isFinite(x)) conMalla(y => { y.giro = x || undefined; }); },
     { tipo: 'number', unidad: '°', ayuda: 'torres que se retuercen; 0: sin giro' });
   campo(fo, 'Malla hasta la cota', 'exo-malla-hasta', m.hasta ?? '', v => { const x = num(v); conMalla(y => { y.hasta = isFinite(x) && x > 0 ? x : undefined; }); },

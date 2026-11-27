@@ -2421,6 +2421,7 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 @media (pointer: coarse) { .malla-controles input[type="range"] { width: 200px; height: 32px; } }
 .malla-patron { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .formulario > .malla-linea { grid-column: 1 / -1; }
+.nota.aviso-malla { border-left: 3px solid var(--revisar); padding-left: 8px; }
 /* «Sección de cálculo» (Ayudas): el contorno de la sección real y lo que se pisa, rayado (color de aviso: no es
    tracción ni compresión) */
 .sec-calculo path { pointer-events: none; vector-effect: non-scaling-stroke; }

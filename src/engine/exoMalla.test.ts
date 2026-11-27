@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ejemploBasicoExo, ejemploGherkin } from './ejemplosExo';
-import { mallaDe, anillosMalla, nudosEnContorno, corrido } from './exoMalla';
+import { mallaDe, anillosMalla, nudosEnContorno, corrido, pisosFlojos } from './exoMalla';
 import { calcularExo, conMalla, propsSeccion, rigidezTabiques, pesoExo, seccionEn, type ExoDef } from './exo';
 import type { Proyecto } from './modelo';
 import { calcularProyecto } from './calculoProyecto';
@@ -234,5 +234,24 @@ describe('malla sobre la fachada: en el cálculo de la app', () => {
     expect(d, ex.ultimoError).not.toBeNull();
     expect(d!.r.caras[0].esfuerzos.some(e => e.clase === 'columna')).toBe(true);
     expect(d!.r.u.at(-1)!).toBeLessThan(d!.r.uSin.at(-1)!);
+  });
+
+  it('una malla que termina donde arriba no hay tabiques no da kilómetros: avisa qué pisos quedarían sueltos', () => {
+    const { p } = gherkinM();
+    p.exo = { ...p.exo!, malla: { ...p.exo!.malla!, hasta: 80 } };
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc');
+    expect(ex.datos('A', p.exo!)).toBeNull();
+    expect(ex.ultimoError).toMatch(/quedarían sueltos/);
+  });
+  it('los pisos entre anillos sin tabiques en ese sentido se marcan como flojos; el Gherkin con su diagrid no tiene', () => {
+    const p = ejemploBasicoExo();
+    p.exo = { ...p.exo!, tipo: 'M', malla: { patron: 'diagrid', nudos: 6, esquinas: true } };
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const ex = new ExoDeCalculo(p, calcularProyecto(p), 'cirsoc'), d = ex.datos('B', p.exo!)!;
+    expect(pisosFlojos(d.entrada.malla!, d.entrada.zs, d.r.u).length).toBeGreaterThan(0);
+    const g = gherkinM(); g.p.calculo = { ...(g.p.calculo ?? {}), metodo: 'cirsoc' } as typeof g.p.calculo;
+    const dg = new ExoDeCalculo(g.p, calcularProyecto(g.p), 'cirsoc').datos('A', g.p.exo!)!;
+    expect(pisosFlojos(dg.entrada.malla!, dg.entrada.zs, dg.r.u)).toEqual([]);
   });
 });

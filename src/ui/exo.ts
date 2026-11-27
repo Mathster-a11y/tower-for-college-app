@@ -14,7 +14,7 @@ import type { Viento102 } from '../engine/cargas/cirsoc102';
 import { datos201De } from '../engine/metodos/cirsoc';
 import { disenadorExo3D } from './exo3d';
 import { camposMalla, vistaMalla } from './exoMalla';
-import { MALLA_POR_DEFECTO } from '../engine/exoMalla';
+import { MALLA_POR_DEFECTO, pisosFlojos } from '../engine/exoMalla';
 import { ExoDeCalculo, type DatosExo } from '../engine/exoDeCalculo';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -337,6 +337,14 @@ export function panelExo(c: H) {
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : def.tipo === 'M' ? 'J equivalente de la malla' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
       kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
+    if (def.tipo === 'M' && d.entrada.malla) {
+      // pisos entre anillos que la malla frena mal (sin tabiques en ese sentido, o donde la malla se cierra arriba)
+      const flojos = pisosFlojos(d.entrada.malla, d.entrada.zs, d.r.u);
+      if (flojos.length) {
+        const peor = flojos.reduce((a, b) => (b.veces > a.veces ? b : a));
+        c.append(h('p', { class: 'nota aviso-malla' }, `Con el viento ${d.dir}, ${flojos.length === 1 ? 'un piso entre anillos se mueve' : `${flojos.length} pisos entre anillos se mueven`} de más (el peor, a la cota ${fmt(peor.z, 1)} m, con ${fmt(peor.veces, 1)} veces la deriva media de la torre). Esos pisos solo los frena la flexión de las barras que cruzan la losa${isFinite(d.r.uSin[n]) ? '' : ' (en este sentido no hay tabiques que tomen viento)'}. Para arreglarlo: un módulo más corto (anillos más seguidos), más nudos por anillo o tabiques en ese sentido.`));
+      }
+    }
     const ens = (['A', 'B'] as const).map(x => entradaExo(x, def)).filter(Boolean) as EntradaExo[];
     const peso = ens.length === 2 ? pesoExo(def, ens) : NaN;
     const bDim = h('button', { type: 'button', class: 'primario', title: 'Prueba los tubos del catálogo de menor a mayor y agranda solo la clase de barra que falla, con los dos vientos' }, 'Dimensionar: el más liviano que verifica');
@@ -660,7 +668,7 @@ export function centroExo(c: H, tam: Tam) {
   c.append(h('div', { class: 'fila-acciones' }, segV));
   if (vistaExo === '3d') { c.append(esMalla ? vistaMalla() : disenadorExo3D()); return; }
   const d = datosExo();
-  if (!d) { c.append(h('p', { class: 'error' }, exoActual().ultimoError ? `No se pudo calcular: ${exoActual().ultimoError} Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
+  if (!d) { c.append(h('p', { class: 'error' }, exoActual().ultimoError ? `No se pudo calcular: ${exoActual().ultimoError}${/mecanismo/.test(exoActual().ultimoError) ? ' Revisá las uniones o las barras sacadas (Ctrl+Z vuelve atrás).' : ''}` : 'No se pudo calcular el exoesqueleto con estos datos (¿faltan niveles sobre PB?).')); return; }
   c.append(h('p', { class: 'nota' }, `${TIPOS_EXO[d.def.tipo].nombre}: ${TIPOS_EXO[d.def.tipo].texto} Tocá una barra para ver sus diagramas de N, Q y M y la tensión en su sección.`));
   const seg = h('div', { class: 'seg chico', role: 'group', 'aria-label': 'Qué se ve en el alzado' });
   MODOS.forEach(([m, t, ayuda]) => { const b = h('button', { type: 'button', 'aria-pressed': String(modo === m), title: ayuda }, t); b.addEventListener('click', () => { modo = m; estado.avisarPanel(); }); seg.append(b); });

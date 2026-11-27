@@ -33,6 +33,9 @@ peso de siempre (igual al reticulado espacial con losa rígida; con plantas asim
 3D» en la etapa 08 y la malla real en el 3D. Archivos nuevos `src/engine/exoMalla.ts` y `src/ui/exoMalla.ts`; cambios
 localizados en `exo.ts`, `exoDeCalculo.ts`, `exoReglamento.ts`, `ui/exo.ts` y `ui/vista3d.ts`. Falta: la rigidez del tubo a
 la torsión en la rototraslación (hoy la toman los tabiques solos, del lado seguro).
+Chequeo de la ficha M (27/11, al unir con `main`): una malla con tope bajo y sin tabiques arriba ya no da kilómetros
+(el cálculo dice qué pisos quedarían sueltos); aviso de pisos flojos entre anillos (sin tabiques en ese sentido);
+nudos por anillo hasta 96; el giro por módulo respeta los cortes.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.

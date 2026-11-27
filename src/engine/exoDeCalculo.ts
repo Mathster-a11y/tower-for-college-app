@@ -101,6 +101,11 @@ export class ExoDeCalculo {
       const { ancho, t, anchos, ts, corr, tc, anchosPerp } = this.anchosCara(dir, def, zs);
       // ficha M: la malla sobre la fachada real es una sola «cara» (la malla entera, proyectada en el plano del viento)
       const malla = def.tipo === 'M' ? mallaDe(p, def, zs) : undefined, tCaras = malla ? [0] : [-t, t];
+      if (malla) {
+        // arriba del tope de la malla, los pisos sin tabiques que tomen viento quedarían sueltos (corrimientos de kilómetros)
+        const zTop = zs[malla.anillos[malla.anillos.length - 1]], sueltos = zs.slice(1).filter(z => z > zTop + 1e-6 && !(EJ(z) > 0));
+        if (sueltos.length) throw new Error(`La malla llega hasta la cota ${fmt(zTop, 1)} m y arriba no hay tabiques que tomen el viento ${dir}: los pisos de las cotas ${fmt(sueltos[0], 1)} a ${fmt(sueltos[sueltos.length - 1], 1)} m quedarían sueltos. Subí «Malla hasta la cota» o dejala vacía (hasta la azotea).`);
+      }
       // (con las losas de los pisos que junta un nivel, como la corona del Citicorp: también las carga el exo)
       const r = hecho ?? calcularExo(paraViento(conMalla(exoConLosasJuntas(p, def, dir), { malla, dir }), dir), zs, W, EJ, ancho, tCaras, E, anchos, corr, { anchosPerp });
       const h0 = zs[zs.length - 1] - zPB;
