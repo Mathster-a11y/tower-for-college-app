@@ -22,7 +22,8 @@ export function esColumna(m: Muro): boolean {
   const t = tipoDe(m);
   if (t === 'tubo-circ' || t === 'tubo-rect') return true;
   const E = ejeDeMuro(m);
-  return !E || E.L < 2.5 * E.e;
+  // (un tramo corto de muro, como el que queda entre una esquina y una puerta, sigue siendo muro: columna, casi cuadrada)
+  return !E || E.L < 1.5 * E.e;
 }
 /** el polígono de un elemento en planta (sin huecos: para bloquear alcanza el contorno) */
 const contorno = (m: Muro): P[] => polilinea(perfilDeMuro(m).v, 4, 16);

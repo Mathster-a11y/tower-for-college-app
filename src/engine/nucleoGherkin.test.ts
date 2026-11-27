@@ -18,17 +18,17 @@ describe('núcleo del Gherkin', () => {
     // el anillo: 16 columnas a 12,3 m del centro
     expect(col.filter(m => m.id.startsWith('R')).map(m => Math.hypot(m.x, m.y)).every(r => Math.abs(r - 12.3) < 0.05)).toBe(true);
   });
-  it('la escalera, el ascensor chico, W, D, S y P llegan al 40º (W y B_sup, recortados en el último piso); el resto, al 38º', () => {
-    const z38 = 38 * 4.15, z39 = 39 * 4.15, al40 = /^(D|S|P|B_inf|C_ext|C_inf)-/, recortados = /^(W|B_sup)-/;
+  it('la escalera, el ascensor chico, W, D, S y P llegan al 40º (W, B_sup y B_inf, recortados en el último piso); el resto, al 38º', () => {
+    const z38 = 38 * 4.15, z39 = 39 * 4.15, al40 = /^(D|S|P|C_ext|C_inf)-/, recortados = /^(W|B_sup|B_inf)-/;
     p.muros.filter(m => !m.id.includes('·40')).forEach(m => expect(m.zHasta).toBeCloseTo(al40.test(m.id) ? 166 : recortados.test(m.id) ? z39 : z38, 2));
     const tramos40 = p.muros.filter(m => m.id.includes('·40'));
-    expect(tramos40.map(m => m.id).sort()).toEqual(['B_sup-E·40', 'B_sup-O·40', 'W-E·40', 'W-O·40']);
+    expect(tramos40.map(m => m.id).sort()).toEqual(['B_inf-E·40', 'B_inf-O·40', 'B_sup-E·40', 'B_sup-O·40', 'W-E·40', 'W-O·40']);
     tramos40.forEach(m => {
       expect(m.zDesde).toBeCloseTo(z39, 2); expect(m.zHasta).toBe(166); expect(m.llega).toBe(false);
       perfilDeMuro(m).v.forEach(q => expect(Math.hypot(q.x, q.y)).toBeLessThan(11.43));
     });
     // nada más en el 40º: ni pozos ni ascensores agregados
-    expect(p.muros.filter(m => (m.zHasta ?? 0) > z39 + 0.01).length).toBe(6 * 2 + 4);
+    expect(p.muros.filter(m => (m.zHasta ?? 0) > z39 + 0.01).length).toBe(5 * 2 + 6);
   });
   it('los muros forman una pieza por mitad y por viento, y quedan dentro de la losa del 38º', () => {
     expect(new Set(mur.map(m => m.piezaA))).toEqual(new Set(['Núcleo O', 'Núcleo E']));

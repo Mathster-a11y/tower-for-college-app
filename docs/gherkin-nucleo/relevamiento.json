@@ -33,7 +33,8 @@
    "nota": "misma lámina y escala que p6; sin columnas del anillo para ajustar"
   },
   "muros": "Cada muro se ajustó a la línea de tinta común de p1, p5 y p6 (dispersión menor a 1 cm en casi todos; W y W2 unos 8 cm porque en una lámina son más gruesos)",
-  "encuentros": "Las puntas de los muros se llevaron a los encuentros exactos (L: las dos puntas al cruce de los ejes; T: la punta sobre el eje del que pasa; en el nudo D, W, A_ext y A_inf al mismo punto), para que cierren en esquina o en T sin pisarse. Se movieron entre 1 y 47 cm."
+  "encuentros": "Las puntas de los muros se llevaron a los encuentros exactos (L: las dos puntas al cruce de los ejes; T: la punta sobre el eje del que pasa; en el nudo D, W, A_ext y A_inf al mismo punto), para que cierren en esquina o en T sin pisarse. Se movieron entre 1 y 47 cm.",
+  "tubos": "A_int (frente de los ascensores) y A2_sup sin las puertas, y B_inf alargado hasta la punta de B_ext: el banco de ascensores, el ascensor suelto y la escalera quedan cerrados, como funcionan estructuralmente (las puertas no se modelan)."
  },
  "columnas": [
   {
@@ -185,21 +186,7 @@
     2.68
    ],
    "plantas": "p1 p5 p6",
-   "vanos_y": [
-    [
-     10.33,
-     9.17
-    ],
-    [
-     7.67,
-     6.33
-    ],
-    [
-     4.83,
-     3.67
-    ]
-   ],
-   "nota": "frente de las puertas de los 3 ascensores",
+   "nota": "frente de las puertas de los 3 ascensores · cerrado: estructuralmente funciona como tubo (las puertas no se modelan)",
    "hasta": "38º"
   },
   {
@@ -240,13 +227,8 @@
     9.724
    ],
    "plantas": "p1 p5 p6",
-   "vanos_x": [
-    [
-     -7.2,
-     -5.87
-    ]
-   ],
-   "hasta": "38º"
+   "hasta": "38º",
+   "nota": "cerrado: estructuralmente funciona como tubo (las puertas no se modelan)"
   },
   {
    "id": "B_sup",
@@ -269,8 +251,8 @@
     6.988
    ],
    "a": [
-    -10.91,
-    4.02
+    -10.669,
+    4.438
    ],
    "plantas": "p1 p5 p6",
    "nota": "escalera, frente hacia la fachada",
@@ -279,15 +261,15 @@
   {
    "id": "B_inf",
    "de": [
-    -9.333,
-    3.667
+    -10.669,
+    4.438
    ],
    "a": [
     -6.156,
     1.835
    ],
    "plantas": "p1 p5 p6",
-   "nota": "escalera, muro de abajo = techo del ascensor C; termina en W",
+   "nota": "escalera, muro de abajo = techo del ascensor C; termina en W · alargado hasta B_ext: la escalera queda cerrada como tubo",
    "hasta": "40º"
   },
   {
