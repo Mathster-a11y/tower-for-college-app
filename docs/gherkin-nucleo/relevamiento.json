@@ -121,7 +121,7 @@
    "giro": 38.0,
    "plantas": "p1 p5 p6 (p7: esquina de un pozo)",
    "nota": "columna interior del lado del hall",
-   "hasta": "39º"
+   "hasta": "40º"
   },
   {
    "id": "D",
@@ -131,7 +131,7 @@
    "giro": -35.0,
    "plantas": "p1 p5 p6",
    "nota": "nudo en el cruce de A_ext, A_inf y W; giro marcado por el usuario sobre el trazado v3 (unos 35° horarios en la mitad izquierda)",
-   "hasta": "39º"
+   "hasta": "40º"
   },
   {
    "id": "P",
@@ -141,7 +141,7 @@
    "plantas": "p1 p5 p6",
    "nota": "poste chico en la esquina del ascensor C",
    "lado": 0.7,
-   "hasta": "39º"
+   "hasta": "40º"
   }
  ],
  "_columnas_nota": "Todas de 0,70 × 0,70 m (pedido del usuario; en los planos miden 0,65 a 0,75 m).",
@@ -259,7 +259,7 @@
    ],
    "plantas": "p1 p5 p6",
    "nota": "escalera, muro de arriba: de R51 al banco A",
-   "hasta": "39º"
+   "hasta": "40º (entero hasta el 39º; del 39º al 40º, recortado a 11 m del centro)"
   },
   {
    "id": "B_ext",
@@ -287,7 +287,7 @@
    ],
    "plantas": "p1 p5 p6",
    "nota": "escalera, muro de abajo = techo del ascensor C; termina en W",
-   "hasta": "39º"
+   "hasta": "40º"
   },
   {
    "id": "C_ext",
@@ -300,7 +300,7 @@
     1.7
    ],
    "plantas": "p1 p5 p6",
-   "hasta": "39º"
+   "hasta": "40º"
   },
   {
    "id": "C_inf",
@@ -314,7 +314,7 @@
    ],
    "plantas": "p1 p5 p6",
    "nota": "termina en W",
-   "hasta": "39º"
+   "hasta": "40º"
   },
   {
    "id": "W",
@@ -328,7 +328,7 @@
    ],
    "plantas": "p1 p5 p6",
    "nota": "de R95 al nudo D: borde de arriba del bloque de servicios",
-   "hasta": "39º"
+   "hasta": "40º (entero hasta el 39º; del 39º al 40º, recortado a 11 m del centro)"
   },
   {
    "id": "W2",
@@ -388,7 +388,7 @@
   "anillo_y_muros": "Iguales en p1, p5 y p6 (desde las oficinas bajas hasta cerca del 33º). Del 34º al 38º no hay planos. En el 39º (p7) no está ninguna columna del anillo.",
   "39": "Solo coinciden con p6 los dos pozos que arrancan en S (unos 3,3 × 3,6 m, girados unos 20°) y algunos tramos de tabique; D no coincide del todo.",
   "40": "Ninguna pieza del núcleo: la losa (unos 18,5 m) apoya en el diagrid.",
-  "decision": "Del usuario: anillo, bancos de ascensores, A′, B_ext y W2 hasta la losa del 38º (+157,70 m); la escalera (B_sup, B_inf), el ascensor chico (C_ext, C_inf, P), W, D y S hasta la del 39º (+161,85 m): son los que siguen en la planta del restaurante (medido sobre la planta del 39º). Nada del núcleo llega al 40º."
+  "decision": "Del usuario: el anillo, los bancos de ascensores, A′, B_ext y W2 hasta la losa del 38º (+157,70 m). La escalera (B_sup, B_inf), el ascensor chico (C_ext, C_inf, P), W, D y S hasta la del 40º (+166,00 m): son los que siguen en la planta del restaurante y llevan la losa del 40º. W y B_sup llegan al anillo (12,3 m) y la piel del 40º mide 11,43 m: suben enteros hasta el 39º y del 39º al 40º siguen recortados a 11 m del centro."
  },
  "descartados": [
   {

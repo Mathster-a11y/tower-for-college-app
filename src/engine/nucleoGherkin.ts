@@ -49,6 +49,13 @@ function rect(cx: number, cy: number, a: number, b: number, giro: number): Verti
   const t = (giro * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
   return ([[-a / 2, -b / 2], [a / 2, -b / 2], [a / 2, b / 2], [-a / 2, b / 2]] as P2[]).map(([u, v]) => ({ x: cx + u * c - v * s, y: cy + u * s + v * c }));
 }
+/** la parte del segmento a–b que queda a menos de r del centro (un extremo adentro y el otro afuera) */
+function recortar(a: P2, b: P2, r: number): [P2, P2] {
+  const [ini, fin] = Math.hypot(...a) <= Math.hypot(...b) ? [a, b] : [b, a];
+  const dx = fin[0] - ini[0], dy = fin[1] - ini[1], A = dx * dx + dy * dy, B = 2 * (ini[0] * dx + ini[1] * dy), C = ini[0] ** 2 + ini[1] ** 2 - r * r;
+  const t = (-B + Math.sqrt(Math.max(0, B * B - 4 * A * C))) / (2 * A);
+  return [ini, [ini[0] + t * dx, ini[1] + t * dy]];
+}
 /** tramos de un muro: el eje entero, o partido por sus vanos (en y o en x) */
 function tramos(m: (typeof MUROS)[number]): [P2, P2][] {
   if (!m.vanos) return [[m.de, m.a]];
@@ -63,6 +70,12 @@ function tramos(m: (typeof MUROS)[number]): [P2, P2][] {
 export interface OpcionesNucleo {
   /** cota de la losa donde termina casi todo (el 38º) y donde terminan la escalera, el ascensor chico, W, D, S y P (el 39º) */
   z38: number; z39: number;
+  /**
+   * si se da, lo que llega al 39º (la escalera, el ascensor chico, W, D, S y P) sigue hasta esta losa (el 40º). Un muro
+   * que en el 40º saldría de la piel (W y B_sup llegan al anillo, a 12,3 m) sube entero hasta el 39º y de ahí al 40º
+   * sigue recortado a rMax40 del centro
+   */
+  z40?: number; rMax40?: number;
   espesor?: number; lado?: number;
   /** espesor de algún muro en particular (por su id de la mitad izquierda, p. ej. «W2») */
   espesorDe?: Record<string, number>;
@@ -86,13 +99,21 @@ export function nucleoGherkin(o: OpcionesNucleo): Muro[] {
         const L = Math.hypot(b[0] - a[0], b[1] - a[1]), g = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
         const id = `${m.id}${ts.length > 1 ? String.fromCharCode(97 + i) : ''}-${lado_}`;
         // área de losa que carga: 1 m² por metro de muro (supuesto; el resto lo llevan las columnas y el diagrid)
-        out.push(ponerPerfil(base(id, AL_39.has(m.id) ? o.z39 : o.z38, Math.round(L * 10) / 10, `Núcleo ${lado_}`), { v: sx(rect((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, o.espesorDe?.[m.id] ?? e, g)) }));
+        const em = o.espesorDe?.[m.id] ?? e, rMax = (o.rMax40 ?? 11) - em / 2;
+        const sigue40 = AL_39.has(m.id) && o.z40 !== undefined, dentro = Math.max(Math.hypot(...a), Math.hypot(...b)) <= rMax;
+        const zH = sigue40 && dentro ? o.z40! : AL_39.has(m.id) ? o.z39 : o.z38;
+        out.push(ponerPerfil(base(id, zH, Math.round(L * 10) / 10, `Núcleo ${lado_}`), { v: sx(rect((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, em, g)) }));
+        if (sigue40 && !dentro) {
+          // del 39º al 40º, recortado a la piel del 40º: la parte del eje que queda a menos de rMax del centro
+          const [p, q] = recortar(a, b, rMax), Lr = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          out.push(ponerPerfil({ ...base(`${id}·40`, o.z40!, Math.round(Lr * 10) / 10, ''), llega: false, zDesde: o.z39 }, { v: sx(rect((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, Lr, em, g)) }));
+        }
       });
     }
     for (const [id, x, y, giro, al39] of COLUMNAS) {
       // anillo: unos 18 m² de losa cada una; D y S, 15 m²; P (poste chico), 3 m²
       const area = id.startsWith('R') ? 18 : id === 'P' ? 3 : 15;
-      out.push(ponerPerfil(base(`${id}-${lado_}`, al39 ? o.z39 : o.z38, area, ''), { v: sx(rect(x, y, lado, lado, giro)) }));
+      out.push(ponerPerfil(base(`${id}-${lado_}`, al39 ? o.z40 ?? o.z39 : o.z38, area, ''), { v: sx(rect(x, y, lado, lado, giro)) }));
     }
   }
   return out;

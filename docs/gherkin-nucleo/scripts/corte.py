@@ -18,14 +18,12 @@ def panel(ox,oy,S,xr,z0,z1,titulo,detalle):
   o.append(f'<clipPath id="c{ox}"><rect x="{ox}" y="{oy}" width="{W}" height="{H}"/></clipPath><g clip-path="url(#c{ox})">')
   o.append(f'<polygon points="{izq} {der}" fill="#eef3f6" stroke="#8aa" stroke-width="2"/>')
   # cúpula: sin losas
-  # tubo actual (comparación)
-  o.append(f'<line x1="{X(-11)}" y1="{Z(0)}" x2="{X(-11)}" y2="{Z(166)}" stroke="{VIO}" stroke-width="1.5" stroke-dasharray="6 4"/><line x1="{X(11)}" y1="{Z(0)}" x2="{X(11)}" y2="{Z(166)}" stroke="{VIO}" stroke-width="1.5" stroke-dasharray="6 4"/>')
   # cara exterior del anillo (radio 12,3 + 0,35)
   for s in (-1,1):
     o.append(f'<line x1="{X(s*(RING+LADO/2))}" y1="{Z(z0)}" x2="{X(s*(RING+LADO/2))}" y2="{Z(z1)}" stroke="{NAR}" stroke-width="1" stroke-dasharray="2 4"/>')
   # núcleo: hasta 38º lleno, 38º→39º rayado (opción)
   for s in (-1,1):
-    for (xc,w,col,op,zt) in [(R95,LADO,NAR,1,157.7),(4.56,LADO,NAR,0.45,161.85),(3.56,LADO,NAR,0.45,161.85),(9.66,0.33,VER,1,161.85)]:
+    for (xc,w,col,op,zt) in [(R95,LADO,NAR,1,157.7),(4.56,LADO,NAR,0.45,166),(3.56,LADO,NAR,0.45,166),(9.66,0.33,VER,1,166)]:
       xa=X(s*xc-w/2); 
       o.append(f'<rect x="{xa:.1f}" y="{Z(zt):.1f}" width="{w*S:.1f}" height="{zt*S:.1f}" fill="{col}" opacity="{op}"/>')
     # banco A (detrás, en vista)
@@ -44,14 +42,14 @@ def panel(ox,oy,S,xr,z0,z1,titulo,detalle):
     for k,z,txt in [(38,157.7,None),(39,161.85,None),(40,166,None)]:
       r=D(z)/2; gap=r-(RING+LADO/2)
       c=lambda v:f'{v:.2f}'.replace('.',',')
-      t=f'losa {k}º: radio {c(r)} m · cara del anillo 12,65 m → '+(f'sobran {c(gap)} m' if gap>0 else f'el anillo sale {c(-gap)} m afuera')
-      o.append(f'<text x="{X(0)}" y="{Z(z)-7}" text-anchor="middle" stroke="white" stroke-width="4" paint-order="stroke" font-size="13" fill="{"#333" if gap>0 else NAR}" font-weight="{"normal" if gap>0 else "bold"}">{t}</text>')
+      t=(f'losa 40º: radio 11,43 m; la llevan D, S, P, la escalera, el ascensor chico y W (recortados a 11 m) y el diagrid' if k==40 else f'losa {k}º: radio {c(r)} m · cara del anillo 12,65 m → '+(f'sobran {c(gap)} m' if gap>0 else f'el anillo sale {c(-gap)} m afuera'))
+      o.append(f'<text x="{X(0)}" y="{Z(z)-7}" text-anchor="middle" stroke="white" stroke-width="4" paint-order="stroke" font-size="13" fill="#333">{t}</text>')
   return o
 o=['<defs><pattern id="ray" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="white"/><line x1="0" y1="0" x2="0" y2="6" stroke="#c4570e" stroke-width="2.5"/></pattern></defs>']
 o+=panel(70,50,4.2,31,-2,182,'Corte E–O del ejemplo, mirando al norte',False)
 o+=panel(420,50,22,21,133,182,'Detalle: del 32º a la cúpula',True)
 Wt=420+42*22+30; Ht=50+49*22+130
-leg=[('rect',NAR,1,'columna del anillo cortada (R95, 0,70 m, hasta el 38º)'),('rect',NAR,0.45,'columnas D y S, en vista (hasta el 39º)'),('rect',VER,1,'muro W cortado (hasta el 39º)'),('rect',VER,0.12,'banco de ascensores A, en vista'),('dash',VIO,1,'tubo Ø 22 m del ejemplo actual'),('dot',NAR,1,'cara exterior del anillo (r = 12,65 m)')]
+leg=[('rect',NAR,1,'columna del anillo cortada (R95, 0,70 m, hasta el 38º)'),('rect',NAR,0.45,'columnas D y S, en vista (hasta el 40º)'),('rect',VER,1,'muro W cortado (hasta el 40º)'),('rect',VER,0.12,'banco de ascensores A, en vista'),('dot',NAR,1,'cara exterior del anillo (r = 12,65 m)')]
 y=50+49*22+40; x=70
 for i,(k,c,op,t) in enumerate(leg):
   xx=x+(i%3)*400; yy=y+(i//3)*28
