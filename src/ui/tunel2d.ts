@@ -31,6 +31,7 @@ import { agregarRetiro, armarEscenario, cajaDe, tramosEdificio, contextoDesdeCAD
 import { factorUnidad, leerDXFCompleto, type DibujoCAD } from '../engine/cad';
 import type { EdificioVecino } from '../engine/modelo';
 import { encuadrar, sigmaBanda, FINURA_MAX, geometriaDetalle, type GeometriaDetalle, type Ventana } from '../viento/detalle';
+import { letraLienzo } from './tipografia';
 
 type Vista = 'vorticidad' | 'velocidad' | 'presion' | 'media' | 'rafagas';
 /** las vistas que pintan una velocidad con el espectro térmico */
@@ -609,7 +610,7 @@ function dibujarIsolineas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
     g.strokeStyle = fondo; g.lineWidth = fino ? 2.6 : 4; g.globalAlpha = 0.55; traza();
     g.strokeStyle = tinta; g.lineWidth = fino ? 0.9 : 1.9; g.globalAlpha = fino ? 0.8 : 1; traza();
     // el valor en unos pocos lugares separados
-    g.setLineDash([]); g.font = '600 10.5px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.setLineDash([]); g.font = letraLienzo(10.5, 600); g.textAlign = 'center'; g.textBaseline = 'middle';
     const t = tv(nivel);
     for (let k = 0; k < tramos.length && puestos.length < 4; k += 7) {
       const [x0, y0, x1, y1] = tramos[k], q = P((x0 + x1) / 2, (y0 + y1) / 2);
@@ -645,7 +646,7 @@ function estadSonda(q: Sonda) {
 /** los anemómetros en el túnel: un cuadradito con su letra */
 function marcarSondas(g: CanvasRenderingContext2D, c: Corrida, s: number) {
   const ny = c.geo.ny, fondo = css('--lienzo', '#ffffff');
-  g.save(); g.font = '700 11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.save(); g.font = letraLienzo(11, 700); g.textAlign = 'center'; g.textBaseline = 'middle';
   sondas.forEach((q, k) => {
     const x = (q.x * s - zoom.ox) * zoom.z, y = ((ny - q.y) * s - zoom.oy) * zoom.z;
     g.fillStyle = fondo; g.fillRect(x - 9, y - 9, 18, 18);
@@ -701,7 +702,7 @@ function armarSondas(forzar = false) {
 /** los puntos de velocidad alta en el túnel: un anillo y la velocidad media (en veces la de entrada) */
 function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number, conAnillos = true) {
   const ny = c.geo.ny, tinta = css('--ink', '#223344'), fondo = css('--lienzo', '#ffffff');
-  g.save(); g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'middle';
+  g.save(); g.font = letraLienzo(11, 600); g.textBaseline = 'middle';
   // el rótulo: el número (y el valor si hay lugar: de cerca o con pocos puntos); si se pisa con otro, se corre
   const puestos: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const conValor = zoom.z >= 2 || c.altos.length <= 2;
@@ -718,10 +719,10 @@ function marcarAltos(g: CanvasRenderingContext2D, c: Corrida, s: number, conAnil
   // si se rompió: un cartel en el túnel en vez de una imagen sin sentido
   if (c.roto) {
     const t1 = 'La simulación se volvió inestable', t2 = `cerca de ${c.dondeRoto ?? 'la torre'}. Probá el túnel «lento» o más resolución.`;
-    g.font = '600 13px system-ui, sans-serif';
+    g.font = letraLienzo(13, 600);
     const w = Math.max(g.measureText(t1).width, g.measureText(t2).width) + 24, x = ((lienzo?.width ?? 400) - w) / 2, y = 40;
     g.globalAlpha = 0.92; g.fillStyle = fondo; g.fillRect(x, y, w, 46); g.globalAlpha = 1; g.strokeStyle = tinta; g.lineWidth = 1; g.strokeRect(x, y, w, 46);
-    g.fillStyle = tinta; g.textAlign = 'center'; g.fillText(t1, x + w / 2, y + 14); g.font = '12px system-ui, sans-serif'; g.fillText(t2, x + w / 2, y + 32);
+    g.fillStyle = tinta; g.textAlign = 'center'; g.fillText(t1, x + w / 2, y + 14); g.font = letraLienzo(12); g.fillText(t2, x + w / 2, y + 32);
   }
   g.restore();
 }
@@ -789,7 +790,7 @@ function recuadroArriba(g: CanvasRenderingContext2D, cv: HTMLCanvasElement, nx: 
   g.setLineDash([]); g.globalAlpha = 1;
   g.drawImage(d, ix, iy, W, Hh);
   g.lineWidth = 2; g.strokeRect(ix, iy, W, Hh);
-  g.font = '600 11px system-ui, sans-serif'; g.textBaseline = 'top';
+  g.font = letraLienzo(11, 600); g.textBaseline = 'top';
   const rot = `ventana ×${det!.geo.r}`, tw = g.measureText(rot).width;
   g.fillStyle = css('--elegido', '#ef9f27'); g.fillRect(ix, iy, tw + 10, 16); g.fillStyle = '#1b1b1b'; g.fillText(rot, ix + 5, iy + 2);
   g.restore();

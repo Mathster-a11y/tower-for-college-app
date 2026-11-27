@@ -100,7 +100,8 @@ def b64(r):
     return base64.b64encode(open(os.path.join(RAIZ, r), 'rb').read()).decode()
 FUENTES = ("@font-face { font-family: 'IBM Plex Math'; src: url(data:font/woff2;base64," + b64('src/assets/fuentes/plex-math-sub.woff2') + ") format('woff2'); }\n"
            "@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') + ") format('woff2'); }\n"
-           "@font-face { font-family: 'IBM Plex Sans'; font-weight: 600 700; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') + ") format('woff2'); }\n")
+           "@font-face { font-family: 'IBM Plex Sans'; font-weight: 600 700; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') + ") format('woff2'); }\n"
+           "@font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: url(data:font/woff2;base64," + b64('node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') + ") format('woff2'); }\n")
 html = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dudas sobre la planilla</title>
@@ -115,7 +116,7 @@ h3.paso-duda {{ font-size: 11px; text-transform: uppercase; letter-spacing: .07e
   /* la convención de la app: rojo tracción, azul compresión */
   --traccion: #e24b4a; --compresion: #378add; }}
 * {{ box-sizing: border-box; }}
-body {{ margin: 0; background: #fff; color: var(--tinta); font: 14.5px/1.55 "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }}
+body {{ margin: 0; background: #fff; color: var(--tinta); font: 14.5px/1.55 "IBM Plex Sans", "IBM Plex Math", sans-serif; }}
 main {{ max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }}
 h1 {{ font-size: 27px; margin: 0 0 4px; }} h2 {{ font-size: 20px; margin: 34px 0 8px; border-bottom: 2px solid var(--suave); padding-bottom: 4px; break-after: avoid; }}
 h3 {{ font-size: 15.5px; margin: 16px 0 4px; break-after: avoid; }} p, li {{ max-width: 82ch; }} .sub {{ color: var(--gris); margin: 0 0 16px; }}
@@ -131,7 +132,7 @@ th {{ background: var(--suave); font-weight: 600; }} td.n {{ text-align: right; 
 .tag.alta {{ background: #fdecea; color: #a1302b; }} .tag.media {{ background: #fff7e0; color: var(--aviso); }} .tag.baja {{ background: var(--suave); }}
 .comp {{ color: var(--compresion); font-weight: 600; }} .trac {{ color: var(--traccion); font-weight: 600; }} .err {{ color: var(--gris); font-style: italic; }}
 code {{ background: var(--suave); padding: 0 4px; border-radius: 3px; font-size: 12.5px; }}
-.f {{ font-family: "IBM Plex Mono", Consolas, monospace; font-size: 13px; }}
+.f {{ font-family: "JetBrains Mono", "IBM Plex Math", monospace; font-size: 13px; }}
 .duda {{ break-inside: auto; }}
 @media print {{ main {{ max-width: none; padding: 0 4mm; }} table, .caja, .preg, .grilla {{ break-inside: avoid; }} h2 {{ break-before: auto; }} }}
 @media (max-width: 700px) {{ .grilla {{ grid-template-columns: 1fr; }} table {{ font-size: 12px; }} }}

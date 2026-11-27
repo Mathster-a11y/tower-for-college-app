@@ -45,6 +45,10 @@ import metaFiguras from './assets/figuras/figuras.json';
 // los PNG de los dibujos rediseñados (tools/figuras), por nombre
 const urlFiguras = import.meta.glob('./assets/figuras/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 import { interpretar, murosDeLineas, unidadProbable, tablaDelProyecto, type Importacion } from './engine/importar';
+import { precargarLetras } from './ui/tipografia';
+
+// los canvas (túneles, llaves de color) dibujan con Plex Sans: pedirla antes del primer cuadro
+void precargarLetras();
 
 /** la app completa (el editor). main.ts la arranca, salvo en la pestaña de la vista previa de la planilla. */
 export function iniciarApp() {

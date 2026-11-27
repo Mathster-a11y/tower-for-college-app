@@ -2,6 +2,7 @@
  * Llaves de colores de las simulaciones: una barra con el degradé y sus valores, dibujada sobre el lienzo (así queda
  * también en el video y en las capturas) o como HTML encima de la vista 3D.
  */
+import { letraLienzo } from './tipografia';
 export interface Llave {
   titulo: string;
   /** colores del degradé, de izquierda a derecha (CSS) */
@@ -21,7 +22,7 @@ export function llaveEnLienzo(g: CanvasRenderingContext2D, ll: Llave, x: number,
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
   const fs = 11, barra = 9, pad = 6, filaExtras = ll.extras?.length ? fs + 6 : 0;
-  g.font = `600 ${fs}px system-ui, sans-serif`;
+  g.font = letraLienzo(fs, 600);
   const anchoExtras = (ll.extras ?? []).reduce((s, e) => s + g.measureText(e.texto).width + 22, 0);
   const W = Math.min(maxAncho, Math.max(ancho, g.measureText(ll.titulo).width, anchoExtras) + 2 * pad);
   // el título en renglones que entren en el ancho
@@ -38,7 +39,7 @@ export function llaveEnLienzo(g: CanvasRenderingContext2D, ll: Llave, x: number,
   ll.colores.forEach((c, i) => gr.addColorStop(ll.colores.length === 1 ? 0 : i / (ll.colores.length - 1), c));
   g.fillStyle = gr; g.fillRect(x0 + pad, by, bw, barra);
   g.strokeStyle = tinta; g.globalAlpha = 0.35; g.lineWidth = 1; g.strokeRect(x0 + pad + 0.5, by + 0.5, bw - 1, barra - 1); g.globalAlpha = 1;
-  g.font = `${fs}px system-ui, sans-serif`; g.fillStyle = tinta;
+  g.font = letraLienzo(fs); g.fillStyle = tinta;
   for (const [t, txt] of ll.marcas) {
     g.textAlign = t <= 0.02 ? 'left' : t >= 0.98 ? 'right' : 'center';
     g.fillText(txt, x0 + pad + t * bw, by + barra + 3, isFinite(maxAncho) ? bw / Math.max(2, ll.marcas.length) * 1.4 : undefined);
@@ -97,7 +98,7 @@ function glifo(g: CanvasRenderingContext2D, s: Simbolo, x: number, y: number, ti
     for (const [dx, dy] of [[3, 2], [8, -2], [12, 1], [16, -1], [19, 3], [6, 4]]) g.fillRect(x + dx, cy + dy - 1, 2, 2);
   } else if (s.forma === 'sonda') {
     g.fillStyle = col; g.fillRect(x + 5, y, 12, 12);
-    g.fillStyle = '#ffffff'; g.font = '700 9px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('A', x + 11, cy + 0.5);
+    g.fillStyle = '#ffffff'; g.font = letraLienzo(9, 700); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('A', x + 11, cy + 0.5);
   }
   g.restore();
 }
@@ -107,25 +108,25 @@ export function simbolosEnLienzo(g: CanvasRenderingContext2D, titulo: string, it
   if (!items.length) return { ancho: 0, alto: 0 };
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
   const fs = 11, fn = 10, pad = 6, glAncho = 26;
-  g.font = `600 ${fs}px system-ui, sans-serif`;
+  g.font = letraLienzo(fs, 600);
   let W = g.measureText(titulo).width;
   for (const s of items) {
-    g.font = `${fs}px system-ui, sans-serif`; W = Math.max(W, glAncho + g.measureText(s.texto).width);
-    if (s.nota) { g.font = `${fn}px system-ui, sans-serif`; W = Math.max(W, glAncho + g.measureText(s.nota).width); }
+    g.font = letraLienzo(fs); W = Math.max(W, glAncho + g.measureText(s.texto).width);
+    if (s.nota) { g.font = letraLienzo(fn); W = Math.max(W, glAncho + g.measureText(s.nota).width); }
   }
   W = Math.min(maxAncho, W + 2 * pad);
   const H = pad + fs + 5 + items.reduce((a, s) => a + fs + 4 + (s.nota ? fn + 2 : 0), 0) + pad - 2;
   const x0 = xDerecha - W, y0 = yAbajo - H;
   g.globalAlpha = 0.88; g.fillStyle = fondo; g.beginPath(); g.roundRect(x0, y0, W, H, 6); g.fill(); g.globalAlpha = 1;
-  g.textBaseline = 'top'; g.textAlign = 'left'; g.fillStyle = tinta; g.font = `600 ${fs}px system-ui, sans-serif`;
+  g.textBaseline = 'top'; g.textAlign = 'left'; g.fillStyle = tinta; g.font = letraLienzo(fs, 600);
   g.fillText(titulo, x0 + pad, y0 + pad, W - 2 * pad);
   let y = y0 + pad + fs + 5;
   const mx = W - 2 * pad - glAncho;
   for (const s of items) {
     glifo(g, s, x0 + pad, y, tinta, fondo);
-    g.fillStyle = tinta; g.font = `${fs}px system-ui, sans-serif`; g.fillText(s.texto, x0 + pad + glAncho, y, mx);
+    g.fillStyle = tinta; g.font = letraLienzo(fs); g.fillText(s.texto, x0 + pad + glAncho, y, mx);
     y += fs + 4;
-    if (s.nota) { g.globalAlpha = 0.75; g.font = `${fn}px system-ui, sans-serif`; g.fillText(s.nota, x0 + pad + glAncho, y - 2, mx); g.globalAlpha = 1; y += fn + 2; }
+    if (s.nota) { g.globalAlpha = 0.75; g.font = letraLienzo(fn); g.fillText(s.nota, x0 + pad + glAncho, y - 2, mx); g.globalAlpha = 1; y += fn + 2; }
   }
   g.restore();
   return { ancho: W, alto: H };

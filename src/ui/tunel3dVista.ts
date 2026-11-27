@@ -8,6 +8,7 @@
  */
 import * as THREE from 'three';
 import type { Geometria3D } from '../viento/geometria3d';
+import { letraLienzo } from './tipografia';
 
 /** una línea de corriente: puntos (m), la velocidad de la red en cada uno y el tiempo de la red acumulado (pasos) */
 export interface Trazo { pts: THREE.Vector3[]; vel: number[]; t: number[] }
@@ -209,7 +210,7 @@ export function graficoEnLienzo(g: CanvasRenderingContext2D, serie: { t: number;
   g.save();
   g.fillStyle = 'rgba(255,255,255,0.88)'; g.fillRect(x, y, w, h);
   const s = serie.slice(-300);
-  g.fillStyle = col.tinta; g.font = '600 11px system-ui, sans-serif'; g.fillText('Fuerzas en la base (t)', x + 8, y + 14);
+  g.fillStyle = col.tinta; g.font = letraLienzo(11, 600); g.fillText('Fuerzas en la base (t)', x + 8, y + 14);
   if (s.length > 1) {
     const vals = s.flatMap(q => [q.Vx, q.Vy, 0]), lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.1 || 1;
     const t0 = s[0].t, t1 = s[s.length - 1].t || t0 + 1;
@@ -221,7 +222,7 @@ export function graficoEnLienzo(g: CanvasRenderingContext2D, serie: { t: number;
       const u = s[s.length - 1]; g.fillStyle = c; g.beginPath(); g.arc(X(u.t), Y(u[k]), 3.5, 0, 2 * Math.PI); g.fill();
     }
     const u = s[s.length - 1];
-    g.font = '11px system-ui, sans-serif';
+    g.font = letraLienzo(11);
     g.fillStyle = col.arrastre; g.fillText(`arrastre ${u.Vx.toFixed(0)}`, x + w - 150, y + 14);
     g.fillStyle = col.lateral; g.fillText(`lateral ${u.Vy.toFixed(0)}`, x + w - 70, y + 14);
   }

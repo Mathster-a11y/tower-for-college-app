@@ -43,6 +43,7 @@ import { seccionDinamica, type InfoDinamica } from './tunel3dDinamica';
 import { moduloHormigon, rigidez, rigidezPorNivel } from '../engine/diagramas';
 import { medidasNiveles } from '../engine/perfilTorre';
 import { datos201De } from '../engine/metodos/cirsoc';
+import { letraLienzo } from './tipografia';
 
 const TAM: Record<string, { nx: number; ny: number; nz: number; texto: string }> = {
   rapida: { nx: 96, ny: 48, nz: 40, texto: 'rápida (96 × 48 × 40, 0,2 M celdas: gruesa)' },
@@ -774,8 +775,8 @@ function grabarVideo() {
       let y = 10;
       for (const ll of llavesVisibles) { const alto = 46; llaveEnLienzo(gx, ll, 10, y + alto, Math.min(300, W * 0.36), '#ffffff', tinta); y += alto + 6; }
       const seg = c.gpu ? c.gpu.pasos * (isFinite(c.dtPaso) ? c.dtPaso : 0) : 0;
-      gx.save(); gx.font = '600 13px system-ui, sans-serif'; gx.textAlign = 'right'; gx.fillStyle = 'rgba(255,255,255,0.85)'; gx.fillRect(W - 220, 8, 212, 40);
-      gx.fillStyle = tinta; gx.fillText(`viento ${estado.dir} · ${fmt(seg, 0)} s simulados`, W - 16, 26); gx.font = '11px system-ui, sans-serif'; gx.fillText('Torre 3D · túnel de viento (didáctico)', W - 16, 41); gx.restore();
+      gx.save(); gx.font = letraLienzo(13, 600); gx.textAlign = 'right'; gx.fillStyle = 'rgba(255,255,255,0.85)'; gx.fillRect(W - 220, 8, 212, 40);
+      gx.fillStyle = tinta; gx.fillText(`viento ${estado.dir} · ${fmt(seg, 0)} s simulados`, W - 16, 26); gx.font = letraLienzo(11); gx.fillText('Torre 3D · túnel de viento (didáctico)', W - 16, 41); gx.restore();
       if (c.fz && c.fz.serie.length > 1) graficoEnLienzo(gx, c.fz.serie, 10, H - 110, Math.min(420, W * 0.45), 100, { arrastre: colA, lateral: colL, tinta });
     },
     alTerminar: (blob, error) => {
@@ -853,8 +854,8 @@ function encimaToma(gx: CanvasRenderingContext2D, Wt: number, Ht: number, t: Tom
     gx.fillStyle = '#ffffff'; gx.fillRect(W, 0, F, Ht); gx.fillStyle = 'rgba(0,0,0,0.12)'; gx.fillRect(W, 0, 1, Ht);
     let y = 14;
     if (t.rotulo) {
-      gx.fillStyle = tinta; gx.textBaseline = 'top'; gx.font = `700 ${Math.round(F / 18)}px system-ui, sans-serif`; gx.fillText(rotulo, x, y, ancho); y += Math.round(F / 18) + 6;
-      gx.font = `${Math.round(F / 26)}px system-ui, sans-serif`; gx.fillStyle = '#5f6b76'; gx.fillText(sub, x, y, ancho); y += Math.round(F / 26) + 4; gx.fillText(tiempo, x, y, ancho); y += Math.round(F / 26) + 12;
+      gx.fillStyle = tinta; gx.textBaseline = 'top'; gx.font = letraLienzo(Math.round(F / 18), 700); gx.fillText(rotulo, x, y, ancho); y += Math.round(F / 18) + 6;
+      gx.font = letraLienzo(Math.round(F / 26)); gx.fillStyle = '#5f6b76'; gx.fillText(sub, x, y, ancho); y += Math.round(F / 26) + 4; gx.fillText(tiempo, x, y, ancho); y += Math.round(F / 26) + 12;
     }
     // cada llave con su alto real (el título largo se parte en renglones), una debajo de otra, sin salirse de la franja
     if (t.llaves !== 'no') for (const ll of llavesVisibles) {
@@ -870,10 +871,10 @@ function encimaToma(gx: CanvasRenderingContext2D, Wt: number, Ht: number, t: Tom
       for (const ll of llavesVisibles.slice(0, 3)) { const prueba = document.createElement('canvas').getContext('2d')!, r0 = llaveEnLienzo(prueba, ll, 0, 1000, an, '#ffffff', tinta, an); llaveEnLienzo(gx, ll, 10, y + r0.alto, an, '#ffffff', tinta, an); y += r0.alto + 6; }
     }
     if (t.rotulo) {
-      gx.font = '600 13px system-ui, sans-serif'; gx.textAlign = 'right'; gx.textBaseline = 'alphabetic';
+      gx.font = letraLienzo(13, 600); gx.textAlign = 'right'; gx.textBaseline = 'alphabetic';
       const ancho = Math.min(W * 0.4, Math.max(gx.measureText(rotulo).width, 200) + 24);
       gx.fillStyle = 'rgba(255,255,255,0.82)'; gx.fillRect(W - ancho - 8, 8, ancho, 44);
-      gx.fillStyle = tinta; gx.fillText(rotulo, W - 16, 26, ancho - 16); gx.font = '11px system-ui, sans-serif'; gx.fillText(`${sub} · ${tiempo}`, W - 16, 42, ancho - 16);
+      gx.fillStyle = tinta; gx.fillText(rotulo, W - 16, 26, ancho - 16); gx.font = letraLienzo(11); gx.fillText(`${sub} · ${tiempo}`, W - 16, 42, ancho - 16);
     }
     if (t.grafico && c.fz && c.fz.serie.length > 1) graficoEnLienzo(gx, c.fz.serie, W - Math.min(360, W * 0.3) - 10, Ht - 100, Math.min(360, W * 0.3), 90, { arrastre: colA, lateral: colL, tinta });
   }

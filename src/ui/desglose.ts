@@ -12,6 +12,7 @@ import { AUTOR, AVISO } from '../autoria';
 import { h, mat } from './comp';
 import { dibujosPorHoja, type Dibujo } from './dibujosDesglose';
 import { desglosar, num, resumenHoja, textoDiferencia, type EntradaDesglose, type HojaDesglose } from '../engine/desglose';
+import { FUENTE_PPTX } from './tipografia';
 
 export function entradaDesglose(): EntradaDesglose {
   const p = estado.proyecto, c = estado.calculo;
@@ -141,7 +142,7 @@ export async function imprimirDesglose() {
 const AZUL = '1A6BBD', TINTA = '1F2328', GRIS = '5F6B76', OK = '1A7A3A', MAL = 'C62828', AMARILLO = 'FBF1DC', FONDO_OK = 'EAF6EC';
 /** semáforo: color del texto y del fondo */
 const SEM: Record<string, { c: string; f: string }> = { verde: { c: '1A7A3A', f: 'EAF6EC' }, amarillo: { c: '8A5F00', f: 'FBF1DC' }, rojo: { c: 'C62828', f: 'FBE9E9' } };
-const FUENTE = 'Calibri';
+const FUENTE = FUENTE_PPTX;
 
 /** cada hoja de la planilla en la presentación: color y etapa de la app, la pregunta que responde y qué recibe y entrega */
 const META = [
