@@ -7,6 +7,9 @@ import { leerProyecto } from './lector';
 import { cajaSilueta, carpinteriaDeNivel } from './silueta';
 import { armarCara, paraLado, paraViento } from './exo';
 import { adentro } from './avisos';
+import { exoConLosasJuntas, losasJuntas } from './losasJuntas';
+import { contornoEnvolventeEnZ } from './envolvente';
+import { armarCara as armar2, cargasDeLosa } from './exo';
 
 const armar = () => { const p = ejemploCiticorpFachada(); aplicarCarpinteriaTramos(p); return p; };
 /** la piel a la cota z: el anillo de la banda que la contiene, interpolado entre abajo y arriba */
@@ -135,5 +138,32 @@ describe('Citicorp: los chevrones se unen solo por el mástil', () => {
   });
   it('abre con el método CIRSOC (el exo entra en el cálculo)', () => {
     expect(ejemploCiticorpFachada().calculo?.metodo).toBe('cirsoc');
+  });
+  it('los pisos de la corona: el cajón con losas enteras y, bajo el techo a 45°, losas que llegan a la pendiente sin salirse de la piel', () => {
+    const p = ejemploCiticorpFachada();
+    const zc = p.niveles[1].cota, js = losasJuntas(p);
+    const cajon = js.filter(j => j.i === 1), corona = js.filter(j => j.i === 0);
+    expect(cajon.length).toBe(3); expect(corona.length).toBe(7);
+    cajon.forEach(j => { const c = cajaSilueta(j.v); expect(c.B).toBeCloseTo(47.85, 2); expect(c.L).toBeCloseTo(47.85, 2); });
+    let ancho = Infinity;
+    corona.sort((a, b) => a.z - b.z).forEach(j => {
+      expect(j.z).toBeGreaterThan(zc);
+      const c = cajaSilueta(j.v), piel = cajaSilueta(contornoEnvolventeEnZ(p, j.z)!);
+      expect(c.L).toBeLessThan(ancho); ancho = c.L;                     // se angostan hacia arriba, con la pendiente
+      expect(c.L).toBeLessThanOrEqual(piel.L + 1e-6);                   // y quedan dentro de la piel
+      expect(c.cy - c.L / 2).toBeGreaterThanOrEqual(piel.cy - piel.L / 2 - 1e-6);
+    });
+    expect(Math.max(...corona.map(j => j.z))).toBeLessThan(p.niveles[0].cota);
+  });
+  it('el exo carga las losas de los pisos que junta un nivel', () => {
+    const p = ejemploCiticorpFachada(), def = exoConLosasJuntas(p, p.exo!, 'A');
+    expect(def.losas!.extra!.length).toBe(losasJuntas(p).length);
+    const zs = [0, ...p.niveles.filter(n => n.cota > 0).map(n => n.cota).sort((a, b) => a - b)], ancho = 47.85 + 2 * def.separacion;
+    const cara = armar2(paraLado(paraViento(def, 'A'), ancho / 2), ancho, zs);
+    const l = { q: 0.7, franja: 6.4, ancho: () => ancho, centro: () => 0, anchoPerp: () => ancho };
+    const tot = (x: { P: number }[]) => x.reduce((s, c) => s + c.P, 0);
+    const sin = tot(cargasDeLosa(cara, zs, l)), con = tot(cargasDeLosa(cara, zs, { ...l, extra: def.losas!.extra }));
+    const esperado = def.losas!.extra!.reduce((s, e) => s + 0.7 * 6.4 * (Math.max(0, e.a - 6.4) + Math.max(0, e.ap - 6.4) * 0), 0);
+    expect(con - sin).toBeGreaterThan(esperado * 0.99);                 // las losas de más llegan a la cara (y algo a las esquinas)
   });
 });

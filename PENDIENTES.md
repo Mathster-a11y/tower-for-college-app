@@ -2,6 +2,43 @@
 
 Se tacha cada ítem cuando está hecho, probado y subido.
 
+## Quién hace qué (las dos sesiones)
+
+Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commit (ver «Varias sesiones a la vez» en
+`CLAUDE.md`). Rama `alternativa`: diseño de la torre, exoesqueleto y ejemplos con forma. Otra rama
+(`claude/ejemplos-cirsoc`): viento y túneles, métodos de cálculo, salidas de entrega, tablet y estética.
+
+**En curso**
+- (nada en curso en `alternativa`)
+- (nada en curso en `claude/ejemplos-cirsoc`; la CI con la revisión de punteros espera a que el usuario tenga la computadora)
+
+**Hecho hace poco en `alternativa`** (27/11): el núcleo del Gherkin relevado en las plantas de Foster (anillo de 16 columnas, 4 centrales y los muros que se repiten; todo al 38º, D y S al 39º), en lugar del tubo de Ø 22 m; datos e imágenes en `docs/gherkin-nucleo/`. (26/11): un solo perfil de la torre para la carta de la planta y el editor de
+Diseño → Perfil; script de Sheets v4 (textos largos); zoom del 3D hacia el cursor; la corona del Citicorp con su piel
+media; la planta que no queda tapada en una notebook; el Citicorp con el criterio CIRSOC (notas de la plaza y la
+fundación) y el 3D que dibuja las losas de los pisos que junta un nivel; los pisos de la corona del Citicorp
+(57º–59º en el cajón y siete técnicos bajo el techo a 45°, recortados por la envolvente), que el exo también carga. Los ejemplos con exo abren con CIRSOC. El Gherkin con un núcleo de hormigón de 22 m que toma
+viento hasta la última losa. Las cartas de la planta no quedan nunca debajo de la barra
+de herramientas y se arrastran desde cualquier parte del borde.
+
+**Hecho hace poco en `claude/ejemplos-cirsoc`** (27/11): tabla de alturas → perfil (alzado en vivo, avisos por fila,
+«Copiar como tabla»); contraste del FEM con Pynite desde la app (.py para Colab, cuatro torres más, área de corte de
+Timoshenko por tipo de pieza); licencias de terceros en Ayuda; comparar dos versiones en dibujo; «Predecí antes de
+ver»; rototraslación sin rojo ni azul fuera de tracción y compresión; tipografía de la guía (Plex Sans, JetBrains Mono
+y Plex Math nombradas solo en `src/ui/tipografia.ts`; canvas, PowerPoint y Excel de la app en Plex, con la nota de la
+letra en cada «Léame»). Tocó `src/app.ts`, `src/estilo.css` y `src/ui/planta.ts` con cambios chicos.
+
+**Próximos en `alternativa`** (propuestos, sin empezar)
+- Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
+- Supercolumnas del exo que bajen hasta la fundación.
+- Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
+
+**Para la otra rama** (vistos desde acá, sin tocar)
+- «Ver la explicación» de Rototraslación: chico para el dedo.
+- Que `tools/revision_punteros.cjs` corra en GitHub en cada cambio a `main`.
+- Que CIRSOC y FEM acepten más de 49 niveles sobre PB: hoy todos los métodos arman los niveles sobre la tabla de la
+  planilla y con 50 el corte, el momento y el vuelco del nivel más alto salen mal. Con eso, los ejemplos (que solo
+  tienen que cumplir CIRSOC) podrían ir piso por piso: el Citicorp separaría el 11º y el 12º.
+
 ## Lo que falta (lista viva, noviembre 2026)
 
 Cada ítem se tacha (~~así~~) cuando queda hecho, probado y subido, con la fecha.

@@ -155,7 +155,10 @@ export function zonasDe(def: ExoDef, zs: number[]): { tipo: TipoExo; kI: number;
   const ok = lista.filter((x, i) => x.k < n && (i === 0 || x.k > lista[i - 1].k)).filter((x, i, a) => i === a.length - 1 || a[i + 1].k > x.k);
   return ok.map((x, i) => ({ tipo: x.z.tipo, kI: x.k, kF: i + 1 < ok.length ? ok[i + 1].k : n, modulo: Math.max(1, Math.round(x.z.modulo ?? m)), vanos: x.z.vanos ?? def.vanos, desde: zs[x.k] }));
 }
-export interface LosasExo { franja: number; qD?: number; qL?: number }
+export interface LosasExo { franja: number; qD?: number; qL?: number;
+  /** (lo arma el cálculo, no se guarda) las losas de los pisos que junta un nivel, con su cota y su ancho en las caras de
+   *  este viento (a) y en las perpendiculares (ap): ver exoConLosasJuntas */
+  extra?: { z: number; a: number; ap: number }[] }
 /** peso de las losas y sobrecarga por m² (t/m²): los mismos de la planilla (0,7 descargado, 0,9 cargado) */
 export const LOSA_QD = 0.7, LOSA_QL = 0.2;
 export interface TramoSeccion { clase: ClaseBarra | 'mastil'; desde: number; sec: Seccion }
@@ -587,7 +590,8 @@ export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], l
 }
 
 /** lo que bajan las losas a una cara: q (t/m²), la franja (m), el ancho de la cara y el de la cara perpendicular en cada cota */
-export interface CargaLosa { q: number; franja: number; ancho: (k: number) => number; centro: (k: number) => number; anchoPerp: (k: number) => number }
+export interface CargaLosa { q: number; franja: number; ancho: (k: number) => number; centro: (k: number) => number; anchoPerp: (k: number) => number;
+  /** losas entre pisos (las que junta un nivel): su cota y sus anchos */ extra?: { z: number; a: number; ap: number }[] }
 /**
  * Cargas de las losas en los nudos de una cara. En cada piso k (no la base) la franja de la cara baja
  * P = q · f · (a − f) (a: ancho de la cara; las esquinas f × f se reparten entre las dos caras que se cruzan), repartida
@@ -615,6 +619,14 @@ export function cargasDeLosa(cara: Cara, zs: number[], l: CargaLosa): { nudo: nu
     const abajo = [...conNudos].reverse().find(j => j < k), arriba = conNudos.find(j => j > k);
     if (abajo === undefined || arriba === undefined) { const j = (abajo ?? arriba)!; sumar(carga, j, P); sumar(perp, j, Pp); continue; }
     const t = (zs[k] - zs[abajo]) / (zs[arriba] - zs[abajo]);
+    sumar(carga, abajo, P * (1 - t)); sumar(carga, arriba, P * t); sumar(perp, abajo, Pp * (1 - t)); sumar(perp, arriba, Pp * t);
+  }
+  // las losas de los pisos que junta un nivel: a los pisos con nudos de abajo y de arriba, por la distancia
+  for (const e of l.extra ?? []) {
+    const P = l.q * f * Math.max(0, e.a - f), Pp = l.q * f * Math.max(0, e.ap - f);
+    const abajo = [...conNudos].reverse().find(j => zs[j] <= e.z + 1e-6), arriba = conNudos.find(j => zs[j] > e.z + 1e-6);
+    if (abajo === undefined || arriba === undefined) { const j = (abajo ?? arriba)!; sumar(carga, j, P); sumar(perp, j, Pp); continue; }
+    const t = (e.z - zs[abajo]) / (zs[arriba] - zs[abajo]);
     sumar(carga, abajo, P * (1 - t)); sumar(carga, arriba, P * t); sumar(perp, abajo, Pp * (1 - t)); sumar(perp, arriba, Pp * t);
   }
   const out: { nudo: number; P: number }[] = [];
@@ -1002,6 +1014,7 @@ function calcularExoSinMemoria(def: ExoDef, zs: number[], W: number[], EJ: (z: n
   const losa: CargaLosa | undefined = def.losas && qLosa > 0 ? {
     q: qLosa, franja: def.losas.franja, ancho: k => (anchos && anchos[k] > 0 ? anchos[k] : anchoCara),
     centro: k => (def.tipo !== 'E' && corr ? corr[k] ?? 0 : 0), anchoPerp: k => op.anchosPerp?.[k] ?? dPerp,
+    extra: def.losas.extra,
   } : undefined;
   const F = def.tipo === 'F';
   // ficha F: el núcleo está dentro de cada plano (cada uno con su parte del EJ de los tabiques); la ménsula sola no se suma

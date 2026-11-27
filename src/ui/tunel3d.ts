@@ -304,7 +304,7 @@ function armarVista(cont: HTMLElement) {
   const g = c.geo, Hm = g.H;
   const Lx = g.nx / g.escala, Ly = g.ny / g.escala;
   cam.position.set(-Lx * 0.62, Math.max(Hm * 1.9, Lx * 0.42), Ly * 1.25);
-  const ctl = new OrbitControls(cam, ren.domElement); ctl.target.set(Lx * 0.05, Hm * 0.3, 0); ctl.update();
+  const ctl = new OrbitControls(cam, ren.domElement); ctl.zoomToCursor = true; ctl.target.set(Lx * 0.05, Hm * 0.3, 0); ctl.update();
   esc.add(new THREE.HemisphereLight(0xffffff, 0x99aabb, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.1); sol.position.set(-60, 120, 80); esc.add(sol);
   // sombras (modo maqueta): el sol cubre todo el túnel

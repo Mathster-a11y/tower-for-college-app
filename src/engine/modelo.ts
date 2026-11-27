@@ -458,6 +458,8 @@ export function ejemploCiticorp(): Proyecto {
   // el último módulo sube hasta la cima: la corona inclinada es estructura (si no, queda colgada de columnas sueltas)
   const cortes = [...[8, 16, 24, 32, 40, 48, 56].map(z), 278.6];
   return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
     version: 1,
     nombre: 'Citicorp Center (Nueva York, 1977) · modelo aproximado',
     alumno: '',

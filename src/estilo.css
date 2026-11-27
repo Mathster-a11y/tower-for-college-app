@@ -1682,6 +1682,7 @@ body.con-guia > :not(.guia-impresion) { display: none !important; }
 /* Cuadros flotantes de la planta: asa para moverlos (flotantes.ts) */
 .asa-mover { touch-action: none; cursor: grab; border: 0; background: none; padding: 0; color: var(--ink2); }
 .asa-mover:active, .moviendose .asa-mover { cursor: grabbing; }
+.movible.borde-mover, .movible.moviendose { cursor: move; }
 .asa-mover:not(.en-linea) { position: absolute; top: 1px; left: 50%; transform: translateX(-50%); width: 56px; height: 14px; z-index: 1; pointer-events: auto; }
 .asa-mover:not(.en-linea)::before { content: ''; position: absolute; left: 12px; right: 12px; top: 5px; height: 4px; border-radius: 2px; background: var(--edge); }
 .asa-mover:not(.en-linea):hover::before, .asa-mover:not(.en-linea):focus-visible::before { background: var(--accent); }

@@ -2,7 +2,8 @@
  * Perfil de la torre (alzado): cómo cambia la planta con la altura, a partir de la losa de un nivel base.
  *
  *  - Una curva de puntos (h, fx, fy, dx, dy) con h de 0 (la losa base) a 1 (la azotea): fx y fy escalan la planta en
- *    x y en y desde su centro, dx y dy la corren (torre inclinada). Entre puntos: tramos rectos o una curva suave que
+ *    x y en y desde su centro; dx y dy corren el nivel entero (losa y muros, como en el editor de Diseño → Perfil: los
+ *    usan el protocolo de perfil variable, el exo, el 3D y los túneles), no la losa adentro del nivel. Entre puntos: tramos rectos o una curva suave que
  *    pasa por todos (spline cúbica monótona: no se pasa de los valores de los puntos, sin «panzas» de más).
  *  - Un giro total (grados) que se reparte con la altura: torre retorcida.
  *
@@ -36,6 +37,12 @@ export interface PerfilTorre {
    * círculo entero arriba) y, con dos formas seguidas, para la excepción de un solo piso
    */
   formas?: FormaTramo[] | null;
+  /**
+   * a qué se aplica: a las losas (vacío: escala y gira la silueta de cada losa y escribe B, L y el corrimiento) o solo a
+   * las medidas de la planilla (B, L y el corrimiento; las losas quedan como están). Lo elige la casilla «Las plantas
+   * dibujadas siguen al perfil» del editor de Diseño → Perfil
+   */
+  aplica?: 'losas' | 'medidas' | null;
 }
 export interface FormaTramo { desde: number; silueta: Vertice[] }
 
@@ -117,23 +124,36 @@ export function aplicarPerfil(p: Proyecto): number {
   if (ib < 0) return 0;
   const nb = p.niveles[ib];
   // la base queda con silueta propia (si heredaba la de arriba, se copia antes de tocar los niveles de arriba)
-  if (!nb.silueta || nb.silueta.length < 3) nb.silueta = plantaDeNivel(p, ib).silueta.map(q => ({ ...q }));
-  const base = nb.silueta as Vertice[], z0 = nb.cota, z1 = p.niveles[0].cota;
+  // (con «solo la planilla» las losas no se tocan: la base se lee sin copiarla)
+  if (pf.aplica !== 'medidas' && (!nb.silueta || nb.silueta.length < 3)) nb.silueta = plantaDeNivel(p, ib).silueta.map(q => ({ ...q }));
+  const base = (nb.silueta && nb.silueta.length >= 3 ? nb.silueta : plantaDeNivel(p, ib).silueta) as Vertice[], z0 = nb.cota, z1 = p.niveles[0].cota;
   if (z1 <= z0 + 1e-6) return 0;
   let n = 0;
   // formas por tramos (las de arriba de la base), de abajo hacia arriba
   const formas = [...(pf.formas ?? [])].filter(f => f.desde > z0 + 1e-6 && f.silueta?.length >= 3).sort((a, b) => a.desde - b.desde);
+  const soloMedidas = pf.aplica === 'medidas';
+  const r3 = (x: number) => +x.toFixed(3);
+  // medidas de la base (para «solo las medidas»: B y L de cada nivel son los de la base por el factor del perfil)
+  // (las medidas de la base son las suyas efectivas, antes de tocar los de arriba: un nivel sin B ni L hereda las del de
+  //  arriba, así que la base queda con las suyas escritas; si no, heredaría las del primer piso ya cambiado)
+  const efB = (() => { for (let k = ib; k >= 0; k--) if (p.niveles[k].B) return p.niveles[k].B!; return null; })();
+  const efL = (() => { for (let k = ib; k >= 0; k--) if (p.niveles[k].L) return p.niveles[k].L!; return null; })();
+  const mb = medidasAlViento(base, pf.blCriterio ?? 'caja'), B0 = efB ?? +mb.B.toFixed(2), L0 = efL ?? +mb.L.toFixed(2);
+  if (soloMedidas || (pf.bl ?? true)) { if (!nb.B) nb.B = B0; if (!nb.L) nb.L = L0; }
   p.niveles.forEach((nv, i) => {
     if (i >= ib || nv.manual) return;                          // solo los de arriba de la base, y no los editados a mano
     const h = (nv.cota - z0) / (z1 - z0), v = valorPerfil(pf, h);
     if (!(v.fx > 0.02 && v.fy > 0.02)) return;
+    // el corrimiento es del nivel entero (torre inclinada)
+    nv.dx = Math.abs(v.dx) > 1e-3 ? r3(v.dx) : null; nv.dy = Math.abs(v.dy) > 1e-3 ? r3(v.dy) : null;
+    if (soloMedidas) { nv.B = +(B0 * v.fx).toFixed(2); nv.L = +(L0 * v.fy).toFixed(2); n++; return; }
     // la forma que rige en esta cota: la última que empieza en ella o más abajo; el perfil la cambia desde su cota
     const fo = [...formas].reverse().find(f => f.desde <= nv.cota + 1e-6);
     let s: Vertice[];
     if (fo) {
       const v0 = valorPerfil(pf, (fo.desde - z0) / (z1 - z0));
-      s = transformarPlanta(fo.silueta, v.fx / v0.fx, v.fy / v0.fy, v.dx - v0.dx, v.dy - v0.dy, v.giro - v0.giro);
-    } else s = transformarPlanta(base, v.fx, v.fy, v.dx, v.dy, v.giro);
+      s = transformarPlanta(fo.silueta, v.fx / v0.fx, v.fy / v0.fy, 0, 0, v.giro - v0.giro);
+    } else s = transformarPlanta(base, v.fx, v.fy, 0, 0, v.giro);
     nv.silueta = s;
     if (pf.bl ?? true) { const c = medidasAlViento(s, pf.blCriterio ?? 'caja'); nv.B = +c.B.toFixed(2); nv.L = +c.L.toFixed(2); }
     n++;
@@ -221,7 +241,9 @@ export function perfilDesdeTabla(texto: string, zBase: number, zTop: number): { 
  */
 export function tablaDesdePerfil(p: Proyecto, pf: PerfilTorre): string {
   const ib = nivelBase(p, pf), zb = p.niveles[ib]?.cota ?? 0, zt = p.niveles[0]?.cota ?? 0;
-  const base = cajaSilueta(plantaDeNivel(p, ib).silueta);
+  const caja = cajaSilueta(plantaDeNivel(p, ib).silueta);
+  // con «solo la planilla» los anchos son los B y L de la base (como en aplicarPerfil); si no, los de su losa
+  const nb = p.niveles[ib], base = pf.aplica === 'medidas' ? { B: nb?.B || caja.B, L: nb?.L || caja.L } : caja;
   const n = (x: number, d = 3) => String(+x.toFixed(d)).replace('.', ',');
   const filas = p.niveles.slice(0, ib + 1).map(nv => nv.cota).filter(z => z >= zb - 1e-6).sort((a, b) => a - b).map(z => {
     const v = valorPerfil(pf, zt > zb ? (z - zb) / (zt - zb) : 0);

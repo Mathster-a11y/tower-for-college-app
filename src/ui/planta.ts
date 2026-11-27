@@ -30,7 +30,7 @@ import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerf
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
-import { hacerMovible, hacerRedimensionable } from './flotantes';
+import { apartarHaciaAbajo, hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
 import { NOMBRE_CLASE, type ClasePieza } from '../engine/modelo';
@@ -1043,7 +1043,7 @@ export function montarPlanta(cont: HTMLElement) {
         const fs = (pf2.formas ?? []).filter(x => Math.abs(x.desde - nv.cota) > 1e-6 && (!arriba || Math.abs(x.desde - arriba.cota) > 1e-6 || !soloEste));
         fs.push({ desde: nv.cota, silueta: sil });
         if (arriba && silArriba && !(pf2.formas ?? []).some(x => Math.abs(x.desde - arriba.cota) < 1e-6)) fs.push({ desde: arriba.cota, silueta: silArriba });
-        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) };
+        pp.perfilTorre = { ...pf2, formas: fs.sort((a, b2) => a.desde - b2.desde) }; delete pp.perfil;
         delete nv.manual;
       });
       usarForma.push(h2(boton('Usar esta losa desde este piso', () => tomar(false), 'Desde este piso hacia arriba, el perfil escala, gira y corre esta planta en vez de la losa base (por ejemplo, el círculo sin pozos de un piso para arriba)'),
@@ -1082,7 +1082,8 @@ export function montarPlanta(cont: HTMLElement) {
     const env = objetivo === 'envolvente';
     // el mismo editor para el perfil de las losas y para la forma de la envolvente: cambia de dónde lee y dónde escribe
     const leer = (pp: Proyecto): PerfilTorre | null => (env ? pp.envolvente?.perfil ?? null : pp.perfilTorre ?? null);
-    const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else pp.perfilTorre = q; };
+    // (el perfil de la torre es el mismo del editor de Diseño → Perfil: sus alzados dibujados dejan de valer y se vuelven a leer de los niveles)
+    const escribir = (pp: Proyecto, q: PerfilTorre) => { if (env) { if (pp.envolvente) pp.envolvente = { ...pp.envolvente, perfil: q }; } else { pp.perfilTorre = q; delete pp.perfil; } };
     const ab = env ? pfEnv : pfLosas;
     const p = estado.proyecto, pf = leer(p);
     const det = document.createElement('details'); det.className = 'esquinas-torre perfil-torre-carta'; det.open = ab.abierto;
@@ -1214,7 +1215,17 @@ export function montarPlanta(cont: HTMLElement) {
         det.append(lista);
       }
     }
-    if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; }); })));
+    // a qué se aplica (el mismo perfil del editor de Diseño → Perfil, que lo dibuja en los dos alzados)
+    if (!env && pf) {
+      const sg = document.createElement('div'); sg.className = 'seg chico'; sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'A qué se aplica el perfil');
+      ([['losas', 'Losas y planilla', 'Escala y gira la losa de cada nivel y escribe B, L y el corrimiento'], ['medidas', 'Solo la planilla', 'Escribe B, L y el corrimiento de cada nivel; las losas quedan como están']] as const).forEach(([v, t, ti]) => {
+        const x = document.createElement('button'); x.type = 'button'; x.textContent = t; x.title = ti; x.setAttribute('aria-pressed', String((pf.aplica ?? 'losas') === v));
+        x.addEventListener('click', () => poner(q => { q.aplica = v === 'losas' ? null : v; }));
+        sg.append(x);
+      });
+      det.append(h2(nota('Se aplica a:')), sg, nota('Es el mismo perfil que se dibuja en los dos alzados de Diseño → Perfil. La inclinación corre el nivel entero (losa y muros).'));
+    }
+    if (!env) det.append(h2(boton('Quitar el perfil', 'Las losas quedan como están ahora (como siluetas propias)', () => { pfSel = ab.sel = null; ab.sel = null; estado.cambiar(pp => { delete pp.perfilTorre; delete pp.perfil; }); })));
     void aplicarPerfil;
     return det;
   }
@@ -3384,11 +3395,24 @@ export function montarPlanta(cont: HTMLElement) {
     [dock, panelIns, panelCal, panelMed, cont.querySelector<HTMLElement>(':scope > .contorno-panel')].forEach(e => {
       if (!e) return;
       e.style.maxHeight = '';
-      if (!visible(e) || e.classList.contains('movido')) return;
+      if (!visible(e)) return;
       const r = e.getBoundingClientRect();
+      // (el que movió el usuario queda donde lo dejó, pero sin pasar del borde de abajo de la planta: si no, su tirador
+      //  y lo de abajo quedan afuera)
+      if (e.classList.contains('movido')) { if (r.bottom > R.bottom - 4) { e.style.maxHeight = `${Math.max(120, Math.floor(R.bottom - 4 - r.top))}px`; e.style.overflowY = 'auto'; } return; }
       const abajo = puestos.filter(p => p.left < r.right && p.right > r.left && p.top > r.top + 60).reduce((m, p) => Math.min(m, p.top), R.bottom);
       if (r.bottom > abajo - 6) { e.style.maxHeight = `${Math.max(120, Math.floor(abajo - 6 - r.top))}px`; e.style.overflowY = 'auto'; }
     });
+    // ningún cuadro queda debajo (ni encima) de la barra de herramientas (taparía su asa y sus botones; la barra ya va
+    // debajo de la tira de pasos, que abierta es un desplegable pasajero):
+    // tampoco los que movió el usuario, si después la barra creció (dos renglones, la tira de pasos abierta, otra ventana)
+    {
+      const tapan = [barra].filter(visible).map(e => e.getBoundingClientRect());
+      cont.querySelectorAll<HTMLElement>(':scope > .movible').forEach(e => {
+        if (e === barra || e === pasos || e.contains(barra) || !visible(e)) return;
+        for (const t of tapan) { const r = e.getBoundingClientRect(); if (r.left < t.right - 1 && r.right > t.left + 1 && r.top < t.bottom - 1) apartarHaciaAbajo(e, cont, Math.ceil(t.bottom + 6 - r.top)); }
+      });
+    }
     separarRotulos();
   }
   // todo lo que flota sobre la planta se puede mover con su asa (⠿) adonde no moleste; doble clic vuelve a su lugar
@@ -3410,6 +3434,8 @@ export function montarPlanta(cont: HTMLElement) {
   let cuadroAcomodar = 0;
   const pedirAcomodar = () => { if (!cuadroAcomodar) cuadroAcomodar = requestAnimationFrame(() => { cuadroAcomodar = 0; acomodar(); }); };
   new ResizeObserver(pedirAcomodar).observe(cont);
+  // (la barra de herramientas y la tira de pasos cambian de alto solas: dos renglones, la tira abierta o plegada)
+  { const ro = new ResizeObserver(pedirAcomodar); ro.observe(barra); ro.observe(pasos); }
   new MutationObserver(pedirAcomodar).observe(cont, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   svg.addEventListener('pointerdown', ev => {
     if (modo === 'insertar' && ev.button === 0) {

@@ -1020,6 +1020,7 @@ $('b-sheets').addEventListener('click', () => {
       <li>Implementar → Nueva implementación → Aplicación web · Ejecutar como: yo · Acceso: cualquier persona.</li>
       <li>Pegá acá la dirección que termina en <code>/exec</code> y la clave.</li>
     </ol>
+    <p class="nota"><b>Si ya lo tenías instalado</b> y la app avisa que el script es de una versión anterior: pegá el código nuevo encima, guardá y publicalo como versión nueva (Implementar → Administrar implementaciones → ✎ → Versión: nueva → Implementar). La dirección y la clave no cambian.</p>
     <label class="campo"><span>Dirección de la aplicación web</span><input id="sh-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(actual)}"></label>
     <label class="campo"><span>Clave (la que muestra «configurar»)</span><input id="sh-clave" type="password" autocomplete="off" value="${esc(sincro?.clave ?? '')}"></label>
     <p class="nota">Desde la planilla se editan las hojas «T3D Niveles», «T3D Muros» y los datos de la hoja «viento». Si la planilla ya tiene un edificio, al conectar se trae ese; si está vacía, se escribe el de la app. Si la planilla cambia mientras editás en la app, no se pisa nada: la app te pregunta con cuál quedarte. La clave no se comparte: sin ella, la dirección sola no lee ni escribe.</p>`, [

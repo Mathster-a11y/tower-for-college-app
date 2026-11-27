@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ejemploGuia } from '../engine/modelo';
+import { ejemploCiticorpFachada } from '../engine/ejemploCiticorpFachada';
 import { paquete, SincroSheets } from './sheets';
 
 type Celda = string | number | boolean;
@@ -113,6 +114,17 @@ describe('Codigo.gs: el script de la planilla', () => {
     const e = G.get({ accion: 'estado', clave });
     expect(e.version).toBe(0);
     expect(e.incompleta).toBe(true);
+  });
+
+  it('textos largos (las notas y las 174 barras a mano del Citicorp): el script los acepta hasta 45 000 caracteres', () => {
+    const G = googleFalso(), clave = G.gs.configurar() as string;
+    const pq = paquete(ejemploCiticorpFachada(), {});
+    expect(Math.max(...pq.tablas.flatMap(t => t.filas.flat()).map(v => (typeof v === 'string' ? v.length : 0)))).toBeGreaterThan(2000);
+    const r = G.post({ accion: 'escribir', clave, ...pq });
+    expect(r.error).toBeUndefined();
+    expect(r.version).toBe(1);
+    // y más de 45 000, no
+    expect(G.post({ accion: 'escribir', clave, tablas: [{ nombre: 'T3D Exo', filas: [['Notas', 'x'.repeat(45001)]] }] }).error).toMatch(/Valor no permitido/);
   });
 });
 

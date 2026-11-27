@@ -4,6 +4,7 @@
  * θ(z) alrededor del centro de rigidez CR (ver rototraslacion3D en el motor). Cada muro se arma como un prisma con
  * un anillo en cada nivel, así se dobla y se revira piso por piso; la torre sin deformar queda en línea de trazos.
  */
+import { losasJuntas } from '../engine/losasJuntas';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
@@ -11,7 +12,7 @@ import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
 import { enPlanta, polilinea } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { carpinteriaDeNivel, plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
 import { prepararSecciones } from '../engine/loft';
 import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
@@ -28,6 +29,7 @@ const css = (v: string, def: string) => getComputedStyle(document.documentElemen
 export { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 
+const f2z = (z: number) => z.toFixed(2).replace('.', ',');
 /** el corrimiento (dx, dy) a la altura z, lineal entre las cotas de los niveles (la piel entre dos niveles corridos) */
 function corrimientoLineal(p: { niveles: { cota: number; dx?: number | null; dy?: number | null }[] }): (z: number) => P2 {
   const ns = [...p.niveles].sort((a, b) => a.cota - b.cota);
@@ -173,6 +175,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   let hayQueDibujar = true;
   function pedirCuadro() { hayQueDibujar = true; }
   controles.enableDamping = true;
+  // la rueda y el pellizco acercan hacia donde apunta el cursor (no hacia el centro de la torre): así se llega a un detalle
+  controles.zoomToCursor = true;
   escena.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.4);
   sol.position.set(-60, 120, 80);
@@ -252,46 +256,27 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       ? new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, roughness: 0.9, side: THREE.DoubleSide })
       : new THREE.MeshStandardMaterial({ color: 0xdfe3e6, transparent: true, opacity: def ? 0.4 : 0.55, roughness: 0.9, side: THREE.DoubleSide });
     const matSub = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, transparent: true, opacity: 0.45, roughness: 0.9, side: THREE.DoubleSide });
+    // las losas de los pisos que junta un nivel (el cálculo tiene lugar para 49 niveles): el 11º–12º y la corona del
+    // Citicorp, los niveles del Hancock; en una «Envolvente» las recortan sus planos (la corona a 45°)
+    const juntas = losasJuntas(p);
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
       const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 5);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
-      const losa = new Prisma(pol, [n.cota - 0.2, n.cota], n.cota < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), n.cota, hs, () => dN);
-      capa(losa.malla, 'Losas', `Losa ${n.nombre}`);
-      prismas.push(losa);
+      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: puntosSilueta(j.v, 5) }))]) {
+        const losa = new Prisma(v, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
+        capa(losa.malla, 'Losas', `Losa ${n.nombre}${z === n.cota ? '' : ` (piso de ${f2z(z)} m)`}`);
+        prismas.push(losa);
+      }
     });
     // fachada: una superficie que une la carpintería (o, si no hay, la losa) de cada nivel de PB a la azotea; muestra
     // el perfil, los lofts y las curvas como una piel continua (sin la deformada: ahí se mueven las losas)
     if (estado.capas.fachada && !roto) { const n0 = grupo.children.length; agregarFachada(); grupo.children.slice(n0).forEach(o => capa(o, 'Fachada', 'Fachada')); }
-    // (con la capa «Fachada» apagada) la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: una piel de vidrio que une los contornos
-    // de los niveles (cada uno a la mitad del tramo que cubre, como en el túnel); arriba cierra en el último nivel
-    else if (estado.capas.losas && !def && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) {
-      const niv = p.niveles.map((n, i) => ({ n, i })).filter(x => x.n.cota >= 0).sort((a, b) => a.n.cota - b.n.cota);
-      const anillos = niv.map((x, k) => {
-        const c = carpinteriaDeNivel(p, x.i)?.v ?? plantaDeNivel(p, x.i).silueta;
-        const z = k + 1 < niv.length ? (x.n.cota + niv[k + 1].n.cota) / 2 : x.n.cota;
-        // (torre inclinada: el contorno va corrido con su nivel)
-        const dx = x.n.dx ?? 0, dy = x.n.dy ?? 0;
-        return { z, pts: puntosSilueta(c, 6).map(q => ({ x: q.x + dx, y: q.y + dy })) };
-      });
-      anillos.unshift({ z: niv[0].n.cota, pts: anillos[0].pts });
-      const iguales = anillos.every(a => a.pts.length === anillos[0].pts.length);
-      if (iguales) {
-        const nP = anillos[0].pts.length, pos: number[] = [], idx: number[] = [];
-        anillos.forEach(a => a.pts.forEach(q => pos.push(q.x, a.z, -q.y)));
-        for (let k = 0; k + 1 < anillos.length; k++) for (let j = 0; j < nP; j++) {
-          const a = k * nP + j, b = k * nP + ((j + 1) % nP), c2 = (k + 1) * nP + j, d2 = (k + 1) * nP + ((j + 1) % nP);
-          idx.push(a, b, d2, a, d2, c2);
-        }
-        const gV = new THREE.BufferGeometry();
-        gV.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gV.setIndex(idx); gV.computeVertexNormals();
-        const vidrio = new THREE.Mesh(gV, new THREE.MeshStandardMaterial({ color: 0x8fb3cc, transparent: true, opacity: 0.16, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
-        vidrio.renderOrder = 2;
-        capa(vidrio, 'Fachada', 'Carpintería');
-        grupo.add(vidrio);
-      }
-    }
+    // (con la capa «Fachada» apagada) la carpintería (el cerramiento que ve el viento), si el proyecto la tiene: la misma
+    // piel que la fachada (tramo por tramo: sin vidrio donde no hay carpintería, como la plaza del Citicorp, y bien unida
+    // aunque el contorno cambie de forma, como una corona recortada), en vidrio liviano y sin la panelería
+    else if (estado.capas.losas && !def && !roto && p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3)) { const n0 = grupo.children.length; agregarFachada(true); grupo.children.slice(n0).forEach(o => capa(o, 'Fachada', 'Carpintería')); }
     // muros
     const papeles = estado.calculo.asig?.papeles ?? {};
     const h = top - fondoCota;
@@ -488,7 +473,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     }
   }
 
-  function agregarFachada() {
+  /** la piel de la torre: con la panelería (capa «Fachada») o, liviano, un vidrio tenue sin paños ni grilla */
+  function agregarFachada(liviano = false) {
     const p = estado.proyecto;
     const bandas = bandasFachada(p, prepararSecciones);
     // torre inclinada (Diseño → Perfil): cada nivel se corre entero (dx, dy); entre dos niveles la piel pasa de un
@@ -499,6 +485,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const malla = (pos: number[], mat: THREE.Material) => { if (!pos.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); grupo.add(new THREE.Mesh(g, mat)); };
     const lineas = (lin: number[], color: string, opacidad: number) => { if (!lin.length) return; const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3)); grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: opacidad < 1, opacity: opacidad }))); };
     const v3 = (q: { x: number; y: number; z?: number }, z = q.z ?? 0) => { const c = corr(z); return [q.x + c.x, z, -(q.y + c.y)]; };
+    if (liviano) {
+      const pos: number[] = [];
+      bandas.forEach(bd => { const m = bd.a.length; for (let j = 0; j < m; j++) { const a0 = bd.a[j], a1 = bd.a[(j + 1) % m], b0 = bd.b[j], b1 = bd.b[(j + 1) % m]; pos.push(...v3(a0, bd.z0), ...v3(a1, bd.z0), ...v3(b1, bd.z1), ...v3(a0, bd.z0), ...v3(b1, bd.z1), ...v3(b0, bd.z1)); } });
+      malla(pos, new THREE.MeshStandardMaterial({ color: 0x8fb3cc, transparent: true, opacity: 0.16, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
+      return;
+    }
     if (p.paneleria && p.paneleria.modulo > 0) {
       // panelería: vidrio, antepechos opacos (gris más oscuro: no es tracción ni compresión) y montantes y travesaños
       const r = calcularPaneleria(bandas, p.paneleria), vid: number[] = [], opa: number[] = [], lin: number[] = [];

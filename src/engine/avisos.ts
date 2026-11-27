@@ -13,6 +13,7 @@
  */
 import { huecoEn, presenteEn, rectangulos, tipoDe, type Muro, type Proyecto } from './modelo';
 import { comunLosas, tramoEn } from './carpinteria';
+import { contornoEnvolventeEnZ } from './envolvente';
 import { cajaSilueta, carpinteriaDeNivel, contornoAlViento, medidasAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
 export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza';
@@ -107,13 +108,16 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
     // la planilla toma el viento con B × L; si el contorno que ve el viento (la carpintería o la losa propia) es otro,
     // conviene igualarlos. Vale la caja (el ancho, el diámetro) o el rectángulo de igual área (plantas curvas), y entre
     // el contorno de este nivel y el del de arriba (la fachada puede cambiar de ancho dentro del piso)
-    if (pl.propia || c?.propia) {
-      const k = cajaSilueta(pl.propia || !c ? pl.silueta : c.v);
-      const arriba = i > 0 ? contornoAlViento(p, i - 1).v : null;
+    // (en un tramo «Envolvente» el viento ve la piel, no la losa: B × L tiene que ser la piel media del tramo del nivel,
+    //  la de media altura entre su cota y la del nivel de abajo; así una corona recortada en pendiente lleva su medida media)
+    const pielMedia = conEnv ? contornoEnvolventeEnZ(p, (n.cota + (p.niveles[i + 1] && p.niveles[i + 1].cota >= -1e-6 ? p.niveles[i + 1].cota : n.cota)) / 2) : null;
+    if (pielMedia || pl.propia || c?.propia) {
+      const k = cajaSilueta(pielMedia ?? (pl.propia || !c ? pl.silueta : c.v));
+      const arriba = !pielMedia && i > 0 ? contornoAlViento(p, i - 1).v : null;
       // vale la losa o la carpintería propias de este nivel; en un contorno curvo (la fachada cambia de ancho dentro del
       // piso), también cualquier valor entre el suyo y el del contorno del nivel de arriba
       const curvo = (v: typeof pl.silueta) => v.some(q => q.b || (q as { c1?: unknown }).c1) || v.length >= 12;
-      const contornos = [...(pl.propia ? [pl.silueta] : []), ...(c?.propia ? [c.v] : [])];
+      const contornos = pielMedia ? [pielMedia] : [...(pl.propia ? [pl.silueta] : []), ...(c?.propia ? [c.v] : [])];
       const dentroDe = (crit: 'caja' | 'area') => contornos.some(v => {
         const m = [medidasAlViento(v, crit), ...(curvo(v) && arriba && arriba.length >= 3 ? [medidasAlViento(arriba, crit)] : [])];
         const ok = (x: number, xs: number[]) => x >= Math.min(...xs) - Math.max(0.1, 0.02 * x) && x <= Math.max(...xs) + Math.max(0.1, 0.02 * x);
