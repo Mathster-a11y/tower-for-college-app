@@ -13,9 +13,8 @@ import { medidasNiveles } from '../engine/perfilTorre';
 import { confirmar } from './tarjeta';
 import type { Camino, Cota } from '../engine/modelo';
 import type { Justificacion } from '../engine/colocar';
-import { polilinea } from '../engine/perfil';
 import { circulo, elipse, poligonoRegular, rectangulo } from '../engine/contorno';
-import type { Punto } from '../engine/silueta';
+import { caminoSilueta, type Punto } from '../engine/silueta';
 import {
   alinear, aplicar, bulgeTresPuntos, caja, cajaSel, caminoDesdeCAD, copiarCon, distribuir, invertirCamino, largoCamino, matrizCamino, matrizPolar,
   matrizRect, muroSobreCamino, tangenteFinal, bulgeTangente, perfilDesdeCamino, perfilSobreCamino, girarLibre, puntosCamino, resolver, unirCaminos, vacia, type Alineacion, type EjeSimetria, type Operacion, type Seleccion,
@@ -643,7 +642,7 @@ export function montarColocar(api: ApiPlanta) {
       const f = formaDe(pts[0].p, cursor);
       if (f) {
         const pf = op.formaQue === 'muro' ? perfilSobreCamino({ v: f, cerrado: true }, op.espCam, op.justCam) : { v: f };
-        if (!('error' in pf)) g.append(el('path', { d: [pf.v, ...(pf.huecos ?? [])].map(r => 'M' + polilinea(r, 3).map(q => `${X(q.x)},${Y(q.y)}`).join(' L') + ' Z').join(' '), class: 'muro-curvo-previa', 'fill-rule': 'evenodd' }));
+        if (!('error' in pf)) g.append(el('path', { d: [pf.v, ...(pf.huecos ?? [])].map(r => caminoSilueta(r, X, Y)).join(' '), class: 'muro-curvo-previa', 'fill-rule': 'evenodd' }));
       }
     }
     if (herr === 'camino' && caminoNuevo && caminoNuevo.v.length) {
@@ -671,7 +670,7 @@ export function montarColocar(api: ApiPlanta) {
           vv.push({ x: cursor.x, y: cursor.y });
         }
         const pf = vv.length >= 2 ? perfilSobreCamino({ v: vv, cerrado: false }, op.espCam, op.justCam) : null;
-        if (pf && !('error' in pf)) g.append(el('polygon', { points: polilinea(pf.v, 3).map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'muro-curvo-previa' }));
+        if (pf && !('error' in pf)) g.append(el('path', { d: caminoSilueta(pf.v, X, Y), class: 'muro-curvo-previa' }));
       }
       g.append(el('polyline', { points: ps.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'camino previa' }));
       caminoNuevo.v.forEach(q => g.append(el('circle', { cx: X(q.x), cy: Y(q.y), r: 3, class: 'camino-vert' })));

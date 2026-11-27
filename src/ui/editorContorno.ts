@@ -15,7 +15,7 @@ import type { Muro } from '../engine/modelo';
 import { tipoDe } from '../engine/modelo';
 import { muroBloqueado } from '../engine/grupos';
 import { acople, esOrtogonal, esRectanguloOrtogonal, perfilDeMuro, polilinea, ponerPerfil, propiedades, type Perfil, type VerticePerfil } from '../engine/perfil';
-import type { Punto, Vertice } from '../engine/silueta';
+import { caminoSilueta, type Punto, type Vertice } from '../engine/silueta';
 import { patronPolar, arcoComplementario, arcoConCentro, arcoConRadioMismoLado, geometriaArco, invertirArco, arcoConRadio, chaflan, enderezarAnillo, suavizarAnillo, sustraerEsquina, tratarEsquinas, circulo, desfasarAnillo, dividirLado, elipse, empalme, escalarAnillo, espejarAnillo, girarAnillo, ladoCon, medidaLado, poligonoRegular, polar15, rectangulo } from '../engine/contorno';
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -451,7 +451,8 @@ export function montarEditorContorno(api: ApiPlanta) {
     if (!id || !P) return;
     const { X, Y } = v;
     const g = el('g', { class: 'capa-contorno' });
-    const d = anillos(P).map(vs => { const ps = polilinea(vs, 3, 24); return `M${ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' L')} Z`; }).join(' ');
+    // arcos y Bézier exactos (curvas de SVG), no un polígono
+    const d = anillos(P).map(vs => caminoSilueta(vs, X, Y)).join(' ');
     g.append(el('path', { d, class: 'contorno-edit', 'fill-rule': 'evenodd' }));
     anillos(P).forEach((vs, k) => {
       vs.forEach((a, i) => {

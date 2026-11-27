@@ -10,9 +10,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { estado, COLORES, fmt } from './estado';
 import { cambiosDeEspesor, entraEnCalculo, huecoEn, muroEn, rectangulos, tipoDe } from '../engine/modelo';
-import { enPlanta, polilinea } from '../engine/perfil';
+import { enPlanta } from '../engine/perfil';
 import { desplazar, movimientoEn, type Rototraslacion3D } from '../engine/diagramas';
-import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { plantaDeNivel } from '../engine/silueta';
+import { circuloFino, discretizarCurva } from '../engine/curvas';
 import { prepararSecciones } from '../engine/loft';
 import { bandasFachada, calcularPaneleria } from '../engine/carpinteria';
 import { datosExo, momentoTabiques } from './exo';
@@ -261,10 +262,10 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const juntas = losasJuntas(p);
     p.niveles.forEach((n, iN) => {
       if (!estado.capas.losas || n.sinLosa) return;                  // un nivel sin losa (cúpula, corona) no tiene placa
-      const pol = puntosSilueta(plantaDeNivel(p, iN).silueta, 5);
+      const pol = discretizarCurva(plantaDeNivel(p, iN).silueta);
       const hs = (p.huecosLosa ?? []).filter(hh => huecoEn(hh, n.cota) && hh.v.length >= 3).map(hh => hh.v.map(q => ({ x: q.x, y: q.y })));
       const dN = { x: n.dx ?? 0, y: n.dy ?? 0 };
-      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: puntosSilueta(j.v, 5) }))]) {
+      for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: discretizarCurva(j.v) }))]) {
         const losa = new Prisma(v, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
         capa(losa.malla, 'Losas', `Losa ${n.nombre}${z === n.cota ? '' : ` (piso de ${f2z(z)} m)`}`);
         prismas.push(losa);
@@ -308,10 +309,10 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
           const za = zs[k], zb = zs[k + 1], mm = muroEn(m, (za + zb) / 2);
           const f = [...porPiso].reverse().find(x => x.z <= za + 1e-6);
           const mat = tens!.material(f ? f.sigma : null, estado.seleccion === m.id);
-          const pols: P2[][] = tipoDe(mm) === 'perfil' ? [polilinea(enPlanta(mm).v, 6, 16)] : tipoDe(mm) === 'tubo-circ'
-            ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+          const pols: P2[][] = tipoDe(mm) === 'perfil' ? [discretizarCurva(enPlanta(mm).v)] : tipoDe(mm) === 'tubo-circ'
+            ? [circuloFino(mm.x, mm.y, mm.largo / 2)]
             : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
-          const hs = tipoDe(mm) === 'perfil' ? (enPlanta(mm).huecos ?? []).map(hh => polilinea(hh, 6, 16)) : [];
+          const hs = tipoDe(mm) === 'perfil' ? (enPlanta(mm).huecos ?? []).map(hh => discretizarCurva(hh)) : [];
           pols.forEach(pol => { const pr = new Prisma(pol, [za, zb], mat, tinta, undefined, hs); pr.conBordes = true; prismas.push(pr); });
         }
         return;
@@ -325,7 +326,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       if (z1 - z0 <= 0) return;
       const zs = [z0, ...cotas.filter(z => z > z0 + 1e-6 && z < z1 - 1e-6), z1];
       if (tipoDe(m) === 'perfil') {
-        const pp = enPlanta(m), ext = polilinea(pp.v, 6, 16), hs = (pp.huecos ?? []).map(hh => polilinea(hh, 6, 16));
+        const pp = enPlanta(m), ext = discretizarCurva(pp.v), hs = (pp.huecos ?? []).map(hh => discretizarCurva(hh));
         const pr = new Prisma(ext, zs, mat, tinta, undefined, hs); pr.conBordes = def; prismas.push(pr);
         return;
       }
@@ -347,7 +348,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         const za = cortes[k], zb = cortes[k + 1], mm = muroEn(m, (za + zb) / 2);
         const zsT = [za, ...zs.filter(z => z > za + 1e-6 && z < zb - 1e-6), zb];
         const pols: P2[][] = tipoDe(mm) === 'tubo-circ'
-          ? [Array.from({ length: 28 }, (_, i) => ({ x: mm.x + (mm.largo / 2) * Math.cos((i / 28) * 2 * Math.PI), y: mm.y + (mm.largo / 2) * Math.sin((i / 28) * 2 * Math.PI) }))]
+          ? [circuloFino(mm.x, mm.y, mm.largo / 2)]
           : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
         pols.forEach(pol => { const pr = new Prisma(pol, zsT, mat, tinta); pr.conBordes = def || cortes.length > 2; prismas.push(pr); });
       }

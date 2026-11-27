@@ -27,7 +27,7 @@ import { distanciaAlCentro } from '../engine/distanciaCentro';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
 import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
-import { enPlanta, polilinea, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
+import { enPlanta, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
@@ -2783,7 +2783,8 @@ export function montarPlanta(cont: HTMLElement) {
       const forma = el('g');
       if (limpias.has(m.id)) limpias.get(m.id)!.forEach(pg => forma.appendChild(el('polygon', { points: ptsPg(pg), fill: COLORES[papel], class: 'limpio' })));
       else if (t === 'perfil') {
-        const pp = enPlanta(m), anillo = (vs: typeof pp.v) => { const ps = polilinea(vs, 4, 20); return `M${ps.map(q => `${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' L')} Z`; };
+        // arcos y Bézier exactos (curvas de SVG), no un polígono: el muro curvo se ve liso con cualquier zoom
+        const pp = enPlanta(m), anillo = (vs: typeof pp.v) => caminoSilueta(vs, X, Y);
         forma.appendChild(el('path', { d: [pp.v, ...(pp.huecos ?? [])].map(anillo).join(' '), fill: COLORES[papel], 'fill-rule': 'evenodd', class: 'perfil' }));
       } else if (t === 'tubo-circ') {
         forma.appendChild(el('circle', { cx: X(m.x), cy: Y(m.y), r: (m.largo / 2) * escala, fill: COLORES[papel] }));
