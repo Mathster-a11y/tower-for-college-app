@@ -263,8 +263,8 @@ export function plegarExplicaciones(raiz: HTMLElement) {
       e.before(caja); caja.append(b, cuerpo);
     }
     cuerpo.append(e);
-    // la oración llave a la vista, con «▸ Ver la explicación» al final de la misma línea (no suelto en un renglón
-    // aparte); el resto se despliega debajo
-    if (llave) { caja.before(llave); const b = caja.querySelector(':scope > .ayuda-boton'); if (b) { llave.append(' ', b); caja.classList.add('con-llave'); } }
+    // la oración llave a la vista y, debajo, en su propio renglón, «▸ Ver la explicación» con el resto (el botón no va
+    // dentro del párrafo: su alto abriría el renglón y cambiaría el interlineado del texto)
+    if (llave) caja.before(llave);
   });
 }
