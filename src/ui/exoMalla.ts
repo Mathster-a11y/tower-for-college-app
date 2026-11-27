@@ -40,7 +40,7 @@ export function camposMalla(fo: H, def: ExoDef, set: (f: (d: ExoDef) => void) =>
   ca.addEventListener('change', () => conMalla(x => { x.arriostrada = ca.checked ? undefined : false; }));
   la.append(ca, ' Losas atadas a la malla en cada piso');
   fo.append(la);
-  fo.append(h('p', { class: 'nota chica nota-ancha' }, 'La malla sigue la fachada de cada nivel (la carpintería o, si no hay, el borde de la losa) corrida la separación hacia afuera: sirve para plantas redondas, elípticas, poligonales o curvas y para torres que se angostan o se corren. Se calcula entera con cada viento: es exacta con losas rígidas y una planta simétrica respecto del viento; con plantas asimétricas difiere menos del 1 % (el giro de la planta lo toma la rototraslación). Los anillos se pesan pero no se verifican: en el modelo, su trabajo lo hace la losa.'));
+  fo.append(h('p', { class: 'nota chica nota-ancha' }, 'La malla sigue la fachada de cada nivel (la carpintería o, si no hay, el borde de la losa) corrida la separación hacia afuera: sirve para plantas redondas, elípticas, poligonales o curvas y para torres que se angostan o se corren. Se calcula entera con cada viento: es exacta con losas rígidas y una planta simétrica respecto del viento; con plantas asimétricas difiere menos del 1 % (el giro de la planta lo toma la rototraslación). Los anillos toman el empuje hacia afuera de las diagonales en sus nudos (como un zuncho: el peso, en una malla poligonal, abre los nudos) y se verifican con el CIRSOC 301 a tracción o compresión, con la sección de las vigas; el empuje a lo largo de la fachada lo toma la losa.'));
 }
 
 let giro = 30, anilloVisto = 0, soloViento = true;

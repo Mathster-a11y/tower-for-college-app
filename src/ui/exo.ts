@@ -351,12 +351,13 @@ export function panelExo(c: H) {
     const n = d.r.u.length - 1, fl = flechaExo(d), relS = fl.u / (d.r.u[n] || 1);
     const reglamento = !!vientoReglamento() && def.material !== 'hormigon';
     const malos = reglamento ? verif301(d).filter(x => !x.verifica).length : d.r.controles.filter(x => x.estado !== 'verifica').length;
+    const total = reglamento ? verif301(d).length : d.r.controles.length;
     if (vientoReglamento()) c.append(h('p', { class: 'nota' }, `Método ${estado.config.metodo === 'fem' ? 'FEM' : 'CIRSOC'}: el viento de cada piso es el del CIRSOC 102-25 (de resistencia${estado.config.metodo === 'fem' ? ', con la frecuencia del modelo' : ''}), el ΣJ de los tabiques es el de la sección real, las barras se verifican con el CIRSOC 301/302 y las combinaciones del 101-25, y el desplazamiento se controla como deriva con el viento de servicio.`));
     c.append(h('div', { class: 'kpis' },
       kpi(vientoReglamento() ? 'Deriva de servicio' : 'Flecha azotea', `${fmt(fl.u * 1000, 1)} mm`, `${isFinite(d.r.uSin[n]) ? `sin exo ${fmt(d.r.uSin[n] * relS * 1000, 1)} mm` : 'sin exo no hay tabiques que tomen el viento arriba'} · ${fl.texto} = ${fmt(fl.lim * 1000, 0)}`, colorEstado(fl.u <= fl.lim)),
       kpi('Momento que toma el exo', `${fmt(d.r.fraccionExo * 100, 0)} %`, `los tabiques: ${fmt((1 - d.r.fraccionExo) * 100, 0)} %`),
       kpi(def.tipo === 'F' ? 'J equivalente de cada plano de brazos' : def.tipo === 'M' ? 'J equivalente de la malla' : 'J equivalente de cada cara', `${fmt(d.r.caras[0]?.Jeq ?? 0, 1)} m⁴`, 'para la rototraslación'),
-      kpi('Barras', `${d.r.controles.length - malos} de ${d.r.controles.length}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
+      kpi(def.tipo === 'M' && reglamento ? 'Barras y anillos' : 'Barras', `${total - malos} de ${total}`, malos ? `${malos} no verifican (${reglamento ? 'CIRSOC 301/302' : 'tensión o pandeo'})` : `todas verifican${reglamento ? ' (CIRSOC 301/302)' : ''}`, colorEstado(!malos))));
     if (def.tipo === 'M' && d.entrada.malla) {
       // pisos entre anillos que la malla frena mal (sin tabiques en ese sentido, o donde la malla se cierra arriba)
       const flojos = pisosFlojos(d.entrada.malla, d.entrada.zs, d.r.u);

@@ -18,7 +18,7 @@
  * Unidades: t, m (E en t/m², A en m², I en m⁴).
  */
 import type { RotoRes } from './planilla';
-import { cargasMalla, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
+import { cargasMalla, fuerzasAnillos, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
 
 export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L' | 'M';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
@@ -1443,6 +1443,39 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
     // una pared esbelta abolla antes de llegar a la resistencia: no verifica (habría que reducir el área, 302 apéndice)
     out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
   }));
+  // ficha M: los anillos (a tracción o compresión, con el empuje de las diagonales en sus nudos)
+  if (def.tipo === 'M' && def.mallaGeo) out.push(...anillos301(def, def.mallaGeo, rW, rD, rL, combos.filter(c => !c.otro), Fy, op.costura ?? true));
+  return out;
+}
+
+/**
+ * Ficha M: los anillos con el CIRSOC 301. Cada caso (viento, D y L) da las fuerzas reales de las barras; su empuje hacia
+ * afuera en los nudos lo toma el anillo (fuerzasAnillos), y se combina como las demás barras, con el viento de los dos
+ * lados. Barra solo axial: tracción φ·Pn = 0,9·Fy·A y compresión φ·Pn = 0,85·Fcr·A con el largo del tramo (la losa
+ * lo arriostra en los nudos). Van con la clase «viga» (su sección es la de las vigas) y la letra R.
+ */
+function anillos301(def: ExoDef, g: MallaGeo, rW: ResultadoExo, rD: ResultadoExo, rL: ResultadoExo | null, combos: CombExo[], Fy: number, costura: boolean): Cirsoc301Barra[] {
+  const fW = fuerzasAnillos(g, rW.caras[0]?.esfuerzos ?? []), fD = fuerzasAnillos(g, rD.caras[0]?.esfuerzos ?? []), fL = rL ? fuerzasAnillos(g, rL.caras[0]?.esfuerzos ?? []) : null;
+  const out: Cirsoc301Barra[] = [];
+  let n = 0;
+  g.barras.forEach((b, i) => {
+    if (b.clase !== 'anillo') return;
+    n++;
+    const P = g.nudos[b.a], Q = g.nudos[b.b], L = Math.hypot(Q.x - P.x, Q.y - P.y, Q.z - P.z);
+    const s = seccionEn(def, 'anillo', Math.min(P.z, Q.z)), p = propsSeccion(s), bi = Math.max(0, s.b - 2 * s.e);
+    const lambdaC = (L / (p.i * Math.PI)) * Math.sqrt(Fy / def.E);
+    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
+    const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, costura);
+    const pared: Cirsoc301Barra['pared'] = s.e >= s.b / 2 - 1e-9 || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
+    const phiPc = 0.85 * Fcr * p.A, phiPt = 0.9 * Fy * p.A;
+    const w = fW.get(i) ?? 0, d = fD.get(i) ?? 0, l = fL?.get(i) ?? 0;
+    let peor = { v: -1, Pu: 0, comb: '' };
+    for (const cb of combos) for (const sg of cb.W ? [1, -1] : [1]) {
+      const N = cb.D * d + (cb.L ?? 0) * l + cb.W * sg * w, v = N >= 0 ? N / phiPt : -N / phiPc;
+      if (v > peor.v) peor = { v, Pu: N, comb: cb.nombre };
+    }
+    out.push({ cara: 'anillos', id: `R${n}`, clase: 'viga', Pu: peor.Pu, Mu: 0, phiPc, phiPt, phiMn: 0.9 * Fy * p.W, lambdaC, bt, ratio: peor.v >= 0.2 ? peor.v : peor.v / 2, ecuacion: peor.v >= 0.2 ? 'H1-1a' : 'H1-1b', combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
+  });
   return out;
 }
 

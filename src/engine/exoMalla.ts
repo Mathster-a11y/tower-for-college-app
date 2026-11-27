@@ -9,7 +9,8 @@
  *  - diagrid: en cada anillo los nudos van corridos medio paso respecto del de abajo; cada nudo sube con dos diagonales
  *    a los dos nudos vecinos del anillo de arriba (rombos), como el de 30 St Mary Axe;
  *  - columnas y cruces: columnas que siguen la fachada de anillo en anillo y, en cada paño, una cruz de San Andrés.
- * Los anillos (vigas horizontales) se dibujan y se pesan: en el modelo, la losa rígida de cada piso hace su trabajo.
+ * Los anillos (vigas horizontales) se dibujan y se pesan; en el modelo la losa rígida de cada piso hace su trabajo, y
+ * después se verifican con el empuje hacia afuera de las diagonales en sus nudos (fuerzasAnillos).
  * Con las losas atadas en cada piso (por defecto), cada barra tiene un nudo en cada piso que cruza y es continua ahí.
  *
  * Cálculo por proyección, exacto con las hipótesis de la app. Las losas son diafragmas rígidos: en cada piso todos los
@@ -427,4 +428,77 @@ export function giroMalla(g: MallaGeo, zs: number[], T: number[], E: number, are
   for (let k = 1; k <= n; k++) bvec[idT[k]] = T[k - 1] ?? 0;
   const x = resolverBanda(m, ancho, K, bvec);
   return Array.from({ length: n }, (_, k) => x[idT[k + 1]]);
+}
+
+// ------------------------------------------------------------------ los anillos
+/** clave de un punto del espacio (para encontrar el nudo de la malla de una barra del modelo por su posición real) */
+const claveP = (q: { x: number; y: number; z: number }) => `${q.x.toFixed(4)}|${q.y.toFixed(4)}|${q.z.toFixed(3)}`;
+
+/**
+ * La fuerza de cada barra de anillo (t; + tracción), a partir de las fuerzas reales de las demás barras (con p3: sus
+ * extremos en el espacio). En cada nudo de un anillo las barras que llegan dejan una fuerza horizontal (el empuje de las
+ * diagonales que se abren o se cierran). El anillo toma la parte hacia afuera (o hacia adentro) con fuerzas axiales en
+ * sus tramos, como un zuncho (en un círculo con un empuje parejo, T = p·R); la parte a lo largo de la fachada (el corte
+ * del viento que pasa de la losa a la malla) la toma la losa, como en el diseño habitual de los diagrid. Vuelve un mapa índice de barra de g.barras → fuerza.
+ */
+export function fuerzasAnillos(g: MallaGeo, barras: { N: number; p3?: { a: { x: number; y: number; z: number }; b: { x: number; y: number; z: number } } }[]): Map<number, number> {
+  const idDe = new Map(g.nudos.map((q, i) => [claveP(q), i]));
+  const H = new Map<number, { x: number; y: number }>();
+  for (const e of barras) {
+    if (!e.p3 || !e.N) continue;
+    const ia = idDe.get(claveP(e.p3.a)), ib = idDe.get(claveP(e.p3.b));
+    const { a, b } = e.p3, L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    if (L < 1e-9) continue;
+    // una barra traccionada tira de cada nudo hacia el otro extremo
+    const fx = (e.N * (b.x - a.x)) / L, fy = (e.N * (b.y - a.y)) / L;
+    if (ia !== undefined) { const v = H.get(ia) ?? { x: 0, y: 0 }; v.x += fx; v.y += fy; H.set(ia, v); }
+    if (ib !== undefined) { const v = H.get(ib) ?? { x: 0, y: 0 }; v.x -= fx; v.y -= fy; H.set(ib, v); }
+  }
+  const out = new Map<number, number>();
+  // cada anillo por separado: sus tramos en orden, y las dos ecuaciones (x, y) de cada nudo
+  const porAnillo = new Map<number, number[]>();
+  g.barras.forEach((b, i) => { if (b.clase === 'anillo') { const r = g.nudos[b.a].anillo; porAnillo.set(r, [...(porAnillo.get(r) ?? []), i]); } });
+  porAnillo.forEach(ids => {
+    const m = ids.length, nudos = [...new Set(ids.flatMap(i => [g.barras[i].a, g.barras[i].b]))], fila = new Map(nudos.map((n, j) => [n, j]));
+    // la normal hacia afuera de cada nudo: la bisectriz de los dos tramos que llegan (anillo antihorario)
+    const vecinos = new Map<number, number[]>();
+    ids.forEach(i => { const b = g.barras[i]; vecinos.set(b.a, [...(vecinos.get(b.a) ?? []), b.b]); vecinos.set(b.b, [...(vecinos.get(b.b) ?? []), b.a]); });
+    const normal = (n: number) => {
+      const [p, q] = vecinos.get(n)!.map(k => g.nudos[k]), o = g.nudos[n];
+      // el que viene antes en la vuelta (t menor, dando la vuelta) y el que viene después
+      const [ant, sig] = ((q.t - o.t + 1) % 1) < ((p.t - o.t + 1) % 1) ? [p, q] : [q, p];
+      const tx = sig.x - ant.x, ty = sig.y - ant.y, l = Math.hypot(tx, ty) || 1;
+      return { x: ty / l, y: -tx / l };
+    };
+    // una ecuación por nudo, la del empuje hacia afuera: Σ T·(u·n) = −H·n. En un lado recto u·n = 0: ese empuje lo toma
+    // la flexión de la viga y la losa, no el anillo
+    const A: number[][] = Array.from({ length: nudos.length }, () => new Array<number>(m).fill(0)), rhs = new Array<number>(nudos.length).fill(0);
+    const ns = nudos.map(normal);
+    ids.forEach((i, j) => {
+      const b = g.barras[i], P = g.nudos[b.a], Q = g.nudos[b.b], L = Math.hypot(Q.x - P.x, Q.y - P.y) || 1, ux = (Q.x - P.x) / L, uy = (Q.y - P.y) / L;
+      const ra = fila.get(b.a)!, rb = fila.get(b.b)!;
+      A[ra][j] += ux * ns[ra].x + uy * ns[ra].y; A[rb][j] -= ux * ns[rb].x + uy * ns[rb].y;
+    });
+    nudos.forEach((n, j) => { const v = H.get(n); if (v) rhs[j] = -(v.x * ns[j].x + v.y * ns[j].y); });
+    // ecuaciones normales (mínimos cuadrados: en un rectángulo los nudos de los lados no dan ecuación)
+    const M = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, k) => A.reduce((s, f) => s + f[i] * f[k], 0)));
+    const c = Array.from({ length: m }, (_, i) => A.reduce((s, f, r) => s + f[i] * rhs[r], 0));
+    const tr = M.reduce((s, f, i) => s + f[i], 0) / Math.max(1, m);
+    for (let i = 0; i < m; i++) M[i][i] += 1e-9 * tr;
+    const T = gauss(M, c);
+    ids.forEach((i, j) => out.set(i, T[j]));
+  });
+  return out;
+}
+function gauss(M: number[][], b: number[]): number[] {
+  const n = b.length, A = M.map((f, i) => [...f, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    if (Math.abs(A[c][c]) < 1e-14) continue;
+    for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; if (f) for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; }
+  }
+  const x = new Array<number>(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = A[r][n]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = Math.abs(A[r][r]) < 1e-14 ? 0 : s / A[r][r]; }
+  return x;
 }
