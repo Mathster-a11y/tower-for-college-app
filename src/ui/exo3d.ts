@@ -21,6 +21,7 @@ import { h } from './comp';
 import { datosExo, flechaExo, geometriaExo } from './exo';
 import { CATALOGO_HORMIGON, CATALOGO_TUBOS, pesoExo, TIPOS_EXO, zonasDe, type BarraNueva, type ClaseBarra, type ExoDef, type Seccion, type TipoExo, type ZonaExo } from '../engine/exo';
 import { plantaDeNivel, puntosSilueta } from '../engine/silueta';
+import { diagridCircular } from '../engine/diagridCircular';
 
 type Herramienta = 'elegir' | 'borrar' | 'pintar' | 'zona' | ClaseBarra;
 /** barra para dibujar: con esfuerzos si la cara se pudo calcular */
@@ -47,6 +48,13 @@ class Disenador {
   private escena = new THREE.Scene(); private camara = new THREE.PerspectiveCamera(40, 1, 0.5, 4000); private controles: OrbitControls;
   private grupo = new THREE.Group();
   private herramienta: Herramienta = 'elegir'; private color: ModoColor = 'clase';
+  /**
+   * diagrid circular (el Gherkin): «real» dibuja las barras sobre la fachada redonda; «caras», las cuatro caras planas
+   * del tubo cuadrado equivalente que usa el cálculo (las que se editan)
+   */
+  private vista: 'real' | 'caras' = 'real';
+  /** el diagrid circular del proyecto, si tiene (y se dibuja la fachada real) */
+  private get circular() { return this.vista === 'real' ? diagridCircular(estado.proyecto) : null; }
   private sel: Elegida | null = null; private nudoA: { dir: 'A' | 'B'; t: number; s: number; z: number } | null = null;
   private pincel: Seccion | null = null; private tipoZona: TipoExo = 'A';
   /** grilla de la cara para dibujar: divisiones del ancho y medios pisos */
@@ -117,6 +125,7 @@ class Disenador {
   }
 
   private textoAyuda(): string {
+    if (this.circular) return `El diagrid sobre la fachada redonda: ${this.circular.n} nudos por anillo, diagonales en las dos espirales y los anillos horizontales. El cálculo de la ficha A usa caras planas: un tubo cuadrado de la misma área (por eso en «Caras del cálculo» las esquinas salen de la fachada). Para editar barras, secciones o zonas, pasá a «Caras del cálculo». Arrastrá para girar y rueda para el zoom.`;
     switch (this.herramienta) {
       case 'elegir': return 'Tocá una barra para ver sus esfuerzos y cambiarla (sección, uniones o sacarla). Arrastrá para girar, rueda para el zoom, botón derecho para correr. Esc suelta.';
       case 'pintar': return this.pincel ? `Pintar: tocá barras y pasan a ${fmt(this.pincel.b * 1000, 0)} × ${fmt(this.pincel.e * 1000, 1)} mm (en las cuatro caras).` : 'Pintar: elegí primero un tubo en la lista de al lado.';
@@ -161,7 +170,14 @@ class Disenador {
     }
     const enc = h('button', { type: 'button', title: 'Volver a encuadrar la torre' }, 'Encuadrar');
     enc.addEventListener('click', () => { this.encuadre = ''; this.actualizar(); });
-    this.barraH.replaceChildren(herr, ...extra, col, enc);
+    // diagrid circular: la fachada real o las caras del cálculo (se editan las caras)
+    const conCircular = !!diagridCircular(estado.proyecto);
+    const vis = conCircular ? [seg('Qué se ve', [
+      ['real', 'Sobre la fachada', 'El diagrid como es: las barras sobre la fachada redonda de cada nivel'],
+      ['caras', 'Caras del cálculo', 'Las cuatro caras planas del tubo cuadrado de la misma área con que se calcula (son las que se editan)'],
+    ], this.vista, v => { this.vista = v as 'real' | 'caras'; this.sel = null; this.nudoA = null; this.encuadre = ''; this.actualizar(); })] : [];
+    if (this.circular) { this.barraH.replaceChildren(...vis, enc); return; }
+    this.barraH.replaceChildren(...vis, herr, ...extra, col, enc);
   }
 
   /** caras, losas, nudos y zonas */
@@ -198,7 +214,21 @@ class Disenador {
     const dibujando = this.herramienta === 'diagonal' || this.herramienta === 'viga' || this.herramienta === 'columna';
     const conPuntos = dibujando || this.herramienta === 'zona';
     this.sueltos = 0; this.mecanismo = false;
-    (['A', 'B'] as const).forEach(dir => {
+    const dc = this.circular;
+    if (dc) {
+      // el diagrid circular sobre la fachada: diagonales y anillos (se ven, no se editan: para eso, «Caras del cálculo»)
+      dc.barras.forEach(b => {
+        const A = new THREE.Vector3(b.a.x, b.a.z, -b.a.y), B = new THREE.Vector3(b.b.x, b.b.z, -b.b.y), L = A.distanceTo(B);
+        if (L < 1e-6) return;
+        const anillo = b.clase === 'anillo', sec = anillo ? this.def.viga : this.def.diagonal;
+        const r = (anillo ? radio.viga : radio.diagonal) * Math.max(0.6, Math.min(2.2, (sec?.b ?? 0.4) / 0.4));
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 8), new THREE.MeshStandardMaterial({ color: anillo ? cVig : cDia, roughness: 0.45, metalness: 0.25 }));
+        m.position.copy(A.clone().add(B).multiplyScalar(0.5));
+        m.quaternion.setFromUnitVectors(eje, B.clone().sub(A).normalize());
+        this.grupo.add(m);
+      });
+    }
+    if (!dc) (['A', 'B'] as const).forEach(dir => {
       const d = datosExo(dir), g = d ? null : geometriaExo(dir);
       if (!d && !g) return;
       if (!d) this.mecanismo = true;
