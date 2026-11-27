@@ -18,10 +18,10 @@ describe('núcleo del Gherkin', () => {
     // el anillo: 16 columnas a 12,3 m del centro
     expect(col.filter(m => m.id.startsWith('R')).map(m => Math.hypot(m.x, m.y)).every(r => Math.abs(r - 12.3) < 0.05)).toBe(true);
   });
-  it('todo llega a la losa del 38º; solo D y S siguen a la del 39º; nada al 40º', () => {
-    const z38 = 38 * 4.15, z39 = 39 * 4.15;
-    p.muros.forEach(m => expect(m.zHasta).toBeCloseTo(/^(D|S)-/.test(m.id) ? z39 : z38, 2));
-    expect(p.muros.filter(m => /^(D|S)-/.test(m.id)).length).toBe(4);
+  it('la escalera, el ascensor chico, W, D, S y P llegan a la losa del 39º; el resto, a la del 38º; nada al 40º', () => {
+    const z38 = 38 * 4.15, z39 = 39 * 4.15, al39 = /^(D|S|P|B_sup|B_inf|C_ext|C_inf|W)-/;
+    p.muros.forEach(m => expect(m.zHasta).toBeCloseTo(al39.test(m.id) ? z39 : z38, 2));
+    expect(p.muros.filter(m => al39.test(m.id)).length).toBe(16);
   });
   it('los muros forman una pieza por mitad y por viento, y quedan dentro de la losa del 38º', () => {
     expect(new Set(mur.map(m => m.piezaA))).toEqual(new Set(['Núcleo O', 'Núcleo E']));

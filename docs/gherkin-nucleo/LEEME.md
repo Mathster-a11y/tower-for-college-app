@@ -44,8 +44,9 @@ lo que no es estructural y hasta qué altura llega cada cosa. Coordenadas en met
   nudo, corrida unos 0,3 m).
 - De los dudosos queda solo A2_inf (el piso del ascensor A′); F1 y F2 quedan en «descartados».
 
-- Alturas: toda la estructura (anillo, columnas y muros) hasta la losa del 38º (+157,70 m); solo las 4 columnas
-  centrales (D y S) siguen hasta la losa del 39º (+161,85 m). Ver `progreso_6_corte.jpg`.
+- Alturas (revisadas sobre la planta del 39º, `progreso_10_que_sigue_al_39.jpg`): el anillo, los bancos de ascensores,
+  A′, B_ext y W2 hasta la losa del 38º (+157,70 m); la escalera (B_sup, B_inf), el ascensor chico (C_ext, C_inf, P), W,
+  D y S hasta la del 39º (+161,85 m). Nada del núcleo de oficinas llega al 40º. Ver `progreso_12_corte.jpg`.
 - Las columnas D giran unos 35° (horario en la mitad izquierda), como las marcó el usuario sobre el trazado v3.
 
 ## En la app

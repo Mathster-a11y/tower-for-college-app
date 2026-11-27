@@ -11,7 +11,7 @@ import type { Muro } from './modelo';
 import { ponerPerfil, type VerticePerfil } from './perfil';
 
 type P2 = [number, number];
-/** id, x, y, giro, sigue hasta el 39º (las cuatro columnas centrales, D y S) */
+/** id, x, y, giro, sigue hasta el 39º (D, S y el poste P del ascensor chico) */
 const COLUMNAS: [string, number, number, number, boolean][] = [
   ['R12', -2.46, 12.05, 11.6, false],
   ['R25', -5.14, 11.13, 25.0, false],
@@ -23,8 +23,10 @@ const COLUMNAS: [string, number, number, number, boolean][] = [
   ['R165', -3.17, -11.85, 165.0, false],
   ['S', -3.56, -4.44, 38.0, true],
   ['D', -4.56, 2.64, -35.0, true],
-  ['P', -9.32, 3.39, 56.0, false]
+  ['P', -9.32, 3.39, 56.0, true]
 ];
+/** muros que siguen hasta el 39º: la escalera, el ascensor chico y W (están en la planta del restaurante) */
+const AL_39 = new Set(['B_sup', 'B_inf', 'C_ext', 'C_inf', 'W']);
 const MUROS: { id: string; de: P2; a: P2; vanos?: P2[]; eje?: 'x' | 'y' }[] = [
   { id: 'A_ext', de: [-4.95, 11.13], a: [-4.56, 2.74] },
   { id: 'A_sup', de: [-5.13, 11.04], a: [-2.01, 11.24] },
@@ -59,7 +61,7 @@ function tramos(m: (typeof MUROS)[number]): [P2, P2][] {
 }
 
 export interface OpcionesNucleo {
-  /** cota de la losa donde termina todo (el 38º) y donde terminan D y S (el 39º) */
+  /** cota de la losa donde termina casi todo (el 38º) y donde terminan la escalera, el ascensor chico, W, D, S y P (el 39º) */
   z38: number; z39: number;
   espesor?: number; lado?: number;
   /** espesor de algún muro en particular (por su id de la mitad izquierda, p. ej. «W2») */
@@ -84,7 +86,7 @@ export function nucleoGherkin(o: OpcionesNucleo): Muro[] {
         const L = Math.hypot(b[0] - a[0], b[1] - a[1]), g = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
         const id = `${m.id}${ts.length > 1 ? String.fromCharCode(97 + i) : ''}-${lado_}`;
         // área de losa que carga: 1 m² por metro de muro (supuesto; el resto lo llevan las columnas y el diagrid)
-        out.push(ponerPerfil(base(id, o.z38, Math.round(L * 10) / 10, `Núcleo ${lado_}`), { v: sx(rect((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, o.espesorDe?.[m.id] ?? e, g)) }));
+        out.push(ponerPerfil(base(id, AL_39.has(m.id) ? o.z39 : o.z38, Math.round(L * 10) / 10, `Núcleo ${lado_}`), { v: sx(rect((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, o.espesorDe?.[m.id] ?? e, g)) }));
       });
     }
     for (const [id, x, y, giro, al39] of COLUMNAS) {
