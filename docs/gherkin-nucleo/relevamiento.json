@@ -1,0 +1,393 @@
+{
+ "_leeme": "Relevamiento del núcleo del Gherkin (30 St Mary Axe) a partir de las plantas de Foster + Partners. Metros; origen en el centro de la torre; +y hacia el lado cerrado del núcleo (los bancos de ascensores), +x a la derecha. Solo la mitad izquierda (x < 0): la derecha es su espejo (x → −x). «giro» de una columna: grados que está girada en planta, antihorario (en la mitad derecha es el mismo número con signo cambiado). Las del anillo están giradas con su radio; S, D y P se midieron en las láminas.",
+ "fuentes": {
+  "p1": "Piso bajo de oficinas (con pozos de luz, Ø ≈ 53,6 m)",
+  "p5": "Piso de oficinas, lámina girada 88,3° (sin escala; se ajustó con las columnas)",
+  "p6": "Piso alto de oficinas (Ø ≈ 42,7 m, cerca del 33º)",
+  "p7": "39º, restaurante (Ø ≈ 26,9 m)",
+  "p4": "40º, bar bajo la cúpula"
+ },
+ "ajuste": {
+  "metodo": "Semejanza (giro, escala y traslado) que lleva las 20 columnas del modelo sobre las detectadas en cada lámina",
+  "p1": {
+   "px_por_m": 30.38,
+   "giro": -0.02,
+   "error_rms_m": 0.02,
+   "columnas": 9
+  },
+  "p5": {
+   "px_por_m": 14.66,
+   "giro": 88.29,
+   "error_rms_m": 0.05,
+   "columnas": 20
+  },
+  "p6": {
+   "px_por_m": 14.68,
+   "giro": -0.03,
+   "error_rms_m": 0.03,
+   "columnas": 20
+  },
+  "p7": {
+   "px_por_m": 14.68,
+   "giro": 0,
+   "nota": "misma lámina y escala que p6; sin columnas del anillo para ajustar"
+  },
+  "muros": "Cada muro se ajustó a la línea de tinta común de p1, p5 y p6 (dispersión menor a 1 cm en casi todos; W y W2 unos 8 cm porque en una lámina son más gruesos)"
+ },
+ "columnas": [
+  {
+   "id": "R12",
+   "x": -2.46,
+   "y": 12.05,
+   "lado": 0.7,
+   "giro": 11.6,
+   "plantas": "p1 p5 p6",
+   "nota": "anillo r = 12,3 m"
+  },
+  {
+   "id": "R25",
+   "x": -5.14,
+   "y": 11.13,
+   "lado": 0.7,
+   "giro": 25.0,
+   "plantas": "p1 p5 p6",
+   "nota": "esquina exterior del banco A"
+  },
+  {
+   "id": "R51",
+   "x": -9.56,
+   "y": 7.68,
+   "lado": 0.7,
+   "giro": 51.2,
+   "plantas": "p1 p5 p6",
+   "nota": "punta del muro superior de la escalera"
+  },
+  {
+   "id": "R68",
+   "x": -11.41,
+   "y": 4.63,
+   "lado": 0.7,
+   "giro": 67.9,
+   "plantas": "p1 p5 p6"
+  },
+  {
+   "id": "R95",
+   "x": -12.22,
+   "y": -1.1,
+   "lado": 0.7,
+   "giro": 95.2,
+   "plantas": "p1 p5 p6",
+   "nota": "punta del muro W"
+  },
+  {
+   "id": "R109",
+   "x": -11.67,
+   "y": -3.93,
+   "lado": 0.7,
+   "giro": 108.6,
+   "plantas": "p1 p5 p6"
+  },
+  {
+   "id": "R135",
+   "x": -8.69,
+   "y": -8.72,
+   "lado": 0.7,
+   "giro": 135.1,
+   "plantas": "p1 p5 p6",
+   "nota": "suelta en el hall"
+  },
+  {
+   "id": "R165",
+   "x": -3.17,
+   "y": -11.85,
+   "lado": 0.7,
+   "giro": 165.0,
+   "plantas": "p1 p5 p6",
+   "nota": "suelta en el hall"
+  },
+  {
+   "id": "S",
+   "x": -3.56,
+   "y": -4.44,
+   "lado": 0.75,
+   "giro": 38.0,
+   "plantas": "p1 p5 p6 (p7: esquina de un pozo)",
+   "nota": "columna interior del lado del hall"
+  },
+  {
+   "id": "D",
+   "x": -4.84,
+   "y": 2.77,
+   "lado": 0.8,
+   "giro": 60.0,
+   "plantas": "p1 p5 p6",
+   "nota": "nudo: ahí llegan el banco A, la escalera y el muro W; en el plano es un nudo de unos 1,5 m"
+  },
+  {
+   "id": "P",
+   "x": -9.32,
+   "y": 3.39,
+   "a": 0.6,
+   "b": 0.35,
+   "giro": 56.0,
+   "plantas": "p1 p5 p6",
+   "nota": "poste chico en la esquina del ascensor C"
+  }
+ ],
+ "_columnas_nota": "En los planos miden 0,65 a 0,75 m (las del anillo, unos 0,70 m) y están giradas con su radio. Para la app el usuario propone 0,50 × 0,50.",
+ "muros": [
+  {
+   "id": "A_ext",
+   "de": [
+    -4.95,
+    11.13
+   ],
+   "a": [
+    -4.56,
+    2.74
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "banco A, cara exterior (el banco está girado unos 3,5°: se abre hacia afuera arriba)"
+  },
+  {
+   "id": "A_sup",
+   "de": [
+    -5.13,
+    11.04
+   ],
+   "a": [
+    -2.01,
+    11.24
+   ],
+   "plantas": "p1 p5 p6"
+  },
+  {
+   "id": "A_int",
+   "de": [
+    -2.04,
+    11.15
+   ],
+   "a": [
+    -1.53,
+    2.67
+   ],
+   "plantas": "p1 p5 p6",
+   "vanos_y": [
+    [
+     10.33,
+     9.17
+    ],
+    [
+     7.67,
+     6.33
+    ],
+    [
+     4.83,
+     3.67
+    ]
+   ],
+   "nota": "frente de las puertas de los 3 ascensores"
+  },
+  {
+   "id": "A_inf",
+   "de": [
+    -4.6,
+    2.66
+   ],
+   "a": [
+    -1.55,
+    2.68
+   ],
+   "plantas": "p1 p5 p6"
+  },
+  {
+   "id": "A2_ext",
+   "de": [
+    -7.68,
+    9.65
+   ],
+   "a": [
+    -7.45,
+    5.95
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "ascensor suelto A′"
+  },
+  {
+   "id": "A2_sup",
+   "de": [
+    -7.74,
+    9.54
+   ],
+   "a": [
+    -4.95,
+    9.72
+   ],
+   "plantas": "p1 p5 p6",
+   "vanos_x": [
+    [
+     -7.2,
+     -5.87
+    ]
+   ]
+  },
+  {
+   "id": "B_sup",
+   "de": [
+    -9.36,
+    7.08
+   ],
+   "a": [
+    -4.54,
+    4.31
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "escalera, muro de arriba: de R51 al banco A"
+  },
+  {
+   "id": "B_ext",
+   "de": [
+    -9.1,
+    7.16
+   ],
+   "a": [
+    -10.91,
+    4.02
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "escalera, frente hacia la fachada"
+  },
+  {
+   "id": "B_inf",
+   "de": [
+    -9.32,
+    3.66
+   ],
+   "a": [
+    -6.06,
+    1.78
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "escalera, muro de abajo = techo del ascensor C; termina en W"
+  },
+  {
+   "id": "C_ext",
+   "de": [
+    -9.42,
+    3.47
+   ],
+   "a": [
+    -10.2,
+    1.7
+   ],
+   "plantas": "p1 p5 p6"
+  },
+  {
+   "id": "C_inf",
+   "de": [
+    -10.22,
+    1.69
+   ],
+   "a": [
+    -8.48,
+    0.67
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "termina en W"
+  },
+  {
+   "id": "W",
+   "de": [
+    -12.2,
+    -1.28
+   ],
+   "a": [
+    -4.65,
+    2.52
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "de R95 al nudo D: borde de arriba del bloque de servicios"
+  },
+  {
+   "id": "W2",
+   "de": [
+    -12.26,
+    -0.81
+   ],
+   "a": [
+    -10.77,
+    -4.04
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "de R95 hacia R109"
+  }
+ ],
+ "fragmentos_dudosos": [
+  {
+   "id": "F1",
+   "de": [
+    -6.34,
+    -1.73
+   ],
+   "a": [
+    -3.52,
+    -0.31
+   ],
+   "nota": "trozo del bloque de servicios que coincide en las tres plantas; el resto del bloque cambia (ascensores bajos abajo, baños arriba)"
+  },
+  {
+   "id": "F2",
+   "de": [
+    -6.15,
+    -5.43
+   ],
+   "a": [
+    -3.43,
+    -4.24
+   ],
+   "nota": "de S hacia el sudoeste; coincide en parte"
+  },
+  {
+   "id": "A2_inf",
+   "de": [
+    -6.67,
+    5.63
+   ],
+   "a": [
+    -4.7,
+    5.63
+   ],
+   "plantas": "p1 p5 p6",
+   "nota": "abajo del ascensor A′: en las láminas es un trazo débil; el pozo lo cierra el muro B_sup"
+  }
+ ],
+ "no_estructural": [
+  {
+   "id": "montante",
+   "caja": [
+    [
+     -12.08,
+     0.75
+    ],
+    [
+     -11.25,
+     1.83
+    ]
+   ],
+   "nota": "pozo chico de instalaciones fuera del anillo, con un tabique hasta R95; está en las tres plantas"
+  },
+  {
+   "id": "centro_norte",
+   "nota": "entre los dos bancos A: baños en p1, vacío en p6; no sigue"
+  },
+  {
+   "id": "bloque_servicios",
+   "nota": "entre W y S: ascensores bajos en p1, baños y locales en p5 y p6; cambia de planta a planta"
+  }
+ ],
+ "altura": {
+  "anillo_y_muros": "Iguales en p1, p5 y p6 (desde las oficinas bajas hasta cerca del 33º). Del 34º al 38º no hay planos. En el 39º (p7) no está ninguna columna del anillo.",
+  "39": "Solo coinciden con p6 los dos pozos que arrancan en S (unos 3,3 × 3,6 m, girados unos 20°) y algunos tramos de tabique; D no coincide del todo.",
+  "40": "Ninguna pieza del núcleo: la losa (unos 18,5 m) apoya en el diagrid."
+ }
+}
