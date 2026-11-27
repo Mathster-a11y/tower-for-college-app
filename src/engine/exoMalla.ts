@@ -10,6 +10,7 @@
  *    a los dos nudos vecinos del anillo de arriba (rombos), como el de 30 St Mary Axe;
  *  - columnas y cruces: columnas que siguen la fachada de anillo en anillo y, en cada paño, una cruz de San Andrés.
  * Los anillos (vigas horizontales) se dibujan y se pesan: en el modelo, la losa rígida de cada piso hace su trabajo.
+ * Con las losas atadas en cada piso (por defecto), cada barra tiene un nudo en cada piso que cruza y es continua ahí.
  *
  * Cálculo por proyección, exacto con las hipótesis de la app. Las losas son diafragmas rígidos: en cada piso todos los
  * nudos se corren u en el sentido del viento y nada de costado (sin giro de la planta, que la app calcula aparte). Con
@@ -37,6 +38,12 @@ export interface MallaDef {
   giro?: number;
   /** la malla llega hasta esta cota; arriba, sin exo (una cúpula de vidrio, una corona) */
   hasta?: number | null;
+  /**
+   * las losas se atan a la malla en cada piso que cruza (como en el Gherkin y el Hearst): cada barra tiene un nudo en
+   * cada piso, ahí recibe la losa y el viento de ese piso y pandea de piso a piso. Por defecto sí; sin esto, los pisos
+   * entre anillos solo los sostienen los tabiques (y si arriba no hay, quedan sueltos)
+   */
+  arriostrada?: boolean;
 }
 export const MALLA_POR_DEFECTO: MallaDef = { patron: 'diagrid', nudos: 16, esquinas: true };
 export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string }> = {
@@ -46,7 +53,7 @@ export const PATRONES_MALLA: Record<PatronMalla, { nombre: string; texto: string
 
 export interface NudoMalla {
   x: number; y: number; z: number;
-  /** índice de la cota en zs (piso del modelo) y anillo */
+  /** índice de la cota en zs (piso del modelo) y anillo (−1: un nudo de una barra en un piso entre anillos) */
   k: number; anillo: number;
   /** posición en la vuelta (0 a 1, desde el arranque) y metros de fachada que le tocan */
   t: number; trib: number;
@@ -228,8 +235,27 @@ export function mallaDe(p: Proyecto, def: ExoDef, zs: number[]): MallaGeo {
       });
     }
   });
+  // las losas atadas en cada piso: cada barra que cruza pisos entre anillos se parte en ellos (el nudo, sobre la barra recta)
+  const partidas = m.arriostrada === false ? barras : barras.flatMap(b => {
+    const A = nudos[b.a], B = nudos[b.b];
+    if (b.clase === 'anillo' || Math.abs(B.k - A.k) < 2) return [b];
+    const [lo, hi] = A.k < B.k ? [b.a, b.b] : [b.b, b.a], L0 = nudos[lo], L1 = nudos[hi];
+    const out: BarraMalla[] = []; let prev = lo;
+    for (let k = L0.k + 1; k < L1.k; k++) {
+      const f = (zs[k] - L0.z) / (L1.z - L0.z || 1);
+      const id = nudos.length;
+      nudos.push({ x: L0.x + (L1.x - L0.x) * f, y: L0.y + (L1.y - L0.y) * f, z: zs[k], k, anillo: -1, t: L0.t + ((((L1.t - L0.t + 0.5) % 1) + 1) % 1 - 0.5) * f, trib: 0 });
+      out.push({ clase: b.clase, a: prev, b: id }); prev = id;
+    }
+    out.push({ clase: b.clase, a: prev, b: hi });
+    return out;
+  });
+  // el ancho de influencia de los nudos de los pisos entre anillos: la fachada de ese piso repartida entre ellos
+  const porPiso = new Map<number, number[]>();
+  nudos.forEach((q, i) => { if (q.anillo < 0) porPiso.set(q.k, [...(porPiso.get(q.k) ?? []), i]); });
+  porPiso.forEach((ids, k) => { const P = perimetroPol(corrido(contornos[k].fachada, def.separacion ?? 0)); ids.forEach(i => { nudos[i].trib = P / ids.length; }); });
   const perimetro = contornos.map(c => perimetroPol(c.losa));
-  return { nudos, barras, anillos, perimetro, cx, cy };
+  return { nudos, barras: partidas, anillos, perimetro, cx, cy };
 }
 
 // ------------------------------------------------------------------ proyección en el plano del viento
@@ -253,11 +279,13 @@ export function proyectarMalla(g: MallaGeo, def: ExoDef, dir: 'A' | 'B', zs: num
     const L = Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z), L2 = Math.hypot(sDe(B) - sDe(A), B.z - A.z);
     if (L < 1e-9 || L2 < 1e-6 * L) return;
     const f = (L2 / L) ** 3, sec = secDe(b.clase, Math.min(A.z, B.z)), pr = props(sec);
-    const rel = b.clase === 'columna' ? !colRigida : true;
+    // las diagonales, articuladas en los nudos de los anillos y continuas en los pisos que cruzan (losas atadas): ahí la
+    // flexión de la diagonal es la que frena el piso (articulada, el nudo se deslizaría a lo largo de la barra)
+    const relA = b.clase === 'columna' ? !colRigida : A.anillo >= 0, relB = b.clase === 'columna' ? !colRigida : B.anillo >= 0;
     const letra = b.clase === 'columna' ? 'C' : b.clase === 'diagonal' ? 'D' : 'V';
     cuenta[letra] = (cuenta[letra] ?? 0) + 1;
     barras.push({
-      id: `${letra}${cuenta[letra]}`, clase: b.clase, a: b.a, b: b.b, A: pr.A * f, I: pr.I * f, sec, relA: rel, relB: rel, borde: false,
+      id: `${letra}${cuenta[letra]}`, clase: b.clase, a: b.a, b: b.b, A: pr.A * f, I: pr.I * f, sec, relA, relB, borde: false,
       escala: L / L2, L3: L, p3: { a: { x: A.x, y: A.y, z: A.z }, b: { x: B.x, y: B.y, z: B.z } },
     });
   });
@@ -280,9 +308,10 @@ export function cargasMalla(g: MallaGeo, zs: number[], op: { gamma: number; peso
   });
   const f = op.franja ?? 0, q = op.q ?? 0;
   if (f > 0 && q > 0 && g.anillos.length) {
-    const ks = g.anillos.filter(k => k > 0);
     const porK = new Map<number, number[]>();
     g.nudos.forEach((nd, id) => { if (nd.k > 0) porK.set(nd.k, [...(porK.get(nd.k) ?? []), id]); });
+    // los pisos con nudos: los anillos y, con las losas atadas, todos los que cruza la malla
+    const ks = [...porK.keys()].sort((a, b) => a - b);
     const repartir = (k: number, carga: number) => {
       const ids = porK.get(k) ?? [], tot = ids.reduce((s, id) => s + g.nudos[id].trib, 0) || 1;
       ids.forEach(id => sumar(id, (carga * g.nudos[id].trib) / tot));

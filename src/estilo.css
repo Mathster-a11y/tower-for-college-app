@@ -2405,3 +2405,19 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 :root { --par-marron: #8c6d4f; --par-pizarra: #5f7480; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --par-marron: #c4a383; --par-pizarra: #9fb3bf; } }
 :root[data-theme="dark"] { --par-marron: #c4a383; --par-pizarra: #9fb3bf; }
+
+/* ficha M · «Malla en 3D»: la malla real girable (tracción y compresión por barra) y la planta de un anillo */
+.malla-fila { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 760px) { .malla-fila { grid-template-columns: 1fr; } }
+.malla-svg { width: 100%; height: auto; background: var(--lienzo); border: 1px solid var(--edge); border-radius: 8px; }
+.malla-svg .malla-barra { fill: none; stroke-linecap: round; }
+.malla-svg .malla-nudo-sel { fill: var(--elegido); }
+.malla-svg .malla-losa { fill: color-mix(in srgb, var(--ink) 6%, transparent); stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 4 3; }
+.malla-svg .malla-anillo { fill: none; stroke: var(--ink2); stroke-width: 1.4; }
+.malla-svg .malla-nudo { fill: var(--ink); }
+.malla-svg .malla-nudo.primero { fill: var(--elegido); }
+.malla-svg .malla-viento { fill: none; stroke: var(--carga); stroke-width: 2; }
+.malla-controles input[type="range"] { vertical-align: middle; width: 160px; }
+@media (pointer: coarse) { .malla-controles input[type="range"] { width: 200px; height: 32px; } }
+.malla-patron { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.formulario > .malla-linea { grid-column: 1 / -1; }

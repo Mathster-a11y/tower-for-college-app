@@ -426,7 +426,37 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     });
   }
 
+  /**
+   * ficha M: la malla sobre la fachada real, cada barra con su esfuerzo del viento elegido (tracción en rojo, compresión
+   * en azul, más intenso cuanto mayor |N|); los anillos y las barras que no trabajan con ese viento, en gris acero
+   */
+  function agregarExoMalla(): boolean {
+    const d = datosExo(estado.dir), g = d?.entrada.malla;
+    if (!d || !g) return false;
+    const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
+    const eje = new THREE.Vector3(0, 1, 0), k = (a: { x: number; y: number; z: number }) => `${a.x.toFixed(4)},${a.y.toFixed(4)},${a.z.toFixed(3)}`;
+    const esf = new Map(d.r.caras[0].esfuerzos.filter(e => e.p3).map(e => [`${k(e.p3!.a)}|${k(e.p3!.b)}`, e.N]));
+    const Nmax = Math.max(1e-9, ...[...esf.values()].map(Math.abs));
+    const def = estado.proyecto.exo!;
+    const rd = Math.max(0.12, Math.min(0.35, (def.diagonal?.b ?? 0.4) * 0.6)), rc = Math.max(0.15, Math.min(0.4, (def.columna?.b ?? 0.5) * 0.6)), ra = Math.max(0.1, Math.min(0.3, (def.viga?.b ?? 0.3) * 0.5));
+    const matGris = new THREE.MeshStandardMaterial({ color: acero, roughness: 0.45, metalness: 0.3 });
+    g.barras.forEach(b => {
+      const a3 = g.nudos[b.a], b3 = g.nudos[b.b];
+      const A = new THREE.Vector3(a3.x, a3.z, -a3.y), Bv = new THREE.Vector3(b3.x, b3.z, -b3.y), L = A.distanceTo(Bv);
+      if (L < 1e-6) return;
+      const N = b.clase === 'anillo' ? undefined : esf.get(`${k(a3)}|${k(b3)}`);
+      const mat = N === undefined ? matGris : new THREE.MeshStandardMaterial({ color: acero.clone().lerp(N >= 0 ? cT : cC, 0.35 + 0.65 * Math.min(1, Math.abs(N) / Nmax)), roughness: 0.45, metalness: 0.3 });
+      const r = b.clase === 'anillo' ? ra : b.clase === 'columna' ? rc : rd;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 6), mat);
+      m.position.copy(A.clone().add(Bv).multiplyScalar(0.5));
+      m.quaternion.setFromUnitVectors(eje, Bv.clone().sub(A).normalize());
+      grupo.add(m);
+    });
+    return true;
+  }
+
   function agregarExo() {
+    if (estado.proyecto.exo?.tipo === 'M') { agregarExoMalla(); return; }
     const dc = diagridCircular(estado.proyecto);
     if (dc) { agregarExoCircular(dc); return; }
     const caras = (['A', 'B'] as const).map(dir => ({ dir, d: datosExo(dir) }));

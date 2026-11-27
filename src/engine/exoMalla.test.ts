@@ -91,9 +91,15 @@ describe('malla sobre la fachada: geometría', () => {
     const a0 = Math.min(...porAnillo[0].map(ang).map(a => a % 20)), a1 = Math.min(...porAnillo[1].map(ang).map(a => (a + 10) % 20));
     expect(Math.abs(a0 - a1)).toBeLessThan(0.5);
     // cada nudo (menos los del tope) sube con dos diagonales
-    const diag = g.barras.filter(b => b.clase === 'diagonal');
-    expect(diag.length).toBe(36 * (g.anillos.length - 1));
-    expect(g.barras.filter(b => b.clase === 'anillo').length).toBe(18 * (g.anillos.length - 1));
+    // sin atar las losas, cada nudo (menos los del tope) sube con dos diagonales de anillo a anillo
+    const g0 = mallaDe(p, { ...def, malla: { ...def.malla!, arriostrada: false } }, zs);
+    expect(g0.barras.filter(b => b.clase === 'diagonal').length).toBe(36 * (g0.anillos.length - 1));
+    expect(g0.barras.filter(b => b.clase === 'anillo').length).toBe(18 * (g0.anillos.length - 1));
+    // con las losas atadas (por defecto) cada diagonal se parte en los pisos que cruza: todos los pisos tienen nudos
+    const pisos = new Set(g.nudos.map(q => q.k));
+    zs.forEach((_, k) => expect(pisos.has(k)).toBe(true));
+    const largo = (gg: typeof g) => gg.barras.filter(b => b.clase === 'diagonal').reduce((s2, b) => { const A = gg.nudos[b.a], B = gg.nudos[b.b]; return s2 + Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z); }, 0);
+    expect(largo(g)).toBeCloseTo(largo(g0), 6);
     // anillos en los bordes de los módulos (cada 4 pisos) y en la mitad
     expect(anillosMalla(def, zs).slice(0, 4)).toEqual([0, 2, 4, 6]);
   });
@@ -116,7 +122,8 @@ describe('malla sobre la fachada: geometría', () => {
 describe('malla sobre la fachada: el cálculo por proyección', () => {
   it('da lo mismo que el reticulado espacial con losas rígidas (Gherkin, viento en x)', () => {
     const { p, def: def0, zs } = gherkinM();
-    const def: ExoDef = { ...def0, pesoPropio: false, losas: undefined };
+    // la malla articulada pura (sin atar las losas en los pisos intermedios): ahí la proyección es exacta
+    const def: ExoDef = { ...def0, pesoPropio: false, losas: undefined, malla: { ...def0.malla!, arriostrada: false } };
     const geo = mallaDe(p, def, zs), n = zs.length - 1;
     const W = zs.slice(1).map(() => 10), EJ = () => 2.1e6 * 50;
     const ref = referencia3D(geo, def, zs, W, EJ);
@@ -169,7 +176,7 @@ describe('malla sobre la fachada: límite del método', () => {
     // todas las losas y la fachada: medio círculo de 25 m de radio (recto del lado −x)
     const D = [{ x: 0, y: -25, b: Math.tan(Math.PI / 4) }, { x: 0, y: 25 }];
     p.niveles.forEach(nv => { nv.silueta = D.map(v => ({ ...v })); nv.carpinteria = D.map(v => ({ ...v })); });
-    const def: ExoDef = { ...def0, pesoPropio: false, losas: undefined, malla: { patron: 'diagrid', nudos: 18, esquinas: true } };
+    const def: ExoDef = { ...def0, pesoPropio: false, losas: undefined, malla: { patron: 'diagrid', nudos: 18, esquinas: true, arriostrada: false } };
     const geo = mallaDe(p, def, zs), n = zs.length - 1, EJ = () => 2.1e6 * 50;
     for (const dir of ['A', 'B'] as const) {
       // viento B: a lo largo de x (perpendicular al lado recto: la planta es simétrica respecto de su eje); A: a lo largo de y
@@ -185,6 +192,19 @@ describe('malla sobre la fachada: límite del método', () => {
 });
 
 describe('malla sobre la fachada: en el cálculo de la app', () => {
+  it('con las losas atadas, ningún piso queda suelto: el corrimiento crece parejo con la altura (Gherkin, hasta la cúpula)', () => {
+    const { p } = gherkinM();
+    p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
+    const c = calcularProyecto(p), ex = new ExoDeCalculo(p, c, 'cirsoc');
+    for (const dir of ['A', 'B'] as const) {
+      const d = ex.datos(dir, p.exo!)!, u = d.r.u, z = d.r.zs.slice(1);
+      expect(u.every(x => isFinite(x) && x >= -1e-9)).toBe(true);
+      // la deriva de cada piso, menos de 3 veces la promedio (sin los picos de un piso que no toca la malla)
+      const der = u.map((x, k) => (x - (k ? u[k - 1] : 0)) / (z[k] - (k ? z[k - 1] : d.r.zs[0])));
+      const media = u[u.length - 1] / (z[z.length - 1] - d.r.zs[0]);
+      expect(Math.max(...der)).toBeLessThan(3 * media);
+    }
+  });
   it('el Gherkin con la ficha M se calcula con los dos vientos y verifica sus barras con el CIRSOC 301', () => {
     const { p } = gherkinM();
     p.calculo = { ...(p.calculo ?? {}), metodo: 'cirsoc' } as typeof p.calculo;
