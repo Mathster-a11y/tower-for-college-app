@@ -63,8 +63,6 @@ function tramos(m: (typeof MUROS)[number]): [P2, P2][] {
 export interface OpcionesNucleo {
   /** cota de la losa donde termina casi todo (el 38º) y donde terminan la escalera, el ascensor chico, W, D, S y P (el 39º) */
   z38: number; z39: number;
-  /** si se da, D y S siguen hasta esta losa (el entrepiso del 40º apoya en ellas) */
-  z40?: number;
   espesor?: number; lado?: number;
   /** espesor de algún muro en particular (por su id de la mitad izquierda, p. ej. «W2») */
   espesorDe?: Record<string, number>;
@@ -94,52 +92,8 @@ export function nucleoGherkin(o: OpcionesNucleo): Muro[] {
     for (const [id, x, y, giro, al39] of COLUMNAS) {
       // anillo: unos 18 m² de losa cada una; D y S, 15 m²; P (poste chico), 3 m²
       const area = id.startsWith('R') ? 18 : id === 'P' ? 3 : 15;
-      const zH = (id === 'D' || id === 'S') && o.z40 ? o.z40 : al39 ? o.z39 : o.z38;
-      out.push(ponerPerfil(base(`${id}-${lado_}`, zH, area, ''), { v: sx(rect(x, y, lado, lado, giro)) }));
+      out.push(ponerPerfil(base(`${id}-${lado_}`, al39 ? o.z39 : o.z38, area, ''), { v: sx(rect(x, y, lado, lado, giro)) }));
     }
   }
-  return out;
-}
-
-export interface OpcionesRemate {
-  /** losa donde arrancan los pozos de los ascensores altos (la transferencia del 21º) */
-  z21: number;
-  /** losas del 38º, 39º y 40º */
-  z38: number; z39: number; z40: number;
-}
-/**
- * Lo que lleva el entrepiso del 40º (el bar bajo la cúpula), medido en las plantas del 39º y del 40º:
- * - dos pozos de ascensor junto a S (de la transferencia del 21º al 40º; no están en las oficinas bajas);
- * - el ascensor expreso al restaurante (del 38º al 40º);
- * - dos columnas redondas de 0,55 m al norte, bajo el borde del entrepiso (del 39º al 40º);
- * - la escalera caracol que sube al bar: muro curvo de 2,86 m de radio, su cierre norte y el tambor del centro.
- * Arrancan arriba de la fundación, así que quedan fuera del cálculo de viento (llega = false): son cargas de gravedad.
- */
-export function remate40(o: OpcionesRemate): Muro[] {
-  const out: Muro[] = [];
-  const base = (id: string, zDesde: number, zHasta: number, areaInf: number): Muro => ({
-    id, dir: 'Y', x: 0, y: 0, largo: 1, espesor: 1, llega: false, areaInf, piezaA: '', pegadoA: '', piezaB: '', pegadoB: '', zDesde, zHasta, soloGravedad: true,
-  });
-  const muro = (id: string, a: P2, b: P2, e: number, zD: number, zH: number) => {
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), g = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
-    out.push(ponerPerfil(base(id, zD, zH, Math.round(L * 10) / 10), { v: rect((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, e, g) }));
-  };
-  // pozos junto a S (esquinas del eje de los muros, mitad izquierda; la derecha es su espejo)
-  const pozo: P2[] = [[-4.43, -1.57], [-2.21, -0.83], [-1.0, -3.86], [-3.36, -4.64]];
-  for (const [lado, s] of [['O', 1], ['E', -1]] as const)
-    pozo.forEach((q, i) => { const r = pozo[(i + 1) % 4]; muro(`PZ${i + 1}-${lado}`, [s * q[0], q[1]], [s * r[0], r[1]], 0.25, o.z21, o.z40); });
-  // ascensor expreso al restaurante
-  const asc: P2[] = [[-2.64, 5.07], [-1.14, 5.07], [-1.14, 6.86], [-2.64, 6.86]];
-  asc.forEach((q, i) => muro(`AX${i + 1}`, q, asc[(i + 1) % 4], 0.2, o.z38, o.z40));
-  // columnas redondas bajo el borde norte del entrepiso
-  for (const [lado, s] of [['O', -1], ['E', 1]] as const)
-    out.push({ ...base(`CR-${lado}`, o.z39, o.z40, 8), tipo: 'tubo-circ', x: s * 1.0, y: 9.43, largo: 0.55, espesor: 0.275 });
-  // escalera caracol: tambor del centro y muro curvo (de 79° a −68°, por el este) con su cierre norte
-  const c: P2 = [0.07, 6.21], R = 2.86, e = 0.25, n = 24;
-  out.push({ ...base('TC', o.z39, o.z40, 6), tipo: 'tubo-circ', x: c[0], y: c[1], largo: 1.3, espesor: 0.15 });
-  const arco = (r: number) => Array.from({ length: n + 1 }, (_, k) => { const t = ((79 - (147 * k) / n) * Math.PI) / 180; return { x: c[0] + r * Math.cos(t), y: c[1] + r * Math.sin(t) }; });
-  out.push(ponerPerfil(base('EC1', o.z39, o.z40, 7), { v: [...arco(R - e / 2).reverse(), ...arco(R + e / 2)].reverse() }));
-  const cierre: P2[] = [[0.64, 9.07], [0.36, 7.57], [-1.2, 7.3], [-2.64, 6.93]];
-  for (let i = 0; i < cierre.length - 1; i++) muro(`EC${i + 2}`, cierre[i], cierre[i + 1], 0.2, o.z39, o.z40);
   return out;
 }

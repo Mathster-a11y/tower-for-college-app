@@ -12,13 +12,9 @@ export interface P3 { x: number; y: number; z: number }
 export interface BarraCircular { a: P3; b: P3; clase: 'diagonal' | 'anillo'; anillo: number; th: number }
 export interface DiagridCircular { anillos: { z: number; R: number; th: number[] }[]; barras: BarraCircular[]; n: number }
 
-/**
- * radio de la fachada en la altura z (m): el mayor alcance desde el centro de la carpintería de cada nivel (la piel, si
- * el nivel la tiene) o de su silueta. La carpintería manda porque una losa puede ser más chica que la piel (el entrepiso
- * en D del 40º del Gherkin) y el diagrid va por la fachada
- */
+/** radio de la fachada en la altura z (m), de la silueta de los niveles (el mayor alcance desde el centro) */
 export function radioEn(p: Proyecto, z: number): number {
-  const niv = p.niveles.map((n, i) => ({ z: n.cota, r: Math.max(...(n.carpinteria?.length ? n.carpinteria : plantaDeNivel(p, i).silueta).map(q => Math.hypot(q.x, q.y))) }))
+  const niv = p.niveles.map((n, i) => ({ z: n.cota, r: Math.max(...plantaDeNivel(p, i).silueta.map(q => Math.hypot(q.x, q.y))) }))
     .filter(q => q.z >= 0).sort((a, b) => a.z - b.z);
   if (!niv.length) return 0;
   if (z <= niv[0].z) return niv[0].r;
