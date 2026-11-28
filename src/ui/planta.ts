@@ -711,6 +711,8 @@ export function montarPlanta(cont: HTMLElement) {
   bCarp.title = 'Carpintería (el contorno al que le pega el viento): por tramos (sin, por piso o envolvente), plana o curva, panelería; o a mano, piso por piso';
   bCarp.addEventListener('click', () => { if (modo === 'silueta' && editaCarp) { ponerModo('mover'); return; } editaCarp = true; vSel = null; if (modo === 'silueta') { pintarLosaCarp(modo); armarPanelSil(); dibujar(); } else ponerModo('silueta'); });
   function pintarLosaCarp(m: string) { bSil.setAttribute('aria-pressed', String(m === 'silueta' && !editaCarp)); bCarp.setAttribute('aria-pressed', String(m === 'silueta' && editaCarp)); }
+  /** pestaña de la carta de la losa (se recuerda en este navegador) */
+  let pestLosa: 'forma' | 'altura' | 'cad' = (() => { try { const v = localStorage.getItem('torre3d.pestLosa'); return v === 'altura' || v === 'cad' ? v : 'forma'; } catch { return 'forma'; } })();
   const panelSil = document.createElement('div');
   panelSil.className = 'calco-panel silueta-panel';
   panelSil.hidden = true;
@@ -1109,18 +1111,27 @@ export function montarPlanta(cont: HTMLElement) {
       usarForma.push(h2(boton('Usar esta losa desde este piso', () => tomar(false), 'Desde este piso hacia arriba, el perfil escala, gira y corre esta planta en vez de la losa base (por ejemplo, el círculo sin pozos de un piso para arriba)'),
         boton('Solo en este piso', () => tomar(true), 'Esta planta en este piso y, desde el de arriba, la que había: una excepción de un solo piso (por ejemplo, un piso entero entre pisos con pozos)')));
     }
-    panelSil.append(que, b(`Silueta de ${n.nombre}`), lSin, ...usarForma, ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []), linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)'),
-      linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m`),
-      linea(`la planilla usa B × L = ${pl.B} × ${pl.L} m`),
-      ...estadoCarpLosas(),
-      // primero la forma (lo que hace falta en una torre en blanco), después ajustarla, al final lo demás
+    // la carta en pestañas (crecía hacia abajo y «Herramientas CAD…» quedaba escondido): arriba, siempre, qué se edita,
+    // de dónde sale esta losa y las herramientas CAD; abajo, la pestaña elegida
+    const bCad = cad; bCad.classList.add('primario');
+    const origen = linea(delLoft ? `generada por el loft ${delLoft.id}` : delPerfil ? 'generada por el perfil de la torre' : n.manual ? 'suelta: editada a mano (el perfil y los lofts no la tocan)' : pl.propia ? 'propia de este nivel' : 'heredada (se copia al editarla)');
+    const pests = document.createElement('div'); pests.className = 'seg seg-chico pestanas-losa'; pests.setAttribute('role', 'tablist'); pests.setAttribute('aria-label', 'Partes de la carta de la losa');
+    ([['forma', 'Forma', 'La forma de esta losa: desde cero, esquinas, B y L para el viento, copiar a los demás niveles'],
+      ['altura', 'Altura', 'La torre en altura: el perfil (escala, giro, corrimiento), los lofts entre dos losas y las formas por tramos'],
+      ['cad', 'CAD', 'Vértices con coordenadas, importar un DXF o un modelo 3D']] as const).forEach(([k, t, ayuda]) => {
+      const x = boton(t, () => { pestLosa = k; try { localStorage.setItem('torre3d.pestLosa', k); } catch { /* sin almacenamiento */ } armarPanelSil(); }, ayuda);
+      x.setAttribute('role', 'tab'); x.setAttribute('aria-selected', String(pestLosa === k)); x.setAttribute('aria-pressed', String(pestLosa === k));
+      pests.append(x);
+    });
+    const contenido: HTMLElement[] = pestLosa === 'forma' ? [
+      lSin, ...estadoCarpLosas(),
+      // primero la forma (lo que hace falta en una torre en blanco), al final lo demás
       seccionDesdeCero(),
-      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Ajustar la losa' }),
-      filaV,
-      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Más' }),
-      dxf, importar3D(),
+      seccionEsquinas(Math.min(caja.B, caja.L)),
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'B y L para el viento' }),
       // B y L para el viento: la caja (el ancho que enfrenta el viento) o, en una planta curva, el rectángulo de igual área
       ...seccionAnchoViento(),
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Los demás niveles' }),
       h2(
       boton('Copiar a todos los niveles', async () => {
         if (!(await confirmar('Copiar la silueta', `La silueta de la losa de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan). Se puede deshacer.`, 'Copiar'))) return;
@@ -1128,9 +1139,22 @@ export function montarPlanta(cont: HTMLElement) {
         mensaje(`Silueta de ${n.nombre} copiada a los ${estado.proyecto.niveles.length} niveles.`);
       }, 'La misma silueta de losa en todos los pisos.'),
       boton('Quitar silueta', () => estado.cambiar(() => { estado.proyecto.niveles[iNivel].silueta = null; }), 'Vuelve a la del nivel de arriba o al rectángulo B × L.')),
+    ] : pestLosa === 'altura' ? [
+      ...usarForma,
       seccionPerfil(),
       seccionLoft(),
-      seccionEsquinas(Math.min(caja.B, caja.L)));
+    ] : [
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Vértices' }),
+      filaV,
+      Object.assign(document.createElement('p'), { className: 'nota-losa', textContent: 'Arrastrá los vértices en la planta; tocá uno para escribir sus coordenadas. Arcos, empalmes, chaflanes, desfase y formas: «Herramientas CAD…», arriba.' }),
+      Object.assign(document.createElement('div'), { className: 'sec-sub', textContent: 'Importar' }),
+      dxf, importar3D(),
+    ];
+    panelSil.append(que, b(`Silueta de ${n.nombre}`), origen,
+      linea(`área ${areaSilueta(pl.silueta).toFixed(1).replace('.', ',')} m² · caja ${caja.B.toFixed(2).replace('.', ',')} × ${caja.L.toFixed(2).replace('.', ',')} m · la planilla usa B × L = ${pl.B} × ${pl.L} m`),
+      // los avisos de una losa generada van siempre arriba: lo que se edite a mano se pierde
+      ...avisoLoft, ...avisoPerfil, ...(bSoltar.length ? [h2(...bSoltar)] : []),
+      h2(bCad), pests, ...contenido);
   }
   /**
    * perfil de la torre (alzado): la planta de la losa base se escala, se gira y se corre con la altura. Un alzado chico
@@ -2257,13 +2281,13 @@ export function montarPlanta(cont: HTMLElement) {
     { id: 'pisos', nombre: 'Pisos', ayuda: 'Cuántos pisos tiene la torre y qué altura tiene cada uno (tabla de niveles, a la izquierda).',
       hecho: () => estado.proyecto.niveles.length >= 3, acciones: () => [['Abrir la tabla de niveles', 'La tabla de niveles: nombre, cota, B y L', () => clicEn('#subpasos button', 'Niveles')]] },
     { id: 'losa', nombre: 'Losa', ayuda: 'La forma de la planta: una forma de arranque (rectángulo, círculo, en L…) o dibujada a mano.',
-      hecho: () => estado.proyecto.niveles.some(n => n.silueta && n.silueta.length >= 3), acciones: () => [['Abrir Losa', 'La carta de la losa, con «Losa desde cero» arriba', () => { if (!(modo === 'silueta' && !editaCarp)) bSil.click(); }]] },
+      hecho: () => estado.proyecto.niveles.some(n => n.silueta && n.silueta.length >= 3), acciones: () => [['Abrir Losa', 'La carta de la losa, con «Losa desde cero» arriba', () => { pestLosa = 'forma'; if (!(modo === 'silueta' && !editaCarp)) bSil.click(); else armarPanelSil(); }]] },
     { id: 'forma', nombre: 'Forma en altura', ayuda: '¿La torre cambia de forma al subir? Si es recta, seguí de largo.',
       hecho: () => { const p = estado.proyecto; return !!p.perfilTorre || !!p.lofts?.length || !!p.planosCorte?.length || !!p.envolvente || vistos.has('forma'); },
       acciones: () => [
         ['Recta: seguir', 'La misma planta en toda la altura', () => { vistos.add('forma'); irA(siguiente('forma')); }],
-        ['Perfil (ahusada, barril, retorcida…)', 'El alzado de la torre: cómo se escala, se corre o gira la planta con la altura', () => { pfLosas.abierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
-        ['Loft entre dos losas', 'Las losas de en medio pasan suave de una forma a otra', () => { lft.abierto = true; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Perfil (ahusada, barril, retorcida…)', 'El alzado de la torre: cómo se escala, se corre o gira la planta con la altura', () => { pfLosas.abierto = true; pestLosa = 'altura'; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
+        ['Loft entre dos losas', 'Las losas de en medio pasan suave de una forma a otra', () => { lft.abierto = true; pestLosa = 'altura'; editaCarp = false; if (modo !== 'silueta') ponerModo('silueta'); else { pintarLosaCarp(modo); armarPanelSil(); } }],
         ['Recortar con un plano', 'Un plano inclinado que recorta las losas (en el corte de la torre)', () => bCorte.click()]] },
     { id: 'carp', nombre: 'Carpintería', ayuda: 'El contorno al que le pega el viento: por piso (de losa a losa) o envolvente, o a mano.',
       hecho: () => { const p = estado.proyecto; return tramosCarpinteria(p).length > 0 || p.niveles.some(n => n.carpinteria && n.carpinteria.length >= 3); },

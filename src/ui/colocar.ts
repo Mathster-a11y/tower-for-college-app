@@ -7,6 +7,7 @@
  * elemento elegido.
  */
 import { diagridCircular, radioEn } from '../engine/diagridCircular';
+import { geometriaExo } from './exo';
 import { estado, fmt } from './estado';
 import { agregarVecino } from '../viento/contexto';
 import { medidasNiveles } from '../engine/perfilTorre';
@@ -583,6 +584,30 @@ export function montarColocar(api: ApiPlanta) {
       an.th.forEach(th => { const x = R * Math.cos(th), y = R * Math.sin(th); ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna', transform: `rotate(${(-th * 180) / Math.PI + 45} ${X(x)} ${Y(y)})` })); });
       ge.append(el('text', { x: X(0) - 12, y: Y(-R) + 16, class: 'exo-rot', 'text-anchor': 'end' }, `diagrid: ${dcir.n} nudos por anillo, anillo a ${fmt(an.z, 1)} m (cada anillo gira ${fmt(180 / dcir.n, 0)}°)`));
       g.append(ge);
+    } else if (p.exo && (estado.nivelPlanta ?? 0) < -1e-6 && p.exo.tipo !== 'M') {
+      // subsuelo: solo las columnas del exo que arrancan en PB y siguen hasta la platea (el viento se calcula empotrado en PB)
+      const ge = el('g', { class: 'exo-planta' }), lado = Math.max(0.25, p.exo.columna.b), vistas = new Set<string>();
+      (['A', 'B'] as const).forEach(dir => {
+        const gm = geometriaExo(dir);
+        if (!gm) return;
+        const z0 = gm.zs[0];
+        gm.cara.barras.forEach(b => {
+          if (b.clase !== 'columna' || (b.fraccion ?? 1) !== 1) return;
+          const pie = [gm.cara.nudos[b.a], gm.cara.nudos[b.b]].find(n => Math.abs(n.z - z0) < 1e-6);
+          if (!pie) return;
+          gm.tCaras.forEach(t => {
+            const x = dir === 'A' ? t : pie.s, y = dir === 'A' ? pie.s : t, k = `${x.toFixed(2)},${y.toFixed(2)}`;
+            if (vistas.has(k)) return;
+            vistas.add(k);
+            ge.append(el('rect', { x: X(x - lado / 2), y: Y(y + lado / 2), width: X(x + lado / 2) - X(x - lado / 2), height: Y(y - lado / 2) - Y(y + lado / 2), class: 'exo-columna' }));
+          });
+        });
+      });
+      if (vistas.size) {
+        const xs = [...vistas].map(k => Number(k.split(',')[0])), ys = [...vistas].map(k => Number(k.split(',')[1]));
+        ge.append(el('text', { x: X(Math.min(...xs)) + 4, y: Y(Math.max(...ys)) - 8, class: 'exo-rot' }, 'exoesqueleto · las columnas bajan de PB a la platea'));
+        g.append(ge);
+      }
     } else if (p.exo) {
       const ms = medidasNiveles(p), pb = ms.find(m => Math.abs(m.z) < 1e-6) ?? ms[ms.length - 1];
       const nv = (estado.nivelPlanta !== null ? ms.find(m => Math.abs(m.n.cota - estado.nivelPlanta!) < 1e-6) : undefined) ?? pb;

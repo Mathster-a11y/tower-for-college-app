@@ -23,6 +23,7 @@ import { esPerfilVariable } from '../engine/perfilTorre';
 import { protocoloDelCalculo } from '../engine/perfilVariable';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
+import { centroVisor, panelVisor } from './visor3d';
 import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
@@ -333,6 +334,8 @@ function panelPerfilVariable(c: HTMLElement, d: ReturnType<typeof datos>) {
     formula('4 · Peso corrido: cada nivel pesa donde está', `${v('M', 'G')}${op('=')}Σ ${v('P', 'i')} · ${v('e', 'i')}${op('=')}${r(pr.MG, 0, 'tm')}`, 'P = 0,7 t/m² · B · L · pisos; e = corrimiento del nivel en el sentido del viento'),
     formula('5 · Viento excéntrico: torsor que se suma', `${v('M', 't')}${op('=')}Σ ${v('W', 'i')} · ${v('c', 'i')}${op('=')}${r(pr.MtExtra, 1, 'tm')}`, 'c = corrimiento del nivel a lo ancho (la planilla ya suma Q · e)'),
     formula('7 · P-Δ: el peso sobre la torre deformada', `${v('θ')}${op('=')}Σ ${v('P', 'i')} · ${v('δ', 'i')} / ${v('M', 'v')}${op('=')}${n(pr.MPD1, 1)} / ${n(pr.Mv, 0)}${op('=')}${r(pr.theta, 3)}  ·  ${v('M', 'PΔ')}${op('=')}${n(pr.MPD1, 1)} / (1 − ${n(pr.theta, 3)})${op('=')}${r(pr.MPD, 1, 'tm')}`, conExo ? 'δ = el corrimiento de la torre con el exoesqueleto (etapa 08), llevado al viento de esta etapa' : 'δ = la deformada de la etapa Rigidez (con el J de cada nivel)', okT ? 'verifica' : malT ? 'no verifica' : undefined),
+    // con exoesqueleto y el método Planilla o Guía, el P-Δ no lo cuenta: se dice por qué (y cómo verlo con el exo)
+    ...(estado.proyecto.exo && !exoEnElCalculo() ? [h('p', { class: 'nota aviso' }, `La torre tiene exoesqueleto, pero con el método ${({ guia: 'Guía', combinado: 'Combinado' } as Record<string, string>)[estado.config.metodo] ?? 'Planilla'} el P-Δ usa la deformada de los tabiques solos: la planilla y la guía de la cátedra no cuentan el exo, y la app tampoco en esos métodos (pedido del curso). Por eso θ sale más alto que en la torre real. Con el método CIRSOC o FEM, δ es el corrimiento de la torre con el exo (etapa 08) y θ baja.`)] : []),
   );
   const t = tablaValores(['Nivel', 'z (m)', 'ancho (m)', 'e (m)', 'c (m)', 'β (°)', 'P (t)', 'W (t)', 'δ (mm)'],
     [...pr.niveles].reverse().map(x => [x.nivel, x.z, x.ancho, x.e, x.c, (x.beta * 180) / Math.PI, x.P, x.W, x.delta * 1000]), [0, 1, 2, 2, 2, 1, 0, 2, 1]);
@@ -1003,7 +1006,17 @@ const exoesqueleto: Etapa = {
   estado: () => estadoExo(),
 };
 
-export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto];
+const visor3d: Etapa = {
+  id: 'visor', nro: '3D', nombre: 'Vista 3D', rol: '--r-diseno',
+  icono: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+  globo: 'Vista 3D|La torre en grande para mirarla y presentarla: sombreado, transparente, alambre, texturado y render; perspectiva o paralela (isométrica, dimétrica, trimétrica, planta, alzados) y cortes en planta y en alzado.',
+  panel(c) { panelVisor(c); },
+  centro(c) { centroVisor(c); },
+  nombreCentro: () => 'Vista 3D',
+  estado: () => 'informativo',
+};
+
+export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto, visor3d];
 export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ecuaciones, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;

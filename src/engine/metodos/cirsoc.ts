@@ -14,6 +14,7 @@ import type { PlanillaDatos } from '../planilla';
 import { EXPOSICIONES, KN_POR_T, type Viento102 } from '../cargas/cirsoc102';
 import { losasDeNivel, tipoDe, type Proyecto, type Muro } from '../modelo';
 import { sueloCirsoc } from '../fundaciones';
+import { pesoExoFundacion, type ExoDireccion } from '../exoReglamento';
 import type { PiezaEquivalente } from '../mapping';
 import type { RotoGuia } from '../correcciones';
 import { datosAlturaDe, partesDePieza, verificarPieza } from '../flexocompresion';
@@ -166,11 +167,13 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
 // ---------------------------------------------------------------------------------------------------- controles
 
 /** vuelco con las fuerzas del 102-25 (viento A): Mv en la fundación y Me = G · b1/2 con el peso D de las losas */
-export function vuelco102(p: Proyecto, w: Viento102): { Mv: number; Me: number; G: number; brazo: number } {
+/** @param acero el peso del exoesqueleto que llega a la fundación (t), que también estabiliza */
+export function vuelco102(p: Proyecto, w: Viento102, acero = 0): { Mv: number; Me: number; G: number; brazo: number } {
   const D = datos101De(p).D;
   let B = 0, L = 0, G = 0;
   // cada nivel carga como los pisos reales que junta (como en FEM y la Guía)
   p.niveles.forEach(n => { B = n.B ?? B; L = n.L ?? L; G += D * B * L * losasDeNivel(n); });
+  G += acero;
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0), zFund = p.niveles[p.niveles.length - 1]?.cota ?? zPB;
   const brazo = zPB - zFund;
   const Mv = w.A.MPB + (w.A.QPB + Math.max(0, w.A.WPB)) * brazo;
@@ -190,7 +193,7 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
   /** método FEM: la deformada de servicio del modelo (ya escalada al viento de servicio), en lugar de la ménsula equivalente */
   derivaFem?: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>,
   /** con exoesqueleto: la torre con el exo (manda sobre la ménsula de tabiques y el FEM) */
-  exo?: Record<'A' | 'B', { r: { u: number[] }; z: number[]; h: number }>): Control[] {
+  exo?: Record<'A' | 'B', { r: { u: number[] }; z: number[]; h: number }> | Record<'A' | 'B', ExoDireccion>): Control[] {
   // fuera los de la guía que el reglamento hace distinto (y los del suelo y la resultante, que acá salen del 102-25)
   const fuera = (c: Control) => /^Flexocompresión|^Corte en dinteles/.test(c.grupo) || /^Frecuencia|^Carga mínima|^Vuelco|^Flecha de la ménsula|^Excentricidad|^Tensión máxima en el suelo|^Tensión mínima en el suelo|^Resultante W \+ G/.test(c.nombre);
   // el J mínimo de la cátedra (h/500 con el viento de cálculo) queda como referencia: lo que manda es la deriva de servicio
@@ -207,18 +210,21 @@ export function controlesCirsoc(p: Proyecto, base: Control[], valores: PlanillaR
   }
   // vuelco: la resistencia (0,9 D) iguala o supera al efecto (1,0 W): 0,9 · Me ≥ Mv ⇔ Me / Mv ≥ 1,11, con las fuerzas
   // del 102-25 (viento A) llevadas a la fundación y el peso D de las losas del 101-25
-  const vu = vuelco102(p, w);
+  // el acero del exo (todas sus barras y las columnas que bajan de PB a la platea) también pesa en la fundación
+  const acero = pesoExoFundacion(p, exo && 'W' in exo.A ? (exo as Record<'A' | 'B', ExoDireccion>) : null);
+  const conAcero = acero.total > 0 ? ` (incluye ${nf(acero.total, 0)} t de acero del exo: ${nf(acero.abajo, 0)} t en las columnas de PB a la platea)` : '';
+  const vu = vuelco102(p, w, acero.total);
   out.push({ grupo: 'Estabilidad', nombre: 'Vuelco con 0,9 D + 1,0 W', criterio: '0,9 · Me ≥ 1,0 · Mv (Me / Mv ≥ 1,11)', fuente: 'CIRSOC 101-25, art. 1.3.5 y 2.3.2',
     planilla: null, guia: vu.Me / vu.Mv, unidad: '', estado: est(0.9 * vu.Me >= vu.Mv),
-    nota: `Mv = ${nf(vu.Mv, 0)} tm (M en PB + (Q en PB + franja de PB) · ${nf(vu.brazo, 2)} m) · Me = G · b1/2 = ${nf(vu.G, 0)} t · ${nf(p.fundacion.b1 / 2, 2)} m` });
+    nota: `Mv = ${nf(vu.Mv, 0)} tm (M en PB + (Q en PB + franja de PB) · ${nf(vu.brazo, 2)} m) · Me = G · b1/2 = ${nf(vu.G, 0)} t · ${nf(p.fundacion.b1 / 2, 2)} m${conAcero}` });
   // suelo (sección D del plan): platea rígida, combinaciones de servicio del 102-25 (Apéndice B.4.2) contra σt adm
-  const su = sueloCirsoc(p, w);
+  const su = sueloCirsoc(p, w, acero.total);
   for (const d of su.dirs) {
     const x = d.peor, ok = !x.vuelca && x.sMax <= su.sigmaAdm;
     const parcial = d.combos.some(c => c.parcial && !c.vuelca);
     out.push({ grupo: 'Estabilidad', nombre: `Presión en el suelo, viento ${d.dir}`, criterio: `σmáx ≤ σt adm = ${nf(su.sigmaAdm, 2)} kg/cm²; resultante en el núcleo central (si no, contacto parcial)`, fuente: 'CIRSOC 401, art. 7.4 · 101-25, C 2.2 · 102-25, B.4.2',
       planilla: null, guia: x.sMax, unidad: 'kg/cm²', estado: !ok ? 'no verifica' : parcial ? 'atención' : 'verifica',
-      nota: d.combos.map(c => `${c.nombre}: ${c.vuelca ? 'la resultante sale de la platea' : `σ ${nf(c.sMax, 2)} / ${nf(c.sMin, 2)} kg/cm², e = ${nf(c.e, 2)} m${c.parcial ? ` > b/6 = ${nf(c.nucleo, 2)} m (contacto parcial en ${nf(c.contacto, 2)} m)` : ''}`}`).join(' · ') + `. G = ${nf(su.G, 0)} t, L = ${nf(su.Lt, 0)} t, M del viento en la fundación = ${nf(d.Mw, 0)} tm.` });
+      nota: d.combos.map(c => `${c.nombre}: ${c.vuelca ? 'la resultante sale de la platea' : `σ ${nf(c.sMax, 2)} / ${nf(c.sMin, 2)} kg/cm², e = ${nf(c.e, 2)} m${c.parcial ? ` > b/6 = ${nf(c.nucleo, 2)} m (contacto parcial en ${nf(c.contacto, 2)} m)` : ''}`}`).join(' · ') + `. G = ${nf(su.G, 0)} t${conAcero}, L = ${nf(su.Lt, 0)} t, M del viento en la fundación = ${nf(d.Mw, 0)} tm.` });
   }
   // deriva de servicio: la deformada con el viento de servicio (Wa), contra h/límite y entrepiso/límite
   const lim = datos201De(p).limiteDeriva;
