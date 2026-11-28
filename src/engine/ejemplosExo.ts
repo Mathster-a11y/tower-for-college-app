@@ -232,16 +232,16 @@ export function ejemploShanghai(): Proyecto {
     exo: {
       tipo: 'F', separacion: 0, modulo: 4, nucleo: 30, outriggers: juntas, cinturon: false,
       losas: { franja: 6.25, qD: 0.5, qL: 0.25 },
-      // supercolumnas compuestas como cajones de acero equivalentes, por tramos (supuesto); brazos: botón «Dimensionar»
-      columna: { b: 5.5, e: 0.4 }, diagonal: { b: 2.0, e: 0.10 }, viga: { b: 0.15, e: 0.008 },
-      tramos: [{ clase: 'columna', desde: 0, sec: { b: 5.5, e: 0.4 } }, { clase: 'columna', desde: 211, sec: { b: 4.5, e: 0.3 } }, { clase: 'columna', desde: 421, sec: { b: 3.5, e: 0.2 } }],
+      // supercolumnas compuestas: cajones de acero rellenos de hormigón de 55 MPa, por tramos (CIRSOC 301 cap. I; supuesto); brazos: botón «Dimensionar»
+      columna: { b: 5.5, e: 0.13, relleno: 55 }, diagonal: { b: 2.0, e: 0.10 }, viga: { b: 0.15, e: 0.008 },
+      tramos: [{ clase: 'columna', desde: 0, sec: { b: 5.5, e: 0.13, relleno: 55 } }, { clase: 'columna', desde: 211, sec: { b: 4.5, e: 0.1, relleno: 55 } }, { clase: 'columna', desde: 421, sec: { b: 3.5, e: 0.08, relleno: 55 } }],
       E: 2.1e7, sigmaAdm: 14000,
       notas: [
         '632 m y nueve zonas de 12 a 15 pisos, con dos pisos de máquinas y refugio en cada junta (Wikipedia; Designing Buildings). Acá nueve zonas iguales (supuesto).',
         'Núcleo de hormigón de unos 90 × 90 ft (30 m): Thornton Tomasetti. Pared que se angosta con la altura (2,50 m abajo, 1,80 m desde 211 m y 1,20 m desde 421 m), de hormigón de alta resistencia (H70; la obra usó C60 a C70) y que toma el viento de los dos lados: supuestos.',
         'Outriggers de acero de dos pisos de alto en los pisos de máquinas, cinturones dobles en cada zona y ocho supercolumnas compuestas (acero y hormigón) atadas al núcleo por los brazos: AISC (Modern Steel Construction, abril 2013) y ENR. Acá los brazos son de un piso de alto (un nivel de la app, 13,2 m) y van en las ocho juntas (supuesto: las fuentes no dicen en cuántas).',
         'Planta cuadrada de 55 m (supuesto: la torre real es redondeada y se angosta con la altura). Un nivel de la app cada 13,2 m: cada uno junta 2 o 3 pisos reales (128 en total) y carga sus losas (la planilla admite 49 niveles).',
-        'Supercolumnas pareadas a media cara, alineadas con los brazos: cada brazo toma la suya (sin el reparto del cinturón, que en la obra lleva sobre todo el peso de cada zona). Son compuestas (acero y hormigón) y cada una lleva unas 24 000 t: un tubo de acero no alcanza. Acá son cajones de acero equivalentes por tramos: 5,5 m × 400 mm hasta 211 m, 4,5 m × 300 mm hasta 421 m y 3,5 m × 200 mm arriba (supuestos, las medidas con que verifican con CIRSOC y FEM). Por eso el «acero» que informa la app (unas 107 000 t) no es el de la obra: la mayor parte son las supercolumnas, que en la realidad son sobre todo hormigón.',
+        'Supercolumnas pareadas a media cara, alineadas con los brazos: cada brazo toma la suya (sin el reparto del cinturón, que en la obra lleva sobre todo el peso de cada zona). Son compuestas (acero y hormigón) y cada una lleva unas 24 000 t: un tubo de acero no alcanza. Acá son cajones de acero rellenos de hormigón de 55 MPa (columnas compuestas, CIRSOC 301 cap. I: rigidez de la sección transformada, compresión con Fmy y Em, y el peso del hormigón sumado), por tramos: 5,5 m × 130 mm hasta 211 m, 4,5 m × 100 mm hasta 421 m y 3,5 m × 80 mm arriba (supuestos, las medidas con que verifican con CIRSOC y FEM). La obra usó hormigón C60 a C70; el capítulo I llega a 55 MPa. El peso que informa la app suma el acero y el hormigón del relleno.',
         'Brazos de 2,0 m × 100 mm (diagonales; los cordones quedan en el tubo más chico porque el brazo de 13,2 m de alto los descarga).',
         'Las losas apoyan en el perímetro: la mitad de cada losa (franja de 6,25 m), con 0,5 t/m² de peso y 0,25 t/m² de sobrecarga (supuesto); la otra mitad, en el núcleo. Los brazos se conectan al terminar la obra gruesa.',
         'Fundación: platea cuadrada de 107 m, de la misma área que la losa circular real de 121 m de diámetro sobre 955 pilotes; σ adm = 20 kg/cm² como equivalente de los pilotes (supuesto).',

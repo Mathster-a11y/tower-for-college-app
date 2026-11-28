@@ -33,12 +33,31 @@ export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
 };
 
 /** sección de una barra: tubo cuadrado b × e (m) */
-export interface Seccion { b: number; e: number }
+/**
+ * sección de una barra: tubo cuadrado de lado b y pared e (m). «relleno»: f'c (MPa) del hormigón que rellena el tubo
+ * (columna compuesta, CIRSOC 301 cap. I); sin relleno, tubo hueco.
+ */
+export interface Seccion { b: number; e: number; relleno?: number }
+/** módulo del acero y del hormigón (MPa): Es = 200 000 y Ec = 4700·√f'c (CIRSOC 201, 8.5.1) */
+export const ES_MPA = 200000, ecMPa = (fc: number) => 4700 * Math.sqrt(fc);
+/** 1 MPa en t/m² */
+export const MPA_T = 101.97;
+const GAMMA_HORMIGON = 2.4;
+/**
+ * Propiedades de la sección. Con relleno, A e I son los de la sección transformada a acero (As + Ac/n, Is + Ic/n,
+ * n = Es/Ec): la rigidez de la barra en el cálculo. As, Is, Ac son los de cada material y Ap, el área de acero que pesa
+ * lo mismo (As + Ac·2,4/7,85): el peso de la barra es γ_acero·Ap.
+ */
 export const propsSeccion = (s: Seccion) => {
   const bi = Math.max(0, s.b - 2 * s.e);
-  const A = s.b * s.b - bi * bi, I = (s.b ** 4 - bi ** 4) / 12;
-  return { A, I, i: Math.sqrt(I / (A || 1)), c: s.b / 2, W: I / (s.b / 2 || 1) };
+  const As = s.b * s.b - bi * bi, Is = (s.b ** 4 - bi ** 4) / 12;
+  const fc = s.relleno && s.relleno > 0 && bi > 0 ? s.relleno : 0;
+  const Ac = fc ? bi * bi : 0, Ic = fc ? bi ** 4 / 12 : 0, n = fc ? ES_MPA / ecMPa(fc) : 1;
+  const A = As + Ac / n, I = Is + Ic / n;
+  return { A, I, i: Math.sqrt(I / (A || 1)), c: s.b / 2, W: I / (s.b / 2 || 1), As, Is, Ac, Ic, fc, Ap: As + (Ac * GAMMA_HORMIGON) / 7.85 };
 };
+/** peso de la barra por metro de cada t/m³ de acero, sobre el área transformada (con relleno, menor que 1) */
+export const razonPeso = (s: Seccion) => { const p = propsSeccion(s); return p.Ap / (p.A || 1); };
 export type Union = 'rigida' | 'articulada';
 /** cambios de una barra sola (editor barra por barra): sus uniones, su sección, o sacarla */
 export interface CambioBarra { relA?: boolean; relB?: boolean; sec?: Seccion; quitar?: boolean }
@@ -573,7 +592,7 @@ function arriostrar(barras: Barra[], nudos: Nudo[], zs: number[], nudoEn: (s: nu
 export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], losa?: CargaLosa, pesoSoloBrazos = false): Cara {
   const n = zs.length - 1, peso = def.pesoPropio !== false;
   // ficha M: el peso de las barras reales y la franja de losa, como cargas en los nudos (el viento llega por las losas)
-  if (cara.malla) return { ...cara, cargasNudo: cargasMalla(cara.malla.geo, zs, { gamma: gammaExo(def), peso: peso && !pesoSoloBrazos, area: (c, z) => propsSeccion(seccionEn(def, c, z)).A, q: losa?.q, franja: losa?.franja, extra: losa?.extra }) };
+  if (cara.malla) return { ...cara, cargasNudo: cargasMalla(cara.malla.geo, zs, { gamma: gammaExo(def), peso: peso && !pesoSoloBrazos, area: (c, z) => propsSeccion(seccionEn(def, c, z)).Ap, q: losa?.q, franja: losa?.franja, extra: losa?.extra }) };
   const cargasNudo = losa && losa.q > 0 && losa.franja > 0 ? cargasDeLosa(cara, zs, losa) : undefined;
   // viento por metro de altura en cada piso (t/m, de toda la torre): W_k / D_k
   const D = (k: number) => ((k < n ? zs[k + 1] : zs[k]) - zs[k - 1]) / (k < n ? 2 : 2);
@@ -594,7 +613,7 @@ export function cargarCara(cara: Cara, def: ExoDef, zs: number[], W: number[], l
     const A = cara.nudos[b.a], B = cara.nudos[b.b], L = Math.hypot(B.s - A.s, B.z - A.z) || 1;
     const c: CargaBarra = { xa: 0, za: 0, xb: 0, zb: 0 };
     // el núcleo de la ficha F no es acero del exo: su peso lo cuenta la planilla
-    if (peso && !b.nucleo && (!pesoSoloBrazos || b.brazo)) { c.za = c.zb = -gammaExo(def) * b.A; }
+    if (peso && !b.nucleo && (!pesoSoloBrazos || b.brazo)) { c.za = c.zb = -gammaExo(def) * b.A * razonPeso(b.sec); }
     if (def.viento === 'fachada' && b.borde) {
       // t/m de altura → t/m de barra (por la proyección vertical)
       const k = (Math.abs(B.z - A.z) / L) * f / 4;
@@ -1122,7 +1141,8 @@ function controlesExo(caras: { nombre: string; esfuerzos: EsfuerzoBarra[] }[], d
     // a lo largo de la barra (con carga repartida, el máximo puede estar adentro)
     let sigma = 0, M = 0, Nc = 0;
     for (let i = 0; i <= 20; i++) { const f = esfuerzosEn(e, i / 20); sigma = Math.max(sigma, Math.abs(f.N) / p.A + Math.abs(f.M) / p.W); M = Math.max(M, Math.abs(f.M)); Nc = Math.min(Nc, f.N); }
-    const lambda = e.L / p.i, Ncr = (Math.PI ** 2 * def.E * p.I) / e.L ** 2;
+    // (con relleno, la esbeltez con el radio de giro del tubo de acero, del lado seguro)
+    const lambda = e.L / (p.fc ? Math.sqrt(p.Is / p.As) : p.i), Ncr = (Math.PI ** 2 * def.E * p.I) / e.L ** 2;
     const pandeo = Nc < 0 && (-Nc > Ncr / 1.7 || lambda > 200);
     controles.push({ cara: c.nombre, id: e.id, clase: e.clase, N: e.N, M, sigma, lambda, Ncr, estado: sigma <= def.sigmaAdm && !pandeo ? 'verifica' : 'no verifica' });
   }));
@@ -1156,7 +1176,7 @@ export interface EntradaExo { /** viento de estas caras (para las barras de un s
  */
 export function pesoCinturon(def: ExoDef, en: EntradaExo): number {
   if (def.tipo !== 'F' || def.cinturon === false) return 0;
-  const P = 2 * (en.ancho + (en.anchosPerp?.[0] ?? en.ancho)), Av = propsSeccion(def.viga).A, Ad = propsSeccion(def.diagonal).A;
+  const P = 2 * (en.ancho + (en.anchosPerp?.[0] ?? en.ancho)), Av = propsSeccion(def.viga).Ap, Ad = propsSeccion(def.diagonal).Ap;
   return nivelesOutrigger(def, en.zs).reduce((s, k) => {
     const h = en.zs[k] - en.zs[k - 1], np = Math.max(4, Math.round(P / Math.max(h, 1)));
     return s + (2 * P * Av + np * Math.hypot(h, P / np) * Ad) * gammaExo(def);
@@ -1172,7 +1192,7 @@ export function seccionEn(def: ExoDef, clase: ClaseBarra | 'anillo', z: number):
 }
 export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
   // ficha M: la malla es una sola para los dos vientos (con sus anillos)
-  if (def.tipo === 'M') { const g = entradas.find(e => e.malla)?.malla; return g ? pesoMalla(g, gammaExo(def), (c, z) => propsSeccion(seccionEn(def, c, z)).A) : 0; }
+  if (def.tipo === 'M') { const g = entradas.find(e => e.malla)?.malla; return g ? pesoMalla(g, gammaExo(def), (c, z) => propsSeccion(seccionEn(def, c, z)).Ap) : 0; }
   // las columnas de las esquinas son de las dos caras que se cruzan: se cuentan una sola vez (con el primer viento)
   return entradas.reduce((s, en, i) => s + (i === 0 ? pesoCinturon(def, en) : 0) + en.tCaras.reduce((s2, t) => {
     const c = armarCara(paraLado(paraViento(def, en.dir), t), en.ancho, en.zs, 'cara', en.anchos, en.corr, { anchoPerp: en.anchosPerp?.[0] });
@@ -1184,7 +1204,7 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
     // ficha F: las columnas de la cara se pesan todas (las que el cinturón hace trabajar en parte también son de acero entero)
     const colsF = def.tipo === 'F' && def.cinturon !== false ? Math.max(1, Math.round(def.columnasCara ?? 4)) / 2 : 1;
     const factor = (b: Barra) => (b.nucleo ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : b.deMastil ? 0 : b.fraccion);
-    return s2 + c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).A * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
+    return s2 + c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).Ap * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
   }, 0), 0);
 }
 
@@ -1207,10 +1227,12 @@ export function dimensionarExo(base: ExoDef, entradas: EntradaExo[], maxPasos = 
   const fijo = tramos.map(t => t.clase === 'mastil' || propsSeccion(t.sec).A > Amax * (1 + 1e-9));
   const idxT = tramos.map(() => 0);
   // ficha E: el mástil también se dimensiona; si se afina en altura (tramos), arriba va tres tamaños más chico
+  // (el tubo nuevo conserva el relleno de hormigón de la sección que reemplaza: columnas compuestas)
+  const rel = (nueva: Seccion, vieja?: Seccion): Seccion => (vieja?.relleno ? { ...nueva, relleno: vieja.relleno } : nueva);
   const armar = (): ExoDef => ({
-    ...base, columna: CAT[idx.columna], diagonal: CAT[idx.diagonal], viga: CAT[idx.viga],
-    ...(tramos.length ? { tramos: tramos.map((t, i) => (t.clase === 'mastil' ? (conMastil ? { ...t, sec: CAT[Math.max(0, idx.mastil - 3)] } : t) : fijo[i] ? t : { ...t, sec: CAT[idxT[i]] })) } : {}),
-    ...(conMastil ? { mastil: CAT[idx.mastil] } : {}),
+    ...base, columna: rel(CAT[idx.columna], base.columna), diagonal: rel(CAT[idx.diagonal], base.diagonal), viga: rel(CAT[idx.viga], base.viga),
+    ...(tramos.length ? { tramos: tramos.map((t, i) => (t.clase === 'mastil' ? (conMastil ? { ...t, sec: rel(CAT[Math.max(0, idx.mastil - 3)], t.sec) } : t) : fijo[i] ? t : { ...t, sec: rel(CAT[idxT[i]], t.sec) })) } : {}),
+    ...(conMastil ? { mastil: rel(CAT[idx.mastil], base.mastil ?? base.columna) } : {}),
   });
   // el grupo de una barra: el tramo de su clase que empieza más alto por debajo de su pie, o la sección de la clase
   type Grupo = ClaseBarra | number;
@@ -1324,6 +1346,22 @@ export function vientoDeCuarto(rA: ResultadoExo, rB: ResultadoExo, factor = Math
 // ------------------------------------------------------------------ CIRSOC 301 (estados límite, barras de acero)
 /** acero F-24 del CIRSOC 301: Fy = 235 MPa ≈ 24 000 t/m² (la tensión admisible de la app, 14 000 t/m², es ≈ 0,6·Fy) */
 export const FY_F24 = 24000;
+/**
+ * Columna compuesta (CIRSOC 301, capítulo I, el de la AISC LRFD 1999): tubo de acero relleno de hormigón. La compresión
+ * se calcula como la de un perfil de acero con valores modificados (I.2.2):
+ *   Fmy = Fy + c2·f'c·(Ac/As)   y   Em = E + c3·Ec·(Ac/As),   con c2 = 0,85 y c3 = 0,4 (tubos rellenos)
+ *   λc = k·L / (rm·π)·√(Fmy/Em) (rm: el radio de giro del tubo de acero), Fcr con las curvas de E.2 y Fmy en lugar de
+ *   Fy, y φc·Pn = 0,85·As·Fcr.
+ * Requisitos (I.2.1): el acero, por lo menos el 4 % de la sección; la pared, b/t ≤ √(3E/Fy); f'c entre 21 y 55 MPa
+ * (fuera de eso se avisa: «fcFuera»). Unidades: t y m (f'c y Ec pasados de MPa a t/m²).
+ */
+export interface Compuesta301 { fc: number; Fmy: number; Em: number; cuantia: number; btMax: number; fcFuera: boolean }
+export function compuesta301(s: Seccion, E: number, Fy: number): Compuesta301 | null {
+  const p = propsSeccion(s);
+  if (!p.fc || !p.Ac) return null;
+  const fc = p.fc * MPA_T, Ec = ecMPa(p.fc) * MPA_T, r = p.Ac / p.As;
+  return { fc: p.fc, Fmy: Fy + 0.85 * fc * r, Em: E + 0.4 * Ec * r, cuantia: p.As / (p.As + p.Ac), btMax: Math.sqrt((3 * E) / Fy), fcFuera: p.fc < 21 || p.fc > 55 };
+}
 export interface Cirsoc301Barra {
   cara: string; id: string; clase: ClaseBarra;
   /** cota del pie de la barra (m): para saber en qué tramo de sección está */
@@ -1340,6 +1378,8 @@ export interface Cirsoc301Barra {
   combinacion: string;
   /** pared del tubo (CIRSOC 302, Tabla 2.2.1): compacta, no compacta o esbelta (en flexión y en compresión) */
   pared: 'compacta' | 'no compacta' | 'esbelta';
+  /** columna compuesta (tubo relleno de hormigón, CIRSOC 301 cap. I): los valores modificados */
+  compuesta?: Compuesta301;
   verifica: boolean;
 }
 /**
@@ -1439,15 +1479,19 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
     const sW = muestras(eW), sD = muestras(eD), sL = eL ? muestras(eL) : cero21;
     // a lo largo de la barra: N y M de cada carga en 21 puntos; el viento puede venir del otro lado (signo ±)
     const f = eW.fraccion ?? 1, s = eW.sec, bi = Math.max(0, s.b - 2 * s.e);
-    const p = propsSeccion(s), A = p.A * f, r = p.i, Z = ((s.b ** 3 - bi ** 3) / 4) * f, S = p.W * f;
-    const lambdaC = (eW.L / (r * Math.PI)) * Math.sqrt(Fy / def.E);
-    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy : (0.877 / lambdaC ** 2) * Fy;
+    // (con relleno: el acero solo para la tracción y la flexión, del lado seguro; la compresión con el capítulo I)
+    const p = propsSeccion(s), A = p.As * f, r = Math.sqrt(p.Is / (p.As || 1)), Z = ((s.b ** 3 - bi ** 3) / 4) * f, S = (p.Is / (s.b / 2 || 1)) * f;
+    const comp = p.fc ? compuesta301(s, def.E, Fy) : null;
+    const lambdaC = comp ? (eW.L / (r * Math.PI)) * Math.sqrt(comp.Fmy / comp.Em) : (eW.L / (r * Math.PI)) * Math.sqrt(Fy / def.E);
+    const Fy0 = comp ? comp.Fmy : Fy;
+    const Fcr = lambdaC <= 1.5 ? 0.658 ** (lambdaC ** 2) * Fy0 : (0.877 / lambdaC ** 2) * Fy0;
     // pared del tubo (CIRSOC 302, Tabla 2.2.1). La pieza equivalente de la base (Citicorp: la supercolumna son cuatro
     // barras en las esquinas de un cuadrado de 7,3 m) y las barras macizas no son tubos de pared delgada.
     // (por valor, no por identidad: el resultado puede venir de la memoria, armado con otra copia de la definición)
     const mb = def.mastilBase?.sec, equivalente = (!!mb && s.b === mb.b && s.e === mb.e) || s.e >= s.b / 2 - 1e-9;
     const bt = s.e > 0 ? bi / s.e : Infinity, lim = limitesPared(def.E, Fy, op.costura ?? true);
-    const pared: Cirsoc301Barra['pared'] = equivalente || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
+    // tubo relleno (cap. I, I.2.1.b): el hormigón no deja que la pared abolle hacia adentro; el límite es b/t ≤ √(3E/Fy)
+    const pared: Cirsoc301Barra['pared'] = comp ? (bt <= comp.btMax ? 'compacta' : 'esbelta') : equivalente || bt <= lim.lp ? 'compacta' : bt <= lim.lr ? 'no compacta' : 'esbelta';
     // flexión: compacta Mn = Mp = Z·Fy; no compacta, entre Mp y Mr = Fy·S según λ (302, cap. 3)
     const Mp = Z * Fy, Mr = S * Fy;
     const Mn = pared === 'compacta' ? Mp : pared === 'no compacta' ? Mp - (Mp - Mr) * ((bt - lim.lp) / (lim.lr - lim.lp)) : Mr;
@@ -1475,7 +1519,9 @@ export function cirsoc301(def: ExoDef, zs: number[], W: number[], EJ: (z: number
       for (const x of [inter(Pc, phiPc, MuC), inter(Pt, phiPt, MuT), { v: Mu / phiMn, e: 'H1-1b' as const }]) if (x.v > peor.v) { peor = { ...x, comb: cb.nombre }; PuPeor = Pc >= Pt ? -Pc : Pt; }
     }
     // una pared esbelta abolla antes de llegar a la resistencia: no verifica (habría que reducir el área, 302 apéndice)
-    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, z: Math.min(eW.a.z, eW.b.z), Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared, verifica: peor.v <= 1 && pared !== 'esbelta' });
+    // cap. I: el acero tiene que ser por lo menos el 4 % de la sección (si no, es una columna de hormigón armado)
+    out.push({ cara: c.nombre, id: eW.id, clase: eW.clase, z: Math.min(eW.a.z, eW.b.z), Pu: PuPeor, Mu: MuMax, phiPc, phiPt, phiMn, lambdaC, bt, ratio: peor.v, ecuacion: peor.e, combinacion: peor.comb, pared,
+      ...(comp ? { compuesta: comp } : {}), verifica: peor.v <= 1 && pared !== 'esbelta' && (!comp || comp.cuantia >= 0.04) });
   }));
   // ficha M: los anillos (a tracción o compresión, con el empuje de las diagonales en sus nudos)
   if (def.tipo === 'M' && def.mallaGeo) out.push(...anillos301(def, def.mallaGeo, rW, rD, rL, combos.filter(c => !c.otro), Fy, op.costura ?? true));

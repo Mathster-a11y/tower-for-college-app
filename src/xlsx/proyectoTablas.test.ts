@@ -152,6 +152,11 @@ describe('exoesqueleto y torre inclinada en las tablas', () => {
     const outr = ejemploGuia(); outr.exo = { ...ejemploHearst().exo!, tipo: 'F', nucleo: 9, outriggers: [20.5, 41], cinturon: false, columnasCara: 6, notas: undefined, cortes: undefined, pasoH: undefined };
     const ro = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(outr))), ejemploGuia())!;
     expect(ro.proyecto.exo).toEqual(outr.exo);
+    // columnas compuestas: el relleno de la columna y el de un tramo vuelven
+    const comp = ejemploGuia(); comp.exo = { ...outr.exo!, columna: { b: 0.8, e: 0.03, relleno: 45 }, tramos: [{ clase: 'columna', desde: 30, sec: { b: 0.6, e: 0.025, relleno: 45 } }] };
+    const rc = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(comp))), ejemploGuia())!;
+    expect(rc.proyecto.exo!.columna).toEqual({ b: 0.8, e: 0.03, relleno: 45 });
+    expect(rc.proyecto.exo!.tramos).toEqual(comp.exo.tramos);
     const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
     const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
     const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;

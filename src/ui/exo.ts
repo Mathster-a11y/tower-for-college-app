@@ -8,6 +8,7 @@ import type { Control } from '../engine/verificaciones';
 import { h, seccion, kpi, chip, colorEstado, type H, type EstadoChip } from './comp';
 import { campo } from './paneles';
 import { tablaValores, type Tam } from './diagramas';
+import { compuesta301, FY_F24, MPA_T, type Cirsoc301Barra, type Seccion } from '../engine/exo';
 import { anguloDiagonal, barridoModulo, torsionConExo, type FilaModulo, vientoDeCuarto, CATALOGO_TUBOS, propsBarra, dimensionarExo, esfuerzosEn, cerosDeM, UNIONES_POR_DEFECTO, EXO_POR_DEFECTO, pesoExo, TIPOS_EXO, propsSeccion, idBarra, nivelesOutrigger, columnasEfectivas, LOSA_QD, LOSA_QL, losaPorPiso, type EntradaExo, type EsfuerzoBarra, type ExoDef, type TipoExo } from '../engine/exo';
 import { plantaDeNivel } from '../engine/silueta';
 import type { Viento102 } from '../engine/cargas/cirsoc102';
@@ -189,6 +190,16 @@ export function geometriaExo(dir: 'A' | 'B', def: ExoDef | null | undefined = es
 }
 /** el viento del 102-25 si el método sigue las reglas del CIRSOC (CIRSOC o FEM); si no, null (el de la planilla o la guía) */
 export function vientoReglamento(): Viento102 | null { return exoActual().vientoReglamento; }
+/** ¿hay columnas rellenas de hormigón? (el peso del exo suma el relleno) */
+export const conRelleno = (def: ExoDef) => !!(def.columna.relleno || def.mastil?.relleno || def.tramos?.some(t => t.sec.relleno));
+/** columnas compuestas: los valores del capítulo I de la peor, y lo que no cumple sus requisitos */
+function notaCompuestas(v: Cirsoc301Barra[]): HTMLElement[] {
+  const cs = v.filter(x => x.compuesta);
+  if (!cs.length) return [];
+  const peor = cs.reduce((m, x) => (x.ratio > m.ratio ? x : m), cs[0]), c = peor.compuesta!;
+  const poca = cs.filter(x => x.compuesta!.cuantia < 0.04).length;
+  return [h('p', { class: 'nota chica' }, `Columnas compuestas (tubo relleno de hormigón de ${fmt(c.fc, 0)} MPa, CIRSOC 301 cap. I): la compresión con Fmy = Fy + 0,85·f'c·Ac/As = ${fmt(c.Fmy / MPA_T, 0)} MPa y Em = E + 0,4·Ec·Ac/As = ${fmt(c.Em / MPA_T / 1000, 1)} GPa, φc·Pn = 0,85·As·Fcr; la tracción y la flexión, con el acero solo. La rigidez del cálculo es la de la sección transformada. Acero: ${fmt(c.cuantia * 100, 1)} % de la sección (mínimo 4 %); pared b/t ≤ √(3E/Fy) = ${fmt(c.btMax, 0)}.${poca ? ` ${poca} columna${poca > 1 ? 's tienen' : ' tiene'} menos de 4 % de acero: no verifica${poca > 1 ? 'n' : ''} como compuesta (es hormigón armado).` : ''}${c.fcFuera ? ' El f\'c está fuera de 21 a 55 MPa, el rango del capítulo I.' : ''}`)];
+}
 /** CIRSOC 301/302 de las barras de acero: con las combinaciones del 101-25 (métodos CIRSOC y FEM) o la del curso */
 export function verif301(d: DatosExo & { entrada: EntradaExo }) { return exoActual().verif301(d); }
 /** desplazamiento de la azotea que se controla y su límite: con el viento de servicio y h/límite de deriva (CIRSOC) o h/500 (curso) */
@@ -384,7 +395,7 @@ export function panelExo(c: H) {
       const msg = document.getElementById('mensaje');
       if (msg) msg.textContent = r.verifica ? `Listo: columnas ${t(r.def.columna)}, diagonales ${t(r.def.diagonal)}, vigas ${t(r.def.viga)}${r.def.tipo === 'E' && r.def.mastil ? `, mástil ${t(r.def.mastil)}` : ''} mm${r.def.tramos?.some(t => t.clase !== 'mastil') ? `; por tramos de altura: ${r.def.tramos.filter(t => t.clase !== 'mastil').map(tr => `${tr.clase === 'viga' && def.tipo === 'M' ? 'anillos' : `${tr.clase}s`} desde ${fmt(tr.desde, 1)} m ${t(tr.sec)}`).join(', ')}` : ''} · ${fmt(r.peso, 0)} t de ${def.material === 'hormigon' ? 'hormigón' : 'acero'} (antes ${fmt(peso, 0)} t). Ctrl+Z vuelve atrás.` : `No verifica: ${r.motivo}.`;
     };
-    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
+    c.append(h('div', { class: 'fila-acciones' }, bDim, h('span', { class: 'nota chica' }, `${def.material === 'hormigon' ? 'Hormigón' : conRelleno(def) ? 'Acero y hormigón del relleno' : 'Acero'} ${def.tipo === 'F' ? 'de los brazos y las columnas' : def.tipo === 'M' ? 'de la malla, con los anillos' : 'de las cuatro caras'}: ${fmt(peso, 0)} t (${fmt(peso / Math.max(1, ens[0]?.h ?? 1), 1)} t por metro de altura)`)));
     if ((def.tipo === 'A' || def.tipo === 'D') && ens.length === 2) c.append(seccionModulo(def, ens, d.corr));
     if (def.tipo === 'M' && ens.length === 2) c.append(seccionBarridoMalla(def), botonPyniteMalla(def));
     const st = seccionTorsion(def); if (st) c.append(st);
@@ -418,6 +429,15 @@ export function panelExo(c: H) {
     const s = def[k], pr = propsSeccion(s);
     campo(fo, `${nombre}: lado`, `exo-${k}-b`, s.b * 1000, nu((x, v) => (x[k].b = v / 1000)), { tipo: 'number', unidad: 'mm', ayuda: `tubo cuadrado · A = ${fmt(pr.A * 1e4, 0)} cm² · i = ${fmt(pr.i * 100, 1)} cm` });
     campo(fo, `${nombre}: espesor`, `exo-${k}-e`, s.e * 1000, nu((x, v) => (x[k].e = v / 1000)), { tipo: 'number', unidad: 'mm' });
+    // columna compuesta: el tubo relleno de hormigón (CIRSOC 301 cap. I); no en la malla ni con barras de hormigón
+    if (k === 'columna' && def.tipo !== 'M' && def.material !== 'hormigon') {
+      const cp = compuesta301(s, def.E, FY_F24);
+      campo(fo, `${nombre}: relleno de hormigón f'c`, 'exo-columna-relleno', s.relleno ?? '', v => {
+        const y = parseFloat(v.replace(',', '.'));
+        // también los tramos de columnas (la misma columna más arriba)
+        set(x => { const r = isFinite(y) && y > 0 ? y : undefined; const pon = (q: Seccion) => { if (r) q.relleno = r; else delete q.relleno; }; pon(x.columna); (x.tramos ?? []).forEach(t => { if (t.clase === 'columna') pon(t.sec); }); });
+      }, { tipo: 'number', unidad: 'MPa', ayuda: `columna compuesta: el tubo relleno de hormigón (como las supercolumnas del Taipei 101). Vacío: tubo hueco. Con relleno, la rigidez es la de la sección transformada (n = Es/Ec), el peso suma el hormigón y el CIRSOC 301 la verifica con el capítulo I${cp ? ` · acero ${fmt(cp.cuantia * 100, 1)} % de la sección (mínimo 4 %) · Fmy = ${fmt(cp.Fmy / MPA_T, 0)} MPa · b/t ≤ ${fmt(cp.btMax, 0)}${cp.fcFuera ? ' · f\'c fuera de 21 a 55 MPa: el capítulo I no lo cubre' : ''}` : ''}` });
+    }
   };
   if (def.tipo === 'F') {
     // núcleo con outriggers: dónde van los brazos, el núcleo y el cinturón
@@ -521,7 +541,8 @@ export function panelExo(c: H) {
         h('p', { class: 'nota' }, `Estados límite (LRFD), acero F-24 (Fy = 2400 kg/cm²). ${reglamento ? 'Combinaciones del CIRSOC 101-25 con el viento de resistencia del 102-25: 1,4 D; 1,2 D + 1,0 W; 0,9 D + 1,0 W' : 'Con el viento de la planilla (de servicio): 1,2·D + 1,6·W'}, con el viento de los dos lados. Tracción φ·Pn = 0,9·Fy·A; compresión φ·Pn = 0,85·Fcr·A con λc = L/(r·π)·√(Fy/E); flexión φ·Mn = 0,9·Mn (CIRSOC 302: Mp = Z·Fy si la pared es compacta, entre Mp y Fy·S si no); interacción H1-1a (Pu/φPn ≥ 0,2: Pu/φPn + 8/9·Mu/φMn ≤ 1) o H1-1b. Pared del tubo (302, Tabla 2.2.1, ${def.sinCostura ? 'sin' : 'con'} costura): compacta hasta ${def.sinCostura ? '1,12' : '1,05'}·√(E/Fy), esbelta (no verifica) desde ${def.sinCostura ? '1,40' : '1,30'}·√(E/Fy).${reglamento ? '' : ' El control de arriba (σ adm) es el simple del curso; este es el del reglamento.'}`),
         tablaValores(['Barra', 'combinación', 'Pu (t)', 'Mu (tm)', 'φPn (t)', 'φMn (tm)', 'λc', 'b/t', 'pared', 'interacción', ''],
           peores.map(x => [`${x.cara} · ${x.id}`, x.combinacion, x.Pu, x.Mu, x.Pu < 0 ? x.phiPc : x.phiPt, x.phiMn, x.lambdaC, x.bt, x.pared, x.ratio, `${x.ecuacion} ${x.verifica ? '✓' : '✗'}`]), [0, 0, 1, 1, 0, 0, 2, 1, 0, 2, 0]),
-        ...(paredes.length ? [h('p', { class: 'nota chica' }, `${paredes.length} barra${paredes.length > 1 ? 's' : ''} con la pared no compacta o esbelta: conviene un tubo de pared más gruesa.`)] : []));
+        ...(paredes.length ? [h('p', { class: 'nota chica' }, `${paredes.length} barra${paredes.length > 1 ? 's' : ''} con la pared no compacta o esbelta: conviene un tubo de pared más gruesa.`)] : []),
+        ...notaCompuestas(v));
       c.append(sec.el);
     }
     // viento de cuarto: 0,71·A + 0,71·B en las columnas de las esquinas (lo que se descubrió en el Citicorp en 1978)
