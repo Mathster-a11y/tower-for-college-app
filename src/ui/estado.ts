@@ -1,3 +1,4 @@
+import { gruposPorPieza } from '../engine/piezasGrupos';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
@@ -123,6 +124,7 @@ class Estado {
       }
     }
     this.proyecto = p ?? ejemploGuia();
+    gruposPorPieza(this.proyecto, undefined, false);
     const migrado = !this.proyecto.calculo || (!!p && !JSON.parse(t ?? '{}').calculo);
     if (!this.proyecto.calculo) this.proyecto.calculo = { ...configViejaDelNavegador(), formulas: VERSION_FORMULAS };
     this.recalcular();
@@ -304,7 +306,9 @@ class Estado {
     const nuevo = l.proyecto;
     // sin configuración de cálculo: la de siempre, escrita en el proyecto para que el archivo quede completo
     if (!nuevo.calculo) nuevo.calculo = { ...CONFIG_POR_DEFECTO, formulas: VERSION_FORMULAS };
-    // (no se arman grupos al abrir: los grupos del Esquema los arma el usuario)
+    // no se arman grupos al abrir (los grupos del Esquema los arma el usuario); solo se sueltan, una vez por proyecto,
+    // los grupos de un muro que armaba solo la versión anterior
+    gruposPorPieza(nuevo, undefined, false);
     this.proyecto = nuevo;
     this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] };
     this.revision++;

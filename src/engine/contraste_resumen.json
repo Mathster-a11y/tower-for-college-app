@@ -139,18 +139,18 @@
   "pyniteOpenSees": 0.508,
   "flechaPynite": 0.0007,
   "flechaEuler": 0.180652,
-  "flechaTimoshenko": 0.183308,
-  "corteTimoshenko": 19.54
+  "flechaTimoshenko": 0.183309,
+  "corteTimoshenko": 19.55
  },
  {
   "caso": "planta34_B",
   "piezas": 6,
   "alturaCompleta": true,
   "planillaOpenSees": 0.0004,
-  "pyniteOpenSees": 0.196,
+  "pyniteOpenSees": 0.194,
   "flechaPynite": 0.0001,
-  "flechaEuler": 0.7737,
-  "flechaTimoshenko": 0.775716,
-  "corteTimoshenko": 3.46
+  "flechaEuler": 0.782325,
+  "flechaTimoshenko": 0.784336,
+  "corteTimoshenko": 3.42
  }
 ]

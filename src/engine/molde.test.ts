@@ -46,6 +46,6 @@ describe('molde de la hoja J: J del molde contra J de la sección real', () => {
     const pz = aPlanilla(p).piezas.find(x => x.dir === 'A')!;
     const dif = (pz.Jhoja! - pz.Jreal!) / pz.Jreal!;
     expect(dif).toBeLessThan(0);                                       // fuera: el molde queda por debajo
-    expect(Math.abs(dif)).toBeLessThan(0.06);
+    expect(Math.abs(dif)).toBeLessThan(0.065);                         // (el aporte de las alas del medio, ≈ 6 %)
   });
 });
