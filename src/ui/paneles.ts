@@ -338,7 +338,8 @@ export function panelMuros(c: H) {
       ids = [...set];
     }
     p.muros = agrupar(p.muros, ids).muros;
-    envolverPiezas(p);           // y es un grupo cerrado del Esquema (se entra con doble clic)
+    // y es un grupo cerrado del Esquema (se entra con doble clic): solo esta pieza, las demás quedan como estaban
+    { const g = p.muros.find(m => m.id === ids[0])?.grupo; if (g) envolverPiezas(p, undefined, 'grupo', g); }
   }));
   acc.append(nuevo, dup, borrar, bAgr, imp, tab);
   c.append(seccionEsquema(), acc, seccionQuePasaSi());

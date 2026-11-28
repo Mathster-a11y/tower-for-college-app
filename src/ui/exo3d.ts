@@ -585,7 +585,7 @@ class Disenador {
       out.push(kpi(`Viento ${d.dir} · flecha`, `${fmt(f.u * 1000, 0)} / ${fmt(f.lim * 1000, 0)} mm`, f.u <= f.lim), kpi(`Viento ${d.dir} · momento al exo`, `${fmt(100 * pct, 0)} %`), kpi(`Viento ${d.dir} · barras`, malas ? `${malas} no verifican` : 'verifican', !malas));
       void n;
     }
-    if (dA && dB) out.push(kpi('Acero (cuatro caras)', `${fmt(pesoExo(this.def, [dA.entrada, dB.entrada]), 0)} t`));
+    if (dA && dB) out.push(kpi(this.def.columna.relleno || this.def.tramos?.some(t => t.sec.relleno) ? 'Acero y relleno (cuatro caras)' : 'Acero (cuatro caras)', `${fmt(pesoExo(this.def, [dA.entrada, dB.entrada]), 0)} t`));
     if (this.mecanismo || this.sueltos) out.push(h('p', { class: 'exo3d-aviso' }, this.sueltos
       ? `La estructura todavía se mueve: ${this.sueltos === 1 ? 'hay un nudo suelto' : `hay ${this.sueltos} nudos sueltos`} (en ámbar), con una sola barra. Uní cada uno con otra barra o borrala.`
       : 'La estructura todavía se mueve (es un mecanismo): falta triangular algún paño con una diagonal, o hacer rígidas las uniones de columnas y vigas. Mientras tanto, todo el viento lo toman los tabiques.'));

@@ -1,4 +1,3 @@
-import { envolverPiezas } from '../engine/grupos';
 import { gruposPorPieza } from '../engine/piezasGrupos';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
@@ -37,12 +36,14 @@ const CLAVE = 'torre3d.proyecto.v1';
 type Oyente = () => void;
 
 /** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
-const nombrePieza = (g: string, ms: import('../engine/modelo').Muro[]) => `${ms[0].pieza?.tipo ? `${ms[0].pieza.tipo[0].toUpperCase()}${ms[0].pieza.tipo.slice(1)} ` : 'Pieza '}${g}`;
 /**
  * Controles que se calculan después del cálculo principal porque usan sus resultados (el exoesqueleto): cada módulo
  * registra una función y el estado la llama al recalcular. Así el estado no importa esos módulos (sin ciclos).
  */
+import { alTerminarClic } from './clic';
 const controlesExtra: (() => Control[])[] = [];
+
+
 export function registrarControles(f: () => Control[]) { controlesExtra.push(f); }
 
 class Estado {
@@ -123,7 +124,7 @@ class Estado {
       }
     }
     this.proyecto = p ?? ejemploGuia();
-    gruposPorPieza(this.proyecto, nombrePieza);
+    gruposPorPieza(this.proyecto, undefined, false);
     const migrado = !this.proyecto.calculo || (!!p && !JSON.parse(t ?? '{}').calculo);
     if (!this.proyecto.calculo) this.proyecto.calculo = { ...configViejaDelNavegador(), formulas: VERSION_FORMULAS };
     this.recalcular();
@@ -143,7 +144,13 @@ class Estado {
   elegir(id: string | null) { if (this.seleccion === id) return; this.seleccion = id; this.oyentesSel.forEach(o => o()); }
   avisarSeleccion() { this.oyentesSel.forEach(o => o()); }
   /** redibuja todo sin recalcular (cambió la vista, no los datos) */
-  avisarPanel() { this.oyentes.forEach(o => o()); }
+  avisarPanel() { this.notificar(); }
+  /** avisa a las vistas; con un clic a medio hacer sobre un control, cuando termina (ver «clic») */
+  private notificar() {
+    // con un clic a medio hacer sobre un control, las vistas se rearman cuando termina (ver src/ui/clic.ts)
+    if (alTerminarClic(this, () => this.oyentes.forEach(o => o()))) return;
+    this.oyentes.forEach(o => o());
+  }
   /**
    * cambia el método, la versión de la planilla o el armado: es un cambio del proyecto (se guarda con él, se deshace y
    * viaja en el archivo). Se calcula enseguida, también en el modo con botón.
@@ -180,7 +187,7 @@ class Estado {
     this.calculando = false;
     this.pendiente = false;
     this.cambiosPendientes = 0;
-    this.oyentes.forEach(o => o());
+    this.notificar();
   }
   /** antes de exportar o imprimir: si hay cambios sin calcular, se calculan */
   asegurarCalculo() { if (this.pendiente) this.calcularAhora(); }
@@ -226,7 +233,7 @@ class Estado {
     else this.calculo = r.calculo;   // ya trae los controles extra (los del exo se calculan en el worker)
     // si llegó el de la última revisión, quedó al día; si no, se muestra este (más nuevo que el anterior) y sigue el otro
     if (r.revision === this.revision) { this.calculando = false; this.pendiente = false; this.cambiosPendientes = 0; }
-    this.oyentes.forEach(o => o());
+    this.notificar();
   }
   /** cambia el proyecto, recalcula, guarda en el navegador y avisa a las vistas */
   cambiar(f?: (p: Proyecto) => void) {
@@ -272,7 +279,7 @@ class Estado {
     }
     else if (cambio) { this.pendiente = true; this.cambiosPendientes++; }
     this.guardar();
-    this.oyentes.forEach(o => o());
+    this.notificar();
   }
   /** guarda el proyecto en el navegador; si falla, avisa (una vez, hasta que vuelva a andar) */
   private guardar() { this.guardado.guardar(this.historial.actual); }
@@ -299,8 +306,9 @@ class Estado {
     const nuevo = l.proyecto;
     // sin configuración de cálculo: la de siempre, escrita en el proyecto para que el archivo quede completo
     if (!nuevo.calculo) nuevo.calculo = { ...CONFIG_POR_DEFECTO, formulas: VERSION_FORMULAS };
-    envolverPiezas(nuevo, nombrePieza);          // sobre la copia: si falla, no se tocó nada
-    gruposPorPieza(nuevo, nombrePieza);          // una vez por proyecto: pieza de 2 o más muros = grupo; sin grupos de un muro
+    // no se arman grupos al abrir (los grupos del Esquema los arma el usuario); solo se sueltan, una vez por proyecto,
+    // los grupos de un muro que armaba solo la versión anterior
+    gruposPorPieza(nuevo, undefined, false);
     this.proyecto = nuevo;
     this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] };
     this.revision++;

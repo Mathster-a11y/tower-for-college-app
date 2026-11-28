@@ -26,8 +26,9 @@ export const T = {
 } as const;
 
 type Exo = NonNullable<Proyecto['exo']>;
-const secTxt = (s: { b: number; e: number }) => `${s.b}x${s.e}`;
-const secLeer = (t: string) => { const r = /^\s*([\d.,]+)\s*[x×]\s*([\d.,]+)\s*$/i.exec(t); return r ? { b: Number(r[1].replace(',', '.')), e: Number(r[2].replace(',', '.')) } : null; };
+// (con relleno de hormigón: «0.6x0.025 relleno 40», f'c en MPa)
+const secTxt = (s: { b: number; e: number; relleno?: number }) => `${s.b}x${s.e}${s.relleno ? ` relleno ${s.relleno}` : ''}`;
+const secLeer = (t: string) => { const r = /^\s*([\d.,]+)\s*[x×]\s*([\d.,]+)\s*(?:relleno\s+([\d.,]+))?\s*$/i.exec(t); return r ? { b: Number(r[1].replace(',', '.')), e: Number(r[2].replace(',', '.')), ...(r[3] ? { relleno: Number(r[3].replace(',', '.')) } : {}) } : null; };
 /**
  * «T3D Exo»: lo del exoesqueleto que no entra en «T3D Proyecto» (lo de los ejemplos reales: cortes de los módulos,
  * secciones por tramos, alas, vanos, caras que siguen la planta, …). Dato, valor y qué es, como «T3D Proyecto».
@@ -45,6 +46,8 @@ const DATOS_EXO: [string, string, (x: Exo) => Valor, (x: Exo, v: Valor) => void]
   ['Ancho del núcleo (ficha F)', 'en el sentido del viento, en m (vacío: un tercio de la planta)', x => x.nucleo ?? null, (x, v) => { const n = Number(txt(v).replace(',', '.')); if (txt(v) && n > 0) x.nucleo = n; }],
   ['Cotas de los brazos (ficha F)', 'cordón de arriba de cada outrigger, en m, separadas por «;» (vacío: a media altura)', x => (x.outriggers?.length ? x.outriggers.join('; ') : null), (x, v) => { const c = txt(v).split(';').map(t => Number(t.trim().replace(',', '.'))).filter(z => isFinite(z) && z > 0); if (c.length) x.outriggers = c; }],
   ['Cinturón (ficha F)', 'no: sin cinturón (solo trabaja la columna que toca el brazo); vacío o sí: con cinturón', x => (x.cinturon === false ? 'no' : null), (x, v) => { if (txt(v).toLowerCase() === 'no') x.cinturon = false; }],
+  ['Paso de las columnas (ficha T)', 'tubo en tubo: separación de las columnas del perímetro, en m (vacío: 3)', x => x.pasoCol ?? null, (x, v) => { const n = num(v); if (n !== null && n > 0) x.pasoCol = n; }],
+  ['Eficiencia de las alas (ficha T)', 'tubo en tubo: cuánto trabajan las columnas de las caras perpendiculares al viento, de 0 a 1 (vacío: 0,6)', x => x.alaTubo ?? null, (x, v) => { const n = num(v); if (n !== null && n >= 0) x.alaTubo = n; }],
   ['Columnas en cada cara (ficha F)', 'columnas de cada cara perpendicular al viento que toma el cinturón (vacío: 4)', x => x.columnasCara ?? null, (x, v) => { const n = Math.round(Number(txt(v))); if (txt(v) && n >= 1) x.columnasCara = n; }],
   ['Brazos desde el principio (ficha F)', 'sí: los brazos se conectan desde el principio de la obra y toman parte del peso; vacío: al terminar la obra gruesa', x => b2s(x.brazosDesdeElPrincipio), (x, v) => { if (sino(v)) x.brazosDesdeElPrincipio = true; }],
   ['Diagonales arriostradas por las losas', 'sí: cada diagonal se ata a la losa en cada piso que cruza y pandea de piso a piso', x => b2s(x.arriostradas), (x, v) => { if (sino(v)) x.arriostradas = true; }],
@@ -113,8 +116,8 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
   ] as const).map(([k, rot, desc, t]) => [rot, desc, (p: Proyecto) => (p.cirsoc101?.[k] ?? null) as Valor,
     (p: Proyecto, v: Valor) => { const x = t === 'n' ? num(v) : txt(v) || null; if (x !== null) p.cirsoc101 = { ...(p.cirsoc101 ?? {}), [k]: x }; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   ['Parapeto (m)', 'parapeto o baranda sobre la última losa: se suma a la altura de influencia de la azotea (vacío = 0)', p => p.sitio.parapeto ?? null, (p, v) => { const x = num(v); if (x && x > 0) p.sitio.parapeto = x; else delete p.sitio.parapeto; }],
-  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil, F núcleo con outriggers, M malla sobre la fachada, L libre (barra por barra; vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
-    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E', 'F', 'M', 'L'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
+  ['Exo: ficha', 'exoesqueleto: A diagrid, B mega-marcos, C mega-columnas y cinturones, D tubo en X, E chevrones al mástil, F núcleo con outriggers, T tubo en tubo, M malla sobre la fachada, L libre (barra por barra; vacío = sin exoesqueleto)', p => p.exo?.tipo ?? null,
+    (p, v) => { const t = txt(v).toUpperCase(); if (['A', 'B', 'C', 'D', 'E', 'F', 'T', 'M', 'L'].includes(t)) p.exo = { ...structuredClone(EXO_POR_DEFECTO), ...(p.exo ?? {}), tipo: t as TipoExo }; else delete p.exo; }],
   ['Exo: malla (ficha M)', 'la malla sobre la fachada, en JSON: patron (diagrid, columnas o hexagrid), nudos, nudosArriba, esquinas, giro (°), hasta (m), arriostrada (losas atadas), sacadas (barras sacadas a mano)',
     p => (p.exo?.malla ? JSON.stringify(p.exo.malla) : null),
     (p, v) => {
@@ -137,6 +140,8 @@ const DATOS: [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) =>
     [k, q, (p: Proyecto) => p.exo?.[c] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void]),
   ...(['columna', 'diagonal', 'viga'] as const).flatMap(c => (['b', 'e'] as const).map(k =>
     [`Exo: ${c} ${k === 'b' ? 'lado' : 'espesor'} (m)`, `tubo cuadrado de la ${c}`, (p: Proyecto) => p.exo?.[c][k] ?? null, (p: Proyecto, v: Valor) => { const x = num(v); if (p.exo && x !== null) p.exo[c][k] = x; }] as [string, string, (p: Proyecto) => Valor, (p: Proyecto, v: Valor) => void])),
+  ['Exo: columna relleno f\'c (MPa)', 'columna compuesta: el tubo de la columna relleno de hormigón de esta resistencia (CIRSOC 301 cap. I); vacío: tubo hueco', p => p.exo?.columna.relleno ?? null,
+    (p, v) => { const x = num(v); if (p.exo && x !== null && x > 0) p.exo.columna.relleno = x; }],
   ['Exo: uniones', 'columna, diagonal y viga: rígida o articulada; base: empotrada o articulada', p => (p.exo?.uniones ? (['columna', 'diagonal', 'viga', 'base'] as const).filter(k => p.exo!.uniones![k]).map(k => `${k}=${p.exo!.uniones![k] === 'rigida' ? 'rígida' : p.exo!.uniones![k]}`).join('; ') : null),
     (p, v) => { if (!p.exo) return; const u: NonNullable<NonNullable<Proyecto['exo']>['uniones']> = {}; txt(v).split(';').forEach(par => { const [k, w] = par.split('=').map(x => x.trim().toLowerCase()); if (k === 'base') u.base = w.startsWith('art') ? 'articulada' : 'empotrada'; else if (k === 'columna' || k === 'diagonal' || k === 'viga') u[k] = w.startsWith('art') ? 'articulada' : 'rigida'; }); if (Object.keys(u).length) p.exo.uniones = u; }],
   ['Exo: viento', 'cómo llega el viento al exo: «losas» (en cada piso) o «fachada» (repartido en las barras de borde)', p => p.exo?.viento ?? null, (p, v) => { if (p.exo && txt(v)) p.exo.viento = txt(v).toLowerCase().startsWith('fach') ? 'fachada' : 'losas'; }],

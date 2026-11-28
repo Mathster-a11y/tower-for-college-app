@@ -1,6 +1,8 @@
+import { listaAvisos } from './ui/avisosCalculo';
 import './compat';
 import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
 import { montarDivisores } from './ui/divisores';
+import { instalarClics } from './ui/clic';
 import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
 import { estado, calcularProyecto } from './ui/estado';
@@ -31,7 +33,7 @@ import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, proyectoVacio } from './engine/modelo';
 import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
-import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
+import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai, ejemploTuboEnTubo } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { datos201De } from './engine/metodos/cirsoc';
@@ -53,6 +55,8 @@ void precargarLetras();
 
 /** la app completa (el editor). main.ts la arranca, salvo en la pestaña de la vista previa de la planilla. */
 export function iniciarApp() {
+// los clics con el mouse no se pierden cuando una carta se rearma al apretar (src/ui/clic.ts)
+instalarClics();
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let plantillaAbierta: ArrayBuffer | null = null;
@@ -232,7 +236,9 @@ function dibujarCentro() {
 }
 function dibujarAvance() {
   const a = $('avance');
-  const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
+  const bVentana = h('button', { type: 'button', class: 'mini b-ventana-planilla', title: 'Abrir la planilla en una ventana aparte (se puede llevar a otra pantalla): la que se exporta, con las fórmulas calculadas; se actualiza sola mientras editás', 'aria-label': 'Planilla en una ventana aparte' }, '↗ ventana');
+  bVentana.addEventListener('click', ev => { ev.stopPropagation(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra ventana: permití las ventanas emergentes para esta página.'); });
+  const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', bVentana, h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
   const lista = h('div', { class: 'lista-avance' });
   a.replaceChildren(cab, lista);
   hacerPlegable(a, cab, 'Avance de la planilla', false);
@@ -300,8 +306,8 @@ function dibujarEstadoCalculo() {
     const peor = Math.max(...Object.values(cmp.resumen).map(r => r.noVerifican));
     el.className = `chip-estado ${peor ? 'no-verifica' : 'verifica'}`;
     el.textContent = `No verifican: ${(['planilla', 'guia', 'cirsoc', 'fem'] as const).map(m => `${METODOS[m].corto} ${cmp.resumen[m].noVerifican}`).join(' · ')}`;
-    el.setAttribute('data-globo', 'Método Combinado|Los cuatro métodos con la misma torre: cuántos controles no verifican con cada uno. La comparación está en Resumen.');
-    el.style.cursor = 'pointer'; el.onclick = () => irA('resumen');
+    el.setAttribute('data-globo', 'Método Combinado|Los cuatro métodos con la misma torre: cuántos controles no verifican con cada uno. Tocá para ver los del método elegido y qué hacer; la comparación está en Resumen.');
+    el.style.cursor = 'pointer'; el.onclick = () => abrirAvisos(el);
     return;
   }
   const cs = estado.calculo.controles ?? [];
@@ -311,9 +317,28 @@ function dibujarEstadoCalculo() {
   el.className = `chip-estado ${estado.calculo.error || malos ? 'no-verifica' : revisar ? 'revisar' : 'verifica'}`;
   el.textContent = estado.calculo.error ? 'Error en el cálculo' : malos ? `${malos} control${malos > 1 ? 'es' : ''} no verifica${malos > 1 ? 'n' : ''}`
     : `Verifican los ${calculados} calculados${revisar ? ` · ${revisar} a revisar` : ''}`;
-  el.setAttribute('data-globo', `Estado del cálculo · ${describirConfig(estado.config)}|Cuenta los ${calculados} controles calculados de todas las etapas con el método elegido. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.${info ? ` Además hay ${info} control${info > 1 ? 'es' : ''} solo informativo${info > 1 ? 's' : ''} (por ejemplo la tensión en el suelo, que se compara con el estudio de suelos): no entran en «verifican».` : ''}`);
+  el.setAttribute('data-globo', `Estado del cálculo · ${describirConfig(estado.config)}|Cuenta los ${calculados} controles calculados de todas las etapas con el método elegido. Tocá para ver cada uno con qué cambiar y adónde ir. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.${info ? ` Además hay ${info} control${info > 1 ? 'es' : ''} solo informativo${info > 1 ? 's' : ''} (por ejemplo la tensión en el suelo, que se compara con el estudio de suelos): no entran en «verifican».` : ''}`);
   el.style.cursor = 'pointer';
-  el.onclick = () => irA('resumen');
+  el.onclick = () => abrirAvisos(el);
+  if (malos) el.textContent += ' ▾';
+}
+/** el desplegable del chip de estado: cada control que no verifica, qué hacer y adónde ir (avisosCalculo.ts) */
+function abrirAvisos(chipEl: HTMLElement) {
+  const ya = document.querySelector('.avisos-pop');
+  if (ya) { ya.remove(); return; }
+  const pop = document.createElement('div');
+  pop.className = 'avisos-pop';
+  pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Controles que no verifican');
+  const cerrar = () => { pop.remove(); document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+  const fuera = (ev: Event) => { if (!pop.contains(ev.target as Node) && ev.target !== chipEl) cerrar(); };
+  const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { ev.stopPropagation(); cerrar(); } };
+  pop.append(listaAvisos(estado.calculo.controles ?? [], (etapa, dir) => { cerrar(); if (dir && dir !== estado.dir) estado.dir = dir; irA(etapa); }, estado.calculo.combinado ? 'Método Combinado: estos son los controles de la Planilla (los que muestran las etapas); los de cada método, en Resumen.' : undefined));
+  document.body.append(pop);
+  const r = chipEl.getBoundingClientRect();
+  pop.style.top = `${Math.round(r.bottom + 6)}px`;
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)))}px`;
+  document.addEventListener('pointerdown', fuera, true);
+  document.addEventListener('keydown', esc, true);
 }
 /**
  * @param porCambio la llamada viene de un cambio de datos: en el modo con botón y con cambios sin calcular, no se
@@ -388,8 +413,11 @@ const imprimirDesglose = () => import('./ui/desglose').then(m => m.imprimirDesgl
 const descargarPPTX = () => import('./ui/desglose').then(m => m.descargarPPTX());
 const dibujosPorHoja = () => import('./ui/dibujosDesglose').then(m => m.dibujosPorHoja());
 /** abre (o trae al frente) la pestaña de la vista previa: tiene que ser en el mismo clic (si no, el navegador la bloquea) */
+// (en una ventana aparte, no una pestaña: se arrastra sola a la segunda pantalla; recuerda su tamaño y lugar)
 function abrirVistaPlanilla() {
-  const w = window.open(`${location.pathname}${location.search}#planilla`, 'torre3d-planilla');
+  let g = { w: Math.min(1200, screen.availWidth - 80), h: Math.min(860, screen.availHeight - 80), x: 40, y: 40 };
+  try { const t = localStorage.getItem('torre3d.ventanaPlanilla'); if (t) g = { ...g, ...JSON.parse(t) }; } catch { /* sin almacenamiento */ }
+  const w = window.open(`${location.pathname}${location.search}#planilla`, 'torre3d-planilla', `popup=yes,width=${g.w},height=${g.h},left=${g.x},top=${g.y}`);
   if (w) w.focus();
   return !!w;
 }
@@ -454,7 +482,7 @@ async function exportar() {
     <ul>${filas}<li><b>Hojas «G ·»</b> (solo con las hojas de la app): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Flexocompresión PB</b>: la verificación de la guía en PB, pieza por pieza y en los dos vientos, paso a paso y con los coeficientes a la vista (la «Flex comp PB paralelos» de la cátedra queda como estaba).</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo con las hojas de la app; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
-    <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en otra pestaña y se actualiza sola mientras editás).</p>`, [
+    <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en una ventana aparte, que se puede llevar a otra pantalla, y se actualiza sola mientras editás).</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
     ['Vista previa ↗', () => { abrirVistaPlanilla(); }],
     ['Escribir y descargar', async () => {
@@ -650,6 +678,7 @@ TORRES_PRUEBA.forEach((t, k) => {
 $('b-ejemplo-34').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploPlanta34()); cerrarMenus(); mensaje('Cargada la torre de 34 pisos: los núcleos toman el viento; las columnas, solo carga de losa. Es un ejemplo solo para la Planilla: con otro método no está dimensionada (con CIRSOC no verifican el suelo, la deriva ni la armadura de varios núcleos).'); });
 $('b-ejemplo-chica').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploBasicoExo()); cerrarMenus(); mensaje('Cargada la torre chica con tubo en X: es el ejemplo paso a paso de la guía. Seguí el viento A.'); });
 $('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHancock()); cerrarMenus(); mensaje('Cargado el John Hancock Center: caras que se angostan con la altura y el tubo en X que toma todo el viento (etapa 08 · Exoesqueleto). Las fuentes de cada número están en la etapa 08.'); });
+$('b-ejemplo-tubo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploTuboEnTubo()); cerrarMenus(); mensaje('Cargado el tubo en tubo: un tubo enmarcado de acero alrededor del núcleo de tabiques (etapa 08 · Exoesqueleto, ficha T). Los supuestos están en la etapa 08.'); });
 $('b-ejemplo-shanghai').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploShanghai()); cerrarMenus(); mensaje('Cargada la Shanghai Tower: núcleo de hormigón con outriggers en las juntas de zona (etapa 08 · Exoesqueleto, ficha F). Las fuentes y los supuestos están en la etapa 08.'); });
 $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
 $('b-ejemplo-gherkin').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGherkin()); cerrarMenus(); mensaje('Cargado 30 St Mary Axe («the Gherkin»): diagrid que sigue el perfil de la torre, con la planta circular llevada a un cuadrado de la misma área (etapa 08). Fuentes y supuestos en la etapa 08. Verifica con el método CIRSOC y con el FEM.'); });
@@ -781,7 +810,7 @@ async function descargarLibroGuia() {
     mensaje(`Planilla de la guía descargada: completá o cambiá los datos en la hoja «Datos» y se recalcula sola.${avisos.length ? ' ' + avisos.join(' ') : ''}`);
   } catch (e) { fallo('No se pudo armar la planilla de la guía', e); }
 }
-$('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });
+$('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra ventana: permití las ventanas emergentes para esta página.'); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme().catch(e => fallo('No se pudo armar el informe', e)); });
 $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf().catch(e => fallo('No se pudo armar la carta', e)); });
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
@@ -1082,7 +1111,7 @@ estado.suscribirGuardado(async falla => {
 if (estado.avisoInicio) void tarjeta({ tipo: 'aviso', titulo: 'Proyecto guardado', texto: estado.avisoInicio, botones: ['Entendido'] });
 // el proyecto guardado es un ejemplo, pero sus muros no son los del ejemplo de esta versión (se abrió con una anterior)
 else void (async () => {
-  const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
+  const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploTuboEnTubo, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
   // sin el grupo de dibujo (gd), que no cambia el cálculo y se arma al abrir (pieza de 2 o más muros = grupo)
   const huella = (q: { muros: object[] }) => JSON.stringify(q.muros.map(m => { const { gd: _g, ...r } = m as { gd?: string }; void _g; return r; }));
   for (const f of ejemplos) {

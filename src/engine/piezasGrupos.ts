@@ -16,9 +16,10 @@ export function jMuros(ms: Muro[], dir: 'A' | 'B'): number {
 
 /**
  * Una vez por proyecto (p.gruposPorPieza): deshace los grupos de un solo muro que no hacen falta (no bloqueados, ocultos,
- * fijos ni copias de componente) y envuelve en un grupo cada pieza de cálculo de dos o más muros que no lo tenga.
+ * fijos ni copias de componente) y, con «envolver», envuelve en un grupo cada pieza de cálculo de dos o más muros que no
+ * lo tenga. La app lo llama sin envolver (pedido del usuario, 28/11: los grupos los arma el usuario, ninguno se arma solo).
  */
-export function gruposPorPieza(p: Proyecto, nombres?: (g: string, ms: Muro[]) => string): { envueltas: number; sueltas: number } {
+export function gruposPorPieza(p: Proyecto, nombres?: (g: string, ms: Muro[]) => string, envolver = true): { envueltas: number; sueltas: number } {
   if (p.gruposPorPieza) return { envueltas: 0, sueltas: 0 };
   const cuenta = new Map<string, number>();
   p.muros.forEach(m => { if (m.piezaA) cuenta.set(m.piezaA, (cuenta.get(m.piezaA) ?? 0) + 1); });
@@ -31,7 +32,7 @@ export function gruposPorPieza(p: Proyecto, nombres?: (g: string, ms: Muro[]) =>
     if (m.pieza || m.cref || (m.piezaA && (cuenta.get(m.piezaA) ?? 0) > 1)) continue;
     if (!desagruparNodo(p, g.id)) sueltas++;
   }
-  const envueltas = envolverPiezas(p, nombres, 'calculo');
+  const envueltas = envolver ? envolverPiezas(p, nombres, 'calculo') : 0;
   p.gruposPorPieza = 1;
   return { envueltas, sueltas };
 }

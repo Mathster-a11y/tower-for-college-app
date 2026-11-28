@@ -88,11 +88,12 @@ export function motivoNoTransformable(p: Proyecto, m: Muro, contexto: string | n
  * sin nada más). «por»: las piezas armadas (m.grupo) o las piezas de cálculo del viento A (m.piezaA). Devuelve cuántas
  * piezas envolvió.
  */
-export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`, por: 'grupo' | 'calculo' = 'grupo'): number {
+export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`, por: 'grupo' | 'calculo' = 'grupo', solo?: string): number {
   const porPieza = new Map<string, Muro[]>();
   p.muros.forEach(m => { const k = por === 'grupo' ? m.grupo : m.piezaA; if (k) porPieza.set(k, [...(porPieza.get(k) ?? []), m]); });
   let n = 0;
   porPieza.forEach((ms, g) => {
+    if (solo !== undefined && g !== solo) return;
     if (ms.length < 2) return;                                               // un solo muro: se elige con un clic, sin grupo
     const gd = ms[0].gd ?? null;
     if (ms.some(m => (m.gd ?? null) !== gd)) return;                       // repartida en grupos distintos: se deja

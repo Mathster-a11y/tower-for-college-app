@@ -32,11 +32,13 @@ import { aEscuadra, aTope, criterioDelProyecto, esColumna, rectsEscuadra } from 
 import { diferencia } from '../engine/poligonos';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
-import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
+import { aplicar as aplicarOp, cajaSel, copiarCon, resolver as resolverSel, vacia as vaciaSel, type Seleccion } from '../engine/colocar';
 import { enPlanta, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
+import { montarCartas } from './cartas';
+import { dibujoAreas, type DibujoAreas } from './areasContorno';
 import { apartarHaciaAbajo, hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
@@ -312,10 +314,38 @@ export function montarPlanta(cont: HTMLElement) {
     const r = res.r;
     if ('error' in r) mensaje(r.error); else { estado.grupoSel = r.id; estado.multi = { m: [], g: [] }; mensaje(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.id)?.nombre}». Doble clic para entrar a editarlo.`); estado.avisarPanel(); }
   }
+  /** lo copiado con Ctrl+C (o «Copiar» del menú): qué y desde qué punto (el centro de su caja) */
+  let portapapeles: { sel: Seleccion; ref: { x: number; y: number }; contexto: string | null } | null = null;
+  /** dónde está el puntero en la planta (para pegar ahí) */
+  let ultimoPunto: { x: number; y: number } | null = null;
+  const copiarAlPortapapeles = (): boolean => {
+    const s0 = apiPlanta.seleccion();
+    if (vaciaSel(s0)) return false;
+    const ids = resolverSel(estado.proyecto, s0).ids, ms = estado.proyecto.muros.filter(m => ids.has(m.id));
+    if (!ms.length) return false;
+    const k = cajaSel(estado.proyecto, s0);
+    portapapeles = { sel: s0, ref: { x: (k.x0 + k.x1) / 2, y: (k.y0 + k.y1) / 2 }, contexto: estado.contexto };
+    mensaje(`Copiado: ${ms.length} muro${ms.length > 1 ? 's' : ''}. Ctrl+V lo pega donde está el puntero (clic derecho → «Pegar acá» también).`);
+    return true;
+  };
+  const pegarEn = (q: { x: number; y: number } | null) => {
+    const c = portapapeles; if (!c) return;
+    if ((c.contexto ?? null) !== (estado.contexto ?? null)) { mensaje('Lo copiado es de otro grupo: salí o entrá al mismo grupo para pegarlo.'); return; }
+    const dest = q ?? { x: c.ref.x + 1, y: c.ref.y - 1 };
+    let err: string | null = null, copia: Seleccion | null = null;
+    estado.cambiar(pp => { const r = copiarCon(pp, c.sel, estado.contexto, { t: 'mover', dx: aj(dest.x - c.ref.x), dy: aj(dest.y - c.ref.y) }, false); if ('error' in r) err = r.error; else copia = r.copia; });
+    if (err) { mensaje(err); return; }
+    if (copia) { estado.multi = copia; estado.grupoSel = null; estado.seleccion = null; }
+    mensaje('Pegado. Ctrl+V pega otra; Ctrl+Z deshace.'); estado.avisarPanel();
+  };
   const salirDeGrupo = () => { const g = grupoPorId(estado.proyecto, estado.contexto); estado.grupoSel = g?.id ?? null; estado.contexto = g?.padre ?? null; mensaje(estado.contexto ? `Editando «${grupoPorId(estado.proyecto, estado.contexto)?.nombre}».` : 'De vuelta en la planta.'); estado.avisarPanel(); };
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], .grilla-caja')) return;
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); borrarElegidos(); return; }
+    // Ctrl+C / Ctrl+V: copiar lo elegido y pegarlo donde está el puntero (sin armar grupos), como en CAD (solo con la planta a la vista)
+    const plantaVisible = svg.isConnected && svg.getClientRects().length > 0;
+    if (plantaVisible && (ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C') && !String(window.getSelection?.() ?? '')) { if (copiarAlPortapapeles()) ev.preventDefault(); return; }
+    if (plantaVisible && (ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V') && portapapeles) { ev.preventDefault(); pegarEn(ultimoPunto); return; }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
       ev.preventDefault();
       const p = estado.proyecto, zN = nivelActualZ(), ms = new Set<string>(), gs = new Set<string>();
@@ -347,6 +377,8 @@ export function montarPlanta(cont: HTMLElement) {
   // pieza tipo a insertar (biblioteca)
   let insTipo: TipoPieza = 'C';
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
+  /** las últimas medidas usadas de cada tipo: volver a un tipo no las pisa con las de fábrica */
+  const medPorTipo = new Map<string, MedidasPieza>();
   let iNivel = 0;
   let arrastreV: number | null = null;
   /** vértice del contorno elegido (para escribir sus coordenadas o borrarlo desde el panel) */
@@ -392,7 +424,7 @@ export function montarPlanta(cont: HTMLElement) {
     dibujar: 'Dibujar muros: tocá el inicio y el fin; sale horizontal o vertical y se pega a otros muros. Sigue encadenado: escribí el largo y Enter, o Esc para terminar.',
     calibrar: 'Calibrar el calco: tocá dos puntos de la imagen y escribí la distancia real entre ellos.',
     silueta: 'Losa: arrastrá los vértices (□) de la losa o de la carpintería. En la carta: formas (con vista previa), dibujarla a mano, balcones, loft y herramientas de CAD. Esc sale.',
-    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Esc sale.',
+    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Cada toque inserta otra con las mismas medidas; Esc sale.',
     calar: 'Calar: tocá el muro donde va el vano (puerta, ventana o hueco). Tocá un vano hecho para moverlo o sacarlo. Esc sale.',
     colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
   };
@@ -494,7 +526,7 @@ export function montarPlanta(cont: HTMLElement) {
   cont.appendChild(dock);
   // clic en el título de un panel: se pliega o se despliega
 // (en todas las cartas, también las sueltas: un toque en el título las pliega y deja libre la planta)
-  cont.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel') && t === t.parentElement.querySelector(':scope > b')) { t.parentElement.classList.toggle('plegado'); firmaReservas = ''; } });
+  // (lo hace cartas.ts: montarCartas, más abajo)
   const panelCad = document.createElement('div');
   panelCad.className = 'calco-panel cad-panel';
   panelCad.hidden = true;
@@ -1001,7 +1033,13 @@ export function montarPlanta(cont: HTMLElement) {
               h2(boton('Volver a atar al tramo', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; delete nv.carpManual; delete nv.carpVoladizo; }), 'Se pierde lo editado a mano en este piso: vuelve a ser lo común a su losa y la de arriba')), vol);
           }
         }
-        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
+        // la carpintería de este nivel para toda la torre: con tramos, además se fija (si no, el tramo la recalcularía)
+        const igualar = car ? [h2(boton('Igualar toda la torre a esta carpintería', async () => {
+          if (!(await confirmar('Igualar la carpintería', `La carpintería de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan) y queda fija: ya no sigue a las losas. Se puede deshacer.`, 'Igualar'))) return;
+          estado.cambiar(pp => { pp.carpinteriaFija = true; pp.niveles.forEach(nv => { nv.carpinteria = car.v.map(q => JSON.parse(JSON.stringify(q))); delete nv.carpManual; delete nv.carpinteriaPartida; }); });
+          mensaje(`Carpintería de ${n.nombre} en los ${estado.proyecto.niveles.length} niveles, fija (desenganchada de las losas): el viento (túneles y presiones) la usa en toda la torre. Ctrl+Z deshace.`);
+        }, 'La misma carpintería en todos los pisos, desenganchada de las losas: lo que usan el túnel 2D, el túnel 3D y las presiones en cada piso'))] : [];
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, ...igualar, segue);
         return;
       }
       panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,
@@ -1844,7 +1882,7 @@ export function montarPlanta(cont: HTMLElement) {
       b.setAttribute('aria-pressed', String(t.tipo === insTipo));
       b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : t.tipo === 'pórtico' ? 0.7 : 2, e: t.tipo === 'columna' ? 2 : t.tipo === 'tubo circ.' ? 0.6 : t.tipo === 'pórtico' ? 0.7 : 0.3 }, 30));
       const sp = document.createElement('span'); sp.textContent = t.nombre; b.append(sp);
-      b.addEventListener('click', () => { const antes = insTipo; insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'tubo circ.') { insMed.h = 3; insMed.e = 0.25; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
+      b.addEventListener('click', () => { const antes = insTipo; medPorTipo.set(antes, { ...insMed }); insTipo = t.tipo; const ya = medPorTipo.get(t.tipo); if (ya) Object.assign(insMed, ya); else if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'tubo circ.') { insMed.h = 3; insMed.e = 0.25; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
       formas.append(b);
     });
     const info = TIPOS.find(t => t.tipo === insTipo)!;
@@ -1893,6 +1931,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (!medGrupo || !info || modo !== 'mover') { panelMed.hidden = true; medGrupo = null; return; }
     panelMed.hidden = false; panelPrec.hidden = true;
     const med = info.med, tipo = info.tipo, t = TIPOS.find(x => x.tipo === tipo)!;
+    // rearmar la carta no la lleva arriba: queda donde estaba
+    const st = panelMed.scrollTop; if (st) requestAnimationFrame(() => { panelMed.scrollTop = st; });
     panelMed.replaceChildren();
     const tit = document.createElement('b'); tit.textContent = `Pieza ${medGrupo} · ${t.nombre}`;
     const cambiar = (k: keyof MedidasPieza, v: number | null) => {
@@ -1950,6 +1990,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // áreas de influencia de la losa (cada punto descarga en el elemento más cercano)
   let verAreas = false, areasCache: { clave: string; a: AreasInfluencia } | null = null;
+  let dibAreasCache: { a: AreasInfluencia; firma: string; d: DibujoAreas } | null = null;
   const bAreas = document.createElement('button');
   bAreas.type = 'button'; bAreas.textContent = 'Áreas';
   bAreas.title = 'Áreas de influencia de la losa de este nivel: cada punto descarga en el muro o columna más cercano (mitad de la luz). Se pueden copiar a la columna «Área inf.» de los muros.';
@@ -2140,11 +2181,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // los cuadros de la derecha (medidas, mover con precisión) se pliegan tocando el título; con pantalla táctil arrancan plegados
   const tactilPlegar = matchMedia('(pointer: coarse)').matches;
-  cont.addEventListener('click', ev => {
-    const t = ev.target as HTMLElement;
-    const pan = t.closest('.prec-panel, .med-panel');
-    if (pan && t.tagName === 'B' && t.parentElement === pan) { pan.classList.toggle('plegado'); try { localStorage.setItem('torre3d.plegar.' + (pan.classList.contains('prec-panel') ? 'prec' : 'med'), pan.classList.contains('plegado') ? '1' : '0'); } catch { /* sin almacenamiento */ } }
-  });
+  // (el título los pliega: cartas.ts, que también recuerda cómo quedaron)
   const plegarInicial = (pan: HTMLElement, k: string) => { let v: string | null = null; try { v = localStorage.getItem('torre3d.plegar.' + k); } catch { /* */ } if (v === '1' || (v === null && tactilPlegar)) pan.classList.add('plegado'); };
   plegarInicial(panelMed, 'med');
   const gui = montarGuias(apiPlanta);
@@ -2744,23 +2781,6 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (verAreas) {
       const a = areasDe(iN);
-      // bordes entre áreas: cuadrados de 4 centros de celda; donde cambia el dueño se unen los medios de los lados
-      // (como las curvas de nivel): queda una línea quebrada fina en vez de escalones
-      let d = '';
-      const own = (j: number, k: number) => (j < 0 || k < 0 || j >= a.ny || k >= a.nx ? -1 : a.duenio[j * a.nx + k]);
-      const cx = (k: number) => X(a.x0 + (k + 0.5) * a.paso), cy = (j: number) => Y(a.y0 + (j + 0.5) * a.paso);
-      for (let j = 0; j < a.ny - 1; j++) for (let k = 0; k < a.nx - 1; k++) {
-        const o0 = own(j, k), o1 = own(j, k + 1), o2 = own(j + 1, k + 1), o3 = own(j + 1, k);
-        if (o0 < 0 || o1 < 0 || o2 < 0 || o3 < 0) continue;
-        const xa = cx(k), xb = cx(k + 1), ya = cy(j), yb = cy(j + 1), xm = (xa + xb) / 2, ym = (ya + yb) / 2;
-        const ms2: [number, number][] = [];
-        if (o0 !== o1) ms2.push([xm, ya]);
-        if (o1 !== o2) ms2.push([xb, ym]);
-        if (o3 !== o2) ms2.push([xm, yb]);
-        if (o0 !== o3) ms2.push([xa, ym]);
-        if (ms2.length === 2) d += `M${ms2[0][0].toFixed(1)},${ms2[0][1].toFixed(1)}L${ms2[1][0].toFixed(1)},${ms2[1][1].toFixed(1)}`;
-        else if (ms2.length > 2) ms2.forEach(([x, y]) => { d += `M${x.toFixed(1)},${y.toFixed(1)}L${xm.toFixed(1)},${ym.toFixed(1)}`; });
-      }
       const ga = el('g', { class: 'areas-inf' });
       // relleno por grupo (color y rayado); una tira por fila y por grupo, para que sea liviano
       const orden = ordenClaves(a), porId = new Map(p.muros.map(m => [m.id, m]));
@@ -2771,29 +2791,28 @@ export function montarPlanta(cont: HTMLElement) {
         const st = estiloArea(k, orden.get(k) ?? 0), id = `ar-${st.rayado}-${st.color.slice(1)}`;
         if (!usados.has(id)) {
           usados.add(id);
-          const pt = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: 8, height: 8, patternTransform: st.rayado === 'd45' ? 'rotate(45)' : st.rayado === 'd135' ? 'rotate(-45)' : st.rayado === 'v' ? 'rotate(90)' : '' });
+          const pt = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: 8, height: 8, patternTransform: `scale(${1 / escala},${-1 / escala})${st.rayado === 'd45' ? ' rotate(45)' : st.rayado === 'd135' ? ' rotate(-45)' : st.rayado === 'v' ? ' rotate(90)' : ''}` });   // (en metros: se deshace la escala para que el rayado mida 8 px)
           pt.appendChild(el('rect', { width: 8, height: 8, fill: st.color, 'fill-opacity': 0.22 }));
           pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 8, stroke: st.color, 'stroke-width': 1.4, 'stroke-opacity': 0.55 }));
           defsA.appendChild(pt);
         }
         return `url(#${id})`;
       };
-      const relleno = el('g', { class: 'areas-relleno' });
-      for (let j = 0; j < a.ny; j++) {
-        let k = 0;
-        while (k < a.nx) {
-          const o = a.duenio[j * a.nx + k];
-          if (o < 0) { k++; continue; }
-          const c = claveDe[o]; let k2 = k + 1;
-          while (k2 < a.nx && a.duenio[j * a.nx + k2] >= 0 && claveDe[a.duenio[j * a.nx + k2]] === c) k2++;
-          const x0 = X(a.x0 + k * a.paso), x1 = X(a.x0 + k2 * a.paso), y0 = Y(a.y0 + (j + 1) * a.paso), y1 = Y(a.y0 + j * a.paso);
-          relleno.appendChild(el('rect', { x: x0.toFixed(1), y: y0.toFixed(1), width: (x1 - x0 + 0.4).toFixed(1), height: (y1 - y0 + 0.4).toFixed(1), fill: patron(c) }));
-          k = k2;
-        }
-      }
+      // relleno liso por grupo (color y rayado): un camino por región que sigue los bordes entre áreas, recortado con
+      // el contorno de la losa (areasContorno.ts)
+      // (se arma en metros una sola vez por planta y se ubica con una transformación: el zoom no lo recalcula)
+      const firmaDib = claveDe.join('|');
+      if (!dibAreasCache || dibAreasCache.a !== a || dibAreasCache.firma !== firmaDib) dibAreasCache = { a, firma: firmaDib, d: dibujoAreas(a, claveDe) };
+      const dib = dibAreasCache.d;
+      const idRec = `rec-areas-${iN}`;
+      const enMetros = el('g', { transform: `matrix(${escala},0,0,${-escala},${ox},${oy})` });
+      if (dib.recorte) { const cp = el('clipPath', { id: idRec }); cp.appendChild(el('path', { d: dib.recorte, 'clip-rule': 'evenodd' })); defsA.appendChild(cp); }
+      const relleno = el('g', { class: 'areas-relleno', ...(dib.recorte ? { 'clip-path': `url(#${idRec})` } : {}) });
+      dib.regiones.forEach((d2, c) => relleno.appendChild(el('path', { d: d2, fill: patron(c) })));
       ga.appendChild(defsA);
-      ga.appendChild(relleno);
-      ga.appendChild(el('path', { d, class: 'areas-borde' }));
+      enMetros.appendChild(relleno);
+      enMetros.appendChild(el('path', { d: dib.bordes, class: 'areas-borde', 'vector-effect': 'non-scaling-stroke', ...(dib.recorte ? { 'clip-path': `url(#${idRec})` } : {}) }));
+      ga.appendChild(enMetros);
       a.ids.forEach(id => {
         const v = a.area[id];
         if (!v) return;
@@ -3830,6 +3849,7 @@ export function montarPlanta(cont: HTMLElement) {
   prepararCartas();
   new MutationObserver(prepararCartas).observe(cont, { childList: true });
   new MutationObserver(prepararCartas).observe(dock, { childList: true });
+  montarCartas(cont, dock);
   cont.addEventListener('carta-cambiada', () => { firmaReservas = ''; pedirAcomodar(); });
   ([[barraSel, 'barra-eleccion'], [barraGrupo, 'barra-grupo'], [barraLazo, 'barra-lazo'], [barraDib, 'barra-dibujo'], [barraTr, 'barra-transformar'], [barraCtx, 'barra-contexto']] as const).forEach(([e, k]) => hacerMovible(e, cont, k, { enLinea: true }));
   let cuadroAcomodar = 0;
@@ -3850,14 +3870,12 @@ export function montarPlanta(cont: HTMLElement) {
         const p = estado.proyecto;
         const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
         if (estado.contexto) nuevos.forEach(m => { m.gd = estado.contexto!; });     // insertada dentro del grupo que se edita
+        // sus muros forman una pieza del cálculo; no se arma un grupo del Esquema (los grupos los arma el usuario)
         p.muros = agrupar([...p.muros, ...nuevos], nuevos.map(m => m.id)).muros;
-        // la pieza insertada es un grupo cerrado del Esquema: se mueve entera y se entra con doble clic
-        const g = p.muros.find(m => m.id === nuevos[0].id)?.grupo;
-        const r = g ? agruparNodos(p, nuevos.map(m => m.id), [], estado.contexto, `${insTipo[0].toUpperCase()}${insTipo.slice(1)} ${g}`) : null;
         estado.seleccion = nuevos[0].id;
-        if (r && !('error' in r)) estado.grupoSel = r.id;
       });
-      ponerModo('mover');
+      // se sigue insertando, con las mismas medidas, hasta Esc o hasta elegir otra herramienta
+      mensaje(`Pieza insertada (${insTipo}). Tocá otro lugar para insertar otra igual · Esc termina.`);
       return;
     }
     if (modo === 'calar' && ev.button === 0 && calQue === 'losa') {
@@ -4018,8 +4036,20 @@ export function montarPlanta(cont: HTMLElement) {
     const bajo = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => (e.closest?.('g.muro') as SVGGElement | null)?.dataset.id).find(Boolean);
     const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id ?? bajo;
     if (idM) { ev.preventDefault(); menuDe(idM, ev.clientX, ev.clientY); return; }
-    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
+    // en el fondo vacío, sin nada elegido: lo que se empieza desde ahí, sin ir a la barra
+    ev.preventDefault();
+    const q = aMundo(ev as PointerEvent);
+    abrirMenuContextual(ev.clientX, ev.clientY, [{ titulo: 'Planta' },
+      { texto: 'Pegar acá', atajo: 'Ctrl+V', no: portapapeles ? false : 'Primero copiá algo (Ctrl+C o clic derecho → Copiar)', accion: () => pegarEn(q) },
+      '—',
+      { texto: 'Dibujar muros', atajo: 'L', accion: () => ponerModo('dibujar') },
+      { texto: 'Insertar pieza…', atajo: 'IN', ayuda: 'Columnas, tabiques, L, T, C, núcleos… varias seguidas', accion: () => ponerModo('insertar') },
+      { texto: 'Elegir con el lazo', atajo: 'LA', accion: () => ponerModo('lazo') },
+      { texto: 'Elegir todo', atajo: 'Ctrl+A', accion: () => svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true })) },
+    ]);
   });
+  svg.addEventListener('pointermove', ev => { ultimoPunto = aMundo(ev); }, { passive: true });
   /** clase de pieza y «entra al J» para las piezas de unos muros (en los dos vientos) */
   const piezasDe = (ids: string[]) => { const p = estado.proyecto, s = new Set<string>(); ids.forEach(id => { const m = p.muros.find(x => x.id === id); if (m?.piezaA) s.add(m.piezaA); if (m?.piezaB) s.add(m.piezaB); }); return [...s]; };
   const menuClase = (ids: string[]): EntradaMenu[] => {
@@ -4058,6 +4088,9 @@ export function montarPlanta(cont: HTMLElement) {
         { texto: 'Agrupar', atajo: 'Ctrl+G', accion: () => agruparElegidos() },
         { texto: 'Desagrupar', atajo: 'Ctrl+Mayús+G', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', accion: () => desagruparElegidos(estado.multi.g) },
         { texto: 'Desagrupar todo (explotar)', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', ayuda: 'Deshace los grupos y los de adentro: todos los muros quedan sueltos', accion: () => desagruparElegidos(estado.multi.g, true) },
+        '—', { texto: 'Mover…', atajo: 'M', ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+        { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+        { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', ayuda: 'Después Ctrl+V lo pega donde está el puntero', accion: () => { copiarAlPortapapeles(); } },
         '—', ...menuClase(ids), '—',
         { texto: 'Soltar la selección', atajo: 'Esc', accion: () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); } },
         { texto: 'Borrar', atajo: 'Supr', peligro: true, accion: () => borrarElegidos() }]);
@@ -4078,6 +4111,9 @@ export function montarPlanta(cont: HTMLElement) {
         g.comp
           ? { texto: 'Hacer único', no: motivo, ayuda: 'Separa esta copia del componente: deja de cambiar con las demás', accion: () => conGrupo(pp => { hacerUnico(pp, id); }, 'La copia ya no está vinculada: es un grupo común.') }
           : { texto: 'Hacer componente', no: motivo, ayuda: 'Un componente es un grupo con copias vinculadas: si editás una, cambian todas', accion: () => conGrupo(pp => hacerComponente(pp, id), 'Ahora es un componente: «Copia vinculada» para repetirlo.') },
+        { texto: 'Mover…', atajo: 'M', no: motivo || (fijo ? 'Está fijo en su lugar 📌' : false), ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+        { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+        { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', accion: () => { copiarAlPortapapeles(); } },
         { texto: 'Duplicar', ayuda: 'Copia independiente a la derecha', accion: () => duplicarGrupo(false) },
         { texto: 'Copia vinculada', ayuda: 'Otra copia del mismo componente: si se edita una, cambian todas (si no era componente, pasa a serlo)', accion: () => duplicarGrupo(true) },
         '—',
@@ -4096,6 +4132,10 @@ export function montarPlanta(cont: HTMLElement) {
     const mot = motivoNoEditable(p, m, estado.contexto);
     abrirMenuContextual(x, y, [{ titulo: `${m.id} · ${m.largo.toFixed(2).replace('.', ',')} × ${m.espesor.toFixed(2).replace('.', ',')} m` },
       ...(estado.contexto ? [{ texto: 'Salir del grupo', atajo: 'Esc', accion: () => salirDeGrupo() } as EntradaMenu] : []),
+      { texto: 'Mover…', atajo: 'M', no: mot || false, ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+      { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+      { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', accion: () => { copiarAlPortapapeles(); } },
+      '—',
       ...menuClase([idM]), '—',
       { texto: 'Borrar', atajo: 'Supr', peligro: true, no: mot || false, accion: () => borrarElegidos() }]);
   }

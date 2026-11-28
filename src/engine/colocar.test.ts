@@ -23,7 +23,8 @@ describe('transformaciones', () => {
     p.muros = p.muros.filter(m => !['M8', 'M9', 'M10'].includes(m.id));
     const r = copiarCon(p, nucleo, null, { t: 'espejar', eje: 'x', c: { x: 0, y: 0 } }, true);
     expect('error' in r).toBe(false);
-    const xs = murosDe(p, (r as { id: string }).id).map(m => [m.dir, m.x, m.y]).sort();
+    if ('error' in r) throw new Error(r.error);
+    const xs = murosDe(p, r.copia.g[0]).map(m => [m.dir, m.x, m.y]).sort();
     expect(xs).toEqual([['X', 4, -1.9], ['X', 4, 1.9], ['Y', 6.4, 0]]);
     const jg = aPlanilla(ejemploGuia()).piezas.filter(x => x.dir === 'A').map(x => x.Jhoja).sort();
     expect(aPlanilla(p).piezas.filter(x => x.dir === 'A').map(x => x.Jhoja).sort()).toEqual(jg);
@@ -55,7 +56,7 @@ describe('matrices', () => {
     const r = matrizRect(p, { m: ['C1'], g: [] }, null, 3, 4, 5, 6, true);
     if ('error' in r) throw new Error(r.error);
     expect(r.copias).toBe(11);
-    const ms = murosDe(p, r.grupo);
+    const ms = p.muros.filter(m => r.muros.includes(m.id));
     expect(ms.length).toBe(12);
     expect(new Set(ms.map(m => `${m.x},${m.y}`)).size).toBe(12);
     expect(Math.max(...ms.map(m => m.x))).toBe(15);
@@ -66,14 +67,14 @@ describe('matrices', () => {
     const previo = clon(p);
     p.muros.find(m => m.id === 'C1')!.largo = 0.6;
     sincronizarComponentes(previo, p);
-    expect(murosDe(p, r.grupo).every(m => m.largo === 0.6)).toBe(true);
+    expect(p.muros.filter(m => r.muros.includes(m.id)).every(m => m.largo === 0.6)).toBe(true);
   });
   it('polar de 4 tabiques a 90°, girando: quedan en cruz', () => {
     const p = ejemploGuia();
     p.muros = [{ id: 'T', dir: 'X', x: 3, y: 0, largo: 2, espesor: 0.2, llega: true, areaInf: 1, piezaA: 'Z', pegadoA: '', piezaB: 'ZB', pegadoB: '' }];
     const r = matrizPolar(p, { m: ['T'], g: [] }, null, { x: 0, y: 0 }, 4, 360, true, false);
     if ('error' in r) throw new Error(r.error);
-    const ms = murosDe(p, r.grupo).map(m => [m.dir, m.x, m.y]).sort();
+    const ms = p.muros.filter(m => r.muros.includes(m.id)).map(m => [m.dir, m.x, m.y]).sort();
     expect(ms).toEqual([['X', -3, 0], ['X', 3, 0], ['Y', 0, -3], ['Y', 0, 3]]);
   });
   it('polar de 6 columnas: no giran (60° quedaría en diagonal) y avisa', () => {
@@ -82,8 +83,34 @@ describe('matrices', () => {
     const r = matrizPolar(p, { m: ['C'], g: [] }, null, { x: 0, y: 0 }, 6, 360, true, false);
     if ('error' in r) throw new Error(r.error);
     expect(r.aviso).toMatch(/no giran/);
-    const ms = murosDe(p, r.grupo);
+    const ms = p.muros.filter(m => r.muros.includes(m.id));
     ms.forEach(m => expect(Math.hypot(m.x, m.y)).toBeCloseTo(5, 3));
+  });
+});
+
+describe('sin grupos automáticos', () => {
+  it('copiar muros sueltos sin vincular no arma grupos', () => {
+    const p = ejemploGuia();
+    const g0 = (p.grupos ?? []).length;
+    const r = copiarCon(p, { m: ['M1', 'M2'], g: [] }, null, { t: 'mover', dx: 30, dy: 0 }, false);
+    if ('error' in r) throw new Error(r.error);
+    expect((p.grupos ?? []).length).toBe(g0);
+    expect(r.copia.m.length).toBe(2);
+    expect(p.muros.filter(m => r.copia.m.includes(m.id)).every(m => !m.gd)).toBe(true);
+    expect(p.muros.find(m => m.id === 'M1')!.gd).toBeUndefined();
+    // la segunda copia sale del mismo original
+    const r2 = copiarCon(p, r.original, null, { t: 'mover', dx: 60, dy: 0 }, false);
+    expect('error' in r2).toBe(false);
+    expect((p.grupos ?? []).length).toBe(g0);
+  });
+  it('la matriz sin vincular no arma grupo', () => {
+    const p = ejemploGuia();
+    p.muros = [{ id: 'C', dir: 'Y', x: 0, y: 0, largo: 0.4, espesor: 0.4, llega: true, areaInf: 1, piezaA: 'Z', pegadoA: '', piezaB: 'ZB', pegadoB: '' }];
+    p.grupos = [];
+    const r = matrizRect(p, { m: ['C'], g: [] }, null, 2, 2, 5, 5, false);
+    if ('error' in r) throw new Error(r.error);
+    expect(r.muros.length).toBe(4);
+    expect(p.grupos.length).toBe(0);
   });
 });
 
@@ -119,13 +146,13 @@ describe('caminos', () => {
     const cam: Camino = { id: 'L', nombre: 'L', v: [{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 8 }], cerrado: false };
     const r = matrizCamino(p, { m: ['C'], g: [] }, null, cam, { n: 5, vinculada: false });
     if ('error' in r) throw new Error(r.error);
-    expect(murosDe(p, r.grupo).map(m => [m.x, m.y]).sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[0, 0], [4, 0], [8, 0], [8, 4], [8, 8]]);
+    expect(p.muros.filter(m => r.muros.includes(m.id)).map(m => [m.x, m.y]).sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[0, 0], [4, 0], [8, 0], [8, 4], [8, 8]]);
     // por paso, con tangente: un tabique sobre la L gira en el tramo vertical
     const q = ejemploGuia();
     q.muros = [{ id: 'T', dir: 'X', x: 0, y: 0, largo: 1, espesor: 0.2, llega: true, areaInf: 1, piezaA: 'Z', pegadoA: '', piezaB: 'ZB', pegadoB: '' }];
     const r2 = matrizCamino(q, { m: ['T'], g: [] }, null, cam, { paso: 4, tangente: true, vinculada: false });
     if ('error' in r2) throw new Error(r2.error);
-    const dirs = murosDe(q, r2.grupo).map(m => `${m.dir}@${m.x},${m.y}`).sort();
+    const dirs = q.muros.filter(m => r2.muros.includes(m.id)).map(m => `${m.dir}@${m.x},${m.y}`).sort();
     expect(dirs).toEqual(['X@0,0', 'X@4,0', 'Y@8,4', 'Y@8,8', 'Y@8,0'].sort().map(x => x.replace('Y@8,0', 'X@8,0')).sort());
   });
 });

@@ -330,6 +330,8 @@ export function montarEditorContorno(api: ApiPlanta) {
   function armar() {
     if (!id || !P) { panel.hidden = true; return; }
     panel.hidden = false; panel.classList.remove('plegado');
+    // rearmar la carta no la lleva arriba: queda donde estaba (se restaura al final del cuadro)
+    const st = panel.scrollTop; if (st) requestAnimationFrame(() => { panel.scrollTop = st; });
     panel.replaceChildren();
     const m = estado.proyecto.muros.find(x => x.id === id);
     const tit = mk('b', destino ? destino.titulo : `Contorno de ${id}${m ? ` (${tipoDe(m) === 'perfil' ? 'perfil' : tipoDe(m) === 'tabique' ? 'tabique' : 'tubo'})` : ''}`);
