@@ -32,7 +32,7 @@ import { calcularPlanilla } from './engine/planilla';
 import { ejemploGuia, ejemploAsimetrico, proyectoVacio } from './engine/modelo';
 import { ejemploCiticorpFachada } from './engine/ejemploCiticorpFachada';
 import { capturar3D, vistas3D } from './ui/vistas';
-import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai } from './engine/ejemplosExo';
+import { ejemploBasicoExo, ejemploGherkin, ejemploHancock, ejemploHearst, ejemploOnterie, ejemploShanghai, ejemploTuboEnTubo } from './engine/ejemplosExo';
 import { TORRES_PRUEBA, armarTorre } from './engine/torresPrueba';
 import { ejemploPlanta34 } from './engine/ejemplo34';
 import { datos201De } from './engine/metodos/cirsoc';
@@ -677,6 +677,7 @@ TORRES_PRUEBA.forEach((t, k) => {
 $('b-ejemplo-34').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploPlanta34()); cerrarMenus(); mensaje('Cargada la torre de 34 pisos: los núcleos toman el viento; las columnas, solo carga de losa. Es un ejemplo solo para la Planilla: con otro método no está dimensionada (con CIRSOC no verifican el suelo, la deriva ni la armadura de varios núcleos).'); });
 $('b-ejemplo-chica').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploBasicoExo()); cerrarMenus(); mensaje('Cargada la torre chica con tubo en X: es el ejemplo paso a paso de la guía. Seguí el viento A.'); });
 $('b-ejemplo-hancock').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHancock()); cerrarMenus(); mensaje('Cargado el John Hancock Center: caras que se angostan con la altura y el tubo en X que toma todo el viento (etapa 08 · Exoesqueleto). Las fuentes de cada número están en la etapa 08.'); });
+$('b-ejemplo-tubo').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploTuboEnTubo()); cerrarMenus(); mensaje('Cargado el tubo en tubo: un tubo enmarcado de acero alrededor del núcleo de tabiques (etapa 08 · Exoesqueleto, ficha T). Los supuestos están en la etapa 08.'); });
 $('b-ejemplo-shanghai').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploShanghai()); cerrarMenus(); mensaje('Cargada la Shanghai Tower: núcleo de hormigón con outriggers en las juntas de zona (etapa 08 · Exoesqueleto, ficha F). Las fuentes y los supuestos están en la etapa 08.'); });
 $('b-ejemplo-hearst').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploHearst()); cerrarMenus(); mensaje('Cargada la Hearst Tower: diagrid con nudos cada 40 ft y núcleo corrido (etapa 08 · Exoesqueleto). Las fuentes están en la etapa 08.'); });
 $('b-ejemplo-gherkin').addEventListener('click', () => { plantillaAbierta = null; reemplazarConCopia(ejemploGherkin()); cerrarMenus(); mensaje('Cargado 30 St Mary Axe («the Gherkin»): diagrid que sigue el perfil de la torre, con la planta circular llevada a un cuadrado de la misma área (etapa 08). Fuentes y supuestos en la etapa 08. Verifica con el método CIRSOC y con el FEM.'); });
@@ -1109,7 +1110,7 @@ estado.suscribirGuardado(async falla => {
 if (estado.avisoInicio) void tarjeta({ tipo: 'aviso', titulo: 'Proyecto guardado', texto: estado.avisoInicio, botones: ['Entendido'] });
 // el proyecto guardado es un ejemplo, pero sus muros no son los del ejemplo de esta versión (se abrió con una anterior)
 else void (async () => {
-  const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
+  const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploTuboEnTubo, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
   // sin el grupo de dibujo (gd), que no cambia el cálculo y se arma al abrir (pieza de 2 o más muros = grupo)
   const huella = (q: { muros: object[] }) => JSON.stringify(q.muros.map(m => { const { gd: _g, ...r } = m as { gd?: string }; void _g; return r; }));
   for (const f of ejemplos) {

@@ -157,6 +157,10 @@ describe('exoesqueleto y torre inclinada en las tablas', () => {
     const rc = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(comp))), ejemploGuia())!;
     expect(rc.proyecto.exo!.columna).toEqual({ b: 0.8, e: 0.03, relleno: 45 });
     expect(rc.proyecto.exo!.tramos).toEqual(comp.exo.tramos);
+    // ficha T: tubo en tubo, con su paso y la eficiencia de las alas
+    const tt = ejemploGuia(); tt.exo = { ...outr.exo!, tipo: 'T', pasoCol: 2.5, alaTubo: 0.7 };
+    const rt = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(tt))), ejemploGuia())!;
+    expect(rt.proyecto.exo).toEqual(tt.exo);
     const g = ejemploGuia(), ms = medidasNiveles(g), H = Math.max(...ms.map(m => m.z)), b = ms.find(m => m.z === 0)!;
     const pf = formaPerfil('inclinada', b.B, b.L, H), inc = { ...g, niveles: aplicarPerfil(g, pf).niveles, perfil: pf };
     const r = proyectoDesdeTablas(await leerLibro(await escribirLibro(tablasProyecto(inc))), ejemploGuia())!;

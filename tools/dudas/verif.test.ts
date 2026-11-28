@@ -6,7 +6,7 @@ import * as EX from '../../src/engine/ejemplosExo';
 import { estado } from '../../src/ui/estado';
 import '../../src/ui/exo';
 it.skipIf(!process.env.DUDAS)('verifican', () => {
-  const ej: Record<string, () => import('../../src/engine/modelo').Proyecto> = { guia: ejemploGuia, asim: ejemploAsimetrico, citicorp: ejemploCiticorp, p34: ejemploPlanta34, chica: EX.ejemploBasicoExo, hancock: EX.ejemploHancock, hearst: EX.ejemploHearst, onterie: EX.ejemploOnterie, shanghai: EX.ejemploShanghai, ...((EX as Record<string, unknown>).ejemploGherkin ? { gherkin: (EX as unknown as Record<string, () => import('../../src/engine/modelo').Proyecto>).ejemploGherkin } : {}) };
+  const ej: Record<string, () => import('../../src/engine/modelo').Proyecto> = { guia: ejemploGuia, asim: ejemploAsimetrico, citicorp: ejemploCiticorp, p34: ejemploPlanta34, chica: EX.ejemploBasicoExo, hancock: EX.ejemploHancock, hearst: EX.ejemploHearst, onterie: EX.ejemploOnterie, shanghai: EX.ejemploShanghai, tubo: EX.ejemploTuboEnTubo, ...((EX as Record<string, unknown>).ejemploGherkin ? { gherkin: (EX as unknown as Record<string, () => import('../../src/engine/modelo').Proyecto>).ejemploGherkin } : {}) };
   const solo = process.env.SOLO?.split(',');
   for (const [k, f] of Object.entries(ej)) for (const m of (process.env.MET?.split(',') ?? ['cirsoc', 'fem']) as ('cirsoc' | 'fem')[]) {
     if (solo && !solo.includes(k)) continue;

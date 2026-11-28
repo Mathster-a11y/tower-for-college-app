@@ -20,7 +20,7 @@
 import type { RotoRes } from './planilla';
 import { cargasMalla, fuerzasAnillos, proyectarMalla, pesoMalla, type BarraReal, type MallaDef, type MallaGeo } from './exoMalla';
 
-export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'L' | 'M';
+export type TipoExo = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'T' | 'L' | 'M';
 export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   A: { nombre: 'Diagrid', texto: 'Diagonales en rombo en las caras, sin columnas intermedias: toman corte y flexión con las mismas barras.' },
   B: { nombre: 'Mega-marcos', texto: 'Columnas en las esquinas y vigas cada «módulo» pisos: trabajan como pórticos (rigidez por flexión).' },
@@ -28,6 +28,7 @@ export const TIPOS_EXO: Record<TipoExo, { nombre: string; texto: string }> = {
   D: { nombre: 'Tubo arriostrado en X', texto: 'Columnas en las esquinas y cruces de San Andrés por módulos de pisos.' },
   F: { nombre: 'Núcleo con outriggers', texto: 'Brazos reticulados de un piso de alto que salen del núcleo de tabiques hacia las columnas del perímetro (con un cinturón, todas las de la cara): cuando el núcleo se flexiona, las columnas lo frenan con un par de fuerzas (Taipei 101, Shanghai Tower).' },
   E: { nombre: 'Chevrones a la columna central', texto: 'Una columna (mástil) en el medio de cada cara y, por módulo, diagonales en V que bajan de las esquinas al mástil: las esquinas cuelgan (como el Citicorp Center).' },
+  T: { nombre: 'Tubo en tubo', texto: 'Tubo enmarcado: columnas cercanas en todo el perímetro (cada «paso» m) y una viga de fachada en cada piso, rígidas, alrededor del núcleo de tabiques. Las caras paralelas al viento trabajan como pórticos de muchos vanos; las perpendiculares, como alas, con el shear lag (One Shell Plaza, el World Trade Center).' },
   M: { nombre: 'Malla sobre la fachada', texto: 'La malla sigue la fachada real de cada nivel (cilindro, elipse, polígono, torre que se angosta o se corre): diagrid o columnas con cruces, calculada entera con el viento de cada lado.' },
   L: { nombre: 'Libre (barra por barra)', texto: 'Sin dibujo armado: cada columna, diagonal y viga se dibuja a mano entre nudos de la cara (en «Diseño 3D»). Sirve sola o como una zona entre otras.' },
 };
@@ -139,6 +140,14 @@ export interface ExoDef {
    * cara perpendicular la comparten las dos caras paralelas). Es el tubo sin «shear lag» (cota superior). Hancock: 5.
    */
   alas?: number;
+  /** ficha T (tubo en tubo): separación de las columnas del tubo (m; vacío = 3) */
+  pasoCol?: number;
+  /**
+   * ficha T: cuánto trabajan las columnas de las caras perpendiculares al viento (las alas del tubo), de 0 a 1: el
+   * shear lag hace que las del medio de la cara tomen menos que las de las esquinas. Vacío = 0,6 (supuesto, del orden
+   * de lo que dan Smith y Coull para tubos enmarcados; 1 sería el tubo sin shear lag)
+   */
+  alaTubo?: number;
   /** diagrid: separación horizontal de los nudos (m); si está, los vanos de cada cara salen de su ancho (Hearst: 40 ft) */
   pasoH?: number;
   /** las caras siguen la planta de cada nivel (B y L por nivel): columnas de esquina inclinadas, como el John Hancock */
@@ -240,6 +249,8 @@ export interface Barra {
   deMastil?: boolean;
   /** parte de la sección que representa (ala: la mitad del mástil de una cara perpendicular, compartido por dos caras) */
   fraccion?: number;
+  /** ficha T: las alas del tubo son columnas que ya se pesan como columnas de la cara del otro viento: acá no pesan */
+  sinPeso?: boolean;
   /** ficha F: el núcleo de tabiques (y sus brazos rígidos hasta el borde): no es del exo, no se verifica ni se pesa */
   nucleo?: boolean;
   /** ficha F: barra de un brazo (reticulado del outrigger) */
@@ -454,6 +465,22 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
         const a = nudoAla(lado(k), k), b = nudoAla(lado(k + 1), k + 1), rel = un.columna === 'articulada';
         const sk = tramo('mastil', a, b, sm), pk = sk === sm ? pm : propsSeccion(sk);
         barras.push({ id: `F${++nF}`, clase: 'columna', a, b, A: pk.A / 2, I: pk.I / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: 0.5, deMastil: true });
+      }
+    } else if (tipo === 'T') {
+      // tubo enmarcado: en la cara paralela, columnas cada «paso» y viga de fachada en cada piso (un pórtico de muchos
+      // vanos); las columnas de las caras perpendiculares están todas a ±ancho/2 en el sentido del viento: van como alas
+      // en las esquinas, con la eficiencia del shear lag (la mitad en cada cara paralela, que las comparten)
+      const paso = Math.max(0.5, def.pasoCol ?? 3);
+      const nb = Math.max(1, Math.round(anchoK(kI) / paso)), sCol = (i: number, k: number) => S0(k) + (i * anchoK(k)) / nb;
+      for (let i = 0; i <= nb; i++) for (let k = kI; k < kF; k++) barra('columna', nudo(sCol(i, k), k), nudo(sCol(i, k + 1), k + 1));
+      for (let k = kI + 1; k <= kF; k++) for (let i = 0; i < nb; i++) barra('viga', nudo(sCol(i, k), k), nudo(sCol(i + 1, k), k));
+      const naReal = Math.max(0, Math.round((op.anchoPerp ?? anchoK(kI)) / paso) - 1), ef = Math.min(1, Math.max(0, def.alaTubo ?? 0.6)), na = naReal * ef;
+      if (na > 0) {
+        const rel = un.columna === 'articulada';
+        for (const lado of [S0, S1]) for (let k = kI; k < kF; k++) {
+          const a = nudo(lado(k), k), b = nudo(lado(k + 1), k + 1), sk = tramo('columna', a, b, def.columna), pk = propsSeccion(sk);
+          barras.push({ id: `F${++nF}`, clase: 'columna', a, b, A: (na * pk.A) / 2, I: (na * pk.I) / 2, sec: sk, relA: rel, relB: rel, borde: false, fraccion: na / 2, sinPeso: true });
+        }
       }
     } else {
       // columnas de esquina, de piso a piso
@@ -1203,7 +1230,7 @@ export function pesoExo(def: ExoDef, entradas: EntradaExo[]): number {
     // perpendiculares) sí, con su cantidad (cada cara perpendicular aparece una vez en cada viento como ala)
     // ficha F: las columnas de la cara se pesan todas (las que el cinturón hace trabajar en parte también son de acero entero)
     const colsF = def.tipo === 'F' && def.cinturon !== false ? Math.max(1, Math.round(def.columnasCara ?? 4)) / 2 : 1;
-    const factor = (b: Barra) => (b.nucleo ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : b.deMastil ? 0 : b.fraccion);
+    const factor = (b: Barra) => (b.nucleo || b.sinPeso ? 0 : def.tipo === 'F' && b.clase === 'columna' && b.borde ? colsF : b.fraccion === undefined || b.fraccion === 1 ? 1 : b.deMastil ? 0 : b.fraccion);
     return s2 + c.barras.reduce((q, b) => { if ((i > 0 && def.tipo !== 'F' && esquina(b)) || !factor(b)) return q; const A = c.nudos[b.a], B = c.nudos[b.b]; return q + factor(b) * propsSeccion(b.sec).Ap * Math.hypot(B.s - A.s, B.z - A.z) * gammaExo(def); }, 0);
   }, 0), 0);
 }

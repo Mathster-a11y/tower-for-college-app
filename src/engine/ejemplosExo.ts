@@ -350,3 +350,42 @@ export function ejemploGherkin(): Proyecto {
     },
   };
 }
+
+/**
+ * Tubo en tubo (ficha T): torre de oficinas de 40 pisos (ejemplo para aprender, no es un edificio real). Un tubo
+ * enmarcado de acero en el perímetro (columnas cada 3 m y viga de fachada en cada piso) alrededor de un núcleo de
+ * tabiques, atados por las losas. Es la idea de One Shell Plaza (Houston, 1971, Fazlur Khan: tubo de hormigón con
+ * columnas cada 1,83 m alrededor de un núcleo), acá en acero y con medidas de ejemplo.
+ */
+export function ejemploTuboEnTubo(): Proyecto {
+  const n = 40, hp = 3.6, B = 36;
+  const niveles: Nivel[] = [];
+  for (let k = n; k >= 1; k--) niveles.push({ nombre: k === n ? 'Azotea' : `${k + 1}º`, cota: r2(k * hp), ...(k === n ? { B, L: B } : {}) });
+  niveles.push({ nombre: 'PB', cota: 0, B, L: B }, { nombre: 'Subsuelo', cota: -4 });
+  return {
+    // abre con CIRSOC: los ejemplos cumplen el reglamento (con la Planilla el exo es un estudio aparte)
+    calculo: { metodo: 'cirsoc' },
+    version: 1,
+    nombre: 'Tubo en tubo · torre de oficinas de 40 pisos (ejemplo)',
+    alumno: '',
+    sitio: { V: 45, Kd: 0.85, I: 1, zg: 366, alfa: 7, Kzt: 1, G: 0.85, Cpb: 0.8, Cps: -0.5, GCpi: 0.18 },
+    niveles,
+    fundacion: { b1: 40, a1: 40, sigmaAdm: 6 },
+    hormigon: 'H40',
+    // núcleo de 12 × 12 m (ascensores, escaleras y servicios), pared de 0,60 m: toma el viento de los dos lados
+    muros: [tubo('N1', 0, 0, 12, 12, 0.6, (B * B) / 2, 'Núcleo', 'Núcleo B')],
+    exo: {
+      tipo: 'T', separacion: 0, modulo: 1, pasoCol: 3, alaTubo: 0.6,
+      losas: { franja: 6, qD: 0.5, qL: 0.25 },
+      columna: { b: 0.5, e: 0.025 }, diagonal: { b: 0.15, e: 0.008 }, viga: { b: 0.6, e: 0.025 },
+      E: 2.1e7, sigmaAdm: 14000,
+      notas: [
+        'Ejemplo para aprender (no es un edificio real): 40 pisos de 3,60 m, planta cuadrada de 36 m y un núcleo de tabiques de 12 × 12 m con pared de 0,60 m.',
+        'Tubo enmarcado de acero en el perímetro: columnas cada 3 m (13 por cara) y una viga de fachada en cada piso, todas rígidas. Cada cara paralela al viento trabaja como un pórtico de muchos vanos; las perpendiculares, como alas, con una eficiencia de 0,6 por el shear lag (supuesto, del orden de lo que dan Smith y Coull).',
+        'Es la idea de One Shell Plaza (Houston, 1971, Fazlur Khan): un tubo de columnas cercanas alrededor del núcleo, atados por las losas. Allá era de hormigón, con columnas cada 1,83 m; acá, acero y medidas de ejemplo.',
+        'Las losas apoyan en el perímetro: una franja de 6 m, con 0,5 t/m² de peso y 0,25 t/m² de sobrecarga (supuesto); el resto, en el núcleo.',
+        'Viento: CIRSOC 102 con V = 45 m/s y exposición B (supuesto). Fundación: platea de 40 × 40 m con σ adm = 6 kg/cm² (supuesto).',
+      ],
+    },
+  };
+}

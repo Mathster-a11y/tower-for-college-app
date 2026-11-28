@@ -439,6 +439,12 @@ export function panelExo(c: H) {
       }, { tipo: 'number', unidad: 'MPa', ayuda: `columna compuesta: el tubo relleno de hormigón (como las supercolumnas del Taipei 101). Vacío: tubo hueco. Con relleno, la rigidez es la de la sección transformada (n = Es/Ec), el peso suma el hormigón y el CIRSOC 301 la verifica con el capítulo I${cp ? ` · acero ${fmt(cp.cuantia * 100, 1)} % de la sección (mínimo 4 %) · Fmy = ${fmt(cp.Fmy / MPA_T, 0)} MPa · b/t ≤ ${fmt(cp.btMax, 0)}${cp.fcFuera ? ' · f\'c fuera de 21 a 55 MPa: el capítulo I no lo cubre' : ''}` : ''}` });
     }
   };
+  if (def.tipo === 'T') {
+    // tubo en tubo: el paso de las columnas del perímetro y cuánto trabajan las alas (shear lag)
+    campo(fo, 'Paso de las columnas del tubo', 'exo-paso', def.pasoCol ?? 3, nu((x, v) => (x.pasoCol = Math.max(0.5, v))), { tipo: 'number', unidad: 'm', ayuda: 'separación de las columnas en todo el perímetro (los tubos enmarcados las llevan cada 1 a 4,5 m: One Shell Plaza, 1,83 m; el World Trade Center, 1 m). Con las vigas de fachada de cada piso, cada cara es un pórtico de muchos vanos' });
+    campo(fo, 'Eficiencia de las alas (shear lag)', 'exo-ala', def.alaTubo ?? 0.6, nu((x, v) => (x.alaTubo = Math.min(1, Math.max(0, v)))), { tipo: 'number', ayuda: 'cuánto trabajan, en promedio, las columnas de las caras perpendiculares al viento (de 0 a 1). El shear lag hace que las del medio de la cara tomen menos que las de las esquinas; 0,6 es del orden de lo que dan Smith y Coull para tubos enmarcados (supuesto); 1, el tubo sin shear lag' });
+    fo.append(h('p', { class: 'nota chica nota-ancha' }, 'Tubo en tubo: el tubo enmarcado de afuera y el núcleo de tabiques de adentro, atados por las losas, se reparten el viento según su rigidez. Cada cara del tubo se deforma por flexión (sus columnas como las fibras de una ménsula) y por el corte de los pisos (las columnas se doblan entre las vigas): por eso las columnas van cerca y las vigas de fachada son altas.'));
+  }
   if (def.tipo === 'F') {
     // núcleo con outriggers: dónde van los brazos, el núcleo y el cinturón
     const zsF = datosExo()?.r.zs ?? [];
@@ -696,7 +702,7 @@ export function dibujoExo(d: DatosExo, tam: Tam): SVGSVGElement {
 export function centroExo(c: H, tam: Tam) {
   if (!estado.proyecto.exo) {
     c.append(h('div', { class: 'tarjeta-vacia' }, h('h3', {}, 'Sin exoesqueleto'), h('p', { class: 'nota' }, 'Tildá «Agregar un exoesqueleto» en el panel de la izquierda para ver cómo cambia la torre: la flecha, el reparto del viento y los esfuerzos de cada barra.'),
-      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F', 'M', 'L'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t, ...(t === 'M' ? { malla: { ...MALLA_POR_DEFECTO } } : {}) }; })); return b; }))));
+      h('div', { class: 'fila-acciones' }, ...(['D', 'B', 'C', 'A', 'E', 'F', 'T', 'M', 'L'] as TipoExo[]).map(t => { const b = h('button', { type: 'button' }, `${t} · ${TIPOS_EXO[t].nombre}`); b.addEventListener('click', () => estado.cambiar(() => { estado.proyecto.exo = { ...structuredClone(EXO_POR_DEFECTO), tipo: t, ...(t === 'M' ? { malla: { ...MALLA_POR_DEFECTO } } : {}) }; })); return b; }))));
     return;
   }
   // vista: el alzado de una cara (con los diagramas) o el diseñador 3D de las cuatro caras
