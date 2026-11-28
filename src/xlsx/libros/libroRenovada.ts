@@ -21,6 +21,7 @@ import { tablasProyecto } from '../proyectoTablas';
 import type { Proyecto } from '../../engine/modelo';
 import { coef, columnasDintel, dato, escribirAberturas, escribirGeometria, hojaSecciones, num, res, VER } from './comun';
 import { COMBOS_SUELO } from '../../engine/fundaciones';
+import { COEF_JEQ, nucleosCerrados, type NucleoCerrado } from '../../engine/torsionNucleos';
 
 export const HR = {
   leame: 'Léame', datos: 'Datos', tablas: 'Tablas', viento: '1 Viento 102-25', cargas: '2 Cargas y vuelco', secciones: '3 Secciones',
@@ -33,6 +34,8 @@ export interface DatosRenovada {
   nivel: 'simple' | 'completa';
   /** cuantía vertical adoptada de cada parte (completa): clave «dir|pieza|muro|n», la necesaria que calculó la app */
   rhoAdoptada: Map<string, number>;
+  /** núcleos cerrados (Bredt): frenan el giro por sí mismos y su torsor le suma corte a sus paredes */
+  nucleos?: NucleoCerrado[];
 }
 const NB = 40;          // barras repartidas a lo largo del tabique (como la app)
 const NC = 120;         // posiciones del eje neutro en el diagrama
@@ -176,6 +179,29 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
   filaD(39, 'σt adm del suelo (estudio de suelos)', d.fund.sigmaAdm, 'sigmaSuelo', 'kg/cm²', 'CIRSOC 401, art. 7.4; la guía usa 2,5', dato('0.00'));
   const geo = escribirGeometria(L, da, d, 41);
   const abD = escribirAberturas(L, da, d.aberturas, geo.rPs + 3 + d.piezas.length);
+  // núcleos cerrados (Bredt): Jt = 4·Am² / ∮ ds/t, y su equivalente para Σ J·a²: Jeq = 0,25 · G/E · Jt · h² (G/E = 1/2,4)
+  const nucs = R.nucleos ?? [];
+  if (nucs.length) {
+    const r0 = abD.f1 + 3, paredes = nucs.flatMap(n => n.paredes.map(w => ({ n: n.nombre, ...w })));
+    da.seccion(r0, 'Núcleos cerrados (Bredt): frenan el giro por sí mismos; su torsor le suma corte a sus paredes (q = T / 2·Am)', 14);
+    da.cabecera(r0 + 1, 1, ['Núcleo', 'Am: área encerrada por la línea media (m²)', 'h: alto sobre PB (m)', '∮ ds/t', 'Jt = 4·Am²/∮ ds/t (m⁴)', `Jeq = ${String(COEF_JEQ).replace('.', ',')}·G/E·Jt·h² (m⁶)`]);
+    const n0 = r0 + 2, n1 = n0 + nucs.length - 1, p0 = n1 + 3, p1 = p0 + paredes.length - 1;
+    nucs.forEach((n, i) => {
+      const r = n0 + i;
+      da.put(1, r, n.nombre, dato()); da.put(2, r, n.Am, dato('0.000')); da.put(3, r, n.h, dato('0.00'));
+      da.f(4, r, `SUMPRODUCT((ncp_nuc=A${r})*ncp_veces*ncp_largo/ncp_e)`, num('0.000'));
+      da.f(5, r, `IF(D${r}>0,4*B${r}^2/D${r},0)`, res('0.000'));
+      da.f(6, r, `${COEF_JEQ}/2.4*E${r}*C${r}^2`, res('0.0'));
+    });
+    da.cabecera(p0 - 1, 1, ['Núcleo', 'Muro', 'Sentido de la pared', 'Largo entre ejes (m)', 'Espesor (m)', 'Veces (2 en un tubo, π/2 en uno circular)']);
+    paredes.forEach((w, i) => {
+      const r = p0 + i;
+      da.put(1, r, w.n, dato()); da.put(2, r, w.id, dato()); da.put(3, r, w.dir, dato()); da.put(4, r, w.largo, dato('0.000')); da.put(5, r, w.espesor, dato('0.000')); da.put(6, r, w.veces, dato('0.0000'));
+    });
+    for (const [n, c, a, b] of [['nc_nombre', 1, n0, n1], ['nc_Am', 2, n0, n1], ['nc_Jeq', 6, n0, n1], ['ncp_nuc', 1, p0, p1], ['ncp_muro', 2, p0, p1], ['ncp_sent', 3, p0, p1], ['ncp_largo', 4, p0, p1], ['ncp_e', 5, p0, p1], ['ncp_veces', 6, p0, p1]] as const)
+      nombrar(n, da, `${rc(c, a)}:${rc(c, b)}`);
+    nucs.forEach((n, i) => clave(`Jt_${n.nombre}`, da, `E${n0 + i}`));
+  }
 
   // ============================================================================================ 1 Viento 102-25
   const vi = L.hoja(HR.viento, [34, 12, 12, 9, 7, 7, 8, 8, 8, 10, 10, 10, 10, 10, 11, 10, 10, 10, 10, 11, 10]);
@@ -416,9 +442,37 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
       re.f(5, r, `${A ? m(5) : m(4)}-Sr_${dir}`, num('0.000'));
       re.f(6, r, `D${r}*B${r}*E${r}^2`, num('0.000'));
     }
-    re.put(1, q1 + 1, 'Σ J·a² = paralelas + perpendiculares', 'textoB'); re.combinar(1, q1 + 1, 4, q1 + 1);
-    const ref = re.f(5, q1 + 1, `SUM(E${f0}:E${f1})+SUM(F${q0}:F${q1})`, res('0.0'));
+    re.put(1, q1 + 1, nucs.length ? 'Σ J·a² = paralelas + perpendiculares + núcleos cerrados (Jeq, hoja «Datos»)' : 'Σ J·a² = paralelas + perpendiculares', 'textoB'); re.combinar(1, q1 + 1, 4, q1 + 1);
+    const ref = re.f(5, q1 + 1, `SUM(E${f0}:E${f1})+SUM(F${q0}:F${q1})${nucs.length ? '+SUM(nc_Jeq)' : ''}`, res('0.0'));
     nombrar(`SJaa_${dir}`, re, ref); clave(`SJaa_${dir}`, re, ref);
+    if (nucs.length) {
+      // torsor de cada núcleo en los cuatro casos (su parte de Mt: Jeq / Σ J·a²) y el corte que le suma a cada pared
+      const t0 = q1 + 4, t1 = t0 + nucs.length - 1;
+      re.cabecera(t0 - 1, 1, ['Núcleo', 'Jeq (m⁶)', 'T caso 1 (tm)', 'T caso 2', 'T caso 3', 'T caso 4', 'Am (m²)']);
+      const eP = `MAX(ABS(eR_${dir}+0.15*Bdir_${dir}),ABS(eR_${dir}-0.15*Bdir_${dir}))`;
+      nucs.forEach((n, i) => {
+        const r = t0 + i, f = `B${r}/SJaa_${dir}`;
+        re.f(1, r, `INDEX(nc_nombre,${i + 1})`, { papel: 'calc' }); re.f(2, r, `INDEX(nc_Jeq,${i + 1})`, num('0.0'));
+        re.f(3, r, `IF(SJaa_${dir}>0,QPB_${dir}*ABS(eR_${dir})*${f},0)`, num('0.00'));
+        re.f(4, r, `IF(SJaa_${dir}>0,0.75*QPB_${dir}*${eP}*${f},0)`, num('0.00'));
+        re.f(5, r, `IF(SJaa_${dir}>0,0.75*QPB_${dir}*ABS(eR_${dir})*${f},0)`, num('0.00'));
+        re.f(6, r, `IF(SJaa_${dir}>0,0.563*(QPB_${dir}*${eP}+Tor_${dir})*${f},0)`, num('0.00'));
+        re.f(7, r, `INDEX(nc_Am,${i + 1})`, num('0.000'));
+        for (let c = 0; c < 4; c++) clave(`T${c + 1}_${dir}_${n.nombre}`, re, rc(3 + c, r));
+      });
+      const paredes = nucs.flatMap(n => n.paredes), w0 = t1 + 3, w1 = w0 + paredes.length - 1, sent = dir === 'A' ? 'Y' : 'X';
+      const fija = (c: number, r: number) => { const x = rc(c, r).match(/^([A-Z]+)(\d+)$/)!; return '$' + x[1] + '$' + x[2]; };
+      re.cabecera(w0 - 1, 1, ['Muro', 'Núcleo', 'Sentido', 'Largo (m)', 'V caso 1 (t)', 'V caso 2', 'V caso 3', 'V caso 4']);
+      paredes.forEach((_, k) => {
+        const r = w0 + k, D_ = (c: string) => `INDEX(${c},${k + 1})`;
+        re.f(1, r, D_('ncp_muro'), { papel: 'calc' }); re.f(2, r, D_('ncp_nuc'), { papel: 'calc' }); re.f(3, r, D_('ncp_sent'), { papel: 'calc', centrar: true }); re.f(4, r, D_('ncp_largo'), num('0.000'));
+        // q = T / (2·Am) por el largo, solo en las paredes que trabajan con este viento
+        for (let c = 0; c < 4; c++) re.f(5 + c, r, `IF(C${r}="${sent}",SUMPRODUCT((${fija(1, t0)}:${fija(1, t1)}=B${r})*${fija(3 + c, t0)}:${fija(3 + c, t1)}/(2*${fija(7, t0)}:${fija(7, t1)}))*D${r},0)`, num('0.00'));
+      });
+      nombrar(`rP${dir}_muro`, re, `A${w0}:A${w1}`);
+      for (let c = 0; c < 4; c++) nombrar(`rP${dir}_V${c + 1}`, re, `${rc(5 + c, w0)}:${rc(5 + c, w1)}`);
+      return w1 + 3;
+    }
     re.graficos.push({ tipo: 'barras', titulo: `Fracción del viento ${dir} que toma cada pieza`, ejeX: 'pieza', ejeY: 'fracción',
       series: [1, 2, 3, 4].map((c, i) => ({ nombre: `caso ${c}`, x: `${RE}$A$${f0}:$A$${f1}`, y: `${RE}$${rc(10 + i, f0).replace(/\d+/, '')}$${f0}:$${rc(10 + i, f0).replace(/\d+/, '')}$${f1}`, color: ['2E75B6', 'C55A11', '548235', '7030A0'][i] })),
       desde: [28, r0], hasta: [37, r0 + 18] });
@@ -487,7 +541,7 @@ export function libroRenovada(R: DatosRenovada, p?: Proyecto): { libro: LibroK; 
       h2.f(21 + c, r, `SUMPRODUCT((r${dir}_nombre=A${r})*r${dir}_V${c + 1})`, num('0.00'));
       h2.f(25 + c, r, `IF(O${r}>0,${rc(17 + c, r)}*D${r}*G${r}/O${r},0)`, num('0.00'));
       h2.f(29 + c, r, `IF(AND(H${r}=1,O${r}>0),${rc(17 + c, r)}*(E${r}*F${r}^3/12)/O${r},0)`, num('0.00'));
-      h2.f(33 + c, r, `IF(H${r}=1,${rc(21 + c, r)}*D${r}/IF(P${r}>0,P${r},1),0)`, num('0.00'));
+      h2.f(33 + c, r, `IF(H${r}=1,${rc(21 + c, r)}*D${r}/IF(P${r}>0,P${r},1)${nucs.length ? `+SUMPRODUCT((rP${dir}_muro=B${r})*rP${dir}_V${c + 1})` : ''},0)`, num('0.00'));
     }
     h2.f(C['hw (m)'], r, `MAX(0.1,MIN(SUMPRODUCT((m_muro=B${r})*m_top),zTop)-zPB)`, num('0.00'));
     h2.f(C['lc (m)'], r, lcForm, num('0.00'));
@@ -733,5 +787,5 @@ export function datosRenovada(p: Proyecto, piezas: PiezaEquivalente[], verif: Ve
     const vistos = new Map<string, number>();
     for (const m of v.muros) { const n = vistos.get(m.id) ?? 0; vistos.set(m.id, n + 1); rhoAdoptada.set(`${v.dir}|${v.nombre}|${m.id}|${n}`, m.rhoNecesaria); }
   }
-  return { geo: datosGuia(p, piezas), c102: datos102De(p), c101: datos101De(p) as Required<DatosCirsoc101>, c201: datos201De(p), nivel, rhoAdoptada };
+  return { geo: datosGuia(p, piezas), c102: datos102De(p), c101: datos101De(p) as Required<DatosCirsoc101>, c201: datos201De(p), nivel, rhoAdoptada, nucleos: nucleosCerrados(p) };
 }

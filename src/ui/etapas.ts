@@ -469,6 +469,12 @@ const rototrasl: Etapa = {
       formula('Rigidez a la rotación', `Σ ${v('J', 'jt')} · ${v('a', 'j')}²${op('=')}${r(dp.SJa2, 1, 'm⁶')}`, guia ? 'paralelos (a al eje de inercia) + cada muro perpendicular con su J propio (a al eje de inercia de la otra dirección), como la guía' : `${hoja}!M51: paralelos y piezas perpendiculares (filas 31 a 50), por pieza`),
       formula('Lo que toma el tabique j (clase 5 y guía)', `${v('W', 'j')}${op('=')}${v('W')} · ${v('J', 'j')} / Σ${v('J', 'j')}${op('±')}${v('W')} · ${v('e')} · ${v('J', 'j')} · ${v('a', 'j')} / Σ${v('J', 'jt')} · ${v('a', 'j')}²`, '(+) del lado del viento: la rotación se suma · (−) del otro lado: se resta'),
     );
+    // CIRSOC y FEM: los núcleos cerrados frenan el giro por sí mismos (Bredt); la Planilla y la Guía no los cuentan
+    const rc = estado.calculo.cirsoc?.corr[d.dir === 'A' ? 'rotoA' : 'rotoB'];
+    if (rc?.nucleos?.length) {
+      const uno = rc.nucleos.length === 1, pct = (100 * (rc.SJa2Nucleos ?? 0)) / (rc.SJa2 || 1);
+      cu.append(h('p', { class: 'nota' }, `Estos valores no cuentan ${uno ? 'el núcleo cerrado' : 'los núcleos cerrados'} (como la cátedra). Con ${estado.calculo.fem ? 'FEM' : 'CIRSOC'}, ${rc.nucleos.map(x => `${x.nombre} (Jt = ${fmt(x.Jt, 1)} m⁴)`).join(', ')} también ${uno ? 'frena' : 'frenan'} el giro con el corte que da vuelta por sus paredes (Bredt: Jt = 4·Am²/∮ds/t). Como G·Jt·h²/(4·E), ${uno ? 'suma' : 'suman'} ${fmt(rc.SJa2Nucleos ?? 0, 0)} m⁶: con ${estado.calculo.fem ? 'FEM' : 'CIRSOC'}, Σ J·a² = ${fmt(rc.SJa2, 0)} m⁶, ${pct >= 99.5 && pct < 100 ? 'más del 99' : fmt(pct, 0)} % por ${uno ? 'el núcleo' : 'los núcleos'}. El torsor que ${uno ? 'toma' : 'toman'} se suma al corte de sus paredes en la verificación.`));
+    }
     const tabla = (filas: ElementoPlano[], perp: boolean) => {
       const t = h('table', { class: 'tabla' });
       t.append(h('thead', {}, h('tr', {}, ...(perp ? ['Muro', 'J (m⁴)', 'a (m)', 'rotación'] : ['Pieza', 'J (m⁴)', '%', 'a (m)', 'tras.', 'rot.', 'total']).map(x => h('th', {}, x)))));

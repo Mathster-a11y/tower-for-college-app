@@ -17,6 +17,7 @@ import { sueloCirsoc } from '../fundaciones';
 import { pesoExoFundacion, type ExoDireccion } from '../exoReglamento';
 import type { PiezaEquivalente } from '../mapping';
 import type { RotoGuia } from '../correcciones';
+import { cortePorTorsion } from '../torsionNucleos';
 import { datosAlturaDe, partesDePieza, verificarPieza } from '../flexocompresion';
 import { corteDintel201, fcDe, verificarMuro201, type Solicitacion, type VerifMuro201 } from '../verificacion/cirsoc201';
 import { armarTabique, estaticoCorte, textoBarras } from './guia';
@@ -122,7 +123,9 @@ export function partesPorCaso(rg: RotoGuia, nombre: string, B: number, Qdir: num
 export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], rg: RotoGuia | undefined, dir: 'A' | 'B',
   QPB: number, MPB: number, Botro: number, QotroPB: number,
   /** método FEM: el corte y el momento en la base de cada pieza en los cuatro casos (manda sobre la rototraslación) */
-  esfuerzosFem?: (nombre: string) => { M: number; V: number }[] | null): VerifPieza201[] {
+  esfuerzosFem?: (nombre: string) => { M: number; V: number }[] | null,
+  /** método FEM: el torsor en la base de cada núcleo cerrado en los cuatro casos (manda sobre el reparto de la guía) */
+  torsorFem?: (nucleo: string) => number[] | null): VerifPieza201[] {
   if (!rg && !esfuerzosFem) return [];
   const alt = datosAlturaDe(p), d1 = datos101De(p), L = sobrecarga(d1), fc = fcDe(p.hormigon || 'H30');
   const rec = (recubrimientoMm(datos201De(p)) + 12) / 1000;                     // al eje de las barras: + Ø6 horizontal + Ø12/2
@@ -132,6 +135,15 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
   const Bdir = (() => { let B = 0, Lp = 0; p.niveles.slice(0, iPB + 1).forEach(n => { B = n.B ?? B; Lp = n.L ?? Lp; }); return dir === 'A' ? B : Lp; })();
   const torsionOtro = 0.15 * Botro * QotroPB;
   const combos = combinaciones();
+  // núcleos cerrados (Bredt): el torsor que toman en cada caso le suma corte a sus paredes (q = T / 2·Am por el largo)
+  const nucleos = rg?.nucleos ?? [];
+  const torsorGuia = (Jeq: number) => {
+    if (!rg || !(rg.SJa2 > 0)) return [0, 0, 0, 0];
+    const f = Jeq / rg.SJa2, ePeor = Math.max(Math.abs(rg.e + 0.15 * Bdir), Math.abs(rg.e - 0.15 * Bdir));
+    return [QPB * Math.abs(rg.e) * f, 0.75 * QPB * ePeor * f, 0.75 * QPB * Math.abs(rg.e) * f, 0.563 * (QPB * ePeor + torsionOtro) * f];
+  };
+  const torsores = nucleos.map(n => ({ n, T: torsorFem?.(n.nombre) ?? torsorGuia(n.Jeq) }));
+  const corteTorsion = (id: string, ci: number) => torsores.reduce((s, x) => s + cortePorTorsion(x.n, id, dir, x.T[ci] ?? 0), 0);
   return piezas.filter(pz => pz.dir === dir && pz.filaHoja !== null).map(pz => {
     const muros = pz.muros.map(id => porId.get(id)).filter((m): m is Muro => !!m);
     const { partes, J } = partesDePieza(muros, dir);
@@ -150,7 +162,7 @@ export function verificarDireccion201(p: Proyecto, piezas: PiezaEquivalente[], r
         frac.forEach((f, ci) => {
           const M = fem ? Math.abs(fem[ci].M) : f * MPB, V = fem ? Math.abs(fem[ci].V) : f * QPB;
           const Nw = J > 0 ? (M * pt.A * pt.d) / J : 0, Mw = esAlma && J > 0 ? (M * (pt.b * pt.h ** 3) / 12) / J : 0;
-          const Vw = esAlma ? (V * pt.A) / areaAlmas : 0;
+          const Vw = esAlma ? (V * pt.A) / areaAlmas + corteTorsion(pt.id, ci) : 0;
           for (const sg of [1, -1]) sol.push({ combinacion: `${c.nombre} · caso ${ci + 1}${sg > 0 ? '' : ' (viento al revés)'}`, Nu: c.D * D + c.L * Lm + sg * c.W * Nw, Mu: c.W * Mw, Vu: c.W * Vw });
         });
       }

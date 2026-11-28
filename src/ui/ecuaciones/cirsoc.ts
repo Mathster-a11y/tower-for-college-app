@@ -147,7 +147,8 @@ export function grafoCirsoc(p0: Proyecto, metodo: 'cirsoc' | 'fem', s: SelCirsoc
       de('SJ', 'ΣJ', 'Suma de los J', 'de todas las piezas del viento', r => rg(r)?.SJ, 2, 'm⁴'),
       de('a', `a_${pieza}`, 'Brazo al eje de inercia', 'de la planta', r => el(r)?.a, 2, 'm'),
       de('e', 'e', 'Excentricidad', 'eje de inercia − eje de simetría', r => rg(r)?.e, 2, 'm'),
-      de('SJa2', 'ΣJ·a²', 'Rigidez a la rotación', 'paralelos y perpendiculares', r => rg(r)?.SJa2, 1, 'm⁶'),
+      de('SJn', 'ΣJ_eq', 'Núcleos cerrados (Bredt)', 'G·Jt·h²/(4·E) con Jt = 4·Am²/∮ds/t; ya sumado en ΣJ·a²', r => rg(r)?.SJa2Nucleos ?? 0, 1, 'm⁶'),
+      de('SJa2', 'ΣJ·a²', 'Rigidez a la rotación', 'paralelos, perpendiculares y núcleos cerrados', r => rg(r)?.SJa2, 1, 'm⁶'),
       { id: 'p1', titulo: 'Parte del viento, caso 1 (rototraslación)', sim: 'φ_1', ec: '[J] / [SJ] − [e] · [J] · [a] / [SJa2]', dec: 4, valor: r => { const g = rg(r), x = el(r); return g && x ? x.J / g.SJ - (g.SJa2 > 0 ? (g.e * x.J * x.a) / g.SJa2 : 0) : null; },
         f: x => x.J / x.SJ - (x.e * x.J * x.a) / x.SJa2, nota: 'Traslación más rotación, como fracción del viento.' },
       { id: 'p2', titulo: 'Caso 2: 75 % con torsión', sim: 'φ_2', ec: '0,75 · máx(φ con e ± 0,15 · [Bc])', dec: 4, valor: r => (fem ? null : verif(r)?.partes[1]) ?? null },
@@ -196,7 +197,7 @@ export function grafoCirsoc(p0: Proyecto, metodo: 'cirsoc' | 'fem', s: SelCirsoc
   sectorizar(modelo, { 'Masa y rigidez': ['m', 'K'], 'Vibración': ['w', 'n1', 'na', 'T'] });
   sectorizar(viento, { 'Presión dinámica': ['Ke', 'Kh', 'qh'], 'Frecuencia y ráfaga': ['n1', 'Iz', 'Qf', 'R', 'gR', 'Gf', 'G'], 'Fuerzas': ['p', 'Wi'], 'Corte y momento': ['Q', 'M'], 'Torsión': ['Mt2'] });
   sectorizar(vuelco, { 'Momento de vuelco': ['MA', 'QA', 'WPB', 'Mv'], 'Peso y estabilizante': ['P', 'Me'], 'Verificación': ['FS'] });
-  sectorizar(reparto, { 'Rigidez de las piezas': ['J', 'SJ', 'a', 'e', 'SJa2'], 'Parte de cada caso': ['p1', 'p2', 'p4', 'pf'], 'Momento de la pieza': ['Mr', 'Mj'] });
+  sectorizar(reparto, { 'Rigidez de las piezas': ['J', 'SJ', 'a', 'e', 'SJn', 'SJa2'], 'Parte de cada caso': ['p1', 'p2', 'p4', 'pf'], 'Momento de la pieza': ['Mr', 'Mj'] });
   sectorizar(resist, { 'Cupla de los cordones': ['z', 'Mu', 'Nu'], 'Tracción': ['T', 'As'], 'Compresión': ['Ac', 'C', 'Cadm'], 'Diagrama de interacción': ['rho'] });
   return {
     datos: () => structuredClone(p0),

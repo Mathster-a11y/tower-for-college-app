@@ -8,6 +8,7 @@ import { propiedades } from './perfil';
 import { propsPoligonos, seccionDebil } from './aberturas';
 import type { PiezaEquivalente } from './mapping';
 import { config } from './config';
+import type { NucleoCerrado } from './torsionNucleos';
 
 export interface ResultadoCorregido {
   /** viento con Kz mínimo 5 m (CIRSOC), J completo en todas las filas y viento en PB con el criterio C: fuera del corte de los tabiques, dentro del vuelco y del suelo */
@@ -33,6 +34,9 @@ export interface RotoGuia {
   SJ: number; SJa2: number;
   paralelos: ElementoRotoGuia[];
   perpendiculares: ElementoRotoGuia[];
+  /** métodos CIRSOC y FEM: los núcleos cerrados que frenan el giro por sí mismos (Bredt) y lo que suman a Σ J·a² */
+  nucleos?: NucleoCerrado[];
+  SJa2Nucleos?: number;
 }
 export interface PiezaRot { Qtras: number; Qrot: number; Qtot: number; Mtras: number; Mrot: number; Mtot: number; Mplanilla: number; }
 
@@ -59,7 +63,7 @@ export function repartoCorregido(r: RotoRes): PiezaRot[] {
  *    del eje de inercia de la otra dirección; también las alas de las piezas (la guía suma las alas de T6);
  *  - la rotación tiene el signo de la planilla: + donde se suma a la traslación.
  */
-export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: PlanillaRes, H: (number | null)[], dir: 'A' | 'B'): RotoGuia {
+export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: PlanillaRes, H: (number | null)[], dir: 'A' | 'B', nucleos?: NucleoCerrado[]): RotoGuia {
   const A = dir === 'A';
   const rot = A ? g.rotA : g.rotB, otra = A ? g.rotB : g.rotA;
   const Q = rot.D5, Mv = rot.F5, hW = Q === 0 ? 0 : Mv / Q;
@@ -87,11 +91,14 @@ export function rototraslacionGuia(p: Proyecto, piezas: PiezaEquivalente[], g: P
       perp.push({ nombre: todos.length > 1 ? `${m.id}·${k + 1}` : m.id, pos: A ? r.y : r.x, posT: A ? r.x : r.y, J: kD && todos.length === 1 ? (A ? kD.Jy : kD.Jx) : (largoS * largoT ** 3) / 12, muros: [m.id] });
     });
   });
-  const SJa2 = par.reduce((x, e) => x + e.J * (e.pos - Xr) ** 2, 0) + perp.reduce((x, e) => x + e.J * (e.pos - Sr) ** 2, 0);
+  // núcleos cerrados (solo CIRSOC y FEM): su rigidez a la torsión, como un término más de Σ J·a²
+  const SJa2Nucleos = (nucleos ?? []).reduce((x, n) => x + n.Jeq, 0);
+  const SJa2 = par.reduce((x, e) => x + e.J * (e.pos - Xr) ** 2, 0) + perp.reduce((x, e) => x + e.J * (e.pos - Sr) ** 2, 0) + SJa2Nucleos;
   const e = Xr, Mt = Q * e;
   const rotDe = (J: number, a: number) => (SJa2 > 0 ? (-Q * e * J * a) / SJa2 : 0);
   return {
     dir, Q, Mv, hW, Xr, Sr, e, Mt, SJ, SJa2,
+    ...(nucleos?.length ? { nucleos, SJa2Nucleos } : {}),
     paralelos: par.map(x => { const a = x.pos - Xr; return { ...x, a, frac: SJ > 0 ? x.J / SJ : 0, tras: SJ > 0 ? (Q * x.J) / SJ : 0, rot: rotDe(x.J, a) }; }),
     perpendiculares: perp.map(x => { const a = x.pos - Sr; return { ...x, fila: null, a, frac: 0, tras: 0, rot: rotDe(x.J, a) }; }),
   };
@@ -151,7 +158,7 @@ export function vientoEnPB(m: PlanillaRes['mnyq'], d: PlanillaDatos, filaPB: num
   m.N89 = m.N86 + m.N87; m.N90 = m.N85 - m.N87;
 }
 
-export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[] }): ResultadoCorregido {
+export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { proyecto: Proyecto; piezas: PiezaEquivalente[]; nucleos?: NucleoCerrado[] }): ResultadoCorregido {
   // con el armado de la app, el J de cada pieza es el de su sección real (Steiner con los muros), como la guía; con el
   // de la cátedra, el de su método simplificado (el molde de la hoja)
   const Jreal = extra && config.metodo === 'app' ? (['A', 'B'] as const).reduce((o, dir) => {
@@ -162,7 +169,7 @@ export function calcularCorregido(d: PlanillaDatos, filaPB: number, extra?: { pr
   guia.jminA = jMinimoConAlturaTotal(guia.jminA, guia.mnyq.G69);
   vientoEnPB(guia.mnyq, d, filaPB);
   if (!extra) return { guia, rotA: repartoCorregido(guia.rotA), rotB: repartoCorregido(guia.rotB) };
-  const rotoA = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotA.H, 'A');
-  const rotoB = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotB.H, 'B');
+  const rotoA = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotA.H, 'A', extra.nucleos);
+  const rotoB = rototraslacionGuia(extra.proyecto, extra.piezas, guia, d.rotB.H, 'B', extra.nucleos);
   return { guia, rotA: repartoGuiaPorFila(guia.rotA, rotoA), rotB: repartoGuiaPorFila(guia.rotB, rotoB), rotoA, rotoB };
 }
