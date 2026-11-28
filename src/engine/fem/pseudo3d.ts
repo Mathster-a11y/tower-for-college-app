@@ -35,6 +35,9 @@ export interface ModeloTorre {
   E: number; G: number;
   /** con deformación por corte (Timoshenko) */
   timo: boolean;
+  /** núcleos cerrados: frenan el giro de las losas por sí mismos (Saint-Venant), un resorte G·Jt/Δz entre cada par de
+   *  losas hasta la cota a la que llegan (sobre PB) */
+  torsores?: { nombre: string; GJt: number; zHasta: number }[];
 }
 /** cargas en cada piso, en el centro de la losa (0, 0): fuerzas en x e y (t) y momento torsor (tm) */
 export interface CargasPiso { Fx: number[]; Fy: number[]; Mz: number[] }
@@ -42,6 +45,8 @@ export interface ResultadoFem {
   ux: number[]; uy: number[]; rz: number[];
   /** corte y momento en la base de cada pieza (t, tm), y la fuerza que toma en cada piso (t) */
   piezas: { nombre: string; dir: 'A' | 'B'; V: number; M: number; f: number[] }[];
+  /** torsor en la base de cada núcleo cerrado (tm) */
+  torsores?: { nombre: string; T: number }[];
 }
 
 // ---------------------------------------------------------------------------------------------------- álgebra
@@ -148,6 +153,17 @@ function ensamblarSinMemoria(mo: ModeloTorre): Ensamble {
     pisos.forEach((ka, a) => pisos.forEach((kb, b) => t(ka).forEach(([i, ci]) => t(kb).forEach(([j, cj]) => { K[i][j] += ci * cj * Kp[a][b]; }))));
     return { p, pisos, Kp };
   });
+  // núcleos cerrados: resortes a la torsión entre losas consecutivas (y con la base empotrada)
+  for (const t of mo.torsores ?? []) {
+    let z0 = 0, k0 = -1;
+    mo.z.forEach((z, k) => {
+      if (z > t.zHasta + 1e-6 || !(t.GJt > 0)) return;
+      const kt = t.GJt / (z - z0), i = 3 * k + 2;
+      K[i][i] += kt;
+      if (k0 >= 0) { const j = 3 * k0 + 2; K[j][j] += kt; K[i][j] -= kt; K[j][i] -= kt; }
+      z0 = z; k0 = k;
+    });
+  }
   // una dirección sin piezas (o sin giro) haría singular la matriz: un resorte despreciable la sostiene
   const maxD = Math.max(1, ...K.map((f, i) => Math.abs(f[i])));
   K.forEach((f, i) => { if (Math.abs(f[i]) < 1e-12 * maxD) f[i] += 1e-12 * maxD; });
@@ -167,7 +183,8 @@ export function resolverTorre(mo: ModeloTorre, c: CargasPiso): ResultadoFem {
     const f = mo.z.map(() => 0); pisos.forEach((k, a) => { f[k] = fz[a]; });
     return { nombre: p.nombre, dir: p.dir, V: fz.reduce((s, x) => s + x, 0), M: fz.reduce((s, x, a) => s + x * mo.z[pisos[a]], 0), f };
   });
-  return { ux, uy, rz, piezas };
+  const torsores = (mo.torsores ?? []).filter(t => t.GJt > 0 && mo.z.length && mo.z[0] <= t.zHasta + 1e-6).map(t => ({ nombre: t.nombre, T: (t.GJt * rz[0]) / mo.z[0] }));
+  return { ux, uy, rz, piezas, ...(torsores.length ? { torsores } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------------- modal

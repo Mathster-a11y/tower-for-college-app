@@ -17,8 +17,15 @@ import { discretizarCurva } from '../engine/curvas';
 
 export type Estilo3D = 'sombreado' | 'transparente' | 'alambre' | 'texturado' | 'render';
 export type Vista3D = 'libre' | 'iso' | 'dimetrica' | 'trimetrica' | 'planta' | 'frente' | 'contrafrente' | 'izquierda' | 'derecha';
+/** color por dato: cada muro pintado según un número de la app (una rampa de un solo tono; rojo y azul no: son tracción y compresión) */
+export type ColorPor = 'no' | 'espesor' | 'parte' | 'cuantia';
 export interface Presentacion3D {
   estilo: Estilo3D;
+  colorPor: ColorPor;
+  /** pisos separados: metros que se abre cada nivel respecto del de abajo (0 = la torre como es) */
+  separar: number;
+  /** aislar o rayos X: solo esos muros opacos (los demás, ocultos o casi transparentes) */
+  aislar: { modo: 'no' | 'aislar' | 'rayosx'; muros: string[]; nombre: string };
   proyeccion: 'perspectiva' | 'paralela';
   vista: Vista3D;
   /** corte en planta (a la altura z, se ve lo de abajo) o en alzado (un plano vertical perpendicular a x o a y de la planta) */
@@ -28,7 +35,8 @@ export interface Presentacion3D {
 }
 
 export const PRESENTACION_INICIAL: Presentacion3D = {
-  estilo: 'sombreado', proyeccion: 'perspectiva', vista: 'libre',
+  estilo: 'sombreado', proyeccion: 'perspectiva', vista: 'libre', colorPor: 'no', separar: 0,
+  aislar: { modo: 'no', muros: [], nombre: '' },
   corte: { tipo: 'no', z: 1.2, eje: 'y', pos: 0, lado: -1 },
   parcial: { activo: false, z0: 0, z1: 10 },
 };
@@ -140,6 +148,140 @@ function rellenoAlzado(p: Proyecto, eje: 'x' | 'y', c: number, matMuro: THREE.Ma
   return g;
 }
 
+// ------------------------------------------------------------------------------------------------ color por dato
+export interface DatosColor {
+  titulo: string;
+  /** valor normalizado (0 a 1) de cada muro que tiene el dato */
+  valor: Map<string, number>;
+  /** qué dicen los extremos de la escala */
+  min: string; max: string;
+  nota?: string;
+}
+/** el dato de cada muro, o un texto que dice por qué no hay (con otro método, sin cálculo…) */
+export function datosColor(por: ColorPor): DatosColor | string | null {
+  if (por === 'no') return null;
+  const p = estado.proyecto, c = estado.calculo;
+  const nf = (x: number, d: number) => x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  if (por === 'espesor') {
+    const es = p.muros.map(m => m.espesor).filter(x => x > 0);
+    if (!es.length) return 'No hay muros.';
+    const a = Math.min(...es), b = Math.max(...es);
+    return { titulo: 'Espesor de cada muro (en PB)', valor: new Map(p.muros.filter(m => m.espesor > 0).map(m => [m.id, b > a ? (m.espesor - a) / (b - a) : 0.5])), min: `${nf(a, 2)} m`, max: `${nf(b, 2)} m` };
+  }
+  if (por === 'parte') {
+    const corr = c.cirsoc?.corr ?? c.corr;
+    const rg = estado.dir === 'A' ? corr?.rotoA : corr?.rotoB;
+    if (!rg || !rg.paralelos.length) return `No hay piezas que tomen el viento ${estado.dir}.`;
+    const mx = Math.max(...rg.paralelos.map(x => x.frac), 1e-12);
+    const valor = new Map<string, number>();
+    rg.paralelos.forEach(x => x.muros.forEach(id => valor.set(id, Math.max(valor.get(id) ?? 0, x.frac / mx))));
+    return { titulo: `Parte del viento ${estado.dir} que toma la pieza de cada muro (J / ΣJ)`, valor, min: '0 %', max: `${nf(mx * 100, 1)} %`, nota: 'Gris: el muro no está en una pieza de este viento.' };
+  }
+  const verif = c.cirsoc?.verif;
+  if (!verif) return 'La cuantía necesaria sale de la verificación del CIRSOC 201: elegí el método CIRSOC o FEM.';
+  const rho = new Map<string, number>(), mal = new Set<string>();
+  verif.forEach(v => v.muros.forEach(m => { rho.set(m.id, Math.max(rho.get(m.id) ?? 0, m.rhoNecesaria)); if (!m.verifica) mal.add(m.id); }));
+  if (!rho.size) return 'No hay muros verificados.';
+  return { titulo: 'Cuantía vertical necesaria (el peor de los dos vientos)', valor: new Map([...rho].map(([id, r]) => [id, Math.min(1, r / 0.04)])), min: '0 %', max: '4 % (la máxima)',
+    nota: mal.size ? `No verifican: ${[...mal].join(', ')} (van con el tono más oscuro).` : 'Todos verifican.' };
+}
+/** rampa de un solo tono (violeta): de claro a oscuro */
+const RAMPA = ['#ede7f6', '#9575cd', '#4527a0'];
+export function colorRampa(t: number): THREE.Color {
+  const x = Math.max(0, Math.min(1, t)) * (RAMPA.length - 1), i = Math.min(RAMPA.length - 2, Math.floor(x));
+  return new THREE.Color(RAMPA[i]).lerp(new THREE.Color(RAMPA[i + 1]), x - i);
+}
+export const RAMPA_CSS = `linear-gradient(to right, ${RAMPA.join(', ')})`;
+const SIN_DATO = 0xcfd4d8;
+
+// ------------------------------------------------------------------------------------------------ pisos separados
+/** cuánto sube lo que está a la altura y: cada nivel se abre «sep» metros respecto del de abajo (la losa va con lo de arriba) */
+export function desplazamientoPiso(cotasAsc: number[], sep: number, y: number): number {
+  let n = 0;
+  for (const c of cotasAsc) if (c <= y + 0.3) n++;
+  return Math.max(0, n - 1) * sep;
+}
+const identidad = (o: THREE.Object3D) => o.matrixWorld.equals(new THREE.Matrix4());
+/**
+ * abre la torre piso por piso: muros, losas y fachada se separan por triángulo (cada tramo con su nivel, como una
+ * vista explotada); las barras del exo y las líneas sueltas se estiran punto por punto (siguen unidas a sus nudos).
+ * Devuelve cuánto creció la torre.
+ */
+export function separarPisos(grupo: THREE.Group, cotasAsc: number[], sep: number): number {
+  if (!(sep > 0) || cotasAsc.length < 2) return 0;
+  grupo.updateMatrixWorld(true);
+  const off = (y: number) => desplazamientoPiso(cotasAsc, sep, y);
+  const usos = new Map<THREE.BufferGeometry, number>();
+  grupo.traverse(o => { const g = (o as THREE.Mesh).geometry; if (g) usos.set(g, (usos.get(g) ?? 0) + 1); });
+  const tomar = (o: THREE.Mesh | THREE.Line): THREE.BufferGeometry => {
+    // una copia propia, sin índice y en coordenadas del grupo (el objeto queda sin transformación)
+    const g0 = o.geometry;
+    let g = g0.index ? g0.toNonIndexed() : g0.clone();
+    if (!identidad(o)) { g.applyMatrix4(o.matrixWorld); o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1); o.updateMatrix(); }
+    if ((usos.get(g0) ?? 0) <= 1) g0.dispose();
+    o.geometry = g;
+    return g;
+  };
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const porGrupo = (o: THREE.Mesh | THREE.Line, n: number, tapaArribaConSuPiso: boolean) => {
+    // n = 3: triángulos; n = 2: segmentos. Todo el grupo sube según su centro
+    const g = tomar(o), pos = g.getAttribute('position') as THREE.BufferAttribute;
+    let yMax = -Infinity; for (let i = 0; i < pos.count; i++) yMax = Math.max(yMax, pos.getY(i));
+    for (let i = 0; i + n - 1 < pos.count; i += n) {
+      let yc = 0; for (let k = 0; k < n; k++) yc += pos.getY(i + k);
+      yc /= n;
+      // la tapa de arriba de un muro está justo en la cota del nivel de arriba: va con su tramo (la cara de arriba de una
+      // losa, en cambio, va con los muros que apoyan en ella)
+      if (n === 3 && tapaArribaConSuPiso) {
+        a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+        const nor = b.sub(a).cross(c.sub(a));
+        if (nor.lengthSq() > 0 && nor.normalize().y > 0.9) yc -= 0.35;
+      } else if (n === 2 && tapaArribaConSuPiso && Math.abs(pos.getY(i) - pos.getY(i + 1)) < 1e-6 && Math.abs(yc - yMax) < 1e-6) yc -= 0.35;   // la arista de arriba del muro
+      const d = off(yc);
+      for (let k = 0; k < n; k++) pos.setY(i + k, pos.getY(i + k) + d);
+    }
+    pos.needsUpdate = true; g.computeBoundingSphere(); g.computeBoundingBox();
+  };
+  const porPunto = (o: THREE.Mesh | THREE.Line) => {
+    const g = tomar(o), pos = g.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + off(pos.getY(i)));
+    pos.needsUpdate = true; g.computeBoundingSphere(); g.computeBoundingBox();
+    if ((o as THREE.Line).isLine && (o.material as THREE.Material).type === 'LineDashedMaterial') (o as THREE.Line).computeLineDistances();
+  };
+  const visitar = (o: THREE.Object3D) => {
+    const ms = o as THREE.Mesh, ln = o as THREE.LineSegments;
+    if (ms.isMesh && ms.geometry) {
+      const capa = o.userData.capa as string | undefined;
+      if (o.userData.muro || capa === 'Muros' || capa === 'Losas' || capa === 'Fachada' || o.userData.corte) porGrupo(ms, 3, capa !== 'Losas' && !o.userData.corte); else porPunto(ms);
+      return;
+    }
+    if (ln.isLine && ln.geometry) { if (ln.isLineSegments) porGrupo(ln, 2, ln.userData.capa !== 'Losas'); else porPunto(ln); return; }
+    if (!o.children.length) return;
+    if (identidad(o)) { [...o.children].forEach(visitar); return; }
+    // un conjunto con su propia posición (la flecha del viento): sube entero según su centro
+    const b = new THREE.Box3().setFromObject(o);
+    if (!b.isEmpty()) o.position.y += off((b.min.y + b.max.y) / 2);
+  };
+  [...grupo.children].forEach(visitar);
+  return off(cotasAsc[cotasAsc.length - 1]);
+}
+
+// ------------------------------------------------------------------------------------------------ vistas guardadas
+/** una vista guardada en el proyecto: lo que se ve (estilo, cortes, color…) y dónde está la cámara */
+export interface VistaGuardada {
+  nombre: string;
+  pr: Presentacion3D;
+  camara: { pos: [number, number, number]; obj: [number, number, number]; zoom: number };
+}
+/** completa una presentación guardada (o vieja) con lo que le falte */
+export function completarPresentacion(g: Partial<Presentacion3D> | null | undefined): Presentacion3D {
+  const b = structuredClone(PRESENTACION_INICIAL);
+  if (!g || typeof g !== 'object') return b;
+  return { ...b, ...g, corte: { ...b.corte, ...(g.corte ?? {}) }, parcial: { ...b.parcial, ...(g.parcial ?? {}) },
+    aislar: { ...b.aislar, ...(g.aislar ?? {}), muros: Array.isArray(g.aislar?.muros) ? [...g.aislar!.muros] : [] },
+    separar: Number.isFinite(g.separar) && (g.separar ?? 0) >= 0 ? g.separar! : 0 };
+}
+
 // ------------------------------------------------------------------------------------------------ aplicar
 export interface ContextoPresentacion {
   grupo: THREE.Group;
@@ -173,9 +315,17 @@ export function aplicarPresentacion(c: ContextoPresentacion, pr: Presentacion3D)
   const bordes: THREE.Object3D[] = [];
   const mallas: THREE.Mesh[] = [];
   grupo.traverse(o => { if ((o as THREE.Mesh).isMesh) mallas.push(o as THREE.Mesh); });
+  // aislar y rayos X: solo los muros elegidos (los que todavía existen)
+  const elegidos = new Set(pr.aislar.modo === 'no' ? [] : pr.aislar.muros.filter(id => p.muros.some(m => m.id === id)));
+  const aislar = elegidos.size > 0 ? pr.aislar.modo : 'no';
+  const datos = datosColor(pr.colorPor);
+  const dc = datos && typeof datos === 'object' ? datos : null;
   for (const ms of mallas) {
     const vidrio = ms.userData.capa === 'Fachada';
-    const fantasma = fuera(ms);
+    const idMuro = ms.userData.muro as string | undefined;
+    const elegido = !!idMuro && elegidos.has(idMuro);
+    if (aislar === 'aislar' && !elegido) { ms.visible = false; continue; }
+    const fantasma = fuera(ms) || (aislar === 'rayosx' && !elegido);
     const mats = (Array.isArray(ms.material) ? ms.material : [ms.material]).map(m0 => {
       const m = m0.clone() as THREE.MeshStandardMaterial;
       if (fantasma || pr.estilo === 'transparente') { m.transparent = true; m.opacity = fantasma ? 0.08 : vidrio ? 0.1 : 0.22; m.depthWrite = false; m.map = null; }
@@ -183,6 +333,12 @@ export function aplicarPresentacion(c: ContextoPresentacion, pr: Presentacion3D)
       else {
         m.transparent = false; m.opacity = 1; m.depthWrite = true;
         if (textura && 'map' in m && !m.vertexColors) { m.map = hormigon(); m.color = new THREE.Color(0xffffff); m.roughness = 0.92; uvCaja(ms.geometry); }
+      }
+      // color por dato: el muro con el tono de su valor (gris si no tiene el dato); el resto no cambia
+      if (dc && idMuro && !fantasma && 'color' in m) {
+        const v = dc.valor.get(idMuro);
+        m.color = v === undefined ? new THREE.Color(SIN_DATO) : colorRampa(v);
+        m.map = null; m.vertexColors = false;
       }
       m.clippingPlanes = planos;
       m.clipShadows = true;
@@ -201,10 +357,15 @@ export function aplicarPresentacion(c: ContextoPresentacion, pr: Presentacion3D)
       ms.parent?.add(ln);
     }
   }
-  // las líneas también se cortan
+  // las líneas también se cortan (y con aislar o rayos X, las de los otros muros y losas se ocultan o se aclaran)
   grupo.traverse(o => {
     const l = o as THREE.Line;
     if (!(l as unknown as { isLine?: boolean }).isLine) return;
+    if (aislar !== 'no' && !elegidos.has(o.userData.muro) && (o.userData.muro || o.userData.capa)) {
+      if (aislar === 'aislar') { o.visible = false; return; }
+      const m0 = (Array.isArray(l.material) ? l.material[0] : l.material) as THREE.LineBasicMaterial;
+      l.material = new THREE.LineBasicMaterial({ color: m0.color ?? tinta.color, transparent: true, opacity: 0.12 });
+    }
     const ms = Array.isArray(l.material) ? l.material : [l.material];
     ms.forEach(m => { m.clippingPlanes = planos; m.needsUpdate = true; });
   });
@@ -232,7 +393,9 @@ export function aplicarPresentacion(c: ContextoPresentacion, pr: Presentacion3D)
   if (pr.corte.tipo !== 'no') {
     const poche = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.colores.poche), side: THREE.DoubleSide });
     const losaC = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.colores.poche).lerp(new THREE.Color(0xffffff), 0.35), side: THREE.DoubleSide });
-    grupo.add(pr.corte.tipo === 'planta' ? rellenoPlanta(p, pr.corte.z, c.corr, poche) : rellenoAlzado(p, pr.corte.eje, pr.corte.pos, poche, losaC, pr.corte.lado));
+    const rel = pr.corte.tipo === 'planta' ? rellenoPlanta(p, pr.corte.z, c.corr, poche) : rellenoAlzado(p, pr.corte.eje, pr.corte.pos, poche, losaC, pr.corte.lado);
+    rel.traverse(o => { o.userData.corte = true; });
+    grupo.add(rel);
     const m = 3, B = md.B / 2 + m, L = md.L / 2 + m;
     const pts = pr.corte.tipo === 'planta'
       ? [[-B, -L], [B, -L], [B, L], [-B, L], [-B, -L]].map(([x, y]) => new THREE.Vector3(x, pr.corte.z + 0.01, -y))
@@ -241,5 +404,10 @@ export function aplicarPresentacion(c: ContextoPresentacion, pr: Presentacion3D)
         : [[-B, md.fondoCota], [B, md.fondoCota], [B, md.top + m], [-B, md.top + m], [-B, md.fondoCota]].map(([s, z]) => new THREE.Vector3(s, z, -pr.corte.pos)));
     grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: new THREE.Color(c.colores.plano), dashSize: 1, gapSize: 0.6 })).computeLineDistances());
   }
-  return planos;
+  // pisos separados: al final (el render parcial y los cortes ya se decidieron con la torre entera); el corte en planta
+  // sube con su nivel
+  const cotasAsc = [...new Set(p.niveles.map(n => n.cota))].sort((a, b) => a - b);
+  const extra = separarPisos(grupo, cotasAsc, pr.separar);
+  if (extra > 0 && pr.corte.tipo === 'planta' && planos[0]) planos[0].constant = pr.corte.z + desplazamientoPiso(cotasAsc, pr.separar, pr.corte.z);
+  return { planos, extra };
 }

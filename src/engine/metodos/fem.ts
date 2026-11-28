@@ -19,6 +19,7 @@ import { modal, resolverTorre, type CargasPiso, type ModeloTorre, type Modo, typ
 import { viento102, type Viento102 } from '../cargas/cirsoc102';
 import { datos101De } from '../cargas/cirsoc101';
 import type { TeoriaFem } from './tipos';
+import { nucleosCerrados } from '../torsionNucleos';
 
 /** aceleración de la gravedad (m/s²) para pasar los pesos (t) a masas (t·s²/m) */
 export const GRAVEDAD = 9.80665;
@@ -41,6 +42,8 @@ export interface ResultadoMetodoFem {
   /** esfuerzos en la base de cada pieza en cada caso (1 a 4): el peor de los dos signos de la torsión. Es una tabla
    *  (no una función) para que el cálculo se pueda copiar entre hilos; se lee con esfuerzosFem */
   esfuerzos: Record<'A' | 'B', Record<string, { M: number; V: number }[]>>;
+  /** torsor en la base de cada núcleo cerrado en cada caso (1 a 4), el mayor de los que entran en esa dirección (tm) */
+  torsion?: Record<'A' | 'B', Record<string, number[]>>;
   /** deformada de servicio de cada dirección (caso 1, borde más desfavorable): cotas sobre PB y desplazamientos (m) */
   deriva: Record<'A' | 'B', { z: number[]; d: number[]; h: number }>;
   /** % del corte del viento que toma cada pieza en el caso 1 (FEM) y el de la planilla, para comparar */
@@ -61,7 +64,8 @@ export function modeloDeProyecto(p: Proyecto, teoria: TeoriaFem = 'timoshenko'):
   const pieza = (dir: 'A' | 'B') => (x: (typeof eA.piezas)[number]) => ({
     nombre: x.nombre, dir, pos: x.x, J: x.J, Av: x.Av > 0 ? x.Av : x.A, zHasta: x.zHasta - zPB,
   });
-  return { z, E: E_HORMIGON, G: G_HORMIGON, timo: teoria === 'timoshenko', piezas: [...eA.piezas.map(pieza('A')), ...eB.piezas.map(pieza('B'))] };
+  const torsores = nucleosCerrados(p).map(n => ({ nombre: n.nombre, GJt: G_HORMIGON * n.Jt, zHasta: n.h }));
+  return { z, E: E_HORMIGON, G: G_HORMIGON, timo: teoria === 'timoshenko', piezas: [...eA.piezas.map(pieza('A')), ...eB.piezas.map(pieza('B'))], ...(torsores.length ? { torsores } : {}) };
 }
 
 /**
@@ -92,6 +96,11 @@ export function masasDeProyecto(p: Proyecto, mo: ModeloTorre): { masas: number[]
 /** esfuerzos en la base de una pieza en los casos 1 a 4, o null si la pieza no está en el modelo */
 export function esfuerzosFem(r: ResultadoMetodoFem, dir: 'A' | 'B', nombre: string): { M: number; V: number }[] | null {
   return Object.prototype.hasOwnProperty.call(r.esfuerzos[dir], nombre) ? r.esfuerzos[dir][nombre] : null;
+}
+
+/** torsor en la base de un núcleo cerrado en los casos 1 a 4, o null si el modelo no lo tiene */
+export function torsorFem(r: ResultadoMetodoFem, dir: 'A' | 'B', nucleo: string): number[] | null {
+  return r.torsion && Object.prototype.hasOwnProperty.call(r.torsion[dir], nucleo) ? r.torsion[dir][nucleo] : null;
 }
 
 /** todo el método FEM de un proyecto: modal → viento del 102-25 con esas frecuencias → casos de carga → esfuerzos */
@@ -137,6 +146,11 @@ export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): Resu
   };
   const esfuerzos: ResultadoMetodoFem['esfuerzos'] = { A: {}, B: {} };
   for (const pz of mo.piezas) esfuerzos[pz.dir][pz.nombre] ??= esfuerzosDe(pz.dir, pz.nombre);
+  const torsion: ResultadoMetodoFem['torsion'] = mo.torsores?.length ? { A: {}, B: {} } : undefined;
+  if (torsion) for (const d of ['A', 'B'] as const) for (const t of mo.torsores!) {
+    torsion[d][t.nombre] = ([1, 2, 3, 4] as const).map(k => casos.filter(x => x.caso === k && deDir(x, d))
+      .reduce((m, c) => Math.max(m, Math.abs(c.res.torsores?.find(x => x.nombre === t.nombre)?.T ?? 0)), 0));
+  }
 
   // deriva de servicio (caso 1): el borde de la planta que más se mueve, con la presión de servicio
   const pl = plantas(p), iPB = p.niveles.reduce((k, n, i) => (n.cota >= 0 ? i : k), -1);
@@ -153,5 +167,5 @@ export function calcularFem(p: Proyecto, teoria: TeoriaFem = 'timoshenko'): Resu
     const pla = new Map(entradaFem(p, d).planilla.reparto.map(x => [x.nombre, x.pct]));
     for (const pz of c.res.piezas.filter(x => x.dir === d)) reparto.push({ dir: d, nombre: pz.nombre, fem: Q > 0 ? (pz.V / Q) * 100 : 0, planilla: pla.get(pz.nombre) ?? 0 });
   }
-  return { modelo: mo, masas, inercias, modos, n1, viento: w, casos, esfuerzos, deriva, reparto };
+  return { modelo: mo, masas, inercias, modos, n1, viento: w, casos, esfuerzos, ...(torsion ? { torsion } : {}), deriva, reparto };
 }

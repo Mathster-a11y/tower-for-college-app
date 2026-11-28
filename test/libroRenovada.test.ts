@@ -55,6 +55,15 @@ describe.each(casos)('planilla renovada · $nombre', ({ p: p0, nivel }) => {
       x.niveles.forEach((n, i) => { igual(`W_${dir}_${i}`, n.W); igual(`Q_${dir}_${i}`, n.Q); igual(`M_${dir}_${i}`, n.M); });
     }
   });
+  it('núcleos cerrados (Bredt): Jt y el torsor de cada caso, como la app', () => {
+    for (const n of R.nucleos ?? []) {
+      igual(`Jt_${n.nombre}`, n.Jt);
+      for (const dir of ['A', 'B'] as const) {
+        const rg = c.cirsoc!.corr[dir === 'A' ? 'rotoA' : 'rotoB']!;
+        igual(`T1_${dir}_${n.nombre}`, w[dir].QPB * Math.abs(rg.e) * n.Jeq / rg.SJa2);
+      }
+    }
+  });
   it('vuelco y deriva de servicio', () => {
     const vu = vuelco102(p, w);
     igual('vuelco', vu.Me / vu.Mv); igual('Mv', vu.Mv);

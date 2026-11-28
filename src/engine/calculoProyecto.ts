@@ -10,7 +10,8 @@ import { calcularCorregido, type ResultadoCorregido } from './correcciones';
 import { controles, type Control } from './verificaciones';
 import { config, usarConfig } from './config';
 import { viento102, type Viento102 } from './cargas/cirsoc102';
-import { calcularFem, esfuerzosFem, type ResultadoMetodoFem } from './metodos/fem';
+import { calcularFem, esfuerzosFem, torsorFem, type ResultadoMetodoFem } from './metodos/fem';
+import { nucleosCerrados } from './torsionNucleos';
 import { compararMetodos, type Comparacion } from './metodos/combinado';
 import { controlesCirsoc, datosCirsoc, verificarDireccion201, type VerifPieza201 } from './metodos/cirsoc';
 import { configDe, configMotor, type ConfigCalculo } from './metodos/tipos';
@@ -66,14 +67,16 @@ function calcularConConfig(proyecto: Proyecto, c: ConfigCalculo): Calculo {
     // método FEM: lo mismo, pero la frecuencia sale del análisis modal y el reparto de los casos de carga, del modelo.
     const fem = c.metodo === 'fem' ? calcularFem(proyecto, c.teoria) : undefined;
     const w = fem?.viento ?? viento102(proyecto);
-    const corrC = calcularCorregido(datosCirsoc(asig.datos, w), filaPB, { proyecto, piezas: asig.piezas });
+    // los núcleos cerrados frenan el giro por sí mismos (Bredt): solo en CIRSOC y FEM, la Guía sigue como la cátedra
+    const corrC = calcularCorregido(datosCirsoc(asig.datos, w), filaPB, { proyecto, piezas: asig.piezas, nucleos: nucleosCerrados(proyecto) });
     // con exoesqueleto: los tabiques toman solo su parte del viento (y la deriva es la de la torre con el exo)
     const SJ = { A: corrC.rotoA?.SJ ?? 0, B: corrC.rotoB?.SJ ?? 0 };
     const ex = exoConViento(proyecto, corrC.guia, asig.piezas, asig.filaNivel, w, SJ);
     const fM = (d: 'A' | 'B') => ex?.[d].fM ?? 1, fV = (d: 'A' | 'B') => ex?.[d].fV ?? 1;
     const esf = (d: 'A' | 'B') => (fem ? (n: string) => esfuerzosFem(fem, d, n)?.map(x => ({ M: x.M * fM(d), V: x.V * fV(d) })) ?? null : undefined);
-    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A')),
-      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'))];
+    const tor = (d: 'A' | 'B') => (fem ? (n: string) => torsorFem(fem, d, n)?.map(T => T * fV(d)) ?? null : undefined);
+    const verif = [...verificarDireccion201(proyecto, asig.piezas, corrC.rotoA, 'A', w.A.QPB * fV('A'), w.A.MPB * fM('A'), w.B.B, w.B.QPB * fV('B'), esf('A'), tor('A')),
+      ...verificarDireccion201(proyecto, asig.piezas, corrC.rotoB, 'B', w.B.QPB * fV('B'), w.B.MPB * fM('B'), w.A.B, w.A.QPB * fV('A'), esf('B'), tor('B'))];
     const base = controles(proyecto, asig.datos, res, corrC, proyecto.hormigon || 'H30', asig.piezas, asig.filaNivel, ex);
     return { asig, res, corr, revision: 0, config: c, valores: corrC.guia, cirsoc: { viento: w, corr: corrC, verif, exo: ex }, fem,
       controles: controlesCirsoc(proyecto, base, corrC.guia, w, verif, asig.filaNivel, c.verificacion, SJ, fem?.deriva, ex ?? undefined) };

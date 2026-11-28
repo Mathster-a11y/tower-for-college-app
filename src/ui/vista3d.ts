@@ -293,6 +293,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       for (const { z, v } of [{ z: n.cota, v: pol }, ...juntas.filter(j => j.i === iN).map(j => ({ z: j.z, v: discretizarCurva(j.v) }))]) {
         const losa = new Prisma(v, [z - 0.2, z], z < 0 ? matSub : matLosa, new THREE.LineBasicMaterial({ color: 0x7d8a94 }), z, hs, () => dN);
         capa(losa.malla, 'Losas', `Losa ${n.nombre}${z === n.cota ? '' : ` (piso de ${f2z(z)} m)`}`);
+        losa.malla.userData.nivel = n.cota;
         prismas.push(losa);
       }
     });
@@ -377,7 +378,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
           : rectangulos(mm).map(r => [{ x: r.x - r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y - r.ay / 2 }, { x: r.x + r.ax / 2, y: r.y + r.ay / 2 }, { x: r.x - r.ax / 2, y: r.y + r.ay / 2 }]);
         pols.forEach(pol => { const pr = new Prisma(pol, zsT, mat, tinta); pr.conBordes = def || cortes.length > 2; prismas.push(pr); });
       }
-      } finally { prismas.slice(k0).forEach(pr => capa(pr.malla, 'Muros', `Muro ${m.id}`)); }
+      } finally { prismas.slice(k0).forEach(pr => { capa(pr.malla, 'Muros', `Muro ${m.id}`); pr.malla.userData.muro = m.id; }); }
     });
     if (espectro && roto) {
       // el mayor corrimiento real de la torre: el de la esquina más alejada del CR en la azotea
@@ -386,7 +387,12 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
       prismas.forEach(pr => { if (!(pr.malla.material as THREE.MeshStandardMaterial).vertexColors) return; pr.colorear(roto!, maximo, blanco, verde); });
     }
     // lo que no es losa es muro (para exportar el modelo por capas)
-    prismas.forEach(pr => { if (!pr.malla.userData.capa) capa(pr.malla, 'Muros', 'Muro'); grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes); });
+    prismas.forEach(pr => {
+      if (!pr.malla.userData.capa) capa(pr.malla, 'Muros', 'Muro');
+      // las aristas, del mismo muro o losa (la etapa «Vista 3D» las oculta o las aclara con aislar y rayos X)
+      pr.bordes.userData.capa = pr.malla.userData.capa; pr.bordes.userData.muro = pr.malla.userData.muro;
+      grupo.add(pr.malla); if (pr.conBordes) grupo.add(pr.bordes);
+    });
     // presiones del viento sobre las fachadas (simulador de viento, etapa V1): sin la deformada
     const pres = estado.capas.presiones && !roto ? capaPresiones() : null;
     leyP.hidden = !pres;
@@ -407,9 +413,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     // la etapa «Vista 3D»: estilo, cortes y cámara (la cámara cambia de proyección o de punto de vista: se encuadra)
     if (op.presentacion) {
       const pr = op.presentacion();
-      aplicarPresentacion({ grupo, renderer, sol, medidas: { B, L, top, fondoCota }, corr: corrimientoActual,
+      const { extra } = aplicarPresentacion({ grupo, renderer, sol, medidas: { B, L, top, fondoCota }, corr: corrimientoActual,
         colores: { tinta: css('--ink', '#222'), poche: css('--ink', '#2b2f33'), plano: css('--deformada', '#2a9d5c') } }, pr);
-      const claveCam = `${pr.proyeccion}|${pr.vista}|${pr.corte.tipo}|${pr.corte.tipo === 'planta' ? pr.corte.z.toFixed(1) : ''}`;
+      // pisos separados: la torre crece (el encuadre la toma entera)
+      if (extra > 0) medidas = { ...medidas, top: medidas.top + extra, h: medidas.h + extra };
+      const claveCam = `${pr.proyeccion}|${pr.vista}|${pr.corte.tipo}|${pr.corte.tipo === 'planta' ? pr.corte.z.toFixed(1) : ''}|${pr.separar}`;
       if (claveCam !== camaraPres) { camaraPres = claveCam; encuadre = ''; }
     }
     if (clave !== encuadre) { encuadrar(); encuadre = clave; }
@@ -878,5 +886,31 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     renderer.render(escena, cam);
     if (op.etiquetas) { capaEt.render(escena, cam); if (++cuadro % 6 === 0 || !movio) ordenarRotulos(); }
   });
-  return { construir, encuadrar, tamaño };
+  /** la etapa «Vista 3D»: el muro (o la losa) bajo el punto (x, y) de la pantalla */
+  const rayo = new THREE.Raycaster();
+  function elegirEn(x: number, y: number): { muro?: string; nivel?: number; punto: THREE.Vector3 } | null {
+    const r = renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    rayo.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), cam);
+    const planos = renderer.localClippingEnabled ? ((grupo.children.find(o => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).material as THREE.Material)?.clippingPlanes?.length) as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.clippingPlanes ?? [] : [];
+    for (const i of rayo.intersectObjects(grupo.children, true)) {
+      if (!i.object.visible || !(i.object as THREE.Mesh).isMesh) continue;
+      if (planos.some(pl => pl.distanceToPoint(i.point) < 0)) continue;      // lo que el corte ya sacó no se elige
+      const mat = (i.object as THREE.Mesh).material as THREE.Material;
+      if (mat && !Array.isArray(mat) && mat.transparent && mat.opacity < 0.15) continue;   // lo fantasma (rayos X) tampoco
+      const u = i.object.userData;
+      if (u.muro || u.nivel !== undefined) return { muro: u.muro, nivel: u.nivel, punto: i.point };
+    }
+    return null;
+  }
+  /** la cámara de ahora (para guardar una vista) y ponerla de nuevo */
+  const camaraAhora = () => ({ pos: cam.position.toArray() as [number, number, number], obj: controles.target.toArray() as [number, number, number], zoom: cam.zoom });
+  function ponerCamara(c: { pos: [number, number, number]; obj: [number, number, number]; zoom: number }) {
+    if (![...c.pos, ...c.obj, c.zoom].every(Number.isFinite)) return;
+    cam.position.fromArray(c.pos); controles.target.fromArray(c.obj);
+    cam.zoom = c.zoom > 0 ? c.zoom : 1; cam.updateProjectionMatrix(); controles.update(); pedirCuadro();
+  }
+  /** hacia dónde mira la cámara (el cubo de navegación lo sigue) */
+  const orientacion = () => cam.quaternion;
+  return { construir, encuadrar, tamaño, elegirEn, camaraAhora, ponerCamara, orientacion, alCambiarCamara: (f: () => void) => controles.addEventListener('change', f) };
 }
