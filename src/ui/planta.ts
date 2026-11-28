@@ -982,7 +982,13 @@ export function montarPlanta(cont: HTMLElement) {
               h2(boton('Volver a atar al tramo', () => estado.cambiar(pp => { const nv = pp.niveles[iNivel]; delete nv.carpManual; delete nv.carpVoladizo; }), 'Se pierde lo editado a mano en este piso: vuelve a ser lo común a su losa y la de arriba')), vol);
           }
         }
-        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, segue);
+        // la carpintería de este nivel para toda la torre: con tramos, además se fija (si no, el tramo la recalcularía)
+        const igualar = car ? [h2(boton('Igualar toda la torre a esta carpintería', async () => {
+          if (!(await confirmar('Igualar la carpintería', `La carpintería de ${n.nombre} pasa a ser la de todos los niveles (se reemplazan las que ya tengan) y queda fija: ya no sigue a las losas. Se puede deshacer.`, 'Igualar'))) return;
+          estado.cambiar(pp => { pp.carpinteriaFija = true; pp.niveles.forEach(nv => { nv.carpinteria = car.v.map(q => JSON.parse(JSON.stringify(q))); delete nv.carpManual; delete nv.carpinteriaPartida; }); });
+          mensaje(`Carpintería de ${n.nombre} en los ${estado.proyecto.niveles.length} niveles, fija (desenganchada de las losas): el viento (túneles y presiones) la usa en toda la torre. Ctrl+Z deshace.`);
+        }, 'La misma carpintería en todos los pisos, desenganchada de las losas: lo que usan el túnel 2D, el túnel 3D y las presiones en cada piso'))] : [];
+        panelSil.append(que, b(`Carpintería de ${n.nombre}`), ...estadoCarpLosas(), linea(tn ? `en este nivel: ${NOMBRE_MODO[tn.modo].toLowerCase()}${car ? ` · a máx ${f2(car.a)} × b máx ${f2(car.b)} m` : ''}` : 'este nivel queda debajo del primer tramo (a mano)'), ...piso, ...igualar, segue);
         return;
       }
       panelSil.append(que, b(`Carpintería de ${n.nombre}`), segue,

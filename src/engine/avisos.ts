@@ -17,7 +17,7 @@ import { comunLosas, tramoEn } from './carpinteria';
 import { contornoEnvolventeEnZ } from './envolvente';
 import { cajaSilueta, carpinteriaDeNivel, contornoAlViento, medidasAlViento, plantaDeNivel, puntosSilueta, type Punto } from './silueta';
 
-export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza' | 'muros-superpuestos';
+export type TipoAviso = 'fuera-losa' | 'sobre-hueco' | 'carpinteria-fuera' | 'losa-fuera-envolvente' | 'carpinteria-vacio' | 'carpinteria-partida' | 'bl-caja' | 'sin-pieza' | 'muros-superpuestos' | 'junta-abierta' | 'sin-pieza-un-viento';
 export interface AvisoDiseno {
   tipo: TipoAviso;
   /** texto para el usuario */
@@ -177,6 +177,42 @@ export function avisosDiseno(p: Proyecto, papeles?: Record<string, { A?: string;
       out.push({ tipo: 'muros-superpuestos', muro: ms[0].id, muros: ms.map(m => m.id), cotas: [],
         texto: `En la pieza ${nombre}, ${sr.superposiciones.length === 1 ? 'dos muros se pisan' : `hay ${sr.superposiciones.length} lugares donde los muros se pisan`} (${f2(sr.superpuesta)} m² en total): el cálculo toma la sección sin repetir esa parte (${f2(sr.A)} m² en lugar de ${f2(sr.Asuma)} m²).`,
         arreglo: 'Ayudas → «Sección de cálculo» muestra dónde se pisan. Alargá o acortá cada muro hasta la cara del otro, así el dibujo coincide con lo que se calcula.' });
+    });
+  }
+  // juntas abiertas: dos tabiques de la misma pieza (en algún viento) o del mismo grupo que casi se tocan (1 a 10 cm).
+  // Para el armado no se tocan: en el viento donde no comparten nombre de pieza quedan separados (y un tabique suelto
+  // perpendicular al viento, con el armado de la cátedra, no entra en esa hoja)
+  {
+    const tabs = p.muros.filter(m => m.llega && tipoDe(m) === 'tabique');
+    const hueco = (a: Muro, b: Muro) => Math.min(...rectangulos(a).flatMap(r => rectangulos(b).map(q => Math.hypot(Math.max(0, Math.abs(r.x - q.x) - (r.ax + q.ax) / 2), Math.max(0, Math.abs(r.y - q.y) - (r.ay + q.ay) / 2)))));
+    const juntos = (a: Muro, b: Muro) => (!!a.piezaA && a.piezaA === b.piezaA) || (!!a.piezaB && a.piezaB === b.piezaB) || (!!a.gd && a.gd === b.gd) || (!!a.grupo && a.grupo === b.grupo);
+    const cm = (v: number) => (v * 100).toFixed(v < 0.1 ? 1 : 0).replace('.', ',').replace(',0', '');
+    for (let i = 0; i < tabs.length; i++) for (let j = i + 1; j < tabs.length; j++) {
+      const a = tabs[i], b = tabs[j];
+      if (a.dir === b.dir || !juntos(a, b)) continue;
+      const g = hueco(a, b);
+      if (g > 0.01 && g <= 0.1) out.push({ tipo: 'junta-abierta', muro: a.id, muros: [a.id, b.id], cotas: [],
+        texto: `${a.id} y ${b.id} no se tocan: quedan ${cm(g)} cm entre ellos. Para armar las piezas cuentan como separados.`,
+        arreglo: `Alargá uno hasta la cara del otro (Planta → «Extender o recortar hasta…», o el largo en la carta del muro). Si van juntos en una pieza, después tocá «Armar».` });
+    }
+  }
+  // un tabique sin pieza en un viento (suelto y perpendicular: no entra en esa hoja) que en el otro viento forma pieza
+  // con muros que en este sí tienen: casi siempre es parte de esa pieza y quedó con otro nombre
+  if (papeles) {
+    const nombres = (m: Muro) => ({ A: m.piezaA, B: m.piezaB });
+    p.muros.forEach(m => {
+      const pa = papeles[m.id];
+      if (!pa || !m.llega || m.soloGravedad) return;
+      for (const [d, o] of [['A', 'B'], ['B', 'A']] as const) {
+        if ((pa[d] ?? 'sin pieza') !== 'sin pieza' || (pa[o] ?? 'sin pieza') === 'sin pieza' || (pa[o] ?? '') === 'fuera del cálculo') continue;
+        const otro = nombres(m)[o];
+        const comp = otro ? p.muros.filter(x => x.id !== m.id && nombres(x)[o] === otro && (papeles[x.id]?.[d] ?? 'sin pieza') !== 'sin pieza') : [];
+        if (!comp.length) continue;
+        const piezasD = [...new Set(comp.map(x => nombres(x)[d]).filter(Boolean))];
+        out.push({ tipo: 'sin-pieza-un-viento', muro: m.id, muros: [m.id, ...comp.map(x => x.id)], cotas: [],
+          texto: `${m.id} no entra en el viento ${d}: ahí quedó solo, perpendicular al viento. En el viento ${o} forma la pieza ${otro} con ${comp.map(x => x.id).join(', ')}, que en el viento ${d} ${piezasD.length === 1 ? `son la pieza ${piezasD[0]}` : `están en ${piezasD.join(', ')}`}.`,
+          arreglo: `Si es parte de esa pieza, ponele en «Pieza ${d}» (Diseño → Muros) el mismo nombre que ${comp[0].id}${piezasD.length > 1 ? ' y juntá las demás' : ''}, o elegí esos muros y tocá «Armar». Fijate también si se tocan (aviso de juntas abiertas).` });
+      }
     });
   }
   if (papeles) p.muros.forEach(m => {
