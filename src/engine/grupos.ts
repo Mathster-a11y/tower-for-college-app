@@ -84,14 +84,16 @@ export function motivoNoTransformable(p: Proyecto, m: Muro, contexto: string | n
 /**
  * Las piezas armadas (insertadas de la biblioteca o agrupadas en el panel de piezas, m.grupo) pasan a ser también
  * grupos del Esquema: cerrados, se mueven enteros y para tocar un muro suelto hay que entrar con doble clic. Envuelve en
- * un grupo cada pieza que todavía no tiene el suyo (todos sus muros en el mismo grupo del Esquema, sin nada más).
- * Devuelve cuántas piezas envolvió.
+ * un grupo cada pieza de dos o más muros que todavía no tiene el suyo (todos sus muros en el mismo grupo del Esquema,
+ * sin nada más). «por»: las piezas armadas (m.grupo) o las piezas de cálculo del viento A (m.piezaA). Devuelve cuántas
+ * piezas envolvió.
  */
-export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`): number {
+export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`, por: 'grupo' | 'calculo' = 'grupo'): number {
   const porPieza = new Map<string, Muro[]>();
-  p.muros.forEach(m => { if (m.grupo) porPieza.set(m.grupo, [...(porPieza.get(m.grupo) ?? []), m]); });
+  p.muros.forEach(m => { const k = por === 'grupo' ? m.grupo : m.piezaA; if (k) porPieza.set(k, [...(porPieza.get(k) ?? []), m]); });
   let n = 0;
   porPieza.forEach((ms, g) => {
+    if (ms.length < 2) return;                                               // un solo muro: se elige con un clic, sin grupo
     const gd = ms[0].gd ?? null;
     if (ms.some(m => (m.gd ?? null) !== gd)) return;                       // repartida en grupos distintos: se deja
     if (gd !== null) {

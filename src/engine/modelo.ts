@@ -318,6 +318,8 @@ export interface Proyecto {
    * rectángulo a escuadra que no toca a ningún otro elemento (columnas enteras), y la cuña que queda, espacio muerto
    */
   encuentrosCalculo?: 'escuadra' | null;
+  /** ya se ordenaron los grupos por pieza (piezasGrupos.gruposPorPieza): lo que se agrupe o desagrupe después se respeta */
+  gruposPorPieza?: 1;
   /** cota del nivel cuyas áreas de influencia se copian solas a «Área inf.» al cambiar la planta (vacío = a mano) */
   areasAuto?: number | null;
   /**

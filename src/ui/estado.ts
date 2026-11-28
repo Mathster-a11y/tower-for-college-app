@@ -1,4 +1,5 @@
 import { envolverPiezas } from '../engine/grupos';
+import { gruposPorPieza } from '../engine/piezasGrupos';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
@@ -122,6 +123,7 @@ class Estado {
       }
     }
     this.proyecto = p ?? ejemploGuia();
+    gruposPorPieza(this.proyecto, nombrePieza);
     const migrado = !this.proyecto.calculo || (!!p && !JSON.parse(t ?? '{}').calculo);
     if (!this.proyecto.calculo) this.proyecto.calculo = { ...configViejaDelNavegador(), formulas: VERSION_FORMULAS };
     this.recalcular();
@@ -298,6 +300,7 @@ class Estado {
     // sin configuración de cálculo: la de siempre, escrita en el proyecto para que el archivo quede completo
     if (!nuevo.calculo) nuevo.calculo = { ...CONFIG_POR_DEFECTO, formulas: VERSION_FORMULAS };
     envolverPiezas(nuevo, nombrePieza);          // sobre la copia: si falla, no se tocó nada
+    gruposPorPieza(nuevo, nombrePieza);          // una vez por proyecto: pieza de 2 o más muros = grupo; sin grupos de un muro
     this.proyecto = nuevo;
     this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] };
     this.revision++;

@@ -2,6 +2,8 @@
 import { problemaAbertura, ubicarAbertura, type Abertura } from '../engine/aberturas';
 import { claveJunta, conEspesor, detectarJuntas, ejeDeMuro, huellasLimpias, lineaReferencia, quienPasa } from '../engine/juntas';
 import { avisar, confirmar, pedirTexto, pedirTextoLargo } from './tarjeta';
+import { jMuros, sacarDePieza, separarPieza } from '../engine/piezasGrupos';
+import { aportes, datosSeccion, type DatosSeccion } from '../engine/datosPieza';
 import { estado, COLORES } from './estado';
 import { areaMuro, cajaMuro, dInterior, huecoEn, huella, presenteEn, rectangulos, tipoDe, type HuecoLosa, type Muro, type Nivel, type Proyecto } from '../engine/modelo';
 import { agrupar, armarPiezas, calarMuro, cerrarVano, fijarPasoGrilla, imanarNodo, inferir, muroDesdeTramo, nodosMuro, tuboEnTabiques, type GuiaInferencia, type Punto } from '../engine/dibujo';
@@ -25,7 +27,7 @@ import { tratarEsquinas, type TipoEsquina } from '../engine/contorno';
 import { Jreal } from '../engine/mapping';
 import { distanciaAlCentro } from '../engine/distanciaCentro';
 import { extenderHasta } from '../engine/extender';
-import { jEnDireccion, propiedadesSeccion, seccionReal, unionHuellas } from '../engine/seccionPieza';
+import { seccionReal, unionHuellas } from '../engine/seccionPieza';
 import { aEscuadra, aTope, criterioDelProyecto, esColumna, rectsEscuadra } from '../engine/escuadra';
 import { diferencia } from '../engine/poligonos';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
@@ -200,11 +202,26 @@ export function montarPlanta(cont: HTMLElement) {
     if (r.v && 'id' in r.v) { estado.grupoSel = r.v.id; mensaje(`${vinculada ? 'Copia vinculada' : 'Copia'} de «${grupoPorId(estado.proyecto, id)?.nombre}» a la derecha: arrastrala a su lugar.`); } else if (r.v) mensaje(r.v.error);
     estado.avisarPanel();
   };
+  // separar la pieza (cálculo): cada muro pasa a ser una pieza propia; «Desagrupar» solo suelta el dibujo
+  const separarLaPieza = async () => {
+    const id = estado.grupoSel; if (!id) return;
+    const p = estado.proyecto, ms = murosDe(p, id), nombres = [...new Set(ms.map(m => m.piezaA).filter(Boolean))];
+    if (nombres.length !== 1) { mensaje(nombres.length ? `El grupo tiene muros de ${nombres.length} piezas (${nombres.join(', ')}): entrá y separá cada una.` : 'Los muros del grupo no son una pieza del cálculo.'); return; }
+    const nombre = nombres[0], todos = p.muros.filter(m => m.piezaA === nombre), llegan = todos.filter(m => m.llega);
+    const antes = jMuros(todos, 'A'), despues = llegan.reduce((s2, m) => s2 + jMuros([m], 'A'), 0);
+    const f2 = (v: number) => v.toFixed(2).replace('.', ',');
+    if (!(await confirmar(`Separar la pieza ${nombre}`, `Cada uno de sus ${llegan.length} muros que llegan pasa a ser una pieza propia en el cálculo${todos.length > llegan.length ? ` (los ${todos.length - llegan.length} que no llegan quedan sin pieza)` : ''}: ya no trabajan juntos. J viento A: ${f2(antes)} m⁴ como pieza, ${f2(despues)} m⁴ sumando los muros sueltos (${antes > 0 ? Math.round((1 - despues / antes) * 100) : 0} % menos). Para soltar solo el dibujo, sin tocar el cálculo, usá «Desagrupar». Se puede deshacer.`, 'Separar'))) return;
+    const r: { v: { texto: string } | { error: string } } = { v: { error: '' } };
+    estado.cambiar(pp => { r.v = separarPieza(pp, nombre); });
+    if ('texto' in r.v) { estado.grupoSel = null; estado.seleccion = null; }
+    mensaje('texto' in r.v ? r.v.texto : r.v.error); estado.avisarPanel();
+  };
   const bDesagTodo = bSel('Desagrupar todo', 'Deshace el grupo y los grupos que tiene adentro: todos sus muros quedan sueltos', () => { if (estado.grupoSel) desagruparElegidos([estado.grupoSel], true); });
   barraGrupo.append(nombreGrupo,
     bSel('Entrar', 'Editar sus elementos (doble clic)', () => { const id = estado.grupoSel; if (!id) return; estado.contexto = id; estado.grupoSel = null; mensaje(`Editando «${grupoPorId(estado.proyecto, id)?.nombre}»: Esc para salir.`); estado.avisarPanel(); }),
-    bSel('Desagrupar', 'Deshace el grupo: lo que tiene queda suelto y elegido (Ctrl+Mayús+G)', () => { if (estado.grupoSel) desagruparElegidos([estado.grupoSel]); }),
+    bSel('Desagrupar', 'Deshace el grupo del dibujo: lo que tiene queda suelto y elegido, y la pieza sigue igual en el cálculo (Ctrl+Mayús+G)', () => { if (estado.grupoSel) desagruparElegidos([estado.grupoSel]); }),
     bDesagTodo,
+    bSel('Separar la pieza', 'Cada muro pasa a ser una pieza propia en el cálculo (ya no trabajan juntos); avisa cuánto J se pierde', () => { void separarLaPieza(); }),
     bSel('Duplicar', 'Copia independiente del grupo entero', () => duplicarGrupo(false)),
     bSel('Copia vinculada', 'Otra copia del mismo componente: si se edita una, cambian todas', () => duplicarGrupo(true)),
     bSel('↺ 90°', 'Girar el grupo 90° (antihorario) alrededor del centro de su caja', () => conGrupo((pp, id) => { girarNodo(pp, id); }, 'Grupo girado 90°.')),
@@ -2433,6 +2450,18 @@ export function montarPlanta(cont: HTMLElement) {
         bx.addEventListener('click', () => { extHasta = extHasta === m.id ? null : m.id; clavePrec = ''; mensaje(extHasta ? `Extender o recortar ${m.id}: tocá el muro hasta el que llega (Esc cancela).` : ''); armarPanelPrec(); dibujar(); });
         panelPrec.append(bx);
       }
+      // sacar este muro de su pieza (pasa a ser una pieza propia en el cálculo)
+      if (m.piezaA && p.muros.filter(o => o.piezaA === m.piezaA).length > 1 && !muroBloqueado(p, m)) {
+        const bs = mk('button', `Sacar ${m.id} de la pieza ${m.piezaA}`, 'b-sacar-pieza') as HTMLButtonElement;
+        bs.type = 'button';
+        bs.title = 'El muro deja de trabajar con los otros de su pieza: pasa a ser una pieza propia en el cálculo y sale del grupo';
+        bs.addEventListener('click', () => {
+          const r: { v: { texto: string } | { error: string } } = { v: { error: '' } };
+          estado.cambiar(pp => { r.v = sacarDePieza(pp, m.id); });
+          mensaje('texto' in r.v ? r.v.texto : r.v.error); clavePrec = ''; estado.avisarPanel();
+        });
+        panelPrec.append(bs);
+      }
       // juntas de este muro con los otros: qué pasa en cada una (L: inglete o pasa uno; X: pasa uno; T: el que llega se corta)
       const js = detectarJuntas(p.muros.filter(o => !muroOculto(p, o))).filter(j => j.a === m.id || j.b === m.id);
       if (js.length) {
@@ -3450,30 +3479,77 @@ export function montarPlanta(cont: HTMLElement) {
     armarPanelPrec(); dibujar();
   }, true);
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && extHasta) { extHasta = null; clavePrec = ''; mensaje('Extender o recortar: cancelado.'); armarPanelPrec(); dibujar(); } });
-  // burbuja: con el mouse quieto 3 s sobre un muro, el área y el J de su pieza (la del viento elegido) en cuatro
-  // direcciones del viento, con la sección con que entra al cálculo
+  // burbuja: con el mouse quieto 3 s sobre un muro, el área, el J y el W en cuatro direcciones del viento, con la
+  // sección con que entra al cálculo. Pestañas «Pieza | Muro»: la pieza entera (y lo que aporta cada muro) o el muro
+  // solo (sus J y W propios y su aporte a la pieza). Abre en el muro si ese muro es el elegido; si no, en la pieza.
+  // Alt o un clic en la pestaña cambian de vista.
   {
     const burbuja = document.createElement('div'); burbuja.className = 'burbuja-j'; burbuja.hidden = true; burbuja.setAttribute('role', 'tooltip');
     cont.appendChild(burbuja);
-    let reloj = 0, sobre = '', ultimo = { x: 0, y: 0 };
-    const ocultar = () => { clearTimeout(reloj); reloj = 0; burbuja.hidden = true; };
+    let reloj = 0, sobre = '', ultimo = { x: 0, y: 0 }, vista: 'pieza' | 'muro' = 'pieza', mostrado = '';
+    const ocultar = () => { clearTimeout(reloj); reloj = 0; burbuja.hidden = true; mostrado = ''; };
+    const f3 = (v: number) => v.toFixed(3).replace('.', ','), f2 = (v: number) => v.toFixed(2).replace('.', ',');
+    // J y W con las cifras que hagan falta (una columna de 30 × 30 tiene J = 0,000675 m⁴)
+    const fj = (v: number) => v.toFixed(Math.abs(v) >= 1 ? 2 : Math.abs(v) >= 0.01 ? 4 : 6).replace('.', ',');
+    const fila = (a: string, ...vs: string[]) => { const r = document.createElement('div'); r.className = 'fila'; const l = document.createElement('span'); l.textContent = a; r.append(l, ...vs.map(v => { const x = document.createElement('span'); x.className = 'n'; x.textContent = v; return x; })); return r; };
+    const nota = (t: string) => { const x = document.createElement('span'); x.className = 'nota'; x.textContent = t; return x; };
+    const tablaDirs = (d: DatosSeccion, propio = false) => {
+      const cab = fila('', propio ? 'J propio' : 'J', propio ? 'W propio' : 'W'); cab.classList.add('cab');
+      return [cab, ...d.filas.map(r => fila(r.nombre, `${fj(r.J)} m⁴`, `${fj(r.W)} m³`))];
+    };
     const mostrar = (id: string) => {
       const p = estado.proyecto, m = p.muros.find(x => x.id === id);
       if (!m) return;
       criterioDelProyecto(p);
       const nombre = estado.dir === 'A' ? m.piezaA : m.piezaB;
-      const ms = nombre ? p.muros.filter(x => (estado.dir === 'A' ? x.piezaA : x.piezaB) === nombre && x.llega) : [m];
-      const s = propiedadesSeccion(ms);
-      if (!s) return;
-      const f3 = (v: number) => v.toFixed(3).replace('.', ','), f2 = (v: number) => v.toFixed(2).replace('.', ',');
-      const filas: [string, number][] = [['viento A ↑', Math.PI / 2], ['viento B →', 0], ['oblicuo ↗ 45°', Math.PI / 4], ['oblicuo ↖ 135°', (3 * Math.PI) / 4]];
-      const d = ms.some(x => rectsEscuadra(x)) ? ' · muros a escuadra (D)' : '';
+      const todos = nombre ? p.muros.filter(x => (estado.dir === 'A' ? x.piezaA : x.piezaB) === nombre) : [m];
+      const ms = todos.filter(x => x.llega);
+      const compuesta = ms.length > 1 || (todos.length > 1 && !m.llega);
+      if (mostrado !== id) vista = compuesta && estado.seleccion === id ? 'muro' : 'pieza';
+      mostrado = id;
+      if (!compuesta) vista = 'pieza';
+      const ang = estado.dir === 'A' ? Math.PI / 2 : 0;
       burbuja.replaceChildren();
-      const t = document.createElement('b'); t.textContent = nombre ? `Pieza ${nombre} (viento ${estado.dir})` : `${m.id} (sin pieza en el viento ${estado.dir})`;
-      const a = document.createElement('div'); a.className = 'fila'; const al = document.createElement('span'); al.textContent = 'área'; a.append(al); const av = document.createElement('span'); av.className = 'n'; av.textContent = `${f3(s.A)} m²`; a.append(av);
-      burbuja.append(t, a);
-      filas.forEach(([n, ang]) => { const r = document.createElement('div'); r.className = 'fila'; const l = document.createElement('span'); l.textContent = `J ${n}`; const v = document.createElement('span'); v.className = 'n'; v.textContent = `${f2(jEnDireccion(s, ang))} m⁴`; r.append(l, v); burbuja.append(r); });
-      const nota = document.createElement('span'); nota.className = 'nota'; nota.textContent = `${ms.length} ${ms.length === 1 ? 'muro' : 'muros'}, con la sección con que entra al cálculo${d}`; burbuja.append(nota);
+      if (compuesta) {
+        const ps = document.createElement('div'); ps.className = 'pestanas';
+        (['pieza', 'muro'] as const).forEach(v => {
+          const b = document.createElement('button'); b.type = 'button'; b.textContent = v === 'pieza' ? `Pieza ${nombre}` : `Muro ${m.id}`;
+          b.setAttribute('aria-pressed', String(vista === v));
+          b.addEventListener('click', ev => { ev.stopPropagation(); vista = v; mostrar(id); });
+          ps.append(b);
+        });
+        burbuja.append(ps);
+      }
+      const d = ms.some(x => rectsEscuadra(x)) ? ' · muros a escuadra (D)' : '';
+      if (vista === 'pieza') {
+        const s = datosSeccion(ms.length ? ms : [m]);
+        if (!s) return;
+        const t = document.createElement('b');
+        const fuera = todos.length - ms.length;
+        t.textContent = nombre ? `Pieza ${nombre} (viento ${estado.dir}) · ${ms.length} ${ms.length === 1 ? 'muro' : 'muros'}${fuera ? ` (${fuera} no ${fuera === 1 ? 'llega' : 'llegan'})` : ''}` : `${m.id} (sin pieza en el viento ${estado.dir})`;
+        burbuja.append(t, fila('área', `${f3(s.A)} m²`), ...tablaDirs(s));
+        if (ms.length > 1) {
+          const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = `Aporte de cada muro al J viento ${estado.dir}`;
+          burbuja.append(sub, ...aportes(ms, ang).sort((a, b) => b.J - a.J).map(a => { const r = fila(a.id, `${f2(a.J)} m⁴`, `${Math.round(a.parte * 100)} %`); if (a.id === m.id) r.classList.add('este'); return r; }));
+        }
+        burbuja.append(nota(`W: J sobre la distancia a la fibra más alejada (el borde que manda). La sección con que entra al cálculo${d}.`));
+      } else {
+        const s = datosSeccion([m]);
+        if (!s) return;
+        const t = document.createElement('b');
+        const med = tipoDe(m) === 'tabique' ? ` · ${f2(m.largo)} × ${f2(m.espesor)} m` : '';
+        t.textContent = `${m.id}${med} · de la pieza ${nombre}`;
+        burbuja.append(t, fila('área', `${f3(s.A)} m²`), ...tablaDirs(s, true));
+        if (m.llega) {
+          const a = aportes(ms, ang).find(x => x.id === m.id), sp = datosSeccion(ms);
+          if (a && sp) {
+            const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = `Aporte a ${nombre} en el viento ${estado.dir} (Steiner)`;
+            burbuja.append(sub, fila(`${f3(a.Jpropio)} + ${f3(a.A)} · ${f2(Math.abs(a.d))}²`, `${f2(a.J)} m⁴`, `${Math.round(a.parte * 100)} %`),
+              fila(`pieza ${nombre}`, `${f2(sp.filas[estado.dir === 'A' ? 0 : 1].J)} m⁴`, ''));
+          }
+        } else burbuja.append(nota('Este muro no llega a la fundación: no suma al J de la pieza.'));
+        burbuja.append(nota(`J y W propios: el muro solo, respecto de su propio centro. Alt cambia de vista.`));
+      }
       burbuja.hidden = false;
       const R = cont.getBoundingClientRect(), w = burbuja.offsetWidth, h = burbuja.offsetHeight;
       burbuja.style.left = `${Math.min(R.width - w - 6, Math.max(6, ultimo.x - R.left + 14))}px`;
@@ -3483,14 +3559,25 @@ export function montarPlanta(cont: HTMLElement) {
       if (ev.pointerType === 'touch') return;
       // el muro bajo el cursor (por la posición: un resaltado dibujado encima no lo tapa)
       const id = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => e.closest?.('[data-muro]')).find(Boolean)?.getAttribute('data-muro') ?? '';
+      const lejos = Math.hypot(ev.clientX - ultimo.x, ev.clientY - ultimo.y);
+      // con la burbuja abierta sigue mientras el mouse va hacia ella (para tocar una pestaña): se cierra al pasar a
+      // otro muro o al alejarse
+      if (!burbuja.hidden && !((id && id !== sobre) || lejos > 220)) return;
       // un movimiento chico sobre el mismo muro no reinicia la espera
-      if (id === sobre && Math.hypot(ev.clientX - ultimo.x, ev.clientY - ultimo.y) < 4) return;
+      if (burbuja.hidden && id === sobre && reloj && lejos < 4) return;
       ultimo = { x: ev.clientX, y: ev.clientY };
-      if (id !== sobre || !burbuja.hidden) { ocultar(); sobre = id; }
-      clearTimeout(reloj);
+      ocultar(); sobre = id;
       if (id && !ev.buttons) reloj = window.setTimeout(() => mostrar(id), 3000);
     });
-    svg.addEventListener('pointerleave', () => { ocultar(); sobre = ''; });
+    // después de un clic, con el mouse quieto, la espera arranca de nuevo
+    svg.addEventListener('pointerup', ev => { if (ev.pointerType !== 'touch' && sobre && !reloj && burbuja.hidden) { const id = sobre; reloj = window.setTimeout(() => mostrar(id), 3000); } });
+    // al pasar a la burbuja (para tocar una pestaña) no se cierra
+    svg.addEventListener('pointerleave', ev => { if (ev.relatedTarget instanceof Node && burbuja.contains(ev.relatedTarget)) return; ocultar(); sobre = ''; });
+    burbuja.addEventListener('pointerleave', ev => { if (ev.relatedTarget instanceof Node && svg.contains(ev.relatedTarget)) return; ocultar(); sobre = ''; });
+    document.addEventListener('keydown', ev => {
+      if (ev.key !== 'Alt' || burbuja.hidden || !mostrado || !burbuja.querySelector('.pestanas')) return;
+      ev.preventDefault(); vista = vista === 'pieza' ? 'muro' : 'pieza'; mostrar(mostrado);
+    });
     svg.addEventListener('pointerdown', ocultar);
     svg.addEventListener('wheel', ocultar, { passive: true });
   }

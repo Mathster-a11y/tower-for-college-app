@@ -1082,7 +1082,8 @@ if (estado.avisoInicio) void tarjeta({ tipo: 'aviso', titulo: 'Proyecto guardado
 // el proyecto guardado es un ejemplo, pero sus muros no son los del ejemplo de esta versión (se abrió con una anterior)
 else void (async () => {
   const ejemplos = [ejemploGuia, ejemploCiticorpFachada, ejemploPlanta34, ejemploBasicoExo, ejemploHancock, ejemploShanghai, ejemploHearst, ejemploGherkin, ejemploOnterie, ejemploAsimetrico];
-  const huella = (q: { muros: unknown[] }) => JSON.stringify(q.muros);
+  // sin el grupo de dibujo (gd), que no cambia el cálculo y se arma al abrir (pieza de 2 o más muros = grupo)
+  const huella = (q: { muros: object[] }) => JSON.stringify(q.muros.map(m => { const { gd: _g, ...r } = m as { gd?: string }; void _g; return r; }));
   for (const f of ejemplos) {
     const l = leerProyecto(f());
     if (!l.ok || l.proyecto.nombre !== estado.proyecto.nombre || huella(l.proyecto) === huella(estado.proyecto)) continue;
