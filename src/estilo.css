@@ -826,6 +826,7 @@ text[data-par].ultimo { font-size: 15px; }
 .planta .vertice.vertice-carp { stroke: var(--carpinteria); }
 .planta .vertice.vertice-carp:hover { fill: var(--serie-1); }
 .silueta-panel .seg { display: flex; flex-wrap: nowrap; } .silueta-panel .seg button { flex: 1; }
+.silueta-panel .pestanas-losa { margin-top: 6px; border-radius: 10px; } .silueta-panel .pestanas-losa button { border-radius: 8px; font-weight: 600; }
 .planta .nodos .ref rect, .planta .nodos .ref polygon { fill: var(--elegido); stroke: var(--elegido); }
 .prec-panel { width: 262px; left: auto; right: 10px; top: 84px; }
 @media (max-width: 760px) { .prec-panel { position: static; width: auto; margin: 6px 10px; } }

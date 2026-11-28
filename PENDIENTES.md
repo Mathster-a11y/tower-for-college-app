@@ -54,7 +54,7 @@ arranca en el cajón del 8º–9º; en el 3D ya era así (ahora con la nota y un
 corriendo en un navegador con WebGPU.
 
 **Próximos en `alternativa`** (propuestos, sin empezar)
-- Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.
+- ~~Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.~~ (28/11: pestañas Forma, Altura y CAD; «Herramientas CAD…» siempre arriba)
 - Supercolumnas del exo que bajen hasta la fundación.
 - Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
 
