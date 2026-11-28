@@ -30,7 +30,7 @@ import { aEscuadra, aTope, criterioDelProyecto, esColumna, rectsEscuadra } from 
 import { diferencia } from '../engine/poligonos';
 import { ID_EXO, areasInfluencia, cuatroColores, vecindades, type AreasInfluencia } from '../engine/areas';
 import { montarColocar, type ApiPlanta } from './colocar';
-import { aplicar as aplicarOp, resolver as resolverSel, vacia as vaciaSel } from '../engine/colocar';
+import { aplicar as aplicarOp, cajaSel, copiarCon, resolver as resolverSel, vacia as vaciaSel, type Seleccion } from '../engine/colocar';
 import { enPlanta, ponerPerfil, principales, propiedades as propsPerfil } from '../engine/perfil';
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
@@ -297,10 +297,37 @@ export function montarPlanta(cont: HTMLElement) {
     const r = res.r;
     if ('error' in r) mensaje(r.error); else { estado.grupoSel = r.id; estado.multi = { m: [], g: [] }; mensaje(`Grupo nuevo: «${grupoPorId(estado.proyecto, r.id)?.nombre}». Doble clic para entrar a editarlo.`); estado.avisarPanel(); }
   }
+  /** lo copiado con Ctrl+C (o «Copiar» del menú): qué y desde qué punto (el centro de su caja) */
+  let portapapeles: { sel: Seleccion; ref: { x: number; y: number }; contexto: string | null } | null = null;
+  /** dónde está el puntero en la planta (para pegar ahí) */
+  let ultimoPunto: { x: number; y: number } | null = null;
+  const copiarAlPortapapeles = (): boolean => {
+    const s0 = apiPlanta.seleccion();
+    if (vaciaSel(s0)) return false;
+    const ids = resolverSel(estado.proyecto, s0).ids, ms = estado.proyecto.muros.filter(m => ids.has(m.id));
+    if (!ms.length) return false;
+    const k = cajaSel(estado.proyecto, s0);
+    portapapeles = { sel: s0, ref: { x: (k.x0 + k.x1) / 2, y: (k.y0 + k.y1) / 2 }, contexto: estado.contexto };
+    mensaje(`Copiado: ${ms.length} muro${ms.length > 1 ? 's' : ''}. Ctrl+V lo pega donde está el puntero (clic derecho → «Pegar acá» también).`);
+    return true;
+  };
+  const pegarEn = (q: { x: number; y: number } | null) => {
+    const c = portapapeles; if (!c) return;
+    if ((c.contexto ?? null) !== (estado.contexto ?? null)) { mensaje('Lo copiado es de otro grupo: salí o entrá al mismo grupo para pegarlo.'); return; }
+    const dest = q ?? { x: c.ref.x + 1, y: c.ref.y - 1 };
+    let err: string | null = null, copia: Seleccion | null = null;
+    estado.cambiar(pp => { const r = copiarCon(pp, c.sel, estado.contexto, { t: 'mover', dx: aj(dest.x - c.ref.x), dy: aj(dest.y - c.ref.y) }, false); if ('error' in r) err = r.error; else copia = r.copia; });
+    if (err) { mensaje(err); return; }
+    if (copia) { estado.multi = copia; estado.grupoSel = null; estado.seleccion = null; }
+    mensaje('Pegado. Ctrl+V pega otra; Ctrl+Z deshace.'); estado.avisarPanel();
+  };
   const salirDeGrupo = () => { const g = grupoPorId(estado.proyecto, estado.contexto); estado.grupoSel = g?.id ?? null; estado.contexto = g?.padre ?? null; mensaje(estado.contexto ? `Editando «${grupoPorId(estado.proyecto, estado.contexto)?.nombre}».` : 'De vuelta en la planta.'); estado.avisarPanel(); };
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], .grilla-caja')) return;
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); borrarElegidos(); return; }
+    // Ctrl+C / Ctrl+V: copiar lo elegido y pegarlo donde está el puntero (sin armar grupos), como en CAD
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C') && !String(window.getSelection?.() ?? '')) { if (copiarAlPortapapeles()) ev.preventDefault(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V') && portapapeles) { ev.preventDefault(); pegarEn(ultimoPunto); return; }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
       ev.preventDefault();
       const p = estado.proyecto, zN = nivelActualZ(), ms = new Set<string>(), gs = new Set<string>();
@@ -3897,8 +3924,20 @@ export function montarPlanta(cont: HTMLElement) {
     const bajo = document.elementsFromPoint(ev.clientX, ev.clientY).map(e => (e.closest?.('g.muro') as SVGGElement | null)?.dataset.id).find(Boolean);
     const idM = ((ev.target as Element).closest?.('g.muro') as SVGGElement | null)?.dataset.id ?? bajo;
     if (idM) { ev.preventDefault(); menuDe(idM, ev.clientX, ev.clientY); return; }
-    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+    if (estado.multi.m.length || estado.multi.g.length || estado.contexto) { ev.preventDefault(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return; }
+    // en el fondo vacío, sin nada elegido: lo que se empieza desde ahí, sin ir a la barra
+    ev.preventDefault();
+    const q = aMundo(ev as PointerEvent);
+    abrirMenuContextual(ev.clientX, ev.clientY, [{ titulo: 'Planta' },
+      { texto: 'Pegar acá', atajo: 'Ctrl+V', no: portapapeles ? false : 'Primero copiá algo (Ctrl+C o clic derecho → Copiar)', accion: () => pegarEn(q) },
+      '—',
+      { texto: 'Dibujar muros', atajo: 'L', accion: () => ponerModo('dibujar') },
+      { texto: 'Insertar pieza…', atajo: 'IN', ayuda: 'Columnas, tabiques, L, T, C, núcleos… varias seguidas', accion: () => ponerModo('insertar') },
+      { texto: 'Elegir con el lazo', atajo: 'LA', accion: () => ponerModo('lazo') },
+      { texto: 'Elegir todo', atajo: 'Ctrl+A', accion: () => svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true })) },
+    ]);
   });
+  svg.addEventListener('pointermove', ev => { ultimoPunto = aMundo(ev); }, { passive: true });
   /** clase de pieza y «entra al J» para las piezas de unos muros (en los dos vientos) */
   const piezasDe = (ids: string[]) => { const p = estado.proyecto, s = new Set<string>(); ids.forEach(id => { const m = p.muros.find(x => x.id === id); if (m?.piezaA) s.add(m.piezaA); if (m?.piezaB) s.add(m.piezaB); }); return [...s]; };
   const menuClase = (ids: string[]): EntradaMenu[] => {
@@ -3937,6 +3976,9 @@ export function montarPlanta(cont: HTMLElement) {
         { texto: 'Agrupar', atajo: 'Ctrl+G', accion: () => agruparElegidos() },
         { texto: 'Desagrupar', atajo: 'Ctrl+Mayús+G', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', accion: () => desagruparElegidos(estado.multi.g) },
         { texto: 'Desagrupar todo (explotar)', no: estado.multi.g.length ? false : 'No hay grupos entre lo elegido', ayuda: 'Deshace los grupos y los de adentro: todos los muros quedan sueltos', accion: () => desagruparElegidos(estado.multi.g, true) },
+        '—', { texto: 'Mover…', atajo: 'M', ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+        { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+        { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', ayuda: 'Después Ctrl+V lo pega donde está el puntero', accion: () => { copiarAlPortapapeles(); } },
         '—', ...menuClase(ids), '—',
         { texto: 'Soltar la selección', atajo: 'Esc', accion: () => { estado.multi = { m: [], g: [] }; estado.avisarPanel(); } },
         { texto: 'Borrar', atajo: 'Supr', peligro: true, accion: () => borrarElegidos() }]);
@@ -3957,6 +3999,9 @@ export function montarPlanta(cont: HTMLElement) {
         g.comp
           ? { texto: 'Hacer único', no: motivo, ayuda: 'Separa esta copia del componente: deja de cambiar con las demás', accion: () => conGrupo(pp => { hacerUnico(pp, id); }, 'La copia ya no está vinculada: es un grupo común.') }
           : { texto: 'Hacer componente', no: motivo, ayuda: 'Un componente es un grupo con copias vinculadas: si editás una, cambian todas', accion: () => conGrupo(pp => hacerComponente(pp, id), 'Ahora es un componente: «Copia vinculada» para repetirlo.') },
+        { texto: 'Mover…', atajo: 'M', no: motivo || (fijo ? 'Está fijo en su lugar 📌' : false), ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+        { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+        { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', accion: () => { copiarAlPortapapeles(); } },
         { texto: 'Duplicar', ayuda: 'Copia independiente a la derecha', accion: () => duplicarGrupo(false) },
         { texto: 'Copia vinculada', ayuda: 'Otra copia del mismo componente: si se edita una, cambian todas (si no era componente, pasa a serlo)', accion: () => duplicarGrupo(true) },
         '—',
@@ -3975,6 +4020,10 @@ export function montarPlanta(cont: HTMLElement) {
     const mot = motivoNoEditable(p, m, estado.contexto);
     abrirMenuContextual(x, y, [{ titulo: `${m.id} · ${m.largo.toFixed(2).replace('.', ',')} × ${m.espesor.toFixed(2).replace('.', ',')} m` },
       ...(estado.contexto ? [{ texto: 'Salir del grupo', atajo: 'Esc', accion: () => salirDeGrupo() } as EntradaMenu] : []),
+      { texto: 'Mover…', atajo: 'M', no: mot || false, ayuda: 'Punto base → destino', accion: () => col.iniciar('mover') },
+      { texto: 'Copiar…', atajo: 'CO', ayuda: 'Punto base y un destino por copia, seguidas; Esc termina', accion: () => col.iniciar('copiar') },
+      { texto: 'Copiar al portapapeles', atajo: 'Ctrl+C', accion: () => { copiarAlPortapapeles(); } },
+      '—',
       ...menuClase([idM]), '—',
       { texto: 'Borrar', atajo: 'Supr', peligro: true, no: mot || false, accion: () => borrarElegidos() }]);
   }

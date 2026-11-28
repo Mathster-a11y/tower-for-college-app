@@ -2478,8 +2478,8 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 /* Cartas de la planta (cartas.ts): botones ▾ (plegar) y ⇲ (debajo del 3D), bandeja de las plegadas y lugar debajo del 3D */
 .calco-panel { --pad-botones: 46px; }
 .calco-panel > b:first-of-type { padding-right: var(--pad-botones); }
-.carta-botones { position: absolute; top: 3px; right: 4px; display: flex; gap: 2px; z-index: 2; }
-.dock-planta .calco-panel, .bandeja-cartas > .calco-panel, .cartas-derecha > .calco-panel { position: relative; }
+/* (en el flujo de la carta, arriba a la derecha sobre la línea del título: no cambia cómo se posiciona la carta) */
+.carta-botones { order: -1; align-self: flex-end; display: flex; gap: 2px; height: 20px; margin: -2px -4px -22px 0; position: relative; z-index: 2; }
 .carta-botones button { min-width: 22px; min-height: 20px !important; padding: 0 4px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--ink2); font-size: 12px; line-height: 1; cursor: pointer; }
 .carta-botones button:hover, .carta-botones button:focus-visible { border-color: var(--edge); background: var(--tint); color: var(--accent); }
 .calco-panel.plegado > .carta-botones { display: flex !important; }
