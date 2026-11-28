@@ -499,6 +499,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const acero = new THREE.Color(css('--ink2', '#6b7480')), cT = new THREE.Color(css('--traccion', '#e24b4a')), cC = new THREE.Color(css('--compresion', '#378add'));
     const radio = { columna: 0.32, diagonal: 0.2, viga: 0.24 } as const;
     const eje = new THREE.Vector3(0, 1, 0);
+    // las columnas que arrancan en PB siguen por los subsuelos hasta la platea (el viento se calcula empotrado en PB; el
+    // tramo de abajo lleva su peso a la fundación): una vez por posición en planta (las esquinas son de dos caras)
+    const zFundExo = estado.proyecto.niveles[estado.proyecto.niveles.length - 1]?.cota ?? 0;
+    const bajadas = new Set<string>();
+    const matBajada = new THREE.MeshStandardMaterial({ color: acero, roughness: 0.45, metalness: 0.3 });
     caras.forEach(({ dir, d }) => {
       if (!d) return;
       const activa = dir === estado.dir;
@@ -524,6 +529,19 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         m.position.copy(A.clone().add(Bv).multiplyScalar(0.5));
         m.quaternion.setFromUnitVectors(eje, Bv.clone().sub(A).normalize());
         grupo.add(m);
+        const zPBexo = d.r.zs[0];
+        if (e.clase === 'columna' && zFundExo < zPBexo - 0.05) {
+          const pie = Math.abs(e.a.z - zPBexo) < 1e-6 ? A : Math.abs(e.b.z - zPBexo) < 1e-6 ? Bv : null;
+          const k = pie ? `${pie.x.toFixed(2)},${pie.z.toFixed(2)}` : '';
+          if (pie && !bajadas.has(k)) {
+            bajadas.add(k);
+            const h = zPBexo - zFundExo;
+            const b = new THREE.Mesh(new THREE.CylinderGeometry(radio.columna, radio.columna, h, 8), matBajada);
+            b.position.set(pie.x, zPBexo - h / 2, pie.z);
+            b.name = 'Columna del exo bajo PB (hasta la platea)';
+            grupo.add(b);
+          }
+        }
       }));
     });
     // ficha F: el cinturón, un anillo por el perímetro arriba y abajo de cada brazo

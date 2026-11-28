@@ -59,11 +59,12 @@ export interface SueloCirsoc { G: number; Lt: number; sigmaAdm: number; dirs: Su
  * servicio). G: peso de las losas (D · Σ B·L); L total: sobrecarga · Σ B·L; momento del viento en la fundación:
  * M en PB + (Q en PB + franja de PB) · (zPB − zFund).
  */
-export function sueloCirsoc(p: Proyecto, w: Viento102): SueloCirsoc {
+/** @param acero el peso del exoesqueleto que llega a la platea (t; pesoExoFundacion), si lo hay */
+export function sueloCirsoc(p: Proyecto, w: Viento102, acero = 0): SueloCirsoc {
   const d1 = datos101De(p), Lq = sobrecarga(d1);
   let B = 0, Lp = 0, area = 0;
   p.niveles.forEach(n => { B = n.B ?? B; Lp = n.L ?? Lp; area += B * Lp * losasDeNivel(n); });
-  const G = d1.D * area, Lt = Lq * area;
+  const G = d1.D * area + acero, Lt = Lq * area;
   const zPB = p.niveles.reduce((z, n) => (n.cota >= 0 ? n.cota : z), 0), zFund = p.niveles[p.niveles.length - 1]?.cota ?? zPB;
   const brazo = zPB - zFund, sigmaAdm = sigmaAdmDe(p);
   const dirs = (['A', 'B'] as const).map(dir => {
