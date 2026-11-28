@@ -506,6 +506,22 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .vista3d.grande.visor3d { height: calc(100vh - 190px); min-height: 360px; }
 .seg.vistas-visor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 12px; }
 .seg.vistas-visor > button { border-radius: 9px; }
+.visor3d { position: relative; }
+/* etapa «Vista 3D»: cubo de navegación (arriba a la derecha), escala del color por dato y muro elegido */
+.cubo-nav { position: absolute; top: 12px; right: 12px; width: 92px; display: grid; justify-items: center; gap: 6px; z-index: 3; }
+.cubo-nav .escena-cubo { width: 64px; height: 64px; display: grid; place-items: center; }
+.cubo-nav .cubo { --m: 32px; position: relative; width: 64px; height: 64px; transform-style: preserve-3d; }
+.cubo-nav .cara { position: absolute; inset: 0; display: grid; place-items: center; font: 600 11px var(--sans, system-ui); color: var(--ink); background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--ink2); backface-visibility: hidden; padding: 0; border-radius: 2px; cursor: pointer; }
+.cubo-nav div.cara { cursor: default; color: var(--ink2); }
+.cubo-nav button.cara:hover, .cubo-nav button.cara:focus-visible { background: var(--accent); color: var(--panel); outline: none; }
+.cubo-nav .iso { font-size: 11px; padding: 2px 10px; min-height: 0; }
+@media (pointer: coarse) { .cubo-nav { width: 110px; } .cubo-nav .escena-cubo, .cubo-nav .cubo { width: 80px; height: 80px; } .cubo-nav .cubo { --m: 40px; } .cubo-nav .iso { padding: 8px 14px; } }
+.leyenda-dato { display: grid; gap: 4px; font-size: 0.85em; }
+.leyenda-dato .escala-dato { height: 12px; border: 1px solid var(--edge); border-radius: 2px; }
+.leyenda-dato .extremos { display: flex; justify-content: space-between; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.info-muro-visor { display: grid; gap: 6px; }
+.info-muro-visor p { margin: 0; }
+.vista-guardada > button:first-child { flex: 1; text-align: left; }
 .info3d { position: absolute; left: 8px; bottom: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--edge); font: 11px/1.4 var(--mono); color: var(--ink); pointer-events: none; }
 .info3d b { color: var(--deformada); }
 .controles3d { flex-wrap: wrap; gap: 8px; align-items: center; }

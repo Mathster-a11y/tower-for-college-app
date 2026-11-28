@@ -47,6 +47,15 @@ export function leerProyecto(x: unknown): Lectura {
   }
   const q = structuredClone(p) as Record<string, unknown>;
 
+  // --- vistas guardadas de la etapa «Vista 3D»: solo las que tienen nombre, presentación y cámara (las otras se sueltan)
+  if (!nulo(q.vistas3d)) {
+    const ok = (v: unknown) => esObj(v) && typeof v.nombre === 'string' && esObj(v.pr) && esObj(v.camara)
+      && [v.camara.pos, v.camara.obj].every(a => Array.isArray(a) && a.length === 3 && a.every(x => typeof x === 'number' && Number.isFinite(x))) && typeof v.camara.zoom === 'number';
+    const vs = Array.isArray(q.vistas3d) ? q.vistas3d.filter(ok) : [];
+    if (!Array.isArray(q.vistas3d) || vs.length < q.vistas3d.length) avisos.push('Algunas vistas guardadas del 3D estaban incompletas: se soltaron.');
+    q.vistas3d = vs;
+  }
+
   // --- 2. textos generales
   for (const k of ['nombre', 'alumno'] as const) {
     if (nulo(q[k])) q[k] = '';

@@ -287,8 +287,12 @@ export const NOMBRE_CLASE: Record<ClasePieza, string> = {
   tubo: 'Tubo circular', portico: 'Pórtico', especial: 'Elemento especial',
 };
 
+/** una vista guardada de la etapa «Vista 3D» (lo que se ve y la cámara); no cambia ningún cálculo */
+export interface VistaGuardadaProyecto { nombre: string; pr: Record<string, unknown>; camara: { pos: [number, number, number]; obj: [number, number, number]; zoom: number } }
 export interface Proyecto {
   version: 1;
+  /** vistas guardadas de la etapa «Vista 3D» */
+  vistas3d?: VistaGuardadaProyecto[] | null;
   nombre: string;
   alumno: string;
   sitio: Sitio;
