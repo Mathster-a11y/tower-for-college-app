@@ -8,6 +8,8 @@ import { calcularPlanilla } from '../src/engine/planilla';
 import { calcularCorregido } from '../src/engine/correcciones';
 import { datosAlturaDe, partesDePieza, verificarDireccion, verificarPieza } from '../src/engine/flexocompresion';
 import { calcFunicular, poligonoFunicular } from '../src/engine/funicular';
+import { jMuros } from '../src/engine/piezasGrupos';
+import type { Muro } from '../src/engine/modelo';
 import { datosAltura, reparto } from '../src/engine/diagramas';
 
 const p = ejemploGuia();
@@ -96,7 +98,8 @@ describe('piezas al azar: el J de la hoja J es el de la geometría dibujada', ()
       const aa = aPlanilla(proyecto);
       const rr = calcularPlanilla(aa.datos);
       const pz = aa.piezas.find(x => x.nombre === 'P')!;
-      const Jgeo = partesDePieza(proyecto.muros, 'A').J, Jhoja = rr.jpar.filas[pz.filaHoja!].AY;
+      // la geometría dibujada sin contar dos veces lo que se superpone (un alma que se mete en el ala): la sección real
+      const Jgeo = jMuros(proyecto.muros as Muro[], 'A'), Jhoja = rr.jpar.filas[pz.filaHoja!].AY;
       expect(Math.abs(Jhoja - Jgeo) / Jgeo, `${k} ${forma} ${cubre ? 'cubre' : 'toca'}: hoja ${Jhoja} geometría ${Jgeo}`).toBeLessThan(5e-4);
     }
   });

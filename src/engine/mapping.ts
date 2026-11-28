@@ -384,21 +384,35 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   };
   const libre = (w: Muro, ...grupos: Muro[][]) => {
     const sol = grupos.reduce((x, g) => x + solape(w, g), 0);
-    if (sol > 1e-9) avisos.push(`Nota: el alma ${w.id} llega hasta la cara exterior del ala (${String(r4(sol)).replace('.', ',')} m); en la hoja J va con su largo libre, ${String(r4(w.largo - sol)).replace('.', ',')} m, y ese tramo se suma al ala, para que el J sea el del dibujo.`);
+    if (sol > 1e-9) avisos.push(`Nota: el alma ${w.id} se mete en el ala (${String(r4(sol)).replace('.', ',')} m); en la hoja J va con su largo libre, ${String(r4(w.largo - sol)).replace('.', ',')} m, y ese tramo se suma al ala donde el ala no lo cubre, para que el J sea el del dibujo.`);
     return r4(Math.max(0.01, w.largo - sol));
   };
-  /** ala equivalente: espesor del ala del extremo (o la mayor) y ancho que conserva el área (con los tramos de alma que caen en su banda) */
+  /**
+   * del espesor del alma, la parte que ningún ala del grupo cubre en planta: el tramo de alma que se mete en la banda
+   * del ala solo agrega área donde el ala no está (si el ala pasa por encima del alma, ese tramo ya es del ala y
+   * sumarlo lo contaría dos veces)
+   */
+  const descubierto = (w: Muro, g: Muro[]) => {
+    let tramos: [number, number][] = [[t(w) - w.espesor / 2, t(w) + w.espesor / 2]];
+    g.forEach(a => {
+      const a0 = t(a) - a.largo / 2, a1 = t(a) + a.largo / 2;
+      tramos = tramos.flatMap(([u0, u1]): [number, number][] => (a1 <= u0 || a0 >= u1 ? [[u0, u1]] : [...(a0 > u0 ? [[u0, a0] as [number, number]] : []), ...(a1 < u1 ? [[a1, u1] as [number, number]] : [])]));
+    });
+    return tramos.reduce((q, [u0, u1]) => q + Math.max(0, u1 - u0), 0);
+  };
+  /** ala equivalente: espesor del ala del extremo (o la mayor) y ancho que conserva el área (con los tramos de alma que caen en su banda y el ala no cubre) */
   const ala = (g: typeof info, ext: Muro[], ws: Muro[]) => {
     if (!g.length) return null;
     const tt = Math.max(...(ext.length ? ext : g.map(x => x.a)).map(m => m.espesor));
-    const area = g.reduce((q, x) => q + x.a.largo * x.a.espesor, 0) + ws.reduce((q, w) => q + solape(w, ext) * w.espesor, 0);
+    const area = g.reduce((q, x) => q + x.a.largo * x.a.espesor, 0) + ws.reduce((q, w) => q + solape(w, ext) * descubierto(w, ext), 0);
     return { b: r4(area / tt), t: r4(tt), area };
   };
   set(izq, 'alma');
   if (der) set(der, 'alma der.');
   info.forEach(x => set(x.a, papelAla(x)));
   sumadas.forEach(x => set(x.de, x.a === izq.id ? 'alma' : 'alma der.'));
-  const A = ala(sup, extSup, almas), B = ala(inf, extInf, [izq]);
+  // el ala inferior suma lo que se meten en su banda las dos almas (el alma derecha se descuenta ese tramo, ver AF)
+  const A = ala(sup, extSup, almas), B = ala(inf, extInf, der ? [izq, der] : [izq]);
 
   if (!der) {
     if (!A && !B) return { ...base, molde: 'simétrico', fila: { B: izq.espesor, C: izq.largo } };
@@ -426,7 +440,9 @@ export function perfilEquivalente(nombre: string, dir: Direccion, muros: Muro[],
   const derArriba = arriba === 'arriba' ? s(der) + der.largo / 2 : s(der) - der.largo / 2;
   const supArriba = arriba === 'arriba' ? s(izq) + izq.largo / 2 : s(izq) - izq.largo / 2;
   if (Math.abs(derArriba - supArriba) > 0.3) avisos.push(`El alma derecha ${der.id} no llega al ala superior: en el molde de la hoja va colgada de ella (es la simplificación de la hoja). Mirá la diferencia de J.`);
-  const fila: FilaJ = { W: A ? A.b : 0.01, X: A ? A.t : 0.01, Z: izq.espesor, AB: libre(izq, extSup, extInf), AE: der.espesor, AF: libre(der, extSup) };
+  // el alma derecha también se descuenta lo que se mete en el ala inferior (en el molde el ala inferior va debajo del
+  // alma izquierda, a la misma profundidad: si no, ese tramo se superpone con ella y cuenta dos veces)
+  const fila: FilaJ = { W: A ? A.b : 0.01, X: A ? A.t : 0.01, Z: izq.espesor, AB: libre(izq, extSup, extInf), AE: der.espesor, AF: libre(der, extSup, extInf) };
   if (B) { fila.AH = B.b; fila.AI = B.t; }
   return { ...base, alasMedio, molde: 'asimétrico', fila };
 }
