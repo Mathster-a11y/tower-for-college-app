@@ -1,0 +1,927 @@
+{
+ "nota": "Relevamiento de la Leeza SOHO (ZHA, Pekín, 2019) sobre las láminas publicadas por Zaha Hadid Architects; medidas en metros, origen en el centro de la torre, ejes de la lámina de plantas (+y hacia arriba). Las láminas no están en el repositorio.",
+ "escalas": {
+  "cortes_px_m": {
+   "corteBB": 5.9215,
+   "corteAA": 5.9168
+  },
+  "planta_sitio_px_m": 6.889,
+  "planta_pb_detalle_px_m": 9.36,
+  "planta_F2_px_m": 12.718,
+  "planta_F10_px_m": 13.166,
+  "error": "cortes: 52 niveles ajustados con < 0,4 px (≈ 7 cm); plantas registradas sobre la de sitio por coincidencia de dibujo (PB) y por los núcleos (F2, F10)"
+ },
+ "niveles": [
+  {
+   "nombre": "Helipuerto",
+   "cota": 207.0
+  },
+  {
+   "nombre": "Coronamiento de la piel",
+   "cota": 199.98
+  },
+  {
+   "nombre": "F46 techo / sala de máquinas",
+   "cota": 190.5
+  },
+  {
+   "nombre": "F45",
+   "cota": 184.8
+  },
+  {
+   "nombre": "F44",
+   "cota": 180.7
+  },
+  {
+   "nombre": "F43",
+   "cota": 176.6
+  },
+  {
+   "nombre": "F42",
+   "cota": 172.5
+  },
+  {
+   "nombre": "F41",
+   "cota": 168.4
+  },
+  {
+   "nombre": "F40",
+   "cota": 164.3
+  },
+  {
+   "nombre": "F39",
+   "cota": 160.2
+  },
+  {
+   "nombre": "F38",
+   "cota": 156.1
+  },
+  {
+   "nombre": "F37",
+   "cota": 152.0
+  },
+  {
+   "nombre": "F36",
+   "cota": 147.9
+  },
+  {
+   "nombre": "F35",
+   "cota": 142.8
+  },
+  {
+   "nombre": "F34",
+   "cota": 138.7
+  },
+  {
+   "nombre": "F33",
+   "cota": 134.6
+  },
+  {
+   "nombre": "F32",
+   "cota": 130.5
+  },
+  {
+   "nombre": "F31",
+   "cota": 126.4
+  },
+  {
+   "nombre": "F30",
+   "cota": 122.3
+  },
+  {
+   "nombre": "F29",
+   "cota": 118.2
+  },
+  {
+   "nombre": "F28",
+   "cota": 114.1
+  },
+  {
+   "nombre": "F27",
+   "cota": 110.0
+  },
+  {
+   "nombre": "F26",
+   "cota": 105.9
+  },
+  {
+   "nombre": "F25",
+   "cota": 101.8
+  },
+  {
+   "nombre": "F24",
+   "cota": 96.1
+  },
+  {
+   "nombre": "F23",
+   "cota": 92.0
+  },
+  {
+   "nombre": "F22",
+   "cota": 87.9
+  },
+  {
+   "nombre": "F21",
+   "cota": 83.8
+  },
+  {
+   "nombre": "F20",
+   "cota": 79.7
+  },
+  {
+   "nombre": "F19",
+   "cota": 75.6
+  },
+  {
+   "nombre": "F18",
+   "cota": 71.5
+  },
+  {
+   "nombre": "F17",
+   "cota": 67.4
+  },
+  {
+   "nombre": "F16",
+   "cota": 63.3
+  },
+  {
+   "nombre": "F15",
+   "cota": 59.2
+  },
+  {
+   "nombre": "F14",
+   "cota": 55.1
+  },
+  {
+   "nombre": "F13",
+   "cota": 50.0
+  },
+  {
+   "nombre": "F12",
+   "cota": 45.9
+  },
+  {
+   "nombre": "F11",
+   "cota": 41.8
+  },
+  {
+   "nombre": "F10",
+   "cota": 37.7
+  },
+  {
+   "nombre": "F9",
+   "cota": 33.6
+  },
+  {
+   "nombre": "F8",
+   "cota": 29.5
+  },
+  {
+   "nombre": "F7",
+   "cota": 25.4
+  },
+  {
+   "nombre": "F6",
+   "cota": 21.3
+  },
+  {
+   "nombre": "F5",
+   "cota": 17.2
+  },
+  {
+   "nombre": "F4",
+   "cota": 13.1
+  },
+  {
+   "nombre": "F3",
+   "cota": 9.0
+  },
+  {
+   "nombre": "F2",
+   "cota": 4.1
+  },
+  {
+   "nombre": "F1",
+   "cota": 0.0
+  },
+  {
+   "nombre": "B1",
+   "cota": -6.9
+  },
+  {
+   "nombre": "B2",
+   "cota": -11.9
+  },
+  {
+   "nombre": "B3",
+   "cota": -15.6
+  },
+  {
+   "nombre": "B4",
+   "cota": -19.3
+  }
+ ],
+ "perfil_piel": {
+  "medido": "ancho exterior de la piel a 1,5 m sobre cada losa, en los cortes B-B (eje largo) y A-A (eje corto)",
+  "tabla": [
+   {
+    "z": 17.2,
+    "ancho_largo": 75.32,
+    "ancho_corto": 58.14
+   },
+   {
+    "z": 21.3,
+    "ancho_largo": 76.33,
+    "ancho_corto": 59.32
+   },
+   {
+    "z": 25.4,
+    "ancho_largo": 77.18,
+    "ancho_corto": 59.83
+   },
+   {
+    "z": 29.5,
+    "ancho_largo": 78.02,
+    "ancho_corto": 61.35
+   },
+   {
+    "z": 33.6,
+    "ancho_largo": 78.7,
+    "ancho_corto": 62.2
+   },
+   {
+    "z": 37.7,
+    "ancho_largo": 79.71,
+    "ancho_corto": 63.04
+   },
+   {
+    "z": 41.8,
+    "ancho_largo": 80.38,
+    "ancho_corto": 63.89
+   },
+   {
+    "z": 45.9,
+    "ancho_largo": 81.06,
+    "ancho_corto": 64.39
+   },
+   {
+    "z": 50.0,
+    "ancho_largo": 81.74,
+    "ancho_corto": 65.07
+   },
+   {
+    "z": 55.1,
+    "ancho_largo": 82.41,
+    "ancho_corto": 65.75
+   },
+   {
+    "z": 59.2,
+    "ancho_largo": 82.75,
+    "ancho_corto": 66.25
+   },
+   {
+    "z": 63.3,
+    "ancho_largo": 83.09,
+    "ancho_corto": 66.59
+   },
+   {
+    "z": 67.4,
+    "ancho_largo": 83.59,
+    "ancho_corto": 67.1
+   },
+   {
+    "z": 71.5,
+    "ancho_largo": 83.76,
+    "ancho_corto": 67.44
+   },
+   {
+    "z": 75.6,
+    "ancho_largo": 84.1,
+    "ancho_corto": 67.77
+   },
+   {
+    "z": 79.7,
+    "ancho_largo": 84.44,
+    "ancho_corto": 67.94
+   },
+   {
+    "z": 83.8,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.11
+   },
+   {
+    "z": 87.9,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.28
+   },
+   {
+    "z": 92.0,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.45
+   },
+   {
+    "z": 96.1,
+    "ancho_largo": 85.11,
+    "ancho_corto": 68.45
+   },
+   {
+    "z": 101.8,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.45
+   },
+   {
+    "z": 105.9,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.45
+   },
+   {
+    "z": 110.0,
+    "ancho_largo": 84.78,
+    "ancho_corto": 68.45
+   },
+   {
+    "z": 114.1,
+    "ancho_largo": 84.44,
+    "ancho_corto": 68.28
+   },
+   {
+    "z": 118.2,
+    "ancho_largo": 84.1,
+    "ancho_corto": 67.94
+   },
+   {
+    "z": 122.3,
+    "ancho_largo": 83.93,
+    "ancho_corto": 67.77
+   },
+   {
+    "z": 126.4,
+    "ancho_largo": 83.59,
+    "ancho_corto": 67.6
+   },
+   {
+    "z": 130.5,
+    "ancho_largo": 83.09,
+    "ancho_corto": 66.93
+   },
+   {
+    "z": 134.6,
+    "ancho_largo": 82.75,
+    "ancho_corto": 66.76
+   },
+   {
+    "z": 138.7,
+    "ancho_largo": 82.24,
+    "ancho_corto": 66.08
+   },
+   {
+    "z": 142.8,
+    "ancho_largo": 81.74,
+    "ancho_corto": 65.91
+   },
+   {
+    "z": 147.9,
+    "ancho_largo": 81.06,
+    "ancho_corto": 64.9
+   },
+   {
+    "z": 152.0,
+    "ancho_largo": 80.38,
+    "ancho_corto": 64.22
+   },
+   {
+    "z": 156.1,
+    "ancho_largo": 79.71,
+    "ancho_corto": 63.55
+   },
+   {
+    "z": 160.2,
+    "ancho_largo": 78.7,
+    "ancho_corto": 62.7
+   },
+   {
+    "z": 164.3,
+    "ancho_largo": 78.02,
+    "ancho_corto": 62.37
+   },
+   {
+    "z": 168.4,
+    "ancho_largo": 77.01,
+    "ancho_corto": 61.69
+   },
+   {
+    "z": 172.5,
+    "ancho_largo": 75.99,
+    "ancho_corto": 60.68
+   },
+   {
+    "z": 176.6,
+    "ancho_largo": 74.98,
+    "ancho_corto": 59.66
+   },
+   {
+    "z": 180.7,
+    "ancho_largo": 73.97,
+    "ancho_corto": 58.65
+   },
+   {
+    "z": 184.8,
+    "ancho_largo": 72.95,
+    "ancho_corto": 57.29
+   },
+   {
+    "z": 190.5,
+    "ancho_largo": 71.27,
+    "ancho_corto": 56.11
+   },
+   {
+    "z": 195,
+    "ancho_largo": 70.08,
+    "ancho_corto": 54.76
+   }
+  ]
+ },
+ "anillo_columnas": {
+  "planta_pb": {
+   "n": 32,
+   "ejes_m": [
+    48.87,
+    61.24
+   ],
+   "giro_lamina_grados": 41.0,
+   "diametro_dibujado_medio": 1.48,
+   "columnas": [
+    [
+     4.91,
+     27.92,
+     1.6
+    ],
+    [
+     10.63,
+     28.07,
+     1.55
+    ],
+    [
+     -0.73,
+     26.65,
+     1.6
+    ],
+    [
+     16.09,
+     26.64,
+     1.6
+    ],
+    [
+     -6.06,
+     24.32,
+     1.55
+    ],
+    [
+     20.71,
+     23.5,
+     1.6
+    ],
+    [
+     -11.64,
+     20.5,
+     1.23
+    ],
+    [
+     -17.09,
+     19.34,
+     1.34
+    ],
+    [
+     24.04,
+     18.99,
+     1.6
+    ],
+    [
+     -17.94,
+     14.1,
+     1.23
+    ],
+    [
+     25.77,
+     13.62,
+     1.6
+    ],
+    [
+     -23.25,
+     12.42,
+     1.23
+    ],
+    [
+     -24.9,
+     9.54,
+     1.18
+    ],
+    [
+     26.3,
+     7.82,
+     1.6
+    ],
+    [
+     -23.95,
+     3.81,
+     1.55
+    ],
+    [
+     25.69,
+     1.93,
+     1.55
+    ],
+    [
+     -25.73,
+     -1.87,
+     1.6
+    ],
+    [
+     23.9,
+     -3.73,
+     1.55
+    ],
+    [
+     -26.35,
+     -7.75,
+     1.6
+    ],
+    [
+     24.88,
+     -9.34,
+     1.39
+    ],
+    [
+     23.84,
+     -11.37,
+     1.23
+    ],
+    [
+     -25.82,
+     -13.57,
+     1.6
+    ],
+    [
+     17.92,
+     -14.07,
+     1.34
+    ],
+    [
+     -24.06,
+     -18.98,
+     1.55
+    ],
+    [
+     17.17,
+     -19.88,
+     1.28
+    ],
+    [
+     11.61,
+     -20.46,
+     1.23
+    ],
+    [
+     -20.74,
+     -23.46,
+     1.5
+    ],
+    [
+     6.01,
+     -24.25,
+     1.55
+    ],
+    [
+     0.69,
+     -26.61,
+     1.66
+    ],
+    [
+     -16.14,
+     -26.6,
+     1.55
+    ],
+    [
+     -10.68,
+     -28.03,
+     1.6
+    ],
+    [
+     -4.94,
+     -27.88,
+     1.5
+    ]
+   ]
+  },
+  "planta_4100": {
+   "n": 26,
+   "ejes_m": [
+    48.23,
+    64.51
+   ],
+   "giro_lamina_grados": 38.6,
+   "diametro_dibujado_medio": 1.43,
+   "columnas": [
+    [
+     10.74,
+     29.12,
+     1.42
+    ],
+    [
+     4.77,
+     28.98,
+     1.42
+    ],
+    [
+     -1.06,
+     27.68,
+     1.45
+    ],
+    [
+     16.55,
+     27.61,
+     1.45
+    ],
+    [
+     -6.59,
+     25.25,
+     1.49
+    ],
+    [
+     21.47,
+     24.29,
+     1.49
+    ],
+    [
+     -12.59,
+     21.75,
+     1.26
+    ],
+    [
+     25.03,
+     19.5,
+     1.49
+    ],
+    [
+     -19.59,
+     14.57,
+     1.26
+    ],
+    [
+     26.89,
+     13.82,
+     1.49
+    ],
+    [
+     27.45,
+     7.77,
+     1.49
+    ],
+    [
+     -24.95,
+     4.18,
+     1.42
+    ],
+    [
+     26.79,
+     1.68,
+     1.42
+    ],
+    [
+     -26.8,
+     -1.67,
+     1.49
+    ],
+    [
+     24.95,
+     -4.17,
+     1.49
+    ],
+    [
+     -27.44,
+     -7.76,
+     1.45
+    ],
+    [
+     -26.89,
+     -13.82,
+     1.45
+    ],
+    [
+     19.58,
+     -14.57,
+     1.26
+    ],
+    [
+     -25.03,
+     -19.5,
+     1.45
+    ],
+    [
+     12.57,
+     -21.75,
+     1.26
+    ],
+    [
+     -21.48,
+     -24.28,
+     1.42
+    ],
+    [
+     6.6,
+     -25.25,
+     1.49
+    ],
+    [
+     -16.54,
+     -27.62,
+     1.45
+    ],
+    [
+     1.06,
+     -27.69,
+     1.49
+    ],
+    [
+     -4.78,
+     -28.99,
+     1.45
+    ],
+    [
+     -10.74,
+     -29.11,
+     1.49
+    ]
+   ]
+  },
+  "planta_37700": {
+   "n": 26,
+   "ejes_m": [
+    57.52,
+    72.74
+   ],
+   "giro_lamina_grados": 38.4,
+   "diametro_dibujado_medio": 1.25,
+   "columnas": [
+    [
+     11.12,
+     33.35,
+     1.25
+    ],
+    [
+     4.29,
+     33.2,
+     1.25
+    ],
+    [
+     -2.38,
+     31.72,
+     1.29
+    ],
+    [
+     18.28,
+     31.49,
+     1.29
+    ],
+    [
+     -8.66,
+     28.94,
+     1.22
+    ],
+    [
+     24.39,
+     27.36,
+     1.22
+    ],
+    [
+     -14.28,
+     26.81,
+     1.22
+    ],
+    [
+     28.8,
+     21.44,
+     1.22
+    ],
+    [
+     31.03,
+     14.65,
+     1.29
+    ],
+    [
+     -26.95,
+     12.59,
+     1.29
+    ],
+    [
+     31.68,
+     7.75,
+     1.22
+    ],
+    [
+     -28.88,
+     5.74,
+     1.29
+    ],
+    [
+     30.92,
+     0.81,
+     1.25
+    ],
+    [
+     -30.93,
+     -0.83,
+     1.25
+    ],
+    [
+     28.87,
+     -5.75,
+     1.22
+    ],
+    [
+     -31.67,
+     -7.75,
+     1.22
+    ],
+    [
+     26.95,
+     -12.61,
+     1.29
+    ],
+    [
+     -31.03,
+     -14.65,
+     1.25
+    ],
+    [
+     -28.81,
+     -21.45,
+     1.29
+    ],
+    [
+     14.28,
+     -26.81,
+     1.22
+    ],
+    [
+     -24.4,
+     -27.37,
+     1.29
+    ],
+    [
+     8.65,
+     -28.94,
+     1.25
+    ],
+    [
+     -18.29,
+     -31.48,
+     1.25
+    ],
+    [
+     2.37,
+     -31.71,
+     1.25
+    ],
+    [
+     -4.28,
+     -33.19,
+     1.25
+    ],
+    [
+     -11.12,
+     -33.35,
+     1.25
+    ]
+   ]
+  }
+ },
+ "nucleos": {
+  "dimensiones": "29,5 × 15,75 m (rectángulo mínimo), muros ~0,55 m (medido en F10)",
+  "iguales_en": [
+   "PB",
+   "F2",
+   "F10"
+  ],
+  "simetria": "central (punto) respecto del eje de la torre",
+  "centros": [
+   [
+    -9.67,
+    -17.09
+   ],
+   [
+    9.65,
+    17.09
+   ]
+  ]
+ },
+ "estructura_fuentes": {
+  "sistema": "dos medias torres antisimétricas, cada una núcleo de hormigón + pórtico curvo de un lado; 4 anillos-cinturón de acero (腰桁架) las unen",
+  "altura_estructural": 191.5,
+  "columnas": "tubos de acero circulares rellenos de hormigón, inclinados (圆钢管混凝土斜柱); 34 columnas del pórtico exterior de B2 a F14 (fuente de la supervisión de obra)",
+  "cinturones_y_puentes": "niveles 13, 24, 35 y 45 (refugio / instalaciones); puentes de acero de 9 a 38 m de luz sobre el atrio",
+  "losas": "compuestas (chapa colaborante y hormigón)",
+  "subsuelos": "4 (B1 a B4, −19,3 m); túnel de servicio del subte bajo la torre",
+  "atrio": "de unos 194 m, gira unos 45° de abajo arriba para alinearse con la calle Lize"
+ }
+}

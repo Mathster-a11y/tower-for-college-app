@@ -9,7 +9,7 @@ Cada sesión anota acá lo que empieza y lo tacha al terminar, en el mismo commi
 (`claude/ejemplos-cirsoc`): viento y túneles, métodos de cálculo, salidas de entrega, tablet y estética.
 
 **En curso**
-- (nada en curso en `alternativa`)
+- `alternativa` (28/11): ejemplo de la Leeza SOHO (ZHA). Etapa 1, relevamiento con el usuario en `docs/leeza-soho/`; la app todavía no se toca.
 - ~~`claude/ejemplos-cirsoc` (28/11): pedidos de la planta del usuario~~ (terminado 28/11). Hecho: insertar y copiar varias veces seguidas (las medidas quedan), sin grupos automáticos (copiar, matrices, insertar y al abrir), cartas con ▾ siempre a mano, bandeja de plegadas y opción ⇲ debajo del 3D, áreas de influencia lisas que siguen el contorno, avisos de lo que no verifica (qué cambiar y adónde ir), Ctrl+C/Ctrl+V y menús de clic derecho (también en el fondo). y la planilla en una ventana aparte (↗ ventana en «Avance de la planilla»; recuerda tamaño y lugar).
 - (nada en curso en `claude/ejemplos-cirsoc`; unida con `main` el 28/11. La CI con la revisión de punteros espera a que la carpeta de la computadora del usuario se pueda usar desde la nube.)
 - Para `alternativa` (visto al unir el 28/11, ya estaba en `main`): el Hancock no verifica 20 barras del exo con CIRSOC y FEM (relación 1,05–1,07, desde «las columnas de PB bajan hasta la platea»): habría que redimensionarlo.
