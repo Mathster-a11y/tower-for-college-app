@@ -56,7 +56,7 @@ corriendo en un navegador con WebGPU.
 **Próximos en `alternativa`** (propuestos, sin empezar)
 - ~~Carta «Losa» en pestañas (Forma, Altura, CAD): creció y «Herramientas CAD…» quedó escondido.~~ (28/11: pestañas Forma, Altura y CAD; «Herramientas CAD…» siempre arriba)
 - Supercolumnas del exo que bajen hasta la fundación.
-- Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.
+- ~~Una línea en Estabilidad que explique por qué el P-Δ con Planilla no cuenta el exo.~~ (28/11)
 
 **Para la otra rama** (vistos desde acá, sin tocar)
 - ~~«Ver la explicación» de Rototraslación: chico para el dedo.~~ (27/11, `claude/ejemplos-cirsoc`: botón con recuadro, 44 px de alto en tablet)
