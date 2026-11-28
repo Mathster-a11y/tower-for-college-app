@@ -24,6 +24,11 @@ export function fidelidadRecomendada(hayPlaca: boolean | null): Fidelidad {
   const nucleos = navigator.hardwareConcurrency || 2;
   const memoria = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
   if (!hayPlaca) return nucleos >= 8 && memoria >= 8 ? 'intermedia' : 'basica';
+  // si la prueba de la placa (Viento → Túnel 3D) se corrió en este navegador, manda lo medido: «alta» pide 10 cuadros por
+  // segundo con la grilla liviana; la intermedia, unas 4,4 veces menos (grilla rápida)
+  let fps: number | null = null;
+  try { const v = Number(localStorage.getItem('torre3d.pruebaGpu')); fps = v > 0 ? v : null; } catch { fps = null; }
+  if (fps !== null) return fps >= 10 ? 'alta' : fps * 4.4 >= 10 ? 'intermedia' : 'basica';
   return nucleos >= 8 && memoria >= 8 ? 'alta' : 'intermedia';
 }
 

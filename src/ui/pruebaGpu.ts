@@ -12,6 +12,23 @@ type Resultado = { adaptador: string; mlups: number; fps: number; pasos: number;
 let resultado: Resultado | null = null, corriendo = false;
 
 /** el criterio: millones de celdas por segundo que hacen falta para 10 cuadros por segundo con la grilla liviana */
+/** celdas de la grilla rápida (la de la fidelidad intermedia) contra la liviana de la prueba: cuántas veces más cuadros daría */
+const RAZON_RAPIDA = (G.nx * G.ny * G.nz) / (96 * 48 * 40);
+/**
+ * qué fidelidad del túnel 3D alcanza con lo medido: con la grilla liviana (fidelidad alta) hacen falta 10 cuadros por
+ * segundo; la intermedia (grilla rápida, 4,4 veces menos celdas) da unas 4,4 veces más; si tampoco, la básica en el
+ * procesador (no usa la placa).
+ */
+export function veredictoGpu(fps: number): string {
+  if (fps >= CUADROS_MIN) return 'Alcanza para el túnel 3D, también con la fidelidad alta.';
+  const rapida = fps * RAZON_RAPIDA;
+  if (rapida >= CUADROS_MIN) return `Con la fidelidad alta (grilla liviana) queda justo; con la intermedia (grilla rápida) daría unos ${fmt(rapida, 0)} cuadros por segundo: el túnel 3D anda bien así. El 2D funciona igual.`;
+  return 'No alcanza para el túnel 3D con la placa: usá la fidelidad básica (en el procesador). El 2D funciona igual.';
+}
+const CLAVE_MEDICION = 'torre3d.pruebaGpu';
+function guardarMedicionGpu(fps: number) { try { localStorage.setItem(CLAVE_MEDICION, String(fps)); } catch { /* sin almacenamiento */ } }
+/** cuadros por segundo de la última prueba en este navegador (null: no se midió) */
+export function medicionGpu(): number | null { try { const v = Number(localStorage.getItem(CLAVE_MEDICION)); return v > 0 ? v : null; } catch { return null; } }
 export const MLUPS_NECESARIOS = (G.nx * G.ny * G.nz * PASOS_CUADRO * CUADROS_MIN) / 1e6;
 
 async function medir(alTerminar: () => void) {
@@ -31,6 +48,7 @@ async function medir(alTerminar: () => void) {
     while (sim.pasos < 1500 && performance.now() - t0 < 12000) { sim.avanzar(60); await sim.esperar(); }
     const corte = await sim.corte(Math.round(hT * 0.6));
     resultado = { adaptador: sim.adaptador, mlups, fps: (mlups * 1e6) / (N * PASOS_CUADRO), pasos: sim.pasos, seg, corte };
+    guardarMedicionGpu(resultado.fps);
   } catch (e) { resultado = { error: e instanceof Error ? e.message : String(e) }; }
   finally { sim?.destruir(); corriendo = false; alTerminar(); }
 }
@@ -51,7 +69,7 @@ function dibujarCorte(c: Float32Array): HTMLCanvasElement {
 
 export function seccionPruebaGpu(redibujar: () => void): H {
   const caja = h('div', {});
-  caja.append(h('p', { class: 'nota' }, `El túnel 3D (etapa V3 del plan) necesita la placa de video. Esta prueba corre la grilla liviana (${G.nx} × ${G.ny} × ${G.nz} celdas, una torre sobre el suelo con el perfil de viento) unos segundos y mide la velocidad. Para seguir con el 3D hacen falta ${CUADROS_MIN} cuadros por segundo a ${PASOS_CUADRO} pasos por cuadro (unos ${fmt(MLUPS_NECESARIOS, 0)} millones de celdas por segundo).`));
+  caja.append(h('p', { class: 'nota' }, `El túnel 3D va mejor con la placa de video. Esta prueba corre la grilla liviana (${G.nx} × ${G.ny} × ${G.nz} celdas, una torre sobre el suelo con el perfil de viento) unos segundos y mide la velocidad. Para seguir con el 3D hacen falta ${CUADROS_MIN} cuadros por segundo a ${PASOS_CUADRO} pasos por cuadro (unos ${fmt(MLUPS_NECESARIOS, 0)} millones de celdas por segundo).`));
   const b = h('button', { type: 'button', class: 'boton' }, corriendo ? 'Midiendo…' : 'Probar la placa de video') as HTMLButtonElement;
   b.disabled = corriendo;
   b.addEventListener('click', () => { void medir(redibujar); });
@@ -64,9 +82,9 @@ export function seccionPruebaGpu(redibujar: () => void): H {
       kpi('Velocidad', `${fmt(r.mlups, 0)} M/s`, 'millones de celdas por segundo'),
       kpi('Cuadros por segundo', fmt(r.fps, 1), `a ${PASOS_CUADRO} pasos por cuadro · hacen falta ${CUADROS_MIN}`, alcanza ? 'var(--ok)' : 'var(--revisar)'),
     ));
-    const texto = `Placa: ${r.adaptador || 'sin nombre'} · ${fmt(r.mlups, 0)} millones de celdas por segundo · ${fmt(r.fps, 1)} cuadros por segundo (${r.pasos} pasos en ${fmt(r.seg, 1)} s de medición). ${alcanza ? 'Alcanza para el túnel 3D.' : 'No alcanza para el túnel 3D en esta computadora: el 2D funciona igual.'}`;
+    const texto = `Placa: ${r.adaptador || 'sin nombre'} · ${fmt(r.mlups, 0)} millones de celdas por segundo · ${fmt(r.fps, 1)} cuadros por segundo con la grilla liviana (${r.pasos} pasos en ${fmt(r.seg, 1)} s de medición). ${veredictoGpu(r.fps)}`;
     caja.append(h('p', { class: 'nota' }, texto));
-    if (r.corte) caja.append(h('figure', { class: 'diagrama' }, dibujarCorte(r.corte), h('figcaption', {}, 'Corte horizontal a 0,6 de la altura de la torre (velocidad: blanco quieto, verde rápido). Es solo para ver que el cálculo anda; el túnel 3D completo es la etapa V3.')));
+    if (r.corte) caja.append(h('figure', { class: 'diagrama' }, dibujarCorte(r.corte), h('figcaption', {}, 'Corte horizontal a 0,6 de la altura de la torre (velocidad: blanco quieto, verde rápido). Es solo para ver que el cálculo anda; el túnel 3D completo está en Viento → Túnel 3D.')));
     const copiar = h('button', { type: 'button', class: 'mini' }, 'Copiar el resultado');
     copiar.addEventListener('click', () => { void navigator.clipboard?.writeText(texto); copiar.textContent = 'Copiado'; });
     caja.append(copiar);
