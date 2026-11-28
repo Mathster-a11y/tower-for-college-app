@@ -101,7 +101,7 @@ Datos: `relevamiento.json` (niveles, perfil piso por piso, cada columna de cada 
 - **Opción B, alineada con la app:** el eje largo sobre x. El viento A ve el lado largo (84,8 m en la panza) y el B el
   corto (68,5 m): son los dos casos extremos y se leen directo en las planillas (B = 84,8, L = 68,5).
 - Es la misma torre girada; para decidir conviene verlas las dos armadas. Con la opción A el ancho que ve cada viento
-  sale de la proyección de la elipse (≈ 77 y 77 m en la panza: casi el mismo para los dos).
+  sale de la proyección de la elipse: en la panza, 75,2 m para el viento A (el ancho en x) y 78,9 m para el B (en y), casi lo mismo para los dos.
 
 ## Columnas del pórtico: tamaño recomendado
 
