@@ -64,6 +64,11 @@ corriendo en un navegador con WebGPU.
   sin cambios. Planilla renovada: hoja «Datos» (núcleos y paredes) y «Reparto» (torsor y corte de cada pared), igual
   en LibreOffice. Falta, si se quiere: núcleos con puertas y dinteles (hoy se toman abiertos) y el contraste con Pynite
   con los núcleos.
+- Gherkin con FEM: «Núcleo E» no verifica en flexocompresión desde el núcleo relevado (27/11, commit 2e1e944; con CIRSOC
+  verifica). En el caso 4 el modelo le da 1,02 del viento contra 0,84 de la rototraslación, y W2-E pide más del 4 %.
+  Engrosar W2 (45 o 50 cm) o subir a H50/H60 no alcanza: el núcleo se pone más rígido y le saca viento al diagrid (con
+  H50, también el O deja de verificar con CIRSOC). Decidir: muros más gruesos que los relevados, otra pieza en W2, o
+  aceptar el aviso en FEM.
 
 **Para la otra rama** (vistos desde acá, sin tocar)
 - ~~«Ver la explicación» de Rototraslación: chico para el dedo.~~ (27/11, `claude/ejemplos-cirsoc`: botón con recuadro, 44 px de alto en tablet)
