@@ -23,6 +23,7 @@ import { esPerfilVariable } from '../engine/perfilTorre';
 import { protocoloDelCalculo } from '../engine/perfilVariable';
 import { datosAltura, deformada, moduloHormigon, rigidez, rigidezPorNivel, rototraslacion3D, torsionPorNivel, type PuntoAltura, type Rototraslacion3D } from '../engine/diagramas';
 import { montar3D } from './montar3d';
+import { centroVisor, panelVisor } from './visor3d';
 import { exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { carta, type DatosCarta, type NivelCarta, type Variante } from './carta';
 import { calcFunicular, poligonoFunicular } from '../engine/funicular';
@@ -1003,7 +1004,17 @@ const exoesqueleto: Etapa = {
   estado: () => estadoExo(),
 };
 
-export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto];
+const visor3d: Etapa = {
+  id: 'visor', nro: '3D', nombre: 'Vista 3D', rol: '--r-diseno',
+  icono: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+  globo: 'Vista 3D|La torre en grande para mirarla y presentarla: sombreado, transparente, alambre, texturado y render; perspectiva o paralela (isométrica, dimétrica, trimétrica, planta, alzados) y cortes en planta y en alzado.',
+  panel(c) { panelVisor(c); },
+  centro(c) { centroVisor(c); },
+  nombreCentro: () => 'Vista 3D',
+  estado: () => 'informativo',
+};
+
+export const ETAPAS: Etapa[] = [diseno, viento, fuerzas, estabilidad, rigidezE, rototrasl, flexion, exoesqueleto, visor3d];
 export const ETAPAS_FIN: Etapa[] = [cartaE, resumen, ecuaciones, ayuda];
 export const todas = () => [...ETAPAS, ...ETAPAS_FIN];
 export const etapaPorId = (id: string) => todas().find(e => e.id === id) ?? diseno;

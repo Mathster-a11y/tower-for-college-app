@@ -29,6 +29,7 @@ const css = (v: string, def: string) => getComputedStyle(document.documentElemen
 
 export { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
 import { movMaximo, ultimaDeformada, exageracionAuto, giroExtraAuto } from './deformadaAuto';
+import { aplicarPresentacion, direccionVista, type Presentacion3D } from './presentacion3d';
 
 const f2z = (z: number) => z.toFixed(2).replace('.', ',');
 /** el corrimiento (dx, dy) a la altura z, lineal entre las cotas de los niveles (la piel entre dos niveles corridos) */
@@ -158,6 +159,8 @@ export interface Opciones3D {
   rotulo?: boolean;
   /** nombres de las piezas, CR, ejes y cotas sobre el dibujo */
   etiquetas?: boolean;
+  /** etapa «Vista 3D»: estilo, cortes y cámara (presentacion3d.ts) */
+  presentacion?: () => Presentacion3D;
 }
 
 export function montar3D(cont: HTMLElement, op: Opciones3D) {
@@ -191,6 +194,9 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   if (op.etiquetas) cont.appendChild(capaEt.domElement);
   const escena = new THREE.Scene();
   const camara = new THREE.PerspectiveCamera(40, 1, 0.5, 2000);
+  // proyección paralela (axonometrías, isométrica, planta y alzados de la etapa «Vista 3D»)
+  const orto = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 5000);
+  let cam: THREE.PerspectiveCamera | THREE.OrthographicCamera = camara;
   const controles = new OrbitControls(camara, renderer.domElement);
   let hayQueDibujar = true;
   function pedirCuadro() { hayQueDibujar = true; }
@@ -398,9 +404,18 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     // la cámara se vuelve a encuadrar cuando cambia el tamaño de la torre (no al mover un muro)
     const clave = [B, L, top, fondoCota].map(v => v.toFixed(1)).join('|') + (roto ? estado.dir : '');
     medidas = { B, L, h, top, fondoCota };
+    // la etapa «Vista 3D»: estilo, cortes y cámara (la cámara cambia de proyección o de punto de vista: se encuadra)
+    if (op.presentacion) {
+      const pr = op.presentacion();
+      aplicarPresentacion({ grupo, renderer, sol, medidas: { B, L, top, fondoCota }, corr: corrimientoActual,
+        colores: { tinta: css('--ink', '#222'), poche: css('--ink', '#2b2f33'), plano: css('--deformada', '#2a9d5c') } }, pr);
+      const claveCam = `${pr.proyeccion}|${pr.vista}|${pr.corte.tipo}|${pr.corte.tipo === 'planta' ? pr.corte.z.toFixed(1) : ''}`;
+      if (claveCam !== camaraPres) { camaraPres = claveCam; encuadre = ''; }
+    }
     if (clave !== encuadre) { encuadrar(); encuadre = clave; }
     rotular();
   }
+  let camaraPres = '';
 
   /**
    * Exoesqueleto: las cuatro caras como tubos de acero. Las dos caras paralelas al viento elegido se pintan con su
@@ -745,8 +760,15 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
   /** la torre entera entra en el visor, sea ancha o angosta */
   function encuadrar() {
     pedirCuadro();
-    const { B, L, h, top, fondoCota } = medidas;
+    const pr0 = op.presentacion?.();
+    // con un corte en planta queda la parte de abajo; la vista «Planta» encuadra la planta (no la altura)
+    const { B, L, fondoCota } = medidas;
+    const top = pr0?.corte.tipo === 'planta' ? Math.min(medidas.top, pr0.corte.z) : medidas.top;
+    const h = pr0?.vista === 'planta' ? 0 : pr0?.corte.tipo === 'planta' ? top - fondoCota : medidas.h;
     const r = 0.5 * Math.sqrt(B * B + L * L + h * h) + (roto ? 9 : 4);
+    const pr = op.presentacion?.();
+    const nueva = pr?.proyeccion === 'paralela' ? orto : camara;
+    if (nueva !== cam) { nueva.position.copy(cam.position); cam = nueva; controles.object = nueva; }
     const fovV = (camara.fov * Math.PI) / 180;
     const fovH = 2 * Math.atan(Math.tan(fovV / 2) * camara.aspect);
     const d = r / Math.sin(Math.min(fovV, fovH) / 2);
@@ -755,10 +777,21 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const w = roto ? new THREE.Vector3(roto.viento.x, 0, -roto.viento.y) : null;
     const dir = w ? new THREE.Vector3(-w.z, 0, w.x).multiplyScalar(0.8).add(new THREE.Vector3(0, 0.45, 0)).addScaledVector(w, -0.42).normalize()
       : new THREE.Vector3(-0.62, 0.38, 0.69).normalize();
-    controles.target.set(0, (top + fondoCota) / 2, 0);
-    camara.position.copy(controles.target).addScaledVector(dir, d);
-    camara.far = Math.max(2000, d * 4);
-    camara.updateProjectionMatrix();
+    const preset = pr ? direccionVista(pr.vista) : null;
+    controles.target.set(0, pr0?.vista === 'planta' ? top : (top + fondoCota) / 2, 0);
+    if (cam === orto) {
+      // paralela: el mismo encuadre con un marco de ± r (la distancia no cambia el tamaño, solo que no corte)
+      const aspect = camara.aspect || 1;
+      orto.top = r * 1.05; orto.bottom = -r * 1.05; orto.left = -r * 1.05 * aspect; orto.right = r * 1.05 * aspect;
+      orto.zoom = 1; orto.near = 0.1; orto.far = Math.max(2000, r * 12);
+      orto.position.copy(controles.target).addScaledVector(preset ?? dir, r * 5);
+      orto.updateProjectionMatrix();
+    } else {
+      camara.position.copy(controles.target).addScaledVector(preset ?? dir, d);
+      camara.far = Math.max(2000, d * 4);
+      camara.updateProjectionMatrix();
+    }
+    controles.update();
   }
   renderer.domElement.addEventListener('dblclick', encuadrar);
   renderer.domElement.title = 'Arrastrar: girar · rueda: acercar · doble clic: encuadrar la torre';
@@ -771,6 +804,7 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const antes = camara.aspect;
     camara.aspect = w / h;
     camara.updateProjectionMatrix();
+    { const hh = (orto.top - orto.bottom) / 2; orto.left = -hh * camara.aspect; orto.right = hh * camara.aspect; orto.updateProjectionMatrix(); }
     if (Math.abs(antes - camara.aspect) > 0.05) encuadrar();
   }
   new ResizeObserver(tamaño).observe(cont);
@@ -809,8 +843,8 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const ahora = performance.now();
     if (!(movio || hayQueDibujar || animando || ahora - ultimoCuadro > 1000)) return;
     hayQueDibujar = false; ultimoCuadro = ahora;
-    renderer.render(escena, camara);
-    if (op.etiquetas) { capaEt.render(escena, camara); if (++cuadro % 6 === 0 || !movio) ordenarRotulos(); }
+    renderer.render(escena, cam);
+    if (op.etiquetas) { capaEt.render(escena, cam); if (++cuadro % 6 === 0 || !movio) ordenarRotulos(); }
   });
   return { construir, encuadrar, tamaño };
 }

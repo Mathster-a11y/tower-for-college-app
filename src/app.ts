@@ -14,6 +14,7 @@ import { tablaComparacion, comparar } from './ui/comparar';
 import { borrarVersion, fechaCorta, guardarVersion, leerVersion, versiones } from './ui/biblioteca';
 import { cantidadAvisos } from './ui/paneles';
 import { ETAPAS, ETAPAS_FIN, etapaPorId, todas, datosRoto3D, type Etapa } from './ui/etapas';
+import { montarTirador3D } from './ui/tirador3d';
 import { montarPresentacion } from './ui/modoPresentacion';
 import { ponerPredecir, predecirActivo, tarjetaPredecir } from './ui/predecir';
 import { activarGlobos, aplicarMat, chip, esc, h, hacerPlegable, plegarExplicaciones, plegarSeccion, plegarTodas } from './ui/comp';
@@ -235,7 +236,7 @@ function dibujarAvance() {
   const lista = h('div', { class: 'lista-avance' });
   a.replaceChildren(cab, lista);
   hacerPlegable(a, cab, 'Avance de la planilla', false);
-  lista.replaceChildren(...ETAPAS.map(e => {
+  lista.replaceChildren(...ETAPAS.filter(e => e.id !== 'visor').map(e => {
     const est = e.estado();
     const b = h('button', { type: 'button', 'aria-current': String(e.id === estado.etapa) }, h('span', { class: 'nro' }, e.nro), h('span', { class: 'nom' }, e.nombre), chip(est === 'pendiente' ? 'pendiente' : est, est === 'revisar' && e.id === 'flexion' ? 'armadura' : est));
     b.addEventListener('click', () => irA(e.id));
@@ -1108,5 +1109,7 @@ montarDivisores();
   const b3 = document.querySelector<HTMLElement>('.bloque3d'), cab3 = b3?.querySelector<HTMLElement>('.tira');
   if (b3 && cab3) { cab3.insertAdjacentHTML('beforeend', '<span class="plegar" aria-hidden="true">▾</span>'); hacerPlegable(b3, cab3, 'Axonometría', false); }
 }
+// el 3D del panel derecho se agranda en vertical con un tirador (se recuerda)
+montarTirador3D();
 
 }

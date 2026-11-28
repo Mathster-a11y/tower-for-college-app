@@ -166,6 +166,12 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .derecha .tira { min-height: 34px; }
 .derecha .vista3d { position: relative; height: 44vh; min-height: 240px; background: var(--lienzo); border-bottom: 1px solid var(--edge); flex-shrink: 0; }
 .derecha .vista3d canvas { display: block; width: 100%; height: 100%; }
+/* tirador para agrandar el 3D en vertical */
+.tirador-3d { flex-shrink: 0; height: 10px; cursor: row-resize; touch-action: none; position: relative; background: var(--panel); border-bottom: 1px solid var(--edge); }
+.tirador-3d::after { content: ''; position: absolute; left: 50%; top: 3px; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px; background: var(--edge); }
+.tirador-3d:hover::after, .tirador-3d:focus-visible::after, .tirador-3d.arrastrando::after { background: var(--accent); }
+.bloque3d.plegada > .tirador-3d { display: none; }
+@media (pointer: coarse) { .tirador-3d { height: 18px; } .tirador-3d::after { top: 7px; } }
 .capas { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 10px 2px; }
 .chip-capa { font-size: 12px; padding: 2px 9px 2px 7px; display: inline-flex; align-items: center; gap: 6px; }
 .chip-capa i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
@@ -496,6 +502,10 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
 .vista3d { position: relative; }
 .vista3d.grande { height: clamp(380px, 62vh, 760px); border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; background: var(--lienzo); }
 .vista3d.grande canvas { display: block; width: 100%; height: 100%; }
+/* la etapa «Vista 3D»: el 3D ocupa todo el alto del centro */
+.vista3d.grande.visor3d { height: calc(100vh - 190px); min-height: 360px; }
+.seg.vistas-visor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 12px; }
+.seg.vistas-visor > button { border-radius: 9px; }
 .info3d { position: absolute; left: 8px; bottom: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--edge); font: 11px/1.4 var(--mono); color: var(--ink); pointer-events: none; }
 .info3d b { color: var(--deformada); }
 .controles3d { flex-wrap: wrap; gap: 8px; align-items: center; }
