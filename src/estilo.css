@@ -971,6 +971,8 @@ body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !impor
 .seccion.plegada > .cab { border-bottom: 0; }
 .avance.plegada > .lista-avance { display: none; }
 .cab-avance { display: flex; align-items: center; gap: 6px; }
+.avance .cab-avance .b-ventana-planilla { display: inline-flex; width: auto; flex: 0 0 auto; margin-left: auto; min-height: 0; padding: 1px 7px; gap: 4px; font-size: 11.5px; font-weight: 500; line-height: 16px; border: 1px solid var(--edge); border-radius: 6px; background: var(--field); color: var(--ink2); white-space: nowrap; }
+.avance .cab-avance .b-ventana-planilla:hover { color: var(--accent); border-color: var(--accent); }
 .bloque3d.plegada > .vista3d, .bloque3d.plegada > .capas { display: none; }
 .bloque3d > .tira .plegar { margin-left: 6px; }
 @media (prefers-reduced-motion: reduce) { .plegar { transition: none; } }

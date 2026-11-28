@@ -37,6 +37,12 @@ function leerGuardado(): Proyecto {
 export function montarVistaPlanilla() {
   (window as unknown as { __torreLista?: boolean }).__torreLista = true;
   document.title = 'Planilla · Torre 3D';
+  // la ventana recuerda su tamaño y lugar (la próxima vez abre donde se dejó, por ejemplo en la segunda pantalla)
+  { const guardar = () => { try { localStorage.setItem('torre3d.ventanaPlanilla', JSON.stringify({ w: outerWidth, h: outerHeight, x: screenX, y: screenY })); } catch { /* sin almacenamiento */ } };
+    // (mover una ventana no avisa con ningún evento: se mira cada tanto si cambió de lugar)
+    let ult = '';
+    setInterval(() => { const k = `${outerWidth},${outerHeight},${screenX},${screenY}`; if (k !== ult) { ult = k; guardar(); } }, 1500);
+    addEventListener('pagehide', guardar); }
   const tema = () => { try { const t = localStorage.getItem('torre3d.tema'); if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; } catch { /* sin almacenamiento */ } };
   tema();
   document.body.replaceChildren();
@@ -68,7 +74,7 @@ export function montarVistaPlanilla() {
   const tabla = h('table', { class: 'vp-tabla' });
   hoja.append(tabla);
   const pestanas = h('nav', { class: 'vp-pestanas', 'aria-label': 'Hojas' });
-  const nota = h('p', { class: 'vp-nota' }, 'Se actualiza sola cuando cambiás la torre en la pestaña de la app. Las fórmulas se calculan como al abrir el archivo en Excel (verificado con LibreOffice, celda por celda). Si en la app abriste tu propia planilla, acá se muestra la de la cátedra.');
+  const nota = h('p', { class: 'vp-nota' }, 'Se actualiza sola cuando cambiás la torre en la app. Las fórmulas se calculan como al abrir el archivo en Excel (verificado con LibreOffice, celda por celda). Si en la app abriste tu propia planilla, acá se muestra la de la cátedra.');
   document.body.append(barra, formula, hoja, pestanas, nota);
   ponerZoom(zoom);
 
@@ -183,7 +189,7 @@ export function montarVistaPlanilla() {
 /** abre (o trae al frente) la pestaña de la vista previa */
 export function abrirVistaPlanilla() {
   const url = `${location.pathname}${location.search}#planilla`;
-  const w = window.open(url, 'torre3d-planilla');
+  const w = window.open(url, 'torre3d-planilla', 'popup=yes,width=1200,height=860');
   if (w) w.focus();
   return !!w;
 }

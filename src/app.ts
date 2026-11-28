@@ -235,7 +235,9 @@ function dibujarCentro() {
 }
 function dibujarAvance() {
   const a = $('avance');
-  const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
+  const bVentana = h('button', { type: 'button', class: 'mini b-ventana-planilla', title: 'Abrir la planilla en una ventana aparte (se puede llevar a otra pantalla): la que se exporta, con las fórmulas calculadas; se actualiza sola mientras editás', 'aria-label': 'Planilla en una ventana aparte' }, '↗ ventana');
+  bVentana.addEventListener('click', ev => { ev.stopPropagation(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra ventana: permití las ventanas emergentes para esta página.'); });
+  const cab = h('h4', { class: 'cab-avance' }, 'Avance de la planilla', bVentana, h('span', { class: 'plegar', 'aria-hidden': 'true' }, '▾'));
   const lista = h('div', { class: 'lista-avance' });
   a.replaceChildren(cab, lista);
   hacerPlegable(a, cab, 'Avance de la planilla', false);
@@ -410,8 +412,11 @@ const imprimirDesglose = () => import('./ui/desglose').then(m => m.imprimirDesgl
 const descargarPPTX = () => import('./ui/desglose').then(m => m.descargarPPTX());
 const dibujosPorHoja = () => import('./ui/dibujosDesglose').then(m => m.dibujosPorHoja());
 /** abre (o trae al frente) la pestaña de la vista previa: tiene que ser en el mismo clic (si no, el navegador la bloquea) */
+// (en una ventana aparte, no una pestaña: se arrastra sola a la segunda pantalla; recuerda su tamaño y lugar)
 function abrirVistaPlanilla() {
-  const w = window.open(`${location.pathname}${location.search}#planilla`, 'torre3d-planilla');
+  let g = { w: Math.min(1200, screen.availWidth - 80), h: Math.min(860, screen.availHeight - 80), x: 40, y: 40 };
+  try { const t = localStorage.getItem('torre3d.ventanaPlanilla'); if (t) g = { ...g, ...JSON.parse(t) }; } catch { /* sin almacenamiento */ }
+  const w = window.open(`${location.pathname}${location.search}#planilla`, 'torre3d-planilla', `popup=yes,width=${g.w},height=${g.h},left=${g.x},top=${g.y}`);
   if (w) w.focus();
   return !!w;
 }
@@ -476,7 +481,7 @@ async function exportar() {
     <ul>${filas}<li><b>Hojas «G ·»</b> (solo con las hojas de la app): los motores de la app con fórmulas vivas y gráficos, la carta de la torre y los dibujos de cada etapa.</li>${asig.piezas.some(z => z.especial && z.filaHoja !== null) ? '<li><b>Elementos especiales</b>: la sección real de los oblicuos, curvos, calados con corte y piezas clasificadas como especiales (en la hoja J va su rectángulo equivalente, con el mismo J y la misma área; esta hoja lo controla).</li>' : ''}<li><b>Flexocompresión PB</b>: la verificación de la guía en PB, pieza por pieza y en los dos vientos, paso a paso y con los coeficientes a la vista (la «Flex comp PB paralelos» de la cátedra queda como estaba).</li><li><b>Hojas «T3D …»</b>: la torre completa en tablas. Con ellas la app vuelve a armar el proyecto.</li></ul>
     <label class="campo-linea"><input type="checkbox" id="exp-figuras" checked> Dibujos explicativos rediseñados sobre las hojas originales <small>(solo con las hojas de la app; los del Excel quedan en el archivo, ocultos; las celdas no cambian)</small></label>
     ${cantidadAvisos() ? `<p class="error">${cantidadAvisos() === 1 ? 'Hay 1 aviso: revisalo' : `Hay ${cantidadAvisos()} avisos: revisalos`} en la pestaña «Avisos».</p>` : ''}
-    <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en otra pestaña y se actualiza sola mientras editás).</p>`, [
+    <p class="nota">Al abrirla, Excel o LibreOffice recalculan todo. Para revisarla antes, con las fórmulas calculadas: «Vista previa ↗» (se abre en una ventana aparte, que se puede llevar a otra pantalla, y se actualiza sola mientras editás).</p>`, [
     ['Cancelar', () => $<HTMLDialogElement>('dialogo').close()],
     ['Vista previa ↗', () => { abrirVistaPlanilla(); }],
     ['Escribir y descargar', async () => {
@@ -803,7 +808,7 @@ async function descargarLibroGuia() {
     mensaje(`Planilla de la guía descargada: completá o cambiá los datos en la hoja «Datos» y se recalcula sola.${avisos.length ? ' ' + avisos.join(' ') : ''}`);
   } catch (e) { fallo('No se pudo armar la planilla de la guía', e); }
 }
-$('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra pestaña: permití las ventanas emergentes para esta página.'); });
+$('b-vista-planilla').addEventListener('click', () => { cerrarMenus(); if (!abrirVistaPlanilla()) mensaje('El navegador no dejó abrir otra ventana: permití las ventanas emergentes para esta página.'); });
 $('b-informe').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir el informe')) return; imprimirInforme().catch(e => fallo('No se pudo armar el informe', e)); });
 $('b-carta-pdf').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('imprimir la carta')) return; imprimirCartaPdf().catch(e => fallo('No se pudo armar la carta', e)); });
 $('b-desglose').addEventListener('click', () => { cerrarMenus(); if (!resultadosListos('armar el desglose')) return; mensaje('Armando el desglose con los dibujos…'); imprimirDesglose().catch(e => fallo('No se pudo armar el desglose', e)); });
