@@ -795,7 +795,7 @@ text[data-par].ultimo { font-size: 15px; }
 .calco-panel > b:first-of-type { cursor: pointer; }
 .calco-panel > b:first-of-type::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
 .calco-panel.plegado > b:first-of-type::after { content: ' ▸'; }
-.calco-panel.plegado > :not(b):not(.asa-mover) { display: none !important; }
+.calco-panel.plegado > :not(b):not(.asa-mover):not(.carta-botones) { display: none !important; }
 .calco-panel.plegado { height: auto !important; max-height: none !important; }
 @media (max-width: 760px) { .dock-planta { position: static; max-height: none; margin: 6px 10px; } }
 /* nodos del elemento elegido */
@@ -1281,7 +1281,7 @@ button.peligro { color: var(--mal); }
 .prec-panel > b, .med-panel > b { cursor: pointer; }
 .prec-panel > b::after, .med-panel > b::after { content: ' ▾'; color: var(--ink2); font-weight: 400; }
 .prec-panel.plegado > b::after, .med-panel.plegado > b::after { content: ' ▸ (tocá para ver)'; }
-.prec-panel.plegado > :not(b), .med-panel.plegado > :not(b) { display: none !important; }
+.prec-panel.plegado > :not(b):not(.carta-botones), .med-panel.plegado > :not(b):not(.carta-botones) { display: none !important; }
 .prec-panel.plegado, .med-panel.plegado { width: auto; }
 
 .barra-transformar.angosta { gap: 0; max-width: calc(100% - 64px); }
@@ -2474,3 +2474,23 @@ dialog.tarjeta.tabla-perfil { width: min(760px, calc(100vw - 32px)); max-width: 
 .burbuja-j .fila { display: flex; justify-content: space-between; gap: 14px; }
 .burbuja-j .n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .burbuja-j .nota { color: var(--ink2); font-size: 11px; margin-top: 3px; }
+
+/* Cartas de la planta (cartas.ts): botones ▾ (plegar) y ⇲ (debajo del 3D), bandeja de las plegadas y lugar debajo del 3D */
+.calco-panel { --pad-botones: 46px; }
+.calco-panel > b:first-of-type { padding-right: var(--pad-botones); }
+.carta-botones { position: absolute; top: 3px; right: 4px; display: flex; gap: 2px; z-index: 2; }
+.dock-planta .calco-panel, .bandeja-cartas > .calco-panel, .cartas-derecha > .calco-panel { position: relative; }
+.carta-botones button { min-width: 22px; min-height: 20px !important; padding: 0 4px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--ink2); font-size: 12px; line-height: 1; cursor: pointer; }
+.carta-botones button:hover, .carta-botones button:focus-visible { border-color: var(--edge); background: var(--tint); color: var(--accent); }
+.calco-panel.plegado > .carta-botones { display: flex !important; }
+.calco-panel > b:first-of-type::after, .calco-panel.plegado > b:first-of-type::after { content: none; }
+.prec-panel.plegado > b::after, .med-panel.plegado > b::after { content: none; }
+.bandeja-cartas { position: absolute; left: 10px; bottom: 34px; z-index: 3; display: flex; flex-wrap: wrap-reverse; gap: 6px; max-width: calc(100% - 80px); pointer-events: none; }
+.bandeja-cartas > * { pointer-events: auto; }
+.bandeja-cartas > .calco-panel { position: relative !important; inset: auto !important; translate: none !important; width: auto !important; max-width: 240px; padding: 6px 8px; }
+.bandeja-cartas > .calco-panel > .asa-mover, .cartas-derecha > .calco-panel > .asa-mover, .bandeja-cartas .asa-tamano, .cartas-derecha .asa-tamano { display: none !important; }
+.cartas-derecha { display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 0; }
+.cartas-derecha:empty, .cartas-derecha:not(:has(> .calco-panel:not([hidden]))) { display: none; }
+.cartas-derecha > .calco-panel { position: relative !important; inset: auto !important; translate: none !important; transform: none !important; width: auto !important; height: auto !important; max-height: none !important; overflow: visible; padding: 8px 10px; }
+.cartas-derecha > .calco-panel.movible:not(.dock-planta *) { padding-top: 8px; }
+.bandeja-cartas > .calco-panel.movible { padding-top: 6px; }

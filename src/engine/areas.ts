@@ -34,6 +34,13 @@ export interface AreasInfluencia {
   huecos?: number;
   /** centro de cada área (para el rótulo) */
   centro: Record<string, Punto>;
+  /** contorno de la losa y sus huecos (para recortar el dibujo) */
+  contorno?: Punto[]; huecosPol?: Punto[][];
+  /**
+   * dónde cae el borde entre dos dueños sobre el segmento q1 → q2 (0 = en q1, 1 = en q2): donde las dos distancias se
+   * igualan (o donde termina la franja del exo). Sirve para dibujar los bordes lisos en vez de escalones.
+   */
+  corte?: (o1: number, q1: Punto, o2: number, q2: Punto) => number;
 }
 
 /** id del exoesqueleto en las áreas de influencia (no es un muro: lleva la franja de losa junto a la fachada) */
@@ -117,7 +124,15 @@ export function areasInfluencia(p: Proyecto, i: number, paso = 0.25): AreasInflu
     centro[id] = n === iExo ? (rotExo ?? { x: xMed, y: yRot }) : c ? { x: sx[n] / c, y: sy[n] / c } : { x: m.x, y: m.y };
     area[id] = Math.round(area[id] * 100) / 100;
   });
-  return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids, centro };
+  // borde entre dos dueños: muro contra muro, donde las distancias se igualan; contra el exo, donde termina su franja
+  const g = (o1: number, o2: number, q: Punto) => (o1 === iExo ? aBorde(q, contornoExo) - fr : o2 === iExo ? fr - aBorde(q, contornoExo) : distancia(q, ms[o1]) - distancia(q, ms[o2]));
+  const corte = (o1: number, q1: Punto, o2: number, q2: Punto) => {
+    if (o1 < 0 || o2 < 0 || o1 === o2) return 0.5;
+    const a1 = g(o1, o2, q1), a2 = g(o1, o2, q2);
+    const t = a1 - a2 !== 0 ? a1 / (a1 - a2) : 0.5;
+    return isFinite(t) ? Math.max(0.02, Math.min(0.98, t)) : 0.5;
+  };
+  return { area, total: Math.round(total * 100) / 100, huecos: Math.round(enHuecos * 100) / 100, paso, x0, y0, nx, ny, duenio, ids, centro, contorno: pol, huecosPol: huecos, corte };
 }
 
 // ------------------------------------------------------------------ colores del mapa de áreas (cuatro colores)

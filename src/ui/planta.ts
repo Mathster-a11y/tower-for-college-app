@@ -35,6 +35,8 @@ import { enPlanta, ponerPerfil, principales, propiedades as propsPerfil } from '
 import { imanDeGuias, montarGuias, opGuias } from './guias';
 import { crucesSobre } from '../engine/guias';
 import { montarEditorContorno } from './editorContorno';
+import { montarCartas } from './cartas';
+import { dibujoAreas, type DibujoAreas } from './areasContorno';
 import { apartarHaciaAbajo, hacerMovible, hacerRedimensionable } from './flotantes';
 import { borrarGrupo, copiarNodo, espejarNodo, girarNodo, hacerComponente, hacerUnico } from '../engine/grupos';
 import { abrirMenuContextual, type EntradaMenu } from './menuContextual';
@@ -479,7 +481,7 @@ export function montarPlanta(cont: HTMLElement) {
   cont.appendChild(dock);
   // clic en el título de un panel: se pliega o se despliega
 // (en todas las cartas, también las sueltas: un toque en el título las pliega y deja libre la planta)
-  cont.addEventListener('click', ev => { const t = ev.target as HTMLElement; if (t.tagName === 'B' && t.parentElement?.classList.contains('calco-panel') && t === t.parentElement.querySelector(':scope > b')) { t.parentElement.classList.toggle('plegado'); firmaReservas = ''; } });
+  // (lo hace cartas.ts: montarCartas, más abajo)
   const panelCad = document.createElement('div');
   panelCad.className = 'calco-panel cad-panel';
   panelCad.hidden = true;
@@ -1919,6 +1921,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // áreas de influencia de la losa (cada punto descarga en el elemento más cercano)
   let verAreas = false, areasCache: { clave: string; a: AreasInfluencia } | null = null;
+  let dibAreasCache: { a: AreasInfluencia; firma: string; d: DibujoAreas } | null = null;
   const bAreas = document.createElement('button');
   bAreas.type = 'button'; bAreas.textContent = 'Áreas';
   bAreas.title = 'Áreas de influencia de la losa de este nivel: cada punto descarga en el muro o columna más cercano (mitad de la luz). Se pueden copiar a la columna «Área inf.» de los muros.';
@@ -2109,11 +2112,7 @@ export function montarPlanta(cont: HTMLElement) {
   }
   // los cuadros de la derecha (medidas, mover con precisión) se pliegan tocando el título; con pantalla táctil arrancan plegados
   const tactilPlegar = matchMedia('(pointer: coarse)').matches;
-  cont.addEventListener('click', ev => {
-    const t = ev.target as HTMLElement;
-    const pan = t.closest('.prec-panel, .med-panel');
-    if (pan && t.tagName === 'B' && t.parentElement === pan) { pan.classList.toggle('plegado'); try { localStorage.setItem('torre3d.plegar.' + (pan.classList.contains('prec-panel') ? 'prec' : 'med'), pan.classList.contains('plegado') ? '1' : '0'); } catch { /* sin almacenamiento */ } }
-  });
+  // (el título los pliega: cartas.ts, que también recuerda cómo quedaron)
   const plegarInicial = (pan: HTMLElement, k: string) => { let v: string | null = null; try { v = localStorage.getItem('torre3d.plegar.' + k); } catch { /* */ } if (v === '1' || (v === null && tactilPlegar)) pan.classList.add('plegado'); };
   plegarInicial(panelMed, 'med');
   const gui = montarGuias(apiPlanta);
@@ -2701,23 +2700,6 @@ export function montarPlanta(cont: HTMLElement) {
     }
     if (verAreas) {
       const a = areasDe(iN);
-      // bordes entre áreas: cuadrados de 4 centros de celda; donde cambia el dueño se unen los medios de los lados
-      // (como las curvas de nivel): queda una línea quebrada fina en vez de escalones
-      let d = '';
-      const own = (j: number, k: number) => (j < 0 || k < 0 || j >= a.ny || k >= a.nx ? -1 : a.duenio[j * a.nx + k]);
-      const cx = (k: number) => X(a.x0 + (k + 0.5) * a.paso), cy = (j: number) => Y(a.y0 + (j + 0.5) * a.paso);
-      for (let j = 0; j < a.ny - 1; j++) for (let k = 0; k < a.nx - 1; k++) {
-        const o0 = own(j, k), o1 = own(j, k + 1), o2 = own(j + 1, k + 1), o3 = own(j + 1, k);
-        if (o0 < 0 || o1 < 0 || o2 < 0 || o3 < 0) continue;
-        const xa = cx(k), xb = cx(k + 1), ya = cy(j), yb = cy(j + 1), xm = (xa + xb) / 2, ym = (ya + yb) / 2;
-        const ms2: [number, number][] = [];
-        if (o0 !== o1) ms2.push([xm, ya]);
-        if (o1 !== o2) ms2.push([xb, ym]);
-        if (o3 !== o2) ms2.push([xm, yb]);
-        if (o0 !== o3) ms2.push([xa, ym]);
-        if (ms2.length === 2) d += `M${ms2[0][0].toFixed(1)},${ms2[0][1].toFixed(1)}L${ms2[1][0].toFixed(1)},${ms2[1][1].toFixed(1)}`;
-        else if (ms2.length > 2) ms2.forEach(([x, y]) => { d += `M${x.toFixed(1)},${y.toFixed(1)}L${xm.toFixed(1)},${ym.toFixed(1)}`; });
-      }
       const ga = el('g', { class: 'areas-inf' });
       // relleno por grupo (color y rayado); una tira por fila y por grupo, para que sea liviano
       const orden = ordenClaves(a), porId = new Map(p.muros.map(m => [m.id, m]));
@@ -2728,29 +2710,28 @@ export function montarPlanta(cont: HTMLElement) {
         const st = estiloArea(k, orden.get(k) ?? 0), id = `ar-${st.rayado}-${st.color.slice(1)}`;
         if (!usados.has(id)) {
           usados.add(id);
-          const pt = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: 8, height: 8, patternTransform: st.rayado === 'd45' ? 'rotate(45)' : st.rayado === 'd135' ? 'rotate(-45)' : st.rayado === 'v' ? 'rotate(90)' : '' });
+          const pt = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: 8, height: 8, patternTransform: `scale(${1 / escala},${-1 / escala})${st.rayado === 'd45' ? ' rotate(45)' : st.rayado === 'd135' ? ' rotate(-45)' : st.rayado === 'v' ? ' rotate(90)' : ''}` });   // (en metros: se deshace la escala para que el rayado mida 8 px)
           pt.appendChild(el('rect', { width: 8, height: 8, fill: st.color, 'fill-opacity': 0.22 }));
           pt.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 8, stroke: st.color, 'stroke-width': 1.4, 'stroke-opacity': 0.55 }));
           defsA.appendChild(pt);
         }
         return `url(#${id})`;
       };
-      const relleno = el('g', { class: 'areas-relleno' });
-      for (let j = 0; j < a.ny; j++) {
-        let k = 0;
-        while (k < a.nx) {
-          const o = a.duenio[j * a.nx + k];
-          if (o < 0) { k++; continue; }
-          const c = claveDe[o]; let k2 = k + 1;
-          while (k2 < a.nx && a.duenio[j * a.nx + k2] >= 0 && claveDe[a.duenio[j * a.nx + k2]] === c) k2++;
-          const x0 = X(a.x0 + k * a.paso), x1 = X(a.x0 + k2 * a.paso), y0 = Y(a.y0 + (j + 1) * a.paso), y1 = Y(a.y0 + j * a.paso);
-          relleno.appendChild(el('rect', { x: x0.toFixed(1), y: y0.toFixed(1), width: (x1 - x0 + 0.4).toFixed(1), height: (y1 - y0 + 0.4).toFixed(1), fill: patron(c) }));
-          k = k2;
-        }
-      }
+      // relleno liso por grupo (color y rayado): un camino por región que sigue los bordes entre áreas, recortado con
+      // el contorno de la losa (areasContorno.ts)
+      // (se arma en metros una sola vez por planta y se ubica con una transformación: el zoom no lo recalcula)
+      const firmaDib = claveDe.join('|');
+      if (!dibAreasCache || dibAreasCache.a !== a || dibAreasCache.firma !== firmaDib) dibAreasCache = { a, firma: firmaDib, d: dibujoAreas(a, claveDe) };
+      const dib = dibAreasCache.d;
+      const idRec = `rec-areas-${iN}`;
+      const enMetros = el('g', { transform: `matrix(${escala},0,0,${-escala},${ox},${oy})` });
+      if (dib.recorte) { const cp = el('clipPath', { id: idRec }); cp.appendChild(el('path', { d: dib.recorte, 'clip-rule': 'evenodd' })); defsA.appendChild(cp); }
+      const relleno = el('g', { class: 'areas-relleno', ...(dib.recorte ? { 'clip-path': `url(#${idRec})` } : {}) });
+      dib.regiones.forEach((d2, c) => relleno.appendChild(el('path', { d: d2, fill: patron(c) })));
       ga.appendChild(defsA);
-      ga.appendChild(relleno);
-      ga.appendChild(el('path', { d, class: 'areas-borde' }));
+      enMetros.appendChild(relleno);
+      enMetros.appendChild(el('path', { d: dib.bordes, class: 'areas-borde', 'vector-effect': 'non-scaling-stroke', ...(dib.recorte ? { 'clip-path': `url(#${idRec})` } : {}) }));
+      ga.appendChild(enMetros);
       a.ids.forEach(id => {
         const v = a.area[id];
         if (!v) return;
@@ -3729,6 +3710,7 @@ export function montarPlanta(cont: HTMLElement) {
   prepararCartas();
   new MutationObserver(prepararCartas).observe(cont, { childList: true });
   new MutationObserver(prepararCartas).observe(dock, { childList: true });
+  montarCartas(cont, dock);
   cont.addEventListener('carta-cambiada', () => { firmaReservas = ''; pedirAcomodar(); });
   ([[barraSel, 'barra-eleccion'], [barraGrupo, 'barra-grupo'], [barraLazo, 'barra-lazo'], [barraDib, 'barra-dibujo'], [barraTr, 'barra-transformar'], [barraCtx, 'barra-contexto']] as const).forEach(([e, k]) => hacerMovible(e, cont, k, { enLinea: true }));
   let cuadroAcomodar = 0;
