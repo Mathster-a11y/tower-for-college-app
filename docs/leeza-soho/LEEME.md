@@ -84,17 +84,53 @@ central**: centros en ±(9,66; 17,09) m, a 19,6 m del eje. Iguales en PB, 2º y 
 
 Datos: `relevamiento.json` (niveles, perfil piso por piso, cada columna de cada anillo, centros de los núcleos).
 
+## Decidido con el usuario (28/11)
+
+- **Altura del ejemplo:** 191 m (la estructural; la piel sigue hasta 199,99 m y el helipuerto a 207 m, sin cálculo).
+- **Núcleos:** muros de 0,55 m de PB al techo, verticales.
+- **Cinturones:** en los pisos dobles de refugio e instalaciones 13–14, 24–25, 35–36 y 45–46.
+- **Láminas:** no se suben al repositorio.
+- **Atrio:** por ahora no hay plantas de más arriba; se mide cuando aparezcan.
+
+## Orientación: las dos opciones
+
+![orientación](progreso_2_orientacion.png)
+
+- **Opción A, como en la lámina:** el eje largo queda girado 51,5° respecto de x (medido en PB, 2º y 10º, con ±1°). Los
+  dos vientos de la app le pegan en diagonal, como al edificio real si el viento viene de los ejes de la lámina.
+- **Opción B, alineada con la app:** el eje largo sobre x. El viento A ve el lado largo (84,8 m en la panza) y el B el
+  corto (68,5 m): son los dos casos extremos y se leen directo en las planillas (B = 84,8, L = 68,5).
+- Es la misma torre girada; para decidir conviene verlas las dos armadas. Con la opción A el ancho que ve cada viento
+  sale de la proyección de la elipse (≈ 77 y 77 m en la panza: casi el mismo para los dos).
+
+## Columnas del pórtico: tamaño recomendado
+
+El diámetro dibujado (1,48 m en PB, 1,25 m en el 10º) incluye el revestimiento contra fuego y la terminación; el tubo de
+acero es más chico. Estimación por gravedad (cada columna lleva su parte de los 45 pisos):
+
+- Área de losas ≈ 156 000 m² (elipse de cada piso menos 15 % de atrio y huecos), D = 0,60 t/m² (losa compuesta,
+  contrapiso, cielorraso, instalaciones, vigas y fachada), L = 0,25 t/m² (oficinas, CIRSOC 101), la mitad al pórtico y
+  34 columnas: **≈ 1 950 t de servicio y ≈ 2 570 t mayoradas (1,2 D + 1,6 L) por columna en la base**.
+- Capacidad de un tubo relleno (CIRSOC 301 cap. I: Pno = Fy·As + 0,95·f'c·Ac, φ = 0,75; acero de 345 MPa y hormigón de
+  50 MPa, 4,1 m entre losas): Ø 800 × 25 da 1,2 veces esa carga, **Ø 900 × 30 da 1,6**, Ø 1000 × 30 da 1,9 y
+  Ø 1200 × 35 da 2,7.
+- **Recomendado:** Ø 900 × 30 mm de B2 al 13º (deja margen para el viento, el sismo y la inclinación), Ø 800 × 25 del 14º
+  al 24º, Ø 700 × 20 del 25º al 35º y Ø 600 × 20 arriba (la carga baja con los pisos que quedan encima). Coincide con lo
+  dibujado si el revestimiento es de unos 25 cm por lado.
+
+## Las 8 columnas fuera del anillo (en el 10º)
+
+En la figura de arriba van en verde y numeradas (en la opción A, igual que en la lámina):
+
+- **1, 2, 7 y 8:** poligonales (no redondas), en la punta del anillo, justo donde la piel se dobla hacia el atrio.
+- **3 y 6:** en el borde del atrio, en la curva de la «S», cerca del centro.
+- **4 y 5:** redondas y sueltas dentro del piso, entre el anillo y el atrio.
+
+Propuesta: 1, 2, 3, 6, 7 y 8 son las **columnas del atrio** del diagrama de ZHA (curvatura 3D, siguen el giro del
+atrio); 4 y 5 son columnas secundarias del piso. Falta que el usuario lo confirme.
+
 ## Para revisar con el usuario
 
-1. **Ejes y orientación:** ¿tomamos el eje largo (B-B, 84,8 m en la panza) y el corto (A-A, 68,5 m) como B y L de la
-   app? ¿Ponemos la elipse girada como en la lámina o alineada con los ejes de la app?
-2. **El atrio:** el corte entre las dos mitades gira unos 45° en altura. Para medirlo piso por piso harían falta plantas
-   de más arriba (por ejemplo del 25º y del 40º). ¿Hay?
-3. **Columnas:** el diámetro dibujado (1,25–1,5 m) puede incluir el revestimiento contra fuego; el tubo real no
-   aparece en ninguna fuente. ¿Lo tomamos así o con un valor típico (por ejemplo 1,2 m con 30–40 mm de acero)?
-4. **Qué columnas son del pórtico y cuáles del atrio** (las 8 fuera del anillo en el 10º): conviene marcarlas a mano
-   sobre la planta.
-5. **Núcleos:** ¿el espesor de 0,55 m sigue igual en altura? ¿Los núcleos siguen hasta el techo (en el corte B-B parece
-   que sí)?
-6. **Cinturones:** ¿van en los pisos dobles 13–14, 24–25, 35–36 y 45–46 (los de refugio, de 5,1 a 5,7 m)?
-7. **Altura del ejemplo:** ¿191,5 m (estructural), 199,99 m (piel) o 207 m (helipuerto)?
+1. Elegir entre la opción A y la B (o dejar las dos) cuando se armen.
+2. Confirmar la lectura de las 8 columnas fuera del anillo.
+3. Si aparecen plantas de más arriba, medir el giro del atrio piso por piso.

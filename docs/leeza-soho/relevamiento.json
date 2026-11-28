@@ -923,5 +923,63 @@
   "losas": "compuestas (chapa colaborante y hormigón)",
   "subsuelos": "4 (B1 a B4, −19,3 m); túnel de servicio del subte bajo la torre",
   "atrio": "de unos 194 m, gira unos 45° de abajo arriba para alinearse con la calle Lize"
+ },
+ "decidido": {
+  "altura_m": 191,
+  "nucleos_espesor_m": 0.55,
+  "cinturones_pisos": [
+   "13-14",
+   "24-25",
+   "35-36",
+   "45-46"
+  ],
+  "orientacion": {
+   "giro_eje_largo_en_lamina_grados": 51.5,
+   "opciones": [
+    "A: como en la lámina",
+    "B: eje largo sobre x"
+   ]
+  },
+  "columnas_porticos_recomendadas": [
+   {
+    "desde": "B2",
+    "hasta": "13º",
+    "D_mm": 900,
+    "t_mm": 30
+   },
+   {
+    "desde": "14º",
+    "hasta": "24º",
+    "D_mm": 800,
+    "t_mm": 25
+   },
+   {
+    "desde": "25º",
+    "hasta": "35º",
+    "D_mm": 700,
+    "t_mm": 20
+   },
+   {
+    "desde": "36º",
+    "hasta": "46º",
+    "D_mm": 600,
+    "t_mm": 20
+   }
+  ],
+  "columnas_fuera_del_anillo_F10": {
+   "atrio": [
+    1,
+    2,
+    3,
+    6,
+    7,
+    8
+   ],
+   "secundarias": [
+    4,
+    5
+   ],
+   "estado": "propuesta, falta confirmar"
+  }
  }
 }
