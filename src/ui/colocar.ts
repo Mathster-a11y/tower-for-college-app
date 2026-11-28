@@ -53,7 +53,7 @@ export function montarColocar(api: ApiPlanta) {
   let pts: { p: Punto; id?: string }[] = [];
   let cursor: Punto | null = null;
   // opciones
-  const op = { vinculada: true, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
+  const op = { vinculada: false, copias: 1, giro: 1 as 1 | 2 | 3, conservar: true, factor: 2, espesor: false, alineada: false, verCotas: true, cotasElegido: true,
     matriz: 'rect' as 'rect' | 'polar' | 'camino', filas: 2, cols: 3, dx: 3.6, dy: 3.6, n: 6, total: 360, girarCopias: true, cx: 0, cy: 0,
     curva: false, dDesf: 0.6, angLibre: 30, espCam: 0.25, camino: '', porPaso: false, paso: 3.6, nCam: 5, d0: 0, d1: 0, tangente: false, arco: false, arcoTg: true,
     forma: 'rect' as 'rect' | 'circulo' | 'poligono' | 'elipse', lados: 6, formaQue: 'perfil' as 'perfil' | 'muro' | 'camino' | 'vecino', altVecino: 30, muroCurvo: false, justCam: ((): Justificacion => { try { const v = localStorage.getItem('torre3d.refDib'); return v === 'izq' || v === 'der' ? v : 'eje'; } catch { return 'eje'; } })() };
@@ -94,7 +94,7 @@ export function montarColocar(api: ApiPlanta) {
 
   const poner = (h: Herr) => {
     if (!h && desdeBarra) { desdeBarra = false; if (panelAbierto === 'colocar') panelAbierto = null; }
-    herr = h; pts = []; tocados = []; tipeo = ''; cursor = null; caminoNuevo = h === 'camino' ? { v: [] } : null;
+    herr = h; pts = []; tocados = []; selCopia = null; tipeo = ''; cursor = null; caminoNuevo = h === 'camino' ? { v: [] } : null;
     api.activar(!!h);
     svg.classList.toggle('colocando', !!h);
     api.dibujar();
@@ -132,7 +132,9 @@ export function montarColocar(api: ApiPlanta) {
     api.mensaje(err || estado.avisoGrupos || ok);
     estado.avisarPanel();
   };
-  const sel = () => api.seleccion();
+  /** al copiar varias veces seguidas, el original de la primera copia (si quedó como grupo, la selección ya no sirve) */
+  let selCopia: Seleccion | null = null;
+  const sel = () => selCopia ?? api.seleccion();
   const conSel = (f: (s: Seleccion) => string | null | void, ok: string) => {
     const s = sel();
     if (vacia(s)) { api.mensaje('Primero elegí qué colocar: un muro, un grupo, o varios con el lazo.'); return; }
@@ -145,7 +147,7 @@ export function montarColocar(api: ApiPlanta) {
       const oo: Operacion = o.t === 'mover' ? { t: 'mover', dx: r3(o.dx * k), dy: r3(o.dy * k) } : o;
       const r = copiarCon(estado.proyecto, s, estado.contexto, oo, op.vinculada);
       if ('error' in r) return r.error;
-      if (k === 1) { s = { m: [], g: [r.original] }; }
+      if (k === 1) { s = r.original; if (herr === 'copiar') selCopia = r.original; }
     }
     return null;
   }, copia ? `Copia${op.vinculada ? ' vinculada' : ''} lista.` : o.t === 'escalar' && esVinculada(sel()) ? 'Escalado. Era una copia vinculada: escalar cambia la forma, así que cambiaron todas sus copias (para escalar solo esta: Esquema → «Hacer único»).' : 'Listo.');
@@ -193,7 +195,15 @@ export function montarColocar(api: ApiPlanta) {
       }
       case 'mover': case 'copiar':
         if (!pts.length) { pts.push(t); api.mensaje(instruccion()); return; }
-        operar({ t: 'mover', dx: r3(q.x - pts[0].p.x), dy: r3(q.y - pts[0].p.y) }, herr === 'copiar');
+        if (herr === 'copiar') {
+          // copias seguidas: el punto base queda y cada toque pone otra copia; Esc termina
+          const base = pts[0];
+          operar({ t: 'mover', dx: r3(q.x - base.p.x), dy: r3(q.y - base.p.y) }, true);
+          pts = [base];
+          api.mensaje(`Copia${op.vinculada ? ' vinculada' : ''} lista. Tocá otro destino para otra copia · Esc termina.`);
+          api.dibujar(); return;
+        }
+        operar({ t: 'mover', dx: r3(q.x - pts[0].p.x), dy: r3(q.y - pts[0].p.y) }, false);
         poner(null); return;
       case 'girar': operar({ t: 'girar', c: q, q: op.giro }, false); poner(null); return;
       case 'espejar':
@@ -348,7 +358,7 @@ export function montarColocar(api: ApiPlanta) {
       if (ev.key === 'Enter' && tipeo && cursor) {
         ev.preventDefault();
         const L = num(tipeo), d = dir45(pts[0].p, cursor);
-        if (isFinite(L) && L > 0) { const h = herr; operar({ t: 'mover', dx: r3(d.x * L), dy: r3(d.y * L) }, h === 'copiar'); poner(null); }
+        if (isFinite(L) && L > 0) { const h = herr; operar({ t: 'mover', dx: r3(d.x * L), dy: r3(d.y * L) }, h === 'copiar'); if (h === 'copiar') { tipeo = ''; api.mensaje('Copia lista. Tocá otro destino o escribí otra distancia · Esc termina.'); api.dibujar(); } else poner(null); }
         return;
       }
     }
@@ -460,12 +470,12 @@ export function montarColocar(api: ApiPlanta) {
     if (op.matriz === 'rect') {
       panel.append(fila(campoN('filas', op.filas, v => { op.filas = v; }, 36), campoN('col.', op.cols, v => { op.cols = v; }, 36)));
       panel.append(fila(campoN('dx', op.dx, v => { op.dx = v; }, 50, 'm'), campoN('dy', op.dy, v => { op.dy = v; }, 50, 'm')));
-      panel.append(fila(boton('Hacer la matriz', 'El original queda abajo a la izquierda', () => conSel(s => { const r = matrizRect(estado.proyecto, s, estado.contexto, op.filas, op.cols, op.dx, op.dy, op.vinculada); return 'error' in r ? r.error : null; }, `Matriz de ${op.filas} × ${op.cols} lista (un grupo).`))));
+      panel.append(fila(boton('Hacer la matriz', 'El original queda abajo a la izquierda', () => conSel(s => { const r = matrizRect(estado.proyecto, s, estado.contexto, op.filas, op.cols, op.dx, op.dy, op.vinculada); return 'error' in r ? r.error : null; }, `Matriz de ${op.filas} × ${op.cols} lista `))));
     } else if (op.matriz === 'polar') {
       panel.append(fila(campoN('cantidad', op.n, v => { op.n = v; }, 36), campoN('ángulo', op.total, v => { op.total = v; }, 44, '°')));
       panel.append(fila(campoN('centro x', op.cx, v => { op.cx = v; }, 46), campoN('y', op.cy, v => { op.cy = v; }, 46), boton('Tocar', 'Elegir el centro en la planta', () => poner('centro-polar'), herr === 'centro-polar')));
       panel.append(fila(tilde('girar las copias', op.girarCopias, v => { op.girarCopias = v; }, 'Solo con pasos de 90°; con otros ángulos quedarían en diagonal')));
-      panel.append(fila(boton('Hacer la matriz', '', () => conSel(s => { const r = matrizPolar(estado.proyecto, s, estado.contexto, { x: op.cx, y: op.cy }, op.n, op.total, op.girarCopias, op.vinculada); if ('error' in r) return r.error; if (r.aviso) setTimeout(() => api.mensaje(r.aviso!), 0); return null; }, `Matriz polar de ${op.n} lista (un grupo).`))));
+      panel.append(fila(boton('Hacer la matriz', '', () => conSel(s => { const r = matrizPolar(estado.proyecto, s, estado.contexto, { x: op.cx, y: op.cy }, op.n, op.total, op.girarCopias, op.vinculada); if ('error' in r) return r.error; if (r.aviso) setTimeout(() => api.mensaje(r.aviso!), 0); return null; }, `Matriz polar de ${op.n} lista `))));
     } else {
       const cs = estado.proyecto.caminos ?? [];
       if (!cs.length) panel.append(mk('p', 'Todavía no hay caminos: dibujá uno abajo, en «Caminos».', 'col-nota'));
@@ -477,7 +487,7 @@ export function montarColocar(api: ApiPlanta) {
         panel.append(fila(tilde('por paso', op.porPaso, v => { op.porPaso = v; }), op.porPaso ? campoN('paso', op.paso, v => { op.paso = v; }, 46, 'm') : campoN('cantidad', op.nCam, v => { op.nCam = v; }, 36)));
         panel.append(fila(campoN('desfase inicio', op.d0, v => { op.d0 = v; }, 40, 'm'), campoN('fin', op.d1, v => { op.d1 = v; }, 40, 'm')));
         panel.append(fila(tilde('girar con la tangente (de a 90°)', op.tangente, v => { op.tangente = v; })));
-        panel.append(fila(boton('Hacer la matriz', 'El original va al inicio del camino', () => conSel(s => { const c = cs.find(x => x.id === op.camino); if (!c) return 'Elegí un camino.'; const r = matrizCamino(estado.proyecto, s, estado.contexto, c, { n: op.porPaso ? undefined : op.nCam, paso: op.porPaso ? op.paso : undefined, d0: op.d0, d1: op.d1, tangente: op.tangente, vinculada: op.vinculada }); return 'error' in r ? r.error : null; }, 'Matriz sobre el camino lista (un grupo).'))));
+        panel.append(fila(boton('Hacer la matriz', 'El original va al inicio del camino', () => conSel(s => { const c = cs.find(x => x.id === op.camino); if (!c) return 'Elegí un camino.'; const r = matrizCamino(estado.proyecto, s, estado.contexto, c, { n: op.porPaso ? undefined : op.nCam, paso: op.porPaso ? op.paso : undefined, d0: op.d0, d1: op.d1, tangente: op.tangente, vinculada: op.vinculada }); return 'error' in r ? r.error : null; }, 'Matriz sobre el camino lista '))));
       }
     }
     // alinear

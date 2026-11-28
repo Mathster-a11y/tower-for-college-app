@@ -87,11 +87,12 @@ export function motivoNoTransformable(p: Proyecto, m: Muro, contexto: string | n
  * un grupo cada pieza que todavía no tiene el suyo (todos sus muros en el mismo grupo del Esquema, sin nada más).
  * Devuelve cuántas piezas envolvió.
  */
-export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`): number {
+export function envolverPiezas(p: Proyecto, nombres: (grupo: string, ms: Muro[]) => string = g => `Pieza ${g}`, solo?: string): number {
   const porPieza = new Map<string, Muro[]>();
   p.muros.forEach(m => { if (m.grupo) porPieza.set(m.grupo, [...(porPieza.get(m.grupo) ?? []), m]); });
   let n = 0;
   porPieza.forEach((ms, g) => {
+    if (solo !== undefined && g !== solo) return;
     const gd = ms[0].gd ?? null;
     if (ms.some(m => (m.gd ?? null) !== gd)) return;                       // repartida en grupos distintos: se deja
     if (gd !== null) {

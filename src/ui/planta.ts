@@ -330,6 +330,8 @@ export function montarPlanta(cont: HTMLElement) {
   // pieza tipo a insertar (biblioteca)
   let insTipo: TipoPieza = 'C';
   const insMed: MedidasPieza = { h: 4, b: 2, e: 0.2, giro: 0 };
+  /** las últimas medidas usadas de cada tipo: volver a un tipo no las pisa con las de fábrica */
+  const medPorTipo = new Map<string, MedidasPieza>();
   let iNivel = 0;
   let arrastreV: number | null = null;
   /** vértice del contorno elegido (para escribir sus coordenadas o borrarlo desde el panel) */
@@ -375,7 +377,7 @@ export function montarPlanta(cont: HTMLElement) {
     dibujar: 'Dibujar muros: tocá el inicio y el fin; sale horizontal o vertical y se pega a otros muros. Sigue encadenado: escribí el largo y Enter, o Esc para terminar.',
     calibrar: 'Calibrar el calco: tocá dos puntos de la imagen y escribí la distancia real entre ellos.',
     silueta: 'Losa: arrastrá los vértices (□) de la losa o de la carpintería. En la carta: formas (con vista previa), dibujarla a mano, balcones, loft y herramientas de CAD. Esc sale.',
-    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Esc sale.',
+    insertar: 'Insertar: elegí la pieza y sus medidas en la carta y tocá la planta donde va (el centro de la pieza). Cada toque inserta otra con las mismas medidas; Esc sale.',
     calar: 'Calar: tocá el muro donde va el vano (puerta, ventana o hueco). Tocá un vano hecho para moverlo o sacarlo. Esc sale.',
     colocar: 'Colocar: elegí un muro, un grupo o varios con el lazo y usá la carta (mover, copiar, girar, espejar, matriz).',
   };
@@ -1809,7 +1811,7 @@ export function montarPlanta(cont: HTMLElement) {
       b.setAttribute('aria-pressed', String(t.tipo === insTipo));
       b.append(miniatura(t.tipo, { ...insMed, giro: 0, h: 4, b: t.tipo === 'núcleo' ? 3 : t.tipo === 'pórtico' ? 0.7 : 2, e: t.tipo === 'columna' ? 2 : t.tipo === 'tubo circ.' ? 0.6 : t.tipo === 'pórtico' ? 0.7 : 0.3 }, 30));
       const sp = document.createElement('span'); sp.textContent = t.nombre; b.append(sp);
-      b.addEventListener('click', () => { const antes = insTipo; insTipo = t.tipo; if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'tubo circ.') { insMed.h = 3; insMed.e = 0.25; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
+      b.addEventListener('click', () => { const antes = insTipo; medPorTipo.set(antes, { ...insMed }); insTipo = t.tipo; const ya = medPorTipo.get(t.tipo); if (ya) Object.assign(insMed, ya); else if (t.tipo === 'columna') { insMed.h = 0.6; insMed.e = 0.3; } else if (t.tipo === 'tubo circ.') { insMed.h = 3; insMed.e = 0.25; } else if (t.tipo === 'pórtico') { insMed.h = 6; insMed.b = 0.6; insMed.e = 0.4; } else if (insMed.h < 1 || antes === 'pórtico') { insMed.h = 4; insMed.b = 2; insMed.e = 0.2; } armarPanelIns(); dibujar(); });
       formas.append(b);
     });
     const info = TIPOS.find(t => t.tipo === insTipo)!;
@@ -3747,14 +3749,12 @@ export function montarPlanta(cont: HTMLElement) {
         const p = estado.proyecto;
         const nuevos = piezaTipo(insTipo, insMed, g5(q.x), g5(q.y), new Set(p.muros.map(m => m.id)));
         if (estado.contexto) nuevos.forEach(m => { m.gd = estado.contexto!; });     // insertada dentro del grupo que se edita
+        // sus muros forman una pieza del cálculo; no se arma un grupo del Esquema (los grupos los arma el usuario)
         p.muros = agrupar([...p.muros, ...nuevos], nuevos.map(m => m.id)).muros;
-        // la pieza insertada es un grupo cerrado del Esquema: se mueve entera y se entra con doble clic
-        const g = p.muros.find(m => m.id === nuevos[0].id)?.grupo;
-        const r = g ? agruparNodos(p, nuevos.map(m => m.id), [], estado.contexto, `${insTipo[0].toUpperCase()}${insTipo.slice(1)} ${g}`) : null;
         estado.seleccion = nuevos[0].id;
-        if (r && !('error' in r)) estado.grupoSel = r.id;
       });
-      ponerModo('mover');
+      // se sigue insertando, con las mismas medidas, hasta Esc o hasta elegir otra herramienta
+      mensaje(`Pieza insertada (${insTipo}). Tocá otro lugar para insertar otra igual · Esc termina.`);
       return;
     }
     if (modo === 'calar' && ev.button === 0 && calQue === 'losa') {

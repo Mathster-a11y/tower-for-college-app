@@ -9,7 +9,7 @@
  */
 import type { Camino, Muro, Proyecto, Ubicacion } from './modelo';
 import { cajaMuro, tipoDe } from './modelo';
-import { agruparNodos, copiarNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
+import { agruparNodos, copiarNodo, desagruparNodo, espejarMuro, girarMuro, grupoPorId, muroBloqueado, murosDe, rehacerPiezas, subgrupos } from './grupos';
 import type { Punto } from './silueta';
 import { nodosMuro } from './dibujo';
 import { polilinea, propiedades, escalar as escalarPerfil, girar as girarPerfil, perfilDeMuro, ponerPerfil, trasladar } from './perfil';
@@ -135,25 +135,55 @@ export function comoGrupo(p: Proyecto, sel: Seleccion, contexto: string | null, 
   return agruparNodos(p, sel.m, sel.g, contexto, `${nombre} ${k}`);
 }
 
-/** copia la selección y le aplica una operación (copiar desplazado, girado, espejado…). Devuelve el grupo de la copia. */
-export function copiarCon(p: Proyecto, sel: Seleccion, contexto: string | null, op: Operacion, vinculada: boolean): { id: string; original: string } | { error: string } {
+/**
+ * copia la selección y le aplica una operación (copiar desplazado, girado, espejado…). Devuelve qué quedó elegido
+ * como copia y como original. Sin vincular no arma grupos: los muros sueltos se copian sueltos (los grupos que armó
+ * el usuario se copian como grupos). Vinculada, el original y la copia tienen que ser grupos (copias de un componente).
+ */
+export function copiarCon(p: Proyecto, sel: Seleccion, contexto: string | null, op: Operacion, vinculada: boolean): { copia: Seleccion; original: Seleccion } | { error: string } {
   const g = comoGrupo(p, sel, contexto);
   if ('error' in g) return g;
   const c = copiarNodo(p, g.id, 0, 0, vinculada);
   if ('error' in c) return c;
   const e = aplicar(p, { m: [], g: [c.id] }, op);
-  return e ? { error: e } : { id: c.id, original: g.id };
+  if (e) return { error: e };
+  const [copia] = soltar(p, sel, g.id, [c.id], vinculada);
+  return { copia, original: vinculada ? { m: [], g: [g.id] } : sel };
 }
 
-/** junta el original y sus copias en un grupo «Matriz n» */
-function juntar(p: Proyecto, original: string, copias: string[], nombre: string): string {
-  const padre = grupoPorId(p, original)?.padre ?? null;
-  const k = (p.grupos ?? []).filter(g => g.nombre.startsWith(nombre)).length + 1;
-  const r = agruparNodos(p, [], [original, ...copias], padre, `${nombre} ${k}`);
-  return 'error' in r ? original : r.id;
+/**
+ * Deshace los grupos de paso: si la selección no era un grupo y las copias no son vinculadas, el original y cada
+ * copia vuelven a quedar como muros sueltos (no se arman grupos que el usuario no pidió). Devuelve la selección de
+ * cada copia.
+ */
+function soltar(p: Proyecto, sel: Seleccion, original: string, copias: string[], vinculada: boolean): Seleccion[] {
+  const dePaso = !(sel.g.length === 1 && !sel.m.length);
+  if (vinculada || !dePaso) return copias.map(id => ({ m: [], g: [id] }));
+  const out = copias.map(id => {
+    const ms = p.muros.filter(m => m.gd === id).map(m => m.id);
+    const gs = (p.grupos ?? []).filter(x => x.padre === id).map(x => x.id);
+    desagruparNodo(p, id);
+    return { m: ms, g: gs };
+  });
+  desagruparNodo(p, original);
+  return out;
 }
 
-export interface ResultadoMatriz { grupo: string; copias: number; aviso?: string }
+/** suelta los grupos de paso y devuelve los muros del original y de las copias */
+function fin(p: Proyecto, sel: Seleccion, original: string, copias: string[], vinculada: boolean): string[] {
+  const orig: Seleccion = vinculada || (sel.g.length === 1 && !sel.m.length) ? { m: [], g: [original] } : sel;
+  return murosDeTodo(p, orig, soltar(p, sel, original, copias, vinculada));
+}
+
+/** los muros del original y de las copias */
+function murosDeTodo(p: Proyecto, original: Seleccion, copias: Seleccion[]): string[] {
+  const ids = new Set<string>();
+  [original, ...copias].forEach(s => resolver(p, s).ids.forEach(id => ids.add(id)));
+  return [...ids];
+}
+
+/** «muros»: los del original y de todas las copias (la matriz no arma un grupo: los grupos los arma el usuario) */
+export interface ResultadoMatriz { muros: string[]; copias: number; aviso?: string }
 
 /** matriz rectangular: filas × columnas con paso dx, dy (el original es la de abajo a la izquierda) */
 export function matrizRect(p: Proyecto, sel: Seleccion, contexto: string | null, filas: number, cols: number, dx: number, dy: number, vinculada: boolean): ResultadoMatriz | { error: string } {
@@ -170,7 +200,7 @@ export function matrizRect(p: Proyecto, sel: Seleccion, contexto: string | null,
     aplicar(p, { m: [], g: [c.id] }, { t: 'mover', dx: j * dx, dy: i * dy });
     copias.push(c.id);
   }
-  return { grupo: juntar(p, g.id, copias, 'Matriz'), copias: copias.length };
+  return { muros: fin(p, sel, g.id, copias, vinculada), copias: copias.length };
 }
 
 /** matriz polar: n elementos alrededor de c en un ángulo total (360° = vuelta entera). «girar»: las copias giran con el ángulo */
@@ -197,7 +227,7 @@ export function matrizPolar(p: Proyecto, sel: Seleccion, contexto: string | null
     }
     copias.push(cp.id);
   }
-  return { grupo: juntar(p, g.id, copias, 'Matriz polar'), copias: copias.length, aviso: girar && !puedeGirar ? 'Las copias no giran: con este ángulo quedarían en diagonal (los giros libres llegan con los elementos diagonales).' : undefined };
+  return { muros: fin(p, sel, g.id, copias, vinculada), copias: copias.length, aviso: girar && !puedeGirar ? 'Las copias no giran: con este ángulo quedarían en diagonal (los giros libres llegan con los elementos diagonales).' : undefined };
 }
 
 // ------------------------------------------------------------------ caminos
@@ -332,7 +362,7 @@ export function matrizCamino(p: Proyecto, sel: Seleccion, contexto: string | nul
   for (let k = 1; k < n; k++) { const cp = copiarNodo(p, g.id, 0, 0, o.vinculada); if ('error' in cp) return cp; copias.push(cp.id); }
   ub(g.id, 0, true);
   copias.forEach((id, i) => ub(id, i + 1, false));
-  return { grupo: juntar(p, g.id, copias, 'Matriz sobre camino'), copias: copias.length };
+  return { muros: fin(p, sel, g.id, copias, o.vinculada), copias: copias.length };
 }
 
 // ------------------------------------------------------------------ alinear y distribuir

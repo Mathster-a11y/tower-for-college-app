@@ -1,4 +1,3 @@
-import { envolverPiezas } from '../engine/grupos';
 import { ejemploGuia, type Proyecto } from '../engine/modelo';
 import { protegerBloqueados, protegerFijos, sincronizarComponentes } from '../engine/grupos';
 import { areasInfluencia } from '../engine/areas';
@@ -36,7 +35,6 @@ const CLAVE = 'torre3d.proyecto.v1';
 type Oyente = () => void;
 
 /** nombre del grupo de una pieza armada: su tipo (núcleo, C, pórtico…) y su nombre */
-const nombrePieza = (g: string, ms: import('../engine/modelo').Muro[]) => `${ms[0].pieza?.tipo ? `${ms[0].pieza.tipo[0].toUpperCase()}${ms[0].pieza.tipo.slice(1)} ` : 'Pieza '}${g}`;
 /**
  * Controles que se calculan después del cálculo principal porque usan sus resultados (el exoesqueleto): cada módulo
  * registra una función y el estado la llama al recalcular. Así el estado no importa esos módulos (sin ciclos).
@@ -306,7 +304,7 @@ class Estado {
     const nuevo = l.proyecto;
     // sin configuración de cálculo: la de siempre, escrita en el proyecto para que el archivo quede completo
     if (!nuevo.calculo) nuevo.calculo = { ...CONFIG_POR_DEFECTO, formulas: VERSION_FORMULAS };
-    envolverPiezas(nuevo, nombrePieza);          // sobre la copia: si falla, no se tocó nada
+    // (no se arman grupos al abrir: los grupos del Esquema los arma el usuario)
     this.proyecto = nuevo;
     this.seleccion = null; this.contexto = null; this.grupoSel = null; this.multi = { m: [], g: [] };
     this.revision++;
