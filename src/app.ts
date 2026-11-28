@@ -1,3 +1,4 @@
+import { listaAvisos } from './ui/avisosCalculo';
 import './compat';
 import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
 import { montarDivisores } from './ui/divisores';
@@ -302,8 +303,8 @@ function dibujarEstadoCalculo() {
     const peor = Math.max(...Object.values(cmp.resumen).map(r => r.noVerifican));
     el.className = `chip-estado ${peor ? 'no-verifica' : 'verifica'}`;
     el.textContent = `No verifican: ${(['planilla', 'guia', 'cirsoc', 'fem'] as const).map(m => `${METODOS[m].corto} ${cmp.resumen[m].noVerifican}`).join(' · ')}`;
-    el.setAttribute('data-globo', 'Método Combinado|Los cuatro métodos con la misma torre: cuántos controles no verifican con cada uno. La comparación está en Resumen.');
-    el.style.cursor = 'pointer'; el.onclick = () => irA('resumen');
+    el.setAttribute('data-globo', 'Método Combinado|Los cuatro métodos con la misma torre: cuántos controles no verifican con cada uno. Tocá para ver los del método elegido y qué hacer; la comparación está en Resumen.');
+    el.style.cursor = 'pointer'; el.onclick = () => abrirAvisos(el);
     return;
   }
   const cs = estado.calculo.controles ?? [];
@@ -313,9 +314,28 @@ function dibujarEstadoCalculo() {
   el.className = `chip-estado ${estado.calculo.error || malos ? 'no-verifica' : revisar ? 'revisar' : 'verifica'}`;
   el.textContent = estado.calculo.error ? 'Error en el cálculo' : malos ? `${malos} control${malos > 1 ? 'es' : ''} no verifica${malos > 1 ? 'n' : ''}`
     : `Verifican los ${calculados} calculados${revisar ? ` · ${revisar} a revisar` : ''}`;
-  el.setAttribute('data-globo', `Estado del cálculo · ${describirConfig(estado.config)}|Cuenta los ${calculados} controles calculados de todas las etapas con el método elegido. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.${info ? ` Además hay ${info} control${info > 1 ? 'es' : ''} solo informativo${info > 1 ? 's' : ''} (por ejemplo la tensión en el suelo, que se compara con el estudio de suelos): no entran en «verifican».` : ''}`);
+  el.setAttribute('data-globo', `Estado del cálculo · ${describirConfig(estado.config)}|Cuenta los ${calculados} controles calculados de todas las etapas con el método elegido. Tocá para ver cada uno con qué cambiar y adónde ir. «A revisar» son puntos que verifican pero piden atención: armadura por tracción, edificio flexible o una pregunta abierta para la cátedra.${info ? ` Además hay ${info} control${info > 1 ? 'es' : ''} solo informativo${info > 1 ? 's' : ''} (por ejemplo la tensión en el suelo, que se compara con el estudio de suelos): no entran en «verifican».` : ''}`);
   el.style.cursor = 'pointer';
-  el.onclick = () => irA('resumen');
+  el.onclick = () => abrirAvisos(el);
+  if (malos) el.textContent += ' ▾';
+}
+/** el desplegable del chip de estado: cada control que no verifica, qué hacer y adónde ir (avisosCalculo.ts) */
+function abrirAvisos(chipEl: HTMLElement) {
+  const ya = document.querySelector('.avisos-pop');
+  if (ya) { ya.remove(); return; }
+  const pop = document.createElement('div');
+  pop.className = 'avisos-pop';
+  pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Controles que no verifican');
+  const cerrar = () => { pop.remove(); document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+  const fuera = (ev: Event) => { if (!pop.contains(ev.target as Node) && ev.target !== chipEl) cerrar(); };
+  const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { ev.stopPropagation(); cerrar(); } };
+  pop.append(listaAvisos(estado.calculo.controles ?? [], (etapa, dir) => { cerrar(); if (dir && dir !== estado.dir) estado.dir = dir; irA(etapa); }));
+  document.body.append(pop);
+  const r = chipEl.getBoundingClientRect();
+  pop.style.top = `${Math.round(r.bottom + 6)}px`;
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)))}px`;
+  document.addEventListener('pointerdown', fuera, true);
+  document.addEventListener('keydown', esc, true);
 }
 /**
  * @param porCambio la llamada viene de un cambio de datos: en el modo con botón y con cambios sin calcular, no se
