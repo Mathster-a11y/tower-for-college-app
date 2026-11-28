@@ -1852,6 +1852,8 @@ export function montarPlanta(cont: HTMLElement) {
     if (!medGrupo || !info || modo !== 'mover') { panelMed.hidden = true; medGrupo = null; return; }
     panelMed.hidden = false; panelPrec.hidden = true;
     const med = info.med, tipo = info.tipo, t = TIPOS.find(x => x.tipo === tipo)!;
+    // rearmar la carta no la lleva arriba: queda donde estaba
+    const st = panelMed.scrollTop; if (st) requestAnimationFrame(() => { panelMed.scrollTop = st; });
     panelMed.replaceChildren();
     const tit = document.createElement('b'); tit.textContent = `Pieza ${medGrupo} · ${t.nombre}`;
     const cambiar = (k: keyof MedidasPieza, v: number | null) => {

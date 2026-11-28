@@ -348,7 +348,12 @@ export function montarCorte(cont: HTMLElement, mensaje: (t: string) => void) {
   }
   function armar() { if (objetivo === 'envolvente' && !estado.proyecto.envolvente) objetivo = 'losas'; armarBarra(); armarPie(); dibujar(); }
   /** @param a qué recortan los planos que se dibujen: las losas (por defecto) o la envolvente */
-  function abrir(obj: 'losas' | 'envolvente' = 'losas') { objetivo = obj === 'envolvente' && estado.proyecto.envolvente ? 'envolvente' : 'losas'; raiz.hidden = false; armar(); }
-  function cerrar() { raiz.hidden = true; modo = 'editar'; calib = []; previa = null; mensaje('Corte cerrado.'); }
+  // el corte tapa la planta: mientras está abierto, lo de abajo (la barra de herramientas, el zoom) queda inactivo, para
+  // que ni el teclado ni el mouse lleguen a botones que no se ven
+  const debajo = (si: boolean) => { const p = raiz.parentElement; if (p) [...p.children].forEach(c => { if (c !== raiz) (c as HTMLElement).inert = si; }); };
+  // (se cierre como se cierre, lo de abajo vuelve a andar: sigue a la visibilidad del corte)
+  new MutationObserver(() => debajo(!raiz.hidden && raiz.isConnected)).observe(raiz, { attributes: true, attributeFilter: ['hidden'] });
+  function abrir(obj: 'losas' | 'envolvente' = 'losas') { objetivo = obj === 'envolvente' && estado.proyecto.envolvente ? 'envolvente' : 'losas'; raiz.hidden = false; debajo(true); armar(); }
+  function cerrar() { raiz.hidden = true; debajo(false); modo = 'editar'; calib = []; previa = null; mensaje('Corte cerrado.'); }
   return { abrir, cerrar, activo: () => !raiz.hidden };
 }

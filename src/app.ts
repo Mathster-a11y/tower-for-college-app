@@ -1,6 +1,7 @@
 import './compat';
 import { pedirTexto, confirmar, avisar } from './ui/tarjeta';
 import { montarDivisores } from './ui/divisores';
+import { instalarClics } from './ui/clic';
 import { SincroSheets, paquete, proyectoDesdeHoja, type Lectura } from './sync/sheets';
 import './estilo.css';
 import { estado, calcularProyecto } from './ui/estado';
@@ -52,6 +53,8 @@ void precargarLetras();
 
 /** la app completa (el editor). main.ts la arranca, salvo en la pestaña de la vista previa de la planilla. */
 export function iniciarApp() {
+// los clics con el mouse no se pierden cuando una carta se rearma al apretar (src/ui/clic.ts)
+instalarClics();
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let plantillaAbierta: ArrayBuffer | null = null;
