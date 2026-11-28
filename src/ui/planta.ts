@@ -325,9 +325,10 @@ export function montarPlanta(cont: HTMLElement) {
   document.addEventListener('keydown', ev => {
     if ((modo !== 'mover' && modo !== 'lazo') || (ev.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], .grilla-caja')) return;
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); borrarElegidos(); return; }
-    // Ctrl+C / Ctrl+V: copiar lo elegido y pegarlo donde está el puntero (sin armar grupos), como en CAD
-    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C') && !String(window.getSelection?.() ?? '')) { if (copiarAlPortapapeles()) ev.preventDefault(); return; }
-    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V') && portapapeles) { ev.preventDefault(); pegarEn(ultimoPunto); return; }
+    // Ctrl+C / Ctrl+V: copiar lo elegido y pegarlo donde está el puntero (sin armar grupos), como en CAD (solo con la planta a la vista)
+    const plantaVisible = svg.isConnected && svg.getClientRects().length > 0;
+    if (plantaVisible && (ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C') && !String(window.getSelection?.() ?? '')) { if (copiarAlPortapapeles()) ev.preventDefault(); return; }
+    if (plantaVisible && (ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V') && portapapeles) { ev.preventDefault(); pegarEn(ultimoPunto); return; }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
       ev.preventDefault();
       const p = estado.proyecto, zN = nivelActualZ(), ms = new Set<string>(), gs = new Set<string>();

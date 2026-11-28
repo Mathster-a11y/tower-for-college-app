@@ -331,7 +331,7 @@ function abrirAvisos(chipEl: HTMLElement) {
   const cerrar = () => { pop.remove(); document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
   const fuera = (ev: Event) => { if (!pop.contains(ev.target as Node) && ev.target !== chipEl) cerrar(); };
   const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { ev.stopPropagation(); cerrar(); } };
-  pop.append(listaAvisos(estado.calculo.controles ?? [], (etapa, dir) => { cerrar(); if (dir && dir !== estado.dir) estado.dir = dir; irA(etapa); }));
+  pop.append(listaAvisos(estado.calculo.controles ?? [], (etapa, dir) => { cerrar(); if (dir && dir !== estado.dir) estado.dir = dir; irA(etapa); }, estado.calculo.combinado ? 'Método Combinado: estos son los controles de la Planilla (los que muestran las etapas); los de cada método, en Resumen.' : undefined));
   document.body.append(pop);
   const r = chipEl.getBoundingClientRect();
   pop.style.top = `${Math.round(r.bottom + 6)}px`;

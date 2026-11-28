@@ -68,13 +68,14 @@ export function valorDe(c: Control): string {
 /**
  * La lista para el desplegable del chip. «ir» lleva a la etapa (y fija el viento si el control es de uno).
  */
-export function listaAvisos(cs: Control[], ir: (etapa: string, dir: 'A' | 'B' | null) => void): HTMLElement {
+export function listaAvisos(cs: Control[], ir: (etapa: string, dir: 'A' | 'B' | null) => void, nota?: string): HTMLElement {
   const caja = document.createElement('div');
   caja.className = 'avisos-calculo';
   const malos = cs.filter(c => c.estado === 'no verifica'), atencion = cs.filter(c => c.estado === 'atención');
   const tit = document.createElement('b');
   tit.textContent = malos.length ? `${malos.length} control${malos.length > 1 ? 'es' : ''} no verifica${malos.length > 1 ? 'n' : ''}` : 'Todo verifica';
   caja.append(tit);
+  if (nota) { const p = document.createElement('div'); p.className = 'av-criterio'; p.textContent = nota; caja.append(p); }
   const item = (c: Control) => {
     const k = consejo(c), d = vientoDe(c);
     const li = document.createElement('li');

@@ -83,6 +83,9 @@ export function montarCartas(cont: HTMLElement, dock: HTMLElement): Cartas {
       if (!vigiladas.has(e)) {
         vigiladas.add(e);
         new MutationObserver(() => { if (bs!.parentElement !== e) e.append(bs!); }).observe(e, { childList: true });
+        // si la herramienta se vuelve a abrir (la carta deja de estar oculta) estando plegada en la bandeja, vuelve desplegada a su lugar
+        let oculta = e.hidden;
+        new MutationObserver(() => { if (oculta && !e.hidden && e.parentElement === bandeja) plegar(e, false); oculta = e.hidden; }).observe(e, { attributes: true, attributeFilter: ['hidden'] });
       }
     }
     const [pl, ab] = bs.children as unknown as HTMLButtonElement[];
