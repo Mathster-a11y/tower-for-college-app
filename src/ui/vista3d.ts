@@ -504,6 +504,17 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
     const zFundExo = estado.proyecto.niveles[estado.proyecto.niveles.length - 1]?.cota ?? 0;
     const bajadas = new Set<string>();
     const matBajada = new THREE.MeshStandardMaterial({ color: acero, roughness: 0.45, metalness: 0.3 });
+    const cilindros = new Map<number, THREE.CylinderGeometry>(), materiales = new Map<string, THREE.MeshStandardMaterial>();
+    const cilindro = (r: number) => { let g = cilindros.get(r); if (!g) cilindros.set(r, (g = new THREE.CylinderGeometry(r, r, 1, 8))); return g; };
+    const materialBarra = (activa: boolean, signo: number, tono: number) => {
+      const k = `${activa ? 1 : 0}|${signo}|${tono}`;
+      let m = materiales.get(k);
+      if (!m) {
+        const col = activa ? acero.clone().lerp(signo >= 0 ? cT : cC, 0.35 + (0.65 * tono) / 32) : acero;
+        materiales.set(k, (m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.3, transparent: !activa, opacity: activa ? 1 : 0.55 })));
+      }
+      return m;
+    };
     caras.forEach(({ dir, d }) => {
       if (!d) return;
       const activa = dir === estado.dir;
@@ -524,8 +535,11 @@ export function montar3D(cont: HTMLElement, op: Opciones3D) {
         const A = new THREE.Vector3(pa.x, e.a.z, -pa.y), Bv = new THREE.Vector3(pb.x, e.b.z, -pb.y);
         const L = A.distanceTo(Bv);
         if (L < 1e-6) return;
-        const col = activa ? acero.clone().lerp(e.N >= 0 ? cT : cC, 0.35 + 0.65 * Math.min(1, Math.abs(e.N) / Nmax)) : acero;
-        const m = new THREE.Mesh(new THREE.CylinderGeometry(radio[e.clase], radio[e.clase], L, 8), new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.3, transparent: !activa, opacity: activa ? 1 : 0.55 }));
+        // (un cilindro de alto 1 por radio, estirado, y un material por color: con miles de barras, uno por barra era lo
+        //  que más tardaba en armar el 3D; el color va en 32 tonos por signo, que a la vista son continuos)
+        const tono = activa ? Math.round(32 * Math.min(1, Math.abs(e.N) / Nmax)) : 0, signo = e.N >= 0 ? 1 : -1;
+        const m = new THREE.Mesh(cilindro(radio[e.clase]), materialBarra(activa, signo, tono));
+        m.scale.y = L;
         m.position.copy(A.clone().add(Bv).multiplyScalar(0.5));
         m.quaternion.setFromUnitVectors(eje, Bv.clone().sub(A).normalize());
         grupo.add(m);

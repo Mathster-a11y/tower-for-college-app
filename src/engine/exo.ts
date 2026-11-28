@@ -316,9 +316,24 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
   const anchoK = (k: number) => (anchos && anchos[k] > 0 ? anchos[k] : ancho);
   const un = { ...UNIONES_POR_DEFECTO, ...(def.uniones ?? {}) };
   const nudos: Nudo[] = [], barras: Barra[] = [];
+  // índice de los nudos por piso y por cubetas de 1e-8 m (con miles de barras, buscar en la lista entera era cuadrático).
+  // Se pone al día solo con lo que se agregó a «nudos» por cualquier camino; devuelve el primero que coincide, como find.
+  const indice = new Map<number, Map<number, number[]>>();
+  let indexados = 0;
+  const ponerAlDia = () => {
+    for (; indexados < nudos.length; indexados++) {
+      const q = nudos[indexados], c = Math.round(q.s * 1e8);
+      let m = indice.get(q.piso); if (!m) indice.set(q.piso, (m = new Map()));
+      const l = m.get(c); if (l) l.push(q.id); else m.set(c, [q.id]);
+    }
+  };
   const nudo = (s: number, k: number) => {
-    let q = nudos.find(x => x.piso === k && Math.abs(x.s - s) < 1e-9);
-    if (!q) { q = { id: nudos.length, s, z: zs[k], piso: k }; nudos.push(q); }
+    ponerAlDia();
+    const m = indice.get(k), c = Math.round(s * 1e8);
+    let mejor = -1;
+    if (m) for (const cc of [c - 1, c, c + 1]) for (const id of m.get(cc) ?? []) if (Math.abs(nudos[id].s - s) < 1e-9 && (mejor < 0 || id < mejor)) mejor = id;
+    if (mejor >= 0) return mejor;
+    const q = { id: nudos.length, s, z: zs[k], piso: k }; nudos.push(q);
     return q.id;
   };
   /** nudo en (s, z) cualquiera: si cae en un piso es un nudo de ese piso; si no, queda entre pisos (piso −1, u libre) */
@@ -351,11 +366,21 @@ export function armarCara(def: ExoDef, ancho: number, zs: number[], nombre = 'ca
     const t = (def.tramos ?? []).filter(x => x.clase === clave && x.desde <= zb + 1e-6).sort((x, y) => y.desde - x.desde)[0];
     return t ? t.sec : s;
   };
+  // cuántas barras de una clase hay (para su nombre: C1, C2…): se cuentan solo las nuevas; si alguna parte partió una
+  // barra en el medio (splice), la última ya no es la misma y se cuenta todo de nuevo
+  const cuenta = new Map<ClaseBarra, number>();
+  let contadas = 0, ultima: Barra | undefined;
+  const cuantas = (clase: ClaseBarra) => {
+    if (contadas && barras[contadas - 1] !== ultima) { cuenta.clear(); contadas = 0; }
+    for (; contadas < barras.length; contadas++) { const x = barras[contadas]; cuenta.set(x.clase, (cuenta.get(x.clase) ?? 0) + 1); }
+    ultima = barras[barras.length - 1];
+    return cuenta.get(clase) ?? 0;
+  };
   const barra = (clase: ClaseBarra, a: number, b: number, sec?: Seccion, clave?: 'mastil') => {
     if (a === b) return;                                       // barra de largo cero (módulos muy cortos)
     const s = tramo(clave ?? clase, a, b, sec ?? (clase === 'columna' ? def.columna : clase === 'diagonal' ? def.diagonal : def.viga)), p = propsSeccion(s);
     const rel = un[clase] === 'articulada';
-    barras.push({ id: `${clase[0].toUpperCase()}${barras.filter(x => x.clase === clase).length + 1}`, clase, a, b, A: p.A, I: p.I, sec: s, relA: rel, relB: rel, borde: enBorde(a) && enBorde(b) });
+    barras.push({ id: `${clase[0].toUpperCase()}${cuantas(clase) + 1}`, clase, a, b, A: p.A, I: p.I, sec: s, relA: rel, relB: rel, borde: enBorde(a) && enBorde(b) });
   };
   /**
    * el dibujo de una tipología entre los niveles kI y kF (toda la torre o una zona). Las zonas comparten los nudos de

@@ -26,7 +26,11 @@ export function grafoFem(p0: Proyecto, teoria: 'timoshenko' | 'euler', s: SelFem
   const r0 = calcular(p0);
   const dir = s.dir, A = dir === 'A';
   const mo = r0.fem.modelo;
-  const pz = (r: RFe) => r.fem.modelo.piezas.find(x => x.dir === dir && x.nombre === s.pieza) ?? r.fem.modelo.piezas.find(x => x.dir === dir)!;
+  // (una torre sin tabiques que tomen este viento, como las que lo dan todo al exo: Hancock, Hearst, Onterie, usa la
+  // pieza que haya; sin ninguna, una vacía y las tarjetas muestran «—» en lugar de cortar la vista)
+  type PiezaFem = RFe['fem']['modelo']['piezas'][number];
+  const vacia = { nombre: '—', dir, J: NaN, Av: NaN, zHasta: -Infinity } as unknown as PiezaFem;
+  const pz = (r: RFe): PiezaFem => r.fem.modelo.piezas.find(x => x.dir === dir && x.nombre === s.pieza) ?? r.fem.modelo.piezas.find(x => x.dir === dir) ?? vacia;
   const nombre = pz(r0)?.nombre ?? s.pieza;
   const timo = mo.timo;
   const n = mo.z.length, top = n - 1;
