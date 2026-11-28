@@ -24,7 +24,7 @@ const PELIGRO = /borrar|eliminar|quitar|sacar|exportar|descargar|bajar|abrir|imp
     await pg.evaluate(e => { localStorage.clear(); localStorage.setItem('torre3d.indicaciones', '1'); localStorage.setItem('torre3d.etapa', e); }, etapa);
     await pg.reload(); await pg.waitForTimeout(1200);
     await pg.evaluate(async ej => {
-      const { estado } = await import('/src/ui/estado.ts');
+      const { estado } = await import(performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes('/src/ui/estado.ts')) ?? '/src/ui/estado.ts');
       const m = ej === 'guia' ? (await import('/src/engine/modelo.ts')).ejemploGuia() : ej === 'citicorp' ? (await import('/src/engine/modelo.ts')).ejemploCiticorp() : (await import('/src/engine/ejemplosExo.ts')).ejemploGherkin();
       estado.reemplazar(m);
     }, EJEMPLO);
@@ -99,7 +99,7 @@ const PELIGRO = /borrar|eliminar|quitar|sacar|exportar|descargar|bajar|abrir|imp
           const perdidos = await pg.evaluate(() => window.__perdidos);
           if (perdidos.length) hallazgos.push(`${donde}: clic perdido en «${perdidos[0]}» después de escribir en «${c.campo}»`);
         } catch { /* el campo o el botón se fueron con la vista: se sigue */ }
-        await pg.evaluate(async () => { const { estado } = await import('/src/ui/estado.ts'); while (estado.puedeDeshacer) estado.deshacer(); });
+        await pg.evaluate(async () => { const { estado } = await import(performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes('/src/ui/estado.ts')) ?? '/src/ui/estado.ts'); while (estado.puedeDeshacer) estado.deshacer(); });
         await pg.keyboard.press('Escape').catch(() => {});
       }
     }
@@ -118,13 +118,13 @@ const PELIGRO = /borrar|eliminar|quitar|sacar|exportar|descargar|bajar|abrir|imp
       const campo = pg.locator('.col-campo input:visible').first();
       const listo = async () => { const r = await pg.locator('button:visible', { hasText: /^Listo/ }).first().boundingBox(); return r; };
       if (await campo.count()) {
-        const antes = await pg.evaluate(async () => { const { estado } = await import('/src/ui/estado.ts'); return JSON.stringify(estado.proyecto.muros.find(m => m.id === 'M1')); });
+        const antes = await pg.evaluate(async () => { const { estado } = await import(performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes('/src/ui/estado.ts')) ?? '/src/ui/estado.ts'); return JSON.stringify(estado.proyecto.muros.find(m => m.id === 'M1')); });
         await campo.click(); await campo.fill(String(parseFloat((await campo.inputValue()).replace(',', '.')) + 0.5).replace('.', ','));
         const r = await listo();
         if (r) {
           await pg.mouse.move(r.x + r.width / 2, r.y + r.height / 2); await pg.mouse.down(); await pg.waitForTimeout(80); await pg.mouse.up(); await pg.waitForTimeout(600);
           const abierto = await pg.locator('button:visible', { hasText: /^Listo/ }).count();
-          const despues = await pg.evaluate(async () => { const { estado } = await import('/src/ui/estado.ts'); return JSON.stringify(estado.proyecto.muros.find(m => m.id === 'M1')); });
+          const despues = await pg.evaluate(async () => { const { estado } = await import(performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes('/src/ui/estado.ts')) ?? '/src/ui/estado.ts'); return JSON.stringify(estado.proyecto.muros.find(m => m.id === 'M1')); });
           if (abierto) hallazgos.push('diseño › contorno de M1: después de escribir una medida, «Listo» con el mouse no cerró la carta');
           else if (antes === despues) hallazgos.push('diseño › contorno de M1: «Listo» cerró la carta pero no guardó la medida escrita');
           else console.log('contorno de M1: «Listo» con el mouse después de escribir: bien (se cerró y guardó la medida)');
