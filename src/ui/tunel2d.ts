@@ -161,6 +161,10 @@ let abierto = false;
 let abiertosAlzado: string[] = [];
 /** con pisos abiertos, el corte vertical usa al menos estas celdas de alto (las columnas son finas: más lento) */
 const CELDAS_ALZADO_ABIERTO = 120;
+/** con pisos abiertos: al menos estas celdas en el ancho del piso abierto (como «solo los muros» en planta), con un tope de alto */
+const CELDAS_ANCHO_ABIERTO = 40, CELDAS_ALZADO_TOPE = 240;
+/** las celdas de alto del corte vertical que se usaron (para la nota) */
+let celdasAlzado = 0;
 /** celdas por ancho, como mínimo, con «solo los muros» */
 const D_MUROS = 40;
 function murosDelNivel(i: number, D: number): { x: number; y: number }[][] {
@@ -224,7 +228,15 @@ function iniciarAlzado() {
   // el viento de cada altura en fracción del de la azotea (con z ≥ 5 m, como el reglamento); arriba, hasta 1,3 veces
   const perfil = (z: number) => (H > 0 ? Math.min(1.3, Math.sqrt(Kz(Math.max(5, z), exp) / Kz(Math.max(5, H), exp))) : 1);
   let geo: Geometria2D;
-  try { geo = geometriaAlzado({ niveles, dir: estado.dir, angulo: cfg.angulo, desplaz: cfg.desplaz, celdasH: abiertosAlzado.length ? Math.max(3 * RES[cfg.res].D, CELDAS_ALZADO_ABIERTO) : 3 * RES[cfg.res].D, perfil }); }
+  // con pisos abiertos, la grilla se afina hasta tener unas 40 celdas en el ancho de sus piezas (las columnas y los
+  // huecos entre ellas se ven), sin pasar de 240 celdas de alto (la red entera crece con el cuadrado)
+  celdasAlzado = 3 * RES[cfg.res].D;
+  if (abiertosAlzado.length) {
+    const pts = niveles.flatMap(x => x.piezas?.flat() ?? []), ancho = pts.length ? Math.max(Math.max(...pts.map(q => q.x)) - Math.min(...pts.map(q => q.x)), Math.max(...pts.map(q => q.y)) - Math.min(...pts.map(q => q.y))) : 0;
+    const porAncho = ancho > 0 ? Math.ceil((CELDAS_ANCHO_ABIERTO * H) / ancho) : 0;
+    celdasAlzado = Math.min(CELDAS_ALZADO_TOPE, Math.max(celdasAlzado, CELDAS_ALZADO_ABIERTO, porAncho));
+  }
+  try { geo = geometriaAlzado({ niveles, dir: estado.dir, angulo: cfg.angulo, desplaz: cfg.desplaz, celdasH: celdasAlzado, perfil }); }
   catch (e) { mensajeTunel(e instanceof Error ? e.message : String(e)); return; }
   // arriba el aire llega a 1,3 veces el de la azotea: la entrada algo más lenta que en planta para que no se rompa
   U0 = cfg.lento ? 0.05 : 0.07;
@@ -1258,7 +1270,7 @@ export function centroTunel(c: H, tam: Tam) {
   c.append(
     h('p', { class: 'cartel-tunel' }, 'Visualización didáctica: no reemplaza los coeficientes del CIRSOC 102 ni un ensayo en túnel de viento.'),
     ...(cfg.forma === 'vivas' && !cr.geo.alzado && (() => { const ne = nivelElegido(); return !!ne && !!piezasPisoAbierto(estado.proyecto, ne.i); })() ? [h('p', { class: 'nota' }, 'Este corte es un piso abierto (carpintería «sin»): «su caja, con esquinas vivas» lo simula como si la losa fuera un bloque lleno, solo para comparar. Con «como está dibujada», el viento ve sus muros y columnas.')] : []),
-    ...(cr.geo.alzado && abiertosAlzado.length ? [h('p', { class: 'nota' }, `${TEXTO_PISO_ABIERTO} En el corte: ${abiertosAlzado.join(', ')}. Cada muro o columna que cruza la línea del corte es una barra hasta el nivel de arriba, con aire entre ellas; si la línea no cruza ninguna, ese piso queda todo aire. Los muros más finos que una celda se engruesan a 1,2 celdas, y el corte usa al menos ${CELDAS_ALZADO_ABIERTO} celdas de alto: es más lento.`)] : []),
+    ...(cr.geo.alzado && abiertosAlzado.length ? [h('p', { class: 'nota' }, `${TEXTO_PISO_ABIERTO} En el corte: ${abiertosAlzado.join(', ')}. Cada muro o columna que cruza la línea del corte es una barra hasta el nivel de arriba, con aire entre ellas; si la línea no cruza ninguna, ese piso queda todo aire. Para que se vean las columnas y el aire entre ellas, el corte usa ${celdasAlzado} celdas de alto (${fmt(cr.geo.alzado!.H / celdasAlzado, 2)} m por celda; con la resolución elegida serían ${3 * RES[cfg.res].D}): es más lento. Los muros más finos que una celda se engruesan a 1,2 celdas.`)] : []),
     ...(abierto && !cr.geo.alzado ? [h('p', { class: 'nota' }, `${TEXTO_PISO_ABIERTO}${cfg.ochava ? ' Las ochavas no se aplican: no hay fachada que ochavar.' : ''}${engrosado ? ` Los muros más finos que ${fmt(engrosado * 100, 0)} cm se simulan de ${fmt(engrosado * 100, 0)} cm (una celda mide ${fmt(engrosado / 1.2, 2)} m).` : ''} Usa al menos ${D_MUROS} celdas por ancho: es más lento.`)] : []),
     ...(cfg.forma === 'muros' ? [h('p', { class: 'nota' }, `Solo los muros: cada muro del corte es un obstáculo y el aire pasa entre ellos (una planta baja libre o la estructura en obra).${engrosado ? ` Los muros más finos que ${fmt(engrosado * 100, 0)} cm se simulan de ${fmt(engrosado * 100, 0)} cm: una celda del túnel mide ${fmt(engrosado / 1.2, 2)} m y la grilla no vería un tabique más fino. Por eso este modo usa al menos ${D_MUROS} celdas por ancho y es unas 4 veces más lento.` : ''}`)] : []),
     ...(() => {

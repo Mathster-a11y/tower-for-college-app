@@ -127,7 +127,7 @@ input[type="number"], input.n { font-family: var(--mono); text-align: right; }
 .menu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 2px; }
 
 /* ------------------------------------------------------------------ disposición */
-.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px var(--w-lat, 360px) 12px minmax(0, 1fr) 12px var(--w-der, 300px); }
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px var(--w-lat, 360px) var(--w-div, 12px) minmax(0, 1fr) var(--w-div, 12px) var(--w-der, 300px); }
 .riel { background: var(--rail); border-right: 1px solid var(--edge); display: flex; flex-direction: column; gap: 2px; padding: 6px 5px; overflow-y: auto; }
 .riel button { position: relative; border: 0; border-radius: 9px; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; font-size: 11px; color: var(--ink2); white-space: normal; line-height: 1.15; }
 .riel button:hover { background: var(--tint); }
@@ -388,12 +388,12 @@ section.tarjeta h3 { margin: 0; font-size: 13.5px; }
    los paneles más angostos. Antes el 3D iba debajo y en la tablet no se podía llegar: el dedo sobre la planta o el túnel
    no desplaza la página. */
 @media (min-width: 1000px) and (max-width: 1280px) and (orientation: landscape) {
-  .app { grid-template-columns: 70px var(--w-lat, 300px) 12px minmax(0, 1fr) 12px var(--w-der, 250px); }
+  .app { grid-template-columns: 70px var(--w-lat, 300px) var(--w-div, 12px) minmax(0, 1fr) var(--w-div, 12px) var(--w-der, 250px); }
 }
 @media (max-width: 999px), (max-width: 1280px) and (orientation: portrait) {
   /* tablet vertical o pantalla angosta: la fila de trabajo (riel, panel, planta) arriba y el 3D con el avance abajo, los
      dos a la vista si hay alto (si no, la fila de trabajo no baja de 560 px y se desplaza) */
-  .app { grid-template-columns: 70px var(--w-lat, 340px) 12px minmax(0, 1fr); grid-template-rows: minmax(560px, 1fr) max-content; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .app { grid-template-columns: 70px var(--w-lat, 340px) var(--w-div, 12px) minmax(0, 1fr); grid-template-rows: minmax(560px, 1fr) max-content; overflow: auto; -webkit-overflow-scrolling: touch; }
   .divisor-der { display: none; }
   .derecha { grid-column: 2 / 5; border-left: 0; border-top: 5px solid var(--edge); flex-direction: row; flex-wrap: wrap; overflow: visible; }
   .derecha .bloque3d { flex: 1 1 380px; }
@@ -954,11 +954,13 @@ svg.planta, .vista3d, .grafico, .funicular, .rototrasl { -webkit-user-select: no
 .divisor > i { width: 4px; height: 44px; border-radius: 2px; background: color-mix(in srgb, var(--ink2) 45%, transparent); background: var(--dim); opacity: .6; }
 .divisor:hover > i, .divisor.arrastrando > i, .divisor:focus-visible > i { background: var(--accent); opacity: 1; }
 .divisor:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
-.divisor-flecha { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 22px; height: 34px; padding: 0; border-radius: 7px; font-size: 15px; line-height: 1; background: var(--field); border: 1px solid var(--edge); color: var(--ink2); }
+/* la flecha es una pestaña del ancho del divisor (12 px): no se sale encima del texto del panel ni del centro */
+.divisor-flecha { position: absolute; top: 8px; left: 0; right: 0; width: 100%; min-width: 0; height: 44px; padding: 0; border-radius: 6px; font-size: 13px; line-height: 1; background: var(--field); border: 1px solid var(--edge); color: var(--ink2); display: flex; align-items: center; justify-content: center; }
 .divisor-flecha:hover { color: var(--accent); border-color: var(--accent); }
 .app.sin-lat > .lateral, .app.sin-der > .derecha { visibility: hidden; overflow: hidden; }
 body.arrastrando-divisor, body.arrastrando-divisor * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
-@media (pointer: coarse) { .divisor-flecha { width: 30px; height: 44px; font-size: 18px; } .divisor > i { height: 64px; } }
+/* con el dedo, el divisor (y su flecha) es más ancho: 30 px para tocarlo sin tapar el texto de los costados */
+@media (pointer: coarse) { .app { --w-div: 30px; } .divisor-flecha { height: 64px; font-size: 18px; } .divisor > i { height: 64px; } }
 @media (max-width: 760px) { .divisor { display: none; } .app.sin-lat > .lateral, .app.sin-der > .derecha { visibility: visible; } }
 
 /* ------------------------------------------------------------------ paneles plegables */
@@ -1185,7 +1187,7 @@ button.peligro { color: var(--mal); }
   .herr-planta.seg.chico button, .herr-planta.seg.chico .menu-mas > button, .menu-mas .lista button { min-height: 36px; padding: 6px 10px; }
   .zoom-dibujo button, .exportar-dibujo button { min-height: 34px; min-width: 36px; }
   .avance .cab-avance, .plegable > .cab, .bloque3d.plegable > .tira { min-height: 36px; }
-  .b-lat, .divisor-flecha { min-width: 36px; }
+  .b-lat { min-width: 36px; }
   .barra .deshacer button, .barra button.icono, #b-deshacer, #b-rehacer { min-width: 38px; }
 }
 
